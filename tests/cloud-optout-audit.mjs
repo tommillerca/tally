@@ -33,7 +33,7 @@
  *             that could not fail: navigator.webdriver disables the boot sync
  *             outright (NOSOCIAL), so no automated reload can exercise it.
  *   BACKON    pressing "On" starts it again. Failure is ZERO: a fix that wedges
- *             backup off forever would make OFF and BOOT green and lose people
+ *             backup off forever would make OFF green and lose people
  *             their saves, which is a far worse bug than the one being fixed.
  *   RESTORE   cloudOff still gates the boot RESTORE, so the fix did not trade
  *             one half of the flag for the other.
@@ -42,8 +42,9 @@
  * a request the browser attempts and abandons is not an upload. Both are
  * recorded and the rows read `served`.
  *
- * PROVE-RED: run against a tree without the guard and OFF and BOOT both go red
- * with the PUT counted; that is how this file was written, before the fix.
+ * PROVE-RED: run against a tree without the guard and OFF goes red with the PUT
+ * counted while PREMISE and BACKON remain green; that is how this file was
+ * written, before the fix.
  *
  * Usage: node tests/cloud-optout-audit.mjs [baseUrl]
  */

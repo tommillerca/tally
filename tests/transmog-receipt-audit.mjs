@@ -22,7 +22,9 @@
  *        paidlooks holds H:H10-2
  *   FAIL W11 a fit holding an unpaid look on a slot its gear pass fills is refused for dust
  *        applyFit -> {"ok":true,"cost":0,"name":"W11"}
- *   the CONTROL rows all green there, so every leg really ran.
+ *   the paid-apply CONTROL rows were green there. The stripped-player price
+ *   CONTROL was red too because it shares the pre-fix receipt bug, so this is
+ *   not evidence that every CONTROL row was green.
  *
  * PURE: node only, no browser, about 1s.   node tests/transmog-receipt-audit.mjs
  */

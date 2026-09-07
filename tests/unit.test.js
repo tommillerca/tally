@@ -79,6 +79,27 @@ async function runAll() {
 const approx = (a, b, tol = 0.02) => {
   assert.ok(Math.abs(a - b) <= Math.max(Math.abs(b) * tol, 0.01), `${a} !~ ${b}`);
 };
+const functionSource = (src, signature) => {
+  const start = src.indexOf(signature);
+  assert.ok(start >= 0, `${signature} not found`);
+  const open = src.indexOf('{', start);
+  let depth = 0, quote = '', escaped = false;
+  for (let i = open; i < src.length; i++) {
+    const c = src[i], n = src[i + 1];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === quote) quote = '';
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') { quote = c; continue; }
+    if (c === '/' && n === '/') { i = src.indexOf('\n', i); if (i < 0) break; continue; }
+    if (c === '/' && n === '*') { i = src.indexOf('*/', i + 2) + 1; continue; }
+    if (c === '{') depth++;
+    if (c === '}' && --depth === 0) return src.slice(start, i + 1);
+  }
+  assert.fail(`unbalanced function ${signature}`);
+};
 
 // ---- targets ----
 test('computeTargets male recomp', () => {
@@ -5057,6 +5078,22 @@ test('R24-L17 commitLogEntry rolls the day before the row is written, and a fres
   assert.equal(store.get('old').kcal, 350);
 });
 
+test('R39-7 commitLogEntry refreshes notification schedules after a successful write', async () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const source = functionSource(app, 'async function commitLogEntry(e, btn, via = null)');
+  let refreshes = 0, writes = 0;
+  const S = { date: '2026-09-07', settings: { targets: {} } };
+  const fn = new Function('S', 'rollDayIfNeeded', 'db', 'toast', 'trackEvent', 'refreshNotifSchedules',
+    'recordMealUsed', 'onFoodLogged', 'entriesFor',
+    `${source}; return commitLogEntry;`)(
+    S, async () => {}, { get: async () => null, put: async () => { writes++; } }, () => {}, () => {},
+    () => { refreshes++; }, async () => {}, async () => ({ xp: 1 }), async () => []);
+  const out = await fn({ id: 'r39-7', date: S.date, meal: 1 }, null);
+  assert.equal(writes, 1, 'precondition: the meal did not commit');
+  assert.equal(out.xp, 1, 'precondition: the successful receipt path did not finish');
+  assert.equal(refreshes, 1, 'a successful meal commit did not refresh notification schedules exactly once');
+});
+
 /* QA ROUND 24 L16: THE DAY-CLOSE IS DELIVERED ONLY AS A DROPPABLE TOAST.
    On budget the player got "Yesterday closed on budget: Bone Crate earned" for
    3.4s inside a 4-deep toast queue that drops the oldest, and nothing on Today
@@ -7320,6 +7357,40 @@ test('R37-3/R37-4 notifGateOk: permission x prefs decides every scheduling/push 
   assert.equal(notifGateOk(noSiege, 'granted', 'siege'), false, 'a false per-kind pref must gate false even when granted');
   assert.equal(notifGateOk(noSiege, 'granted', 'friends'), true, 'an unrelated kind must not be gated by a different pref being off');
   assert.equal(notifGateOk(null, 'granted'), false, 'missing prefs must never gate true');
+});
+
+test('R39-7 syncNotifications checks OS permission before it schedules anything', async () => {
+  const src = readFileSync(join(here, '..', 'js', 'notify.js'), 'utf8');
+  const hit = functionSource(src, 'export async function syncNotifications()');
+  let scheduled = 0, permissionChecks = 0;
+  const L = {
+    getPending: async () => ({ notifications: [] }), cancel: async () => {},
+    checkPermissions: async () => { permissionChecks++; return { display: 'prompt' }; },
+    schedule: async () => { scheduled++; },
+  };
+  const fn = new Function('notifPlatform', 'ln', 'notifPrefs', 'notifGateOk', 'ID', 'db', 'dateKey', 'streakDateSet', 'streakFrom',
+    `${hit.replace('export ', '')}; return syncNotifications;`)(
+    () => 'native', () => L, async () => ({ enabled: true, reminder: true, streak: false }), notifGateOk,
+    { reminder: 1, streak: 2 }, { all: async () => [] }, () => '2026-09-07', () => new Set(), () => 0);
+  await fn();
+  assert.equal(permissionChecks, 1, 'syncNotifications did not ask the OS for current permission');
+  assert.equal(scheduled, 0, 'syncNotifications scheduled while permission was prompt');
+});
+
+test('R39-7 scheduleSiegeReminder routes the authored time through clampQuietHours', async () => {
+  const src = readFileSync(join(here, '..', 'js', 'notify.js'), 'utf8');
+  const hit = functionSource(src, 'export async function scheduleSiegeReminder(name, spireName, until)');
+  let clampCalls = 0, scheduledAt = null;
+  const safeAt = Date.now() + 6 * 3600000;
+  const L = { checkPermissions: async () => ({ display: 'granted' }), cancel: async () => {},
+    schedule: async ({ notifications }) => { scheduledAt = notifications[0].schedule.at.getTime(); } };
+  const fn = new Function('notifPlatform', 'notifPrefs', 'ln', 'notifGateOk', 'clampQuietHours', 'ID',
+    `${hit.replace('export ', '')}; return scheduleSiegeReminder;`)(
+    () => 'native', async () => ({ enabled: true, siege: true }), () => L, notifGateOk,
+    () => { clampCalls++; return safeAt; }, { siege: 3 });
+  await fn('Bonehead', 'Graveholt', Date.now() + 24 * 3600000);
+  assert.equal(clampCalls, 1, 'scheduleSiegeReminder bypassed clampQuietHours');
+  assert.equal(scheduledAt, safeAt, 'the scheduled reminder did not use clampQuietHours output');
 });
 
 test('R37-10 clampQuietHours: no push lands 22:00-08:00 local, moved to the next 08:00', () => {

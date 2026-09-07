@@ -27,7 +27,7 @@
  *   ONBOARD  the real onboarding screens render and the real buttons (#onbGo,
  *            #onbMe, #onbSkip) are clicked, landing on #/today with the tab
  *            bar live, all in one page, no navigation.
- *   TAIL     the fake clock is walked across local midnight (still no
+ *   TAIL-1   the fake clock is walked across local midnight (still no
  *            reload), then a REAL visibilitychange resume is fired the same
  *            way multitab-audit.mjs does it -- backgrounding this page behind
  *            a second real tab and bringing it back -- and kv 'lastOpenDay'
@@ -38,8 +38,12 @@
  *            one moving it is proof the tail ran; neither moving it, on a
  *            genuinely later day, is proof it did not.
  *
+ *   TAIL-2   the page is then reloaded as a returning player, walked across
+ *            another midnight, and genuinely resumed. This is the boot()
+ *            call-site half that the original audit never exercised.
+ *
  * PROVE-RED: delete the `bindAppLifecycle();` line in enterAppFromOnboarding
- * (js/app.js) and re-run. TAIL fails because lastOpenDay never leaves null,
+ * (js/app.js) and re-run. TAIL-1 fails because lastOpenDay never leaves null,
  * and TODAY still passes (onboarding itself is unaffected), which is the
  * point: this is the row that would have caught R37-1 and nothing else pretty
  * lies about being fine because the day never advanced.
@@ -85,7 +89,9 @@ try {
      `new Date()`, so only Date.now() would leave it untouched. */
   await page.evaluateOnNewDocument(() => {
     const RealDate = Date;
-    window.__NOW = RealDate.now();
+    let persisted = 0;
+    try { persisted = Number(localStorage.getItem('__lifecycleAuditNow')) || 0; } catch {}
+    window.__NOW = persisted || RealDate.now();
     class FakeDate extends RealDate {
       constructor(...a) { super(...(a.length ? a : [window.__NOW])); }
       static now() { return window.__NOW; }
@@ -153,9 +159,37 @@ try {
   });
   await blank.close();
 
-  ok("TAIL a visibilitychange resume in the SAME page rolls the day forward (lastOpenDay reaches the next day; only bindAppLifecycle's onAppResume writes it before boot() would)",
+  ok("TAIL-1 onboarding-session resume rolls the day forward (only enterAppFromOnboarding's bindAppLifecycle call can install it)",
     afterResume.lastOpenDay === after0,
     `before ${JSON.stringify(before.lastOpenDay)}, want ${JSON.stringify(after0)}, got ${JSON.stringify(afterResume.lastOpenDay)}`);
+
+  /* A real second session. Persist only the fake clock across navigation, then
+     reload the installed save so boot(), rather than onboarding, owns the
+     lifecycle binding. */
+  await page.evaluate(() => localStorage.setItem('__lifecycleAuditNow', String(window.__NOW)));
+  await page.reload({ waitUntil: 'networkidle2' });
+  await sleep(900);
+  const returning = await page.evaluate(() => ({ hash: location.hash, onboarding: !!document.querySelector('#onbGo') }));
+  ok('SECOND returning-player reload enters the app without onboarding', !returning.onboarding, JSON.stringify(returning));
+
+  const secondDay = await page.evaluate(async () => {
+    const { dateKey, msToNextMidnight } = await import('/js/nutrition.js?q=2');
+    window.__NOW += msToNextMidnight(window.__NOW) + 5000;
+    localStorage.setItem('__lifecycleAuditNow', String(window.__NOW));
+    return dateKey(new Date(window.__NOW));
+  });
+  const blank2 = await browser.newPage();
+  await blank2.bringToFront();
+  await sleep(300);
+  await page.bringToFront();
+  await sleep(1800);
+  const secondResume = await page.evaluate(async () => {
+    const { kvGet } = await import('/js/db.js?q=2');
+    return await kvGet('lastOpenDay', null);
+  });
+  await blank2.close();
+  ok("TAIL-2 returning-session resume rolls the next day forward (only boot's bindAppLifecycle call can install it)",
+    secondResume === secondDay, `want ${JSON.stringify(secondDay)}, got ${JSON.stringify(secondResume)}`);
 
   ok('NOERR no page error across onboarding + the tail', errors.length === 0, errors.join(' | ').slice(0, 300));
 } finally {

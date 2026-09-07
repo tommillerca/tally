@@ -107,8 +107,9 @@ async function device(name) { useDbName(name); await kvSet('apiBase', API); }
    the bug by construction, which would flip a hardcoded "this is the bug"
    assertion to failing on a HEALTHY tree. GUARD-RECEIPT below re-drives the
    identical merge (bootRestored forced false a second time, same stale blob)
-   and is the permanent row proving the fix holds; PROVE-RED at the bottom
-   mutates the fix and shows GUARD/GUARD-RECEIPT go red. */
+   and is the permanent row proving the fix holds. The source-contract rows at
+   the bottom pin the mechanisms; the original behavioural mutation evidence
+   is recorded in the fixing commit and report, not replayed inside this file. */
 
 /* ==================== GUARD: the real path, fixes active ================= */
 await device('devA');
@@ -171,7 +172,7 @@ const invB = (await db.all('inv')).filter(r => r.kind === 'crate');
 ok('REINSTALL  device A\'s newer crate arrived on the reinstalled device', invB.length === crateCountA, `expected=${crateCountA} got=${invB.length}`);
 ok('REINSTALL  device A\'s newer coin balance arrived', (await kvGet('coins', 0)) === 500);
 
-/* ==================== PROVE-RED: mutate the fix, watch these go red ====== */
+/* ==================== SOURCE CONTRACTS FOR THE TWO FIXES ================= */
 const src = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const socialSrc = src('js/social.js');
 const dbSrc = src('js/db.js');

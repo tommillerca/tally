@@ -19,6 +19,13 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## guards grade the hard case, round two (2026-09-07)
+
+1. PROOF: crate-reveal-audit.mjs | REACH: TAIL grades two consecutive browser paints of the final authored crate frame instead of comparing wall-clock timers, so host load cannot manufacture a clipped ending. EARLYTAP samples after fling's 330 ms dismissal window. FABSAFE independently proves the JavaScript guard's two halves: hide and inert on mount, then restore after the protected 400 ms exit. The CSS half is not claimed: frame-by-frame measurement found settled overlap 0, but exit overlap 3,335.83 px squared at 393x852 and 2,152.54 px squared at 375x667.
+2. PROOF: first-session-lifecycle-audit.mjs | REACH: a real resume crosses midnight both in the onboarding session and after a returning-player reload. Removing either bindAppLifecycle call site reds its own TAIL row.
+3. PROOF: unit.test.js | REACH: executable module-boundary rows prove syncNotifications checks current OS permission, siege scheduling uses clampQuietHours, and a committed meal calls refreshNotifSchedules.
+4. PROOF: prove-red-reference-lint.mjs | REACH: the PURE release gate rejects audit-header prove-red evidence that names a missing file or a quoted FAIL row that no longer exists.
+
 ## v500
 1. A hotfix off v499 from Tom's live report that opening a crate is slow and glitchy between cards.
 
@@ -612,7 +619,7 @@ READY cache, not the cache of the page still running").
 
 3. PROOF: crate-reveal-audit.mjs | REACH: a tap on the crate card at 900, 1400 or 1800 ms no longer destroys the reveal before it draws; the item lands and reads back (EARLYTAP rows, red before: survivedTap true, landedOk false).
 
-4. PROOF: crate-reveal-audit.mjs | REACH: the Add-food button is hidden and inert while a reveal is mounted and for 360 ms after, and the close hint no longer overlaps its box at 393x852 or 375x667 (FABSAFE rows, red before: overlap 3364 px, FAB hit at 600 and 900 ms).
+4. PROOF: crate-reveal-audit.mjs | REACH: the Add-food button is hidden and inert while a reveal is mounted and through the protected 400 ms exit window, then restored. Pack-foot geometry is not a safety claim: it clears the settled FAB but frame-by-frame exit measurement still overlaps by 3,335.83 px squared at 393x852 and 2,152.54 px squared at 375x667 (red before: overlap 3,364 px and FAB hit during teardown).
 
 ## quests tell the truth (2026-09-06)
 
@@ -798,7 +805,7 @@ the intervening train).
    Crew activity: friend requests, gifts, cheers) instead of saying "friend
    requests" for a key that also covers gifts and cheers.
 
-6. PROOF: unit.test.js (R37-9 commitLogEntry / R24-L17) | REACH: Logging a
+6. PROOF: unit.test.js (R39-7 commitLogEntry refreshes notification schedules after a successful write) | REACH: Logging a
    meal now re-syncs notification schedules immediately. A morning-only
    logger who eats dinner mid-evening no longer gets the 20:30 "keep your
    streak" nag with the streak already safe; it's pushed to tomorrow evening

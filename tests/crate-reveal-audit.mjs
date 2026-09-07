@@ -561,6 +561,10 @@ ok('TAP a tap advances the card WITHOUT a click event (the real touch case)',
    `end` and the tilt's click listener in openPackReveal (js/app.js) and this
    goes red: the reveal disappears mid-tap and the card is never confirmed. */
 {
+  const servedEarlySource = await page.evaluate(async () => await fetch('/js/app.js').then(r => r.text()));
+  const landedGuardCount = (servedEarlySource.match(/if \(!reveal\.dataset\.landed\) return;/g) || []).length;
+  ok('EARLYTAP SOURCE the served app carries both card-level landed guards', landedGuardCount >= 2,
+    `served guardCount=${landedGuardCount}`);
   await page.evaluate(async () => {
     for (let i = 0; i < 6; i++) {
       if (!document.querySelector('.pack-reveal')) break;
@@ -584,7 +588,9 @@ ok('TAP a tap advances the card WITHOUT a click event (the real touch case)',
       // scroll never gets a compat click at all)
       tilt.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 11, clientX: cx, clientY: cy, bubbles: true }));
       tilt.dispatchEvent(new PointerEvent('pointerup', { pointerId: 11, clientX: cx, clientY: cy, bubbles: true }));
-      await new Promise(res => setTimeout(res, 200));
+      // fling() removes the reveal 330ms after an accepted tap. Sampling before
+      // that deadline made the three pointer rows incapable of seeing the bug.
+      await new Promise(res => setTimeout(res, 450));
       const survivedTap = !!document.querySelector('.pack-reveal');
       // wait past the real landing beat (PACE's own 1.9s ceiling), then read the card back
       await new Promise(res => setTimeout(res, 2300));
@@ -638,13 +644,13 @@ ok('TAP a tap advances the card WITHOUT a click event (the real touch case)',
    for what is behind it -- correct for every other sheet in the app), which
    left a real window where a second tap at the same spot 400 to 900ms later
    landed on the FAB and opened the Add-food sheet on top of the closing
-   crate. Fixed two ways, both graded here: the FAB is held
+   crate. The load-bearing fix is that the FAB is held
    pointer-events:none + hidden for the reveal's whole life plus a beat past
-   its own ~320ms teardown (js/app.js), and #packFoot is shifted clear of the
-   FAB's box in CSS (app.css, .pack-foot margin-bottom).
-   PROVE-RED: drop either half (the `fab.style` lines around openSheet's call
-   in openPackReveal, or app.css's `.pack-foot` margin-bottom) and this goes
-   red -- OVERLAP stops reading 0, or a sample resolves to the FAB again. */
+   its own ~320ms teardown (js/app.js). The geometry is measured during the
+   exit too, but is evidence rather than a safety claim: CSS movement alone
+   cannot make a control behind a closing sheet inert.
+   PROVE-RED: drop either the mount-time hide or the delayed restoration in
+   openPackReveal (js/app.js). The STYLE or EXIT row goes red respectively. */
 for (const [w, h] of [[393, 852], [375, 667]]) {
   await setWidth(page, w, h);
   await page.evaluate(async () => {
@@ -663,26 +669,54 @@ for (const [w, h] of [[393, 852], [375, 667]]) {
     const foot = document.querySelector('#packFoot'), fab = document.querySelector('#fab');
     if (!foot || !fab) return { err: 'missing #packFoot or #fab' };
     const fr = foot.getBoundingClientRect(), ar = fab.getBoundingClientRect();
+    const mountedStyle = { visibility: fab.style.visibility, pointerEvents: fab.style.pointerEvents };
     const overlapPx = Math.max(0, Math.min(fr.right, ar.right) - Math.max(fr.left, ar.left))
       * Math.max(0, Math.min(fr.bottom, ar.bottom) - Math.max(fr.top, ar.top));
-    const cx = fr.left + fr.width / 2, cy = fr.top + fr.height / 2;
+    const cx = ar.left + ar.width / 2, cy = ar.top + ar.height / 2;
     // dismiss with the real close control, then sample the SAME on-screen spot
     // the player just tapped, across the whole close animation
     const b = document.querySelector('.pack-reveal .sheet-close');
     if (b) b.click(); else history.back();
     const samples = [];
     let last = 0;
+    let maxExitOverlapPx = 0;
+    let measuringExit = true;
+    const measureOverlap = () => {
+      const liveFoot = document.querySelector('#packFoot');
+      if (liveFoot) {
+        const lr = liveFoot.getBoundingClientRect(), la = fab.getBoundingClientRect();
+        maxExitOverlapPx = Math.max(maxExitOverlapPx,
+          Math.max(0, Math.min(lr.right, la.right) - Math.max(lr.left, la.left))
+          * Math.max(0, Math.min(lr.bottom, la.bottom) - Math.max(lr.top, la.top)));
+      }
+      if (measuringExit) requestAnimationFrame(measureOverlap);
+    };
+    requestAnimationFrame(measureOverlap);
     for (const t of [0, 100, 200, 400, 600, 900]) {
       await new Promise(res => setTimeout(res, t - last)); last = t;
       const hit = document.elementFromPoint(cx, cy);
-      samples.push({ t, isFab: !!(hit && hit.closest && hit.closest('.fab')) });
+      samples.push({ t, isFab: !!(hit && hit.closest && hit.closest('.fab')),
+        visibility: fab.style.visibility, pointerEvents: fab.style.pointerEvents });
     }
-    return { overlapPx, samples };
+    measuringExit = false;
+    await new Promise(res => setTimeout(res, 400));
+    const restored = { visibility: fab.style.visibility, pointerEvents: fab.style.pointerEvents };
+    return { overlapPx, maxExitOverlapPx, mountedStyle, samples, restored };
   });
-  ok(`FABSAFE ${w}x${h}: #packFoot no longer overlaps #fab (was 100% of its box)`,
-    !fabSafe.err && fabSafe.overlapPx === 0, JSON.stringify(fabSafe));
-  ok(`FABSAFE ${w}x${h}: no sample from 0 to 900ms after the close tap resolves to the FAB`,
-    !fabSafe.err && fabSafe.samples.every(s => !s.isFab), JSON.stringify(fabSafe.samples));
+  const servedFabSource = await page.evaluate(async () => await fetch('/js/app.js').then(r => r.text()));
+  ok(`FABSAFE ${w}x${h}: served source carries the mount-time hide/inert half`,
+    /fab\.style\.visibility = 'hidden'; fab\.style\.pointerEvents = 'none'/.test(servedFabSource));
+  ok(`FABSAFE ${w}x${h}: served source carries the delayed restoration half`,
+    /setTimeout\(\(\) => \{ fab\.style\.visibility = ''; fab\.style\.pointerEvents = ''; \}, 360\)/.test(servedFabSource));
+  ok(`FABSAFE ${w}x${h}: mount explicitly hides and inerts the FAB`,
+    !fabSafe.err && fabSafe.mountedStyle.visibility === 'hidden' && fabSafe.mountedStyle.pointerEvents === 'none',
+    JSON.stringify(fabSafe));
+  ok(`FABSAFE ${w}x${h}: no sample through the protected 400ms exit window resolves to the FAB`,
+    !fabSafe.err && fabSafe.samples.filter(s => s.t <= 400).every(s => !s.isFab), JSON.stringify(fabSafe.samples));
+  ok(`FABSAFE ${w}x${h}: the FAB is restored after the protected exit window`,
+    !fabSafe.err && fabSafe.restored.visibility !== 'hidden' && fabSafe.restored.pointerEvents !== 'none',
+    JSON.stringify(fabSafe));
+  console.log(`MEASURE FABSAFE ${w}x${h}: settled overlap ${fabSafe.overlapPx}px, max exit overlap ${fabSafe.maxExitOverlapPx}px`);
   await sleep(800);
 }
 await setWidth(page, 393, 852);  // restore, for the sections below
@@ -718,29 +752,47 @@ await setWidth(page, 393, 852);  // restore, for the sections below
   for (const kind of ['daily', 'golden']) {
     const r = await p2.evaluate(async k => {
       const t0 = performance.now(); const marks = []; let last = -1;
+      let finalPaints = 0, maxFinalPaints = 0;
+      const appSrc = await fetch('/js/app.js').then(x => x.text());
+      const seqBody = appSrc.slice(appSrc.indexOf('function playCrateSeq'), appSrc.indexOf('\nfunction ', appSrc.indexOf('function playCrateSeq') + 20));
+      const authoredHold = Number(seqBody.match(/const HOLD = (\d+)/)?.[1] || -1);
       window.__crateForce = true;
       window.__packReveal([{ name: 'Tail', rarity: 'rare', kind: 'gear', iconHtml: '<span></span>' }], { crate: k });
-      await new Promise(res => { const iv = setInterval(() => {
+      await new Promise(res => {
+        const paint = () => {
+          const seq = document.querySelector('#crateSeq');
+          const finalOn = !!seq?.lastElementChild?.classList.contains('on');
+          const sink = document.querySelector('.co-sink');
+          const sinkAnim = sink?.getAnimations().find(a => /crSink/.test(a.animationName || ''));
+          const delay = Number(sinkAnim?.effect?.getTiming().delay || 0);
+          const beforeSink = sinkAnim && Number(sinkAnim.currentTime) < delay;
+          if (finalOn && beforeSink) { finalPaints++; maxFinalPaints = Math.max(maxFinalPaints, finalPaints); }
+          else finalPaints = 0;
+          if (performance.now() - t0 <= 3200) requestAnimationFrame(paint);
+        };
+        requestAnimationFrame(paint);
+        const iv = setInterval(() => {
         const now = performance.now() - t0;
         const seq = document.querySelector('#crateSeq');
         if (seq) { const on = [...seq.children].findIndex(c => c.classList.contains('on'));
           if (on >= 0 && on !== last) { last = on; marks.push({ f: on, t: +now.toFixed(0) }); } }
         if (now > 3200) { clearInterval(iv); res(); }
-      }, 16); });
+        }, 16);
+      });
       const seq = document.querySelector('#crateSeq');
       const cs = getComputedStyle(document.querySelector('.pack-reveal'));
       return { shown: marks.length, total: seq ? seq.children.length : 0,
         lastIdx: marks[marks.length - 1]?.f ?? -1, lastAt: marks[marks.length - 1]?.t ?? null,
-        sink: Math.round(parseFloat(cs.getPropertyValue('--b-sink')) * 1000) };
+        sink: Math.round(parseFloat(cs.getPropertyValue('--b-sink')) * 1000), maxFinalPaints, authoredHold };
     }, kind);
     /* CONTROL first: a run where the sequence never played would give a huge
        apparent margin and pass the real check by doing nothing. */
     ok(`TAIL ${kind} CONTROL the sequence actually reached its final frame under the delay`,
       r.total > 0 && r.lastIdx === r.total - 1,
       `showed frame ${r.lastIdx} of ${r.total - 1}`);
-    const hold = r.lastAt === null ? -1 : r.sink - r.lastAt;
     ok(`TAIL ${kind} the last authored frame is on screen before the crate leaves`,
-      hold >= 60, `final frame held ${hold}ms (want 60+), last frame @ ${r.lastAt}ms, sink @ ${r.sink}ms`);
+      r.authoredHold >= 100 && r.maxFinalPaints >= 2,
+      `authored hold ${r.authoredHold}ms; final frame painted ${r.maxFinalPaints} consecutive frame(s), want 100ms and 2+ paints`);
     await p2.evaluate(async () => { history.back(); await new Promise(r => setTimeout(r, 900)); });
   }
   await p2.close();
