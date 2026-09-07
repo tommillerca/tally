@@ -26,10 +26,8 @@ import {
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct, fetchOffProductEx } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
-import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins, dayCloseNews, habitGrantCard } from '../js/game.js';
-import { STAT_META, STYLES, hasFightableStats } from '../js/pit.js';
 import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins, dayCloseNews, habitGrantCard, sparBoardState, SPAR_DAILY_CAP, bagPick, seedBagFromRecent, GW_RECENT_CAP } from '../js/game.js';
-import { STAT_META, STYLES } from '../js/pit.js';
+import { STAT_META, STYLES, hasFightableStats } from '../js/pit.js';
 import * as pitMod from '../js/pit.js';
 const mkFighter = pitMod.makeFighter;
 import {
