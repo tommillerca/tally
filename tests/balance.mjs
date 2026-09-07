@@ -16,12 +16,127 @@
  *
  * Usage: node tests/balance.mjs
  */
-import { measure, BUILDS, STACKS } from './fight-sim.mjs';
-import { BUILD_MULT_CAP, CATALYST_CAP } from '../js/pit.js';
+import { measure, BUILDS, STACKS, PET_BUILDS, FOES, HIGH_LINEAGE, winInterval, medianInterval, createSimFight } from './fight-sim.mjs';
+import { BUILD_MULT_CAP, CATALYST_CAP, makeFighter, createFight, smartPlayerTurn,
+  petActionsFor, applyPetAction, endTurn, actionsFor, applyAction, ACTIONS, expectedDamage, scaleStats } from '../js/pit.js';
+import { buildBattlePet, PET_ASSIGN, PET_TREES, PET_STATS, petBattleStats } from '../js/pets.js';
+import { runFight as auditFight, POLICIES } from './balance-audit.js';
+import { isDeepStrictEqual } from 'node:util';
 
 const SEEDS = 120;
 const results = [];
 const ok = (name, pass, detail = '') => { results.push({ name, pass }); console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`); };
+
+/* Pet-policy guards live in this already registered FULL-tier audit. Prove red
+   by restoring the original smartPlayerTurn on a throwaway copy, and separately
+   removing balance-audit.js's pet dispatch. The reference drives the public
+   manual actions, asserting the final state, including start-of-turn DoTs.
+   No balance limit is raised to accommodate the newly visible pet output. */
+const petFixture = (id, { picks = [], food, state } = {}) => {
+  const fight = createFight({
+    player: makeFighter({ stats: BUILDS[0].stats, pet: id ? buildBattlePet(id, 10, picks) : null, food }),
+    foe: makeFighter({ stats: { ...BUILDS[0].stats, marrow: 4000 } }), seed: 7919, aiLevel: 3,
+  });
+  fight.p.hp -= 40; // make warden healing observable
+  if (state === 'fainted') { fight.pAux.fainted = true; fight.pAux.hp = 0; }
+  if (state === 'dead') fight.pAux.hp = 0;
+  if (state === 'over') fight.over = { winner: 'p' };
+  if (state === 'foe') fight.active = 'f';
+  if (state === 'body-kill') { fight.f.hp = 1; fight.f.stats.reflex = 0; }
+  if (state === 'pet-kill') { fight.f.hp = 1; fight.ap = 0; }
+  return fight;
+};
+const snapshot = fight => JSON.stringify(fight, (k, v) => k === 'owner' || typeof v === 'function' ? undefined : v instanceof Set ? [...v] : v);
+function manualBodyAndPet(fight) {
+  if (fight.over || fight.active !== 'p') return;
+  // Fixture has no player talents and enough HP to avoid the policy heal rule.
+  while (!fight.over && fight.ap > 0) {
+    const legal = actionsFor(fight).filter(a => a.enabled);
+    if (!legal.length) break;
+    const ranked = legal.filter(a => ACTIONS[a.id]?.base).sort((a, b) =>
+      expectedDamage(b.id, fight.p, fight.f, fight.f) / Math.max(1, b.ap)
+      - expectedDamage(a.id, fight.p, fight.f, fight.f) / Math.max(1, a.ap));
+    applyAction(fight, legal.find(a => a.id === 'signature')?.id || ranked[0]?.id || legal[0].id);
+  }
+  const legal = petActionsFor(fight).filter(a => a.enabled);
+  const action = legal.find(a => a.kind === 'special') || legal.find(a => a.kind === 'basic');
+  if (action) applyPetAction(fight, action.id);
+  if (!fight.over) endTurn(fight);
+}
+for (const id of Object.keys(PET_ASSIGN)) {
+  const actual = petFixture(id), reference = petFixture(id);
+  let same = true;
+  const cds = [];
+  for (let round = 0; round < 4; round++) {
+    smartPlayerTurn(actual); manualBodyAndPet(reference);
+    same &&= snapshot(actual) === snapshot(reference);
+    cds.push(actual.p.pet?.specialCd);
+    if (!actual.over) endTurn(actual);
+    if (!reference.over) endTurn(reference);
+  }
+  ok(`PET-PHASE ${id} body then exactly one pet action then endTurn`, same && isDeepStrictEqual(cds, [2, 1, 2, 1]), `cooldowns=${cds}`);
+}
+for (const state of ['fainted', 'dead', 'over', 'foe', 'body-kill', 'pet-kill']) {
+  const actual = petFixture('C4', { state }), reference = petFixture('C4', { state });
+  smartPlayerTurn(actual); manualBodyAndPet(reference);
+  ok(`PET-LIFECYCLE ${state} matches manual dispatch and terminal state`, snapshot(actual) === snapshot(reference)
+    && (!state.endsWith('kill') || (actual.over?.winner === 'p' && actual.active === 'p')));
+}
+{
+  const actual = petFixture(null), reference = petFixture(null);
+  smartPlayerTurn(actual); manualBodyAndPet(reference);
+  ok('PET-CONTROL no pet retains the body-only policy', snapshot(actual) === snapshot(reference));
+}
+for (const [label, opts, expected] of [
+  ['Pack Tactics follows shipped meta.cd', { picks: ['h-pack'] }, [2, 1, 2, 1]],
+  ['petFree special every phase', { food: { petFree: true } }, [0, 0, 0, 0]],
+]) {
+  const actual = petFixture('C3', opts), reference = petFixture('C3', opts), cds = [];
+  let same = true;
+  for (let i = 0; i < 4; i++) {
+    smartPlayerTurn(actual); manualBodyAndPet(reference);
+    same &&= snapshot(actual) === snapshot(reference);
+    cds.push(actual.p.pet.specialCd);
+    endTurn(actual); endTurn(reference);
+  }
+  ok(`PET-COOLDOWN ${label}`, same && isDeepStrictEqual(cds, expected), `cooldowns=${cds}`);
+}
+for (const id of ['C1', 'C2', 'C3']) {
+  const run = pet => auditFight({ stats: BUILDS[0].stats, talents: [],
+    foeCfg: FOES[2], policy: POLICIES.smart, seed: 7919, pet });
+  const pet = run({ id, level: 10, picks: [] }), none = run(null);
+  ok(`PET-AUDIT ${id} consumer actually executes pet turns`, pet.petActions > 0 && none.petActions === 0,
+    `pet actions=${pet.petActions}, no-pet actions=${none.petActions}`);
+}
+for (const id of Object.keys(PET_ASSIGN)) {
+  const rows = PET_BUILDS.filter(b => b.pet.id === id);
+  const picks = new Set(rows.flatMap(b => [...b.pet.picks]));
+  const coverage = PET_TREES[PET_ASSIGN[id]].every(t => t.opts.every(o => picks.has(o.id)));
+  const legal = rows.every(b => PET_TREES[PET_ASSIGN[id]].every(t =>
+    t.opts.filter(o => b.pet.picks.has(o.id)).length <= (b.pet.level >= t.tier ? 1 : 0)));
+  ok(`PET-COVERAGE ${id} levels, no talents, both legal paths and auto signature state`, coverage && legal
+    && [1, 6, 10].every(level => rows.some(b => b.pet.level === level && b.pet.picks.size === 0))
+    && rows.every(b => b.pet.signatureActive === (b.pet.level === 10)));
+  const high = rows.find(b => b.pet.shiny && b.pet.lineage === HIGH_LINEAGE);
+  const m = PET_STATS[id].mult * 1.08 * (1 + 0.05 * HIGH_LINEAGE);
+  ok(`PET-STACK ${id} high lineage reaches the intrinsic HP at end of construction`, !!high
+    && makeFighter({ stats: BUILDS[0].stats, pet: high.pet }).pet.stats.hp
+      === Math.round(120 * m * (PET_STATS[id].tilt.marrow || 1))
+    && petBattleStats(id, 10, true, HIGH_LINEAGE + 1).hp > high.pet.stats.hp, `${m.toFixed(4)}x, still grows above HIGH`);
+}
+ok('PET-STATS confidence retains uncertainty at extremes and sparse wins',
+  winInterval(0, 200)[1] > 0 && winInterval(200, 200)[0] < 1
+  && medianInterval([]) === null && medianInterval([4])[1] === Infinity
+  && isDeepStrictEqual(medianInterval(Array(200).fill(4)), [4, 4]));
+for (const foeCfg of FOES) {
+  const fight = createSimFight({ ...BUILDS[0], foeCfg, seed: 1 });
+  const expected = makeFighter({ name: foeCfg.name, stats: scaleStats(BUILDS[0].stats, foeCfg.mult),
+    style: foeCfg.style || 'plain', talents: foeCfg.talents || [] });
+  ok(`PET-LADDER ${foeCfg.key} measures the full real config`,
+    isDeepStrictEqual(fight.f.stats, expected.stats) && fight.f.style.id === expected.style.id
+    && isDeepStrictEqual(fight.f.talents, expected.talents) && fight.aiLevel === foeCfg.aiLevel,
+    `mult=${foeCfg.mult}, AI=${fight.aiLevel}, style=${fight.f.style.id}, talents=${fight.f.talents.size}`);
+}
 
 /* The band. A build may be meaningfully better than no talents at all (that is
    the entire point of talents) but not so far ahead that the rest of the game

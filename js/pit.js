@@ -1824,7 +1824,21 @@ export function scaleStats(stats, mult) {
  * shorthand implied.
  */
 export const SETUP_FIRST = ['rage', 'totem', 'raisedead', 'callcrows', 'ward'];
+// Mirrors app.js endPlayerBody -> petAct -> doEndTurn: one living-pet action
+// after the body, before endTurn. Read dispatch availability, not pet.cooldown:
+// applyPetAction uses meta.cd (including for Pack Tactics), and foodPetFree
+// bypasses that timer. Prefer the special, then the basic on cooldown.
+export function smartPetTurn(fight) {
+  if (fight.over || fight.active !== 'p') return null;
+  const legal = petActionsFor(fight).filter(a => a.enabled);
+  const pick = legal.find(a => a.kind === 'special') || legal.find(a => a.kind === 'basic');
+  if (!pick) return null;
+  applyPetAction(fight, pick.id);
+  return pick.id;
+}
+
 export function smartPlayerTurn(fight) {
+  if (fight.over || fight.active !== 'p') return;
   let guard = 0;
   while (!fight.over && fight.active === 'p' && fight.ap > 0 && guard++ < 8) {
     const legal = actionsFor(fight).filter(x => x.enabled);
@@ -1844,6 +1858,7 @@ export function smartPlayerTurn(fight) {
     }
     applyAction(fight, pick);
   }
+  smartPetTurn(fight);
   if (!fight.over) endTurn(fight);
 }
 

@@ -994,6 +994,27 @@ export async function serveTree(root, { timeoutMs = 15000, forcePort = null } = 
   let err = '';
   srv.stderr.on('data', d => { err += d; });
   srv.stdout.on('data', () => {});
+  /* THE CHILD MUST NOT HOLD THE EVENT LOOP OPEN. A live child process, plus the
+     two piped stdio sockets these listeners put into flow mode, are all refed
+     handles, so an audit that falls off the end of its file after browser.close()
+     never exits: node has nothing left to do and stays alive anyway. Measured on
+     contrast-audit.mjs, which self-serves via boot(): report printed, no
+     failures, then >30 minutes alive with zero open TCP handles, killable only by
+     SIGTERM, which reports as exit 143 and reads as a red audit. It is in the
+     FULL tier of the release gate, so that stalls the gate.
+     Fixed here rather than in each audit because boot() self-serves whenever no
+     URL is given and never hands the handle back (see boot()). Most audits end
+     with an explicit process.exit, which masks this; the ones whose success path
+     falls off the end of the file do not, and a dozen of them can self-serve
+     (arena-static-probe, crew-cheers, gwart-guide, news-banner, both wardrobe
+     ones, ...). Measured: debuff-chips-audit, which self-serves and DOES call
+     process.exit(0), exits 0 either way.
+     Liveness only: this changes nothing about which tree is served or measured,
+     and the callers that do call close() still do. The exit hooks below (and
+     _trackServer's reaper) still kill the child, so unref cannot orphan it. */
+  srv.unref();
+  srv.stderr.unref?.();
+  srv.stdout.unref?.();
   let exited = null;
   srv.on('exit', (code, sig) => { exited = sig || `exit ${code}`; });
 

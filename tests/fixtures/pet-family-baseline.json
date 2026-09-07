@@ -1,0 +1,566 @@
+{
+  "sourceSHA256": "21366bc0aaa833800ddc55fef37bac83947e2b1507f47f4207cee55263cb7570",
+  "sourceCommit": "45b4989ba45624c1cbc05934116df8cd06c4b54b",
+  "rows": [
+    {
+      "id": "C1",
+      "level": 1,
+      "builds": 4,
+      "effects": 16,
+      "buildSHA256": "b76522e1c887b0e18a78c2e61205fab1151703cea9cec64d8c566512874f97e0",
+      "effectSHA256": "547cd90507dbd931ea7156b8f648928603eb8ee5e5c459fbfb7ffeb223d7a863"
+    },
+    {
+      "id": "C1",
+      "level": 2,
+      "builds": 12,
+      "effects": 48,
+      "buildSHA256": "dca9d174cb8228b049ec333b0e36ee118b599d2366f03790d3cfd98158424ae3",
+      "effectSHA256": "2c08e3cdd6bd5040efe0ec59ae5ac85490f1f4d437513afb33b0d9d5b2d0a92c"
+    },
+    {
+      "id": "C1",
+      "level": 3,
+      "builds": 12,
+      "effects": 48,
+      "buildSHA256": "3168f53c06c866ec03ec728a4e6a5f99cf106e0fbece4dc1c6c4bfa086953f7f",
+      "effectSHA256": "2c08e3cdd6bd5040efe0ec59ae5ac85490f1f4d437513afb33b0d9d5b2d0a92c"
+    },
+    {
+      "id": "C1",
+      "level": 4,
+      "builds": 36,
+      "effects": 144,
+      "buildSHA256": "953ceb149c751b449858fb7dd896b8c1097b7465a26c8edb853239f4fdd952a5",
+      "effectSHA256": "2002d9a41c76d1327951ce2c7065524160f657186a28b077cfd739c2e34fd76f"
+    },
+    {
+      "id": "C1",
+      "level": 5,
+      "builds": 36,
+      "effects": 144,
+      "buildSHA256": "585947683684df4fe7e1783ca10081ce65033ac6de9fe92accf8fe0bc4174726",
+      "effectSHA256": "2002d9a41c76d1327951ce2c7065524160f657186a28b077cfd739c2e34fd76f"
+    },
+    {
+      "id": "C1",
+      "level": 6,
+      "builds": 108,
+      "effects": 432,
+      "buildSHA256": "bb1c882169457f161475fe62fc0b6fed40dcb1c72e39c7f1e1aa78e2dc97b064",
+      "effectSHA256": "e111954505eb454ac113570f738ff76b22641be29536b6cada670b96768bd055"
+    },
+    {
+      "id": "C1",
+      "level": 7,
+      "builds": 108,
+      "effects": 432,
+      "buildSHA256": "d832e149f74224f9a7da59b854a9aa9f5c50e640466f547fd29e798ba1bf9f58",
+      "effectSHA256": "e111954505eb454ac113570f738ff76b22641be29536b6cada670b96768bd055"
+    },
+    {
+      "id": "C1",
+      "level": 8,
+      "builds": 324,
+      "effects": 1296,
+      "buildSHA256": "96806c8245ffa2daaf8fb49b17c61a8b3a1ed3443aafe6516bb865bffcc75d9b",
+      "effectSHA256": "f182d017eb4c9e0d2c5a8bf54e187035067ae82cf7ee70333a0c2957c753694e"
+    },
+    {
+      "id": "C1",
+      "level": 9,
+      "builds": 324,
+      "effects": 1296,
+      "buildSHA256": "ef4fd22f567769ccab709d4e20639126ca57ff98dfcb59487a02287c7abd0942",
+      "effectSHA256": "f182d017eb4c9e0d2c5a8bf54e187035067ae82cf7ee70333a0c2957c753694e"
+    },
+    {
+      "id": "C1",
+      "level": 10,
+      "builds": 972,
+      "effects": 3888,
+      "buildSHA256": "4d8e1c103454942d9a7d9eb6568b67098562c203cb93bf25cdb57d7392f392bd",
+      "effectSHA256": "6433bfe36beb76169fae6124968227abae9154a5ec7a610c7ddcf15391be4ff6"
+    },
+    {
+      "id": "C2",
+      "level": 1,
+      "builds": 4,
+      "effects": 16,
+      "buildSHA256": "7805d5526fa5ff19b393c0aef288859573da02e144deeac3e0e692bb54884f57",
+      "effectSHA256": "63fc477f69b5bf6e8951824e2048346e9b1cc69e3487c93fd5ccb9aea0297155"
+    },
+    {
+      "id": "C2",
+      "level": 2,
+      "builds": 12,
+      "effects": 48,
+      "buildSHA256": "f4c58b1a46746e3ccab2ca606bd625a7eaf562acea127fbeba10270841f02582",
+      "effectSHA256": "935e2731a02ad806b301bcd18d994a5c5030bedb30909bd4c4a33aec66350c7d"
+    },
+    {
+      "id": "C2",
+      "level": 3,
+      "builds": 12,
+      "effects": 48,
+      "buildSHA256": "4bbf4993a73e8c92edc4ccf0c5953db728d5aad17dd263b4a5e0d649f5a2f4dd",
+      "effectSHA256": "fab36903acefe153d84bbcca4a2c1f0f49f0bbdbb76265e7c40417b4ab412137"
+    },
+    {
+      "id": "C2",
+      "level": 4,
+      "builds": 36,
+      "effects": 144,
+      "buildSHA256": "40900b980b723c6c79be165b36a662f351528c9d83ff711c42b7350e0d8623f4",
+      "effectSHA256": "6f22b8b6425b6ff7b81df0bc22c45f33b4d358f760d94c6df9435d4265f6ddbf"
+    },
+    {
+      "id": "C2",
+      "level": 5,
+      "builds": 36,
+      "effects": 144,
+      "buildSHA256": "bf919f398e6c3dc8231397c93f9f86462e24ca44cfbd9816bfe610a4c355520b",
+      "effectSHA256": "94552067ecd440ef32257ff5a1007c1f16b291beaea6a9c0477b22266fae2c9f"
+    },
+    {
+      "id": "C2",
+      "level": 6,
+      "builds": 108,
+      "effects": 432,
+      "buildSHA256": "4dd14ae5ca598bf44a26be6f73867eb9442fe0d3e8c8d313de3639685d1d4daf",
+      "effectSHA256": "5e55b1db1fb829c1d632fc2b90639cc3c64c214e90157abdbf773248c819368e"
+    },
+    {
+      "id": "C2",
+      "level": 7,
+      "builds": 108,
+      "effects": 432,
+      "buildSHA256": "87ecb4d3a307d8fb17a32fad6746b5b584683e20786f02a34f6a346b4d8ee38d",
+      "effectSHA256": "ca42d3fed471118fe3b0cdadc3b6abd6df0885b17dbd4ccf326f26c2619d957b"
+    },
+    {
+      "id": "C2",
+      "level": 8,
+      "builds": 324,
+      "effects": 1296,
+      "buildSHA256": "267ed3a8c5e718b05c58afcab7caf0259e18a1ddc7c055939b3428e7d6ebee83",
+      "effectSHA256": "271128520bbcdb422d7794a5602d3633f03c99ff6d5865154efcec042ae564f8"
+    },
+    {
+      "id": "C2",
+      "level": 9,
+      "builds": 324,
+      "effects": 1296,
+      "buildSHA256": "639dcb7ccfdcc4a071a29ef1ec951b9df22c0739c2ea479c8fe896bc7247133a",
+      "effectSHA256": "6be66d64345b28de38b3c22f978c33f7ffd2b964e5f6c41fd07331bde8c04b17"
+    },
+    {
+      "id": "C2",
+      "level": 10,
+      "builds": 972,
+      "effects": 3888,
+      "buildSHA256": "d044694f20206c85b4eba74396d04881675625353c70d53fbc3fea3adba03651",
+      "effectSHA256": "36dc098869c0fa1a3c8685d685a2b8ee98c580e3782890610e77b9ea6d78583b"
+    },
+    {
+      "id": "C3",
+      "level": 1,
+      "builds": 4,
+      "effects": 16,
+      "buildSHA256": "422e3e1a4e75da8f92f6790263218a49ee51e97d12ad0e84c7a8ef2458c533dc",
+      "effectSHA256": "26a915f74e15cbbd752dd524d6bd2ca162e241cb076b819fa683b8ebef4e3470"
+    },
+    {
+      "id": "C3",
+      "level": 2,
+      "builds": 12,
+      "effects": 48,
+      "buildSHA256": "9a51a501119b0ec9901993c69e0cc521fcc2ad24ff5dffc2b8c511b9d1033632",
+      "effectSHA256": "d9eb763a480c08d72a37310b34fbf15c5cfcee024e6daef7d3c660aaeece9508"
+    },
+    {
+      "id": "C3",
+      "level": 3,
+      "builds": 12,
+      "effects": 48,
+      "buildSHA256": "cc4d2d690a77b4c0ce832d0b0e575af046eefebb2b254d0d1cf12af4f04ac06b",
+      "effectSHA256": "b1f0876b23160726088f029b236d4bb1326e520e3c9c5ed56e6f01b511240fa5"
+    },
+    {
+      "id": "C3",
+      "level": 4,
+      "builds": 36,
+      "effects": 144,
+      "buildSHA256": "dbdf1265f00aacd07dc7da4ea2c897cf9372e4c2f53cdef87b5ff2d1fff517c4",
+      "effectSHA256": "d0fcec551d3f85ab2e8330b5e5f5f43096fda8aa384a5d8592e2cb455ce4ef2e"
+    },
+    {
+      "id": "C3",
+      "level": 5,
+      "builds": 36,
+      "effects": 144,
+      "buildSHA256": "886c90f6c377d4ca452007685d4ee11486b0e52210370a0d3610c55b2b6bf612",
+      "effectSHA256": "3baecca885dbae20abbf195de84770858062ca1397742ff78ccdf7e3f85c874e"
+    },
+    {
+      "id": "C3",
+      "level": 6,
+      "builds": 108,
+      "effects": 432,
+      "buildSHA256": "6f56ea675460d7d454d646a4cfe4600a3d9db5bcfcac3e7978abae057fc469f5",
+      "effectSHA256": "3a406d4168a9bd743d502a2d45160cb7804473bfcba787d7db572cf3d334c868"
+    },
+    {
+      "id": "C3",
+      "level": 7,
+      "builds": 108,
+      "effects": 432,
+      "buildSHA256": "8a959cef5b429b65b19840f69306fef6239092461e46f06a5734345b46561268",
+      "effectSHA256": "53ae1dc277f60b39787ab7f7df901c0240db3f04ad67c01f96aefe88a16eba65"
+    },
+    {
+      "id": "C3",
+      "level": 8,
+      "builds": 324,
+      "effects": 1296,
+      "buildSHA256": "964574e665523fb9067512ec183d6bad8b4fbc3d977c27e709a05dfa30eb6c23",
+      "effectSHA256": "e2e11347f85110f0b58fa6af399a173810ac680a50ee6c5c02eafd5da5dfa544"
+    },
+    {
+      "id": "C3",
+      "level": 9,
+      "builds": 324,
+      "effects": 1296,
+      "buildSHA256": "1d943ea0174e15d2e8f45426a29d552c3b8ad41e1028af22ce7ec62b98459dd3",
+      "effectSHA256": "abffa391a08eff784589f1b187410d068b40eef1d5fd72cb2e3f34f7a65a36a5"
+    },
+    {
+      "id": "C3",
+      "level": 10,
+      "builds": 972,
+      "effects": 3888,
+      "buildSHA256": "7de236a594afa6d407ec7fd328f7cc1602e641a89c3177854a97c550e73d27c0",
+      "effectSHA256": "5a91150ce5b5430b68f41278195ba762cbb2dad17c36b44096af3fcf07a0b6ef"
+    },
+    {
+      "id": "C4",
+      "level": 1,
+      "builds": 4,
+      "effects": 16,
+      "buildSHA256": "93332e00bd904aad020b67e82cda200a9fec414588e3d341275fd016ac7a3d12",
+      "effectSHA256": "26a915f74e15cbbd752dd524d6bd2ca162e241cb076b819fa683b8ebef4e3470"
+    },
+    {
+      "id": "C4",
+      "level": 2,
+      "builds": 12,
+      "effects": 48,
+      "buildSHA256": "72a63ca393ce9ade8b44abe5388c3d962bf42ec47b8afd1f15992933298b57dc",
+      "effectSHA256": "d9eb763a480c08d72a37310b34fbf15c5cfcee024e6daef7d3c660aaeece9508"
+    },
+    {
+      "id": "C4",
+      "level": 3,
+      "builds": 12,
+      "effects": 48,
+      "buildSHA256": "5a21cbf846c6f0ef9456ef8c7da13990169f937963ae932c20261a4d5e034615",
+      "effectSHA256": "b1f0876b23160726088f029b236d4bb1326e520e3c9c5ed56e6f01b511240fa5"
+    },
+    {
+      "id": "C4",
+      "level": 4,
+      "builds": 36,
+      "effects": 144,
+      "buildSHA256": "291d78e56aefc411df22981643492d655b6bb3675c9af1bcc08704eb70a3b9f9",
+      "effectSHA256": "d0fcec551d3f85ab2e8330b5e5f5f43096fda8aa384a5d8592e2cb455ce4ef2e"
+    },
+    {
+      "id": "C4",
+      "level": 5,
+      "builds": 36,
+      "effects": 144,
+      "buildSHA256": "0df94e1711f93fddfc449935b1c2815d07fdcd03e7cabc5e47c4772c1d839185",
+      "effectSHA256": "3baecca885dbae20abbf195de84770858062ca1397742ff78ccdf7e3f85c874e"
+    },
+    {
+      "id": "C4",
+      "level": 6,
+      "builds": 108,
+      "effects": 432,
+      "buildSHA256": "b74845391eb9b0cbff02cbf9b85585aef2e1640a1782155c1f19c91a8ce74062",
+      "effectSHA256": "3a406d4168a9bd743d502a2d45160cb7804473bfcba787d7db572cf3d334c868"
+    },
+    {
+      "id": "C4",
+      "level": 7,
+      "builds": 108,
+      "effects": 432,
+      "buildSHA256": "9816d56f07fc05e8e90635b98f4600f6f0d5b1556d545f83266e81b7e038b86e",
+      "effectSHA256": "53ae1dc277f60b39787ab7f7df901c0240db3f04ad67c01f96aefe88a16eba65"
+    },
+    {
+      "id": "C4",
+      "level": 8,
+      "builds": 324,
+      "effects": 1296,
+      "buildSHA256": "cffd1d8cca9ba7a751a00d0eb991d4132862ae1a3b40ffab26f59b0b7ae18107",
+      "effectSHA256": "e2e11347f85110f0b58fa6af399a173810ac680a50ee6c5c02eafd5da5dfa544"
+    },
+    {
+      "id": "C4",
+      "level": 9,
+      "builds": 324,
+      "effects": 1296,
+      "buildSHA256": "481d3af93a690c864ba07b41e9f1b5df0694470eeeab04a4a4dd36fcca50ee05",
+      "effectSHA256": "abffa391a08eff784589f1b187410d068b40eef1d5fd72cb2e3f34f7a65a36a5"
+    },
+    {
+      "id": "C4",
+      "level": 10,
+      "builds": 972,
+      "effects": 3888,
+      "buildSHA256": "aae8944e964243c38f3537f446278944506b7e3d681df2a4799335aa447db28d",
+      "effectSHA256": "71abc83c334e9171949119064161ab8eceabd0f21be0eace29f1ff0e4073a524"
+    },
+    {
+      "id": "C5",
+      "level": 1,
+      "builds": 4,
+      "effects": 16,
+      "buildSHA256": "ab978cf5de93d6a83158f38976a675d96f8f352bd7e9ed4f9bff6d6bbad67429",
+      "effectSHA256": "63fc477f69b5bf6e8951824e2048346e9b1cc69e3487c93fd5ccb9aea0297155"
+    },
+    {
+      "id": "C5",
+      "level": 2,
+      "builds": 12,
+      "effects": 48,
+      "buildSHA256": "8f4ba1529da7ff306f6030a0d9e66814cc6ba2f6b2ba095518f83fcd1433b8b3",
+      "effectSHA256": "935e2731a02ad806b301bcd18d994a5c5030bedb30909bd4c4a33aec66350c7d"
+    },
+    {
+      "id": "C5",
+      "level": 3,
+      "builds": 12,
+      "effects": 48,
+      "buildSHA256": "f69b874ba6e213cef0ab8e9880ed1ccbf159555f27ae68383b86f9a71fdac081",
+      "effectSHA256": "fab36903acefe153d84bbcca4a2c1f0f49f0bbdbb76265e7c40417b4ab412137"
+    },
+    {
+      "id": "C5",
+      "level": 4,
+      "builds": 36,
+      "effects": 144,
+      "buildSHA256": "52246170c7482a455e991283895e288012d0ead116f26477fec00cbbf17571aa",
+      "effectSHA256": "6f22b8b6425b6ff7b81df0bc22c45f33b4d358f760d94c6df9435d4265f6ddbf"
+    },
+    {
+      "id": "C5",
+      "level": 5,
+      "builds": 36,
+      "effects": 144,
+      "buildSHA256": "2bcad8d054e290d68c1905d1fca3c5378c3695d69cad3fec26626eff9ddf1a45",
+      "effectSHA256": "94552067ecd440ef32257ff5a1007c1f16b291beaea6a9c0477b22266fae2c9f"
+    },
+    {
+      "id": "C5",
+      "level": 6,
+      "builds": 108,
+      "effects": 432,
+      "buildSHA256": "e166a38b83907dbafa0866f616cac8415ce3d7e0276a0ffc75b678f453505f6b",
+      "effectSHA256": "5e55b1db1fb829c1d632fc2b90639cc3c64c214e90157abdbf773248c819368e"
+    },
+    {
+      "id": "C5",
+      "level": 7,
+      "builds": 108,
+      "effects": 432,
+      "buildSHA256": "35ab6eb2bb010710d7ea8023b8e427b6f62209e099e12aba04cf00510a41ef05",
+      "effectSHA256": "ca42d3fed471118fe3b0cdadc3b6abd6df0885b17dbd4ccf326f26c2619d957b"
+    },
+    {
+      "id": "C5",
+      "level": 8,
+      "builds": 324,
+      "effects": 1296,
+      "buildSHA256": "bafdc92010a6435572517d1237de5c0c931efb2d109ef933064a92fb0d724b37",
+      "effectSHA256": "271128520bbcdb422d7794a5602d3633f03c99ff6d5865154efcec042ae564f8"
+    },
+    {
+      "id": "C5",
+      "level": 9,
+      "builds": 324,
+      "effects": 1296,
+      "buildSHA256": "8cdaca8fcf1aca55bc8ff95aa4fcc152305c4b90900cfefbf5c98a8f285b805b",
+      "effectSHA256": "6be66d64345b28de38b3c22f978c33f7ffd2b964e5f6c41fd07331bde8c04b17"
+    },
+    {
+      "id": "C5",
+      "level": 10,
+      "builds": 972,
+      "effects": 3888,
+      "buildSHA256": "c96f461915ffc368f4e6879dc99f19f8dec838fa9a83d1ce35f4322bf09ebcb9",
+      "effectSHA256": "21d72f848841aaa6ba9412abed67ad23e07a74fbe9784ba45b0d419bb667fe06"
+    },
+    {
+      "id": "C6",
+      "level": 1,
+      "builds": 4,
+      "effects": 16,
+      "buildSHA256": "f40496c4a74530ad45b9c2bbb9223f8a9648f2e7891db98507083618eabe7f6c",
+      "effectSHA256": "26a915f74e15cbbd752dd524d6bd2ca162e241cb076b819fa683b8ebef4e3470"
+    },
+    {
+      "id": "C6",
+      "level": 2,
+      "builds": 12,
+      "effects": 48,
+      "buildSHA256": "64a2535cf250956c00be9a048c4741c539436dabc76eb0447d6e382d66e87d1c",
+      "effectSHA256": "d9eb763a480c08d72a37310b34fbf15c5cfcee024e6daef7d3c660aaeece9508"
+    },
+    {
+      "id": "C6",
+      "level": 3,
+      "builds": 12,
+      "effects": 48,
+      "buildSHA256": "898b6e0ac9c64afbb4ede520e8de39576338ce723efcba2c3a09071342ca24a0",
+      "effectSHA256": "b1f0876b23160726088f029b236d4bb1326e520e3c9c5ed56e6f01b511240fa5"
+    },
+    {
+      "id": "C6",
+      "level": 4,
+      "builds": 36,
+      "effects": 144,
+      "buildSHA256": "44f78bd82b0b8bd62eab908ee19d6ba1a5b0bf701f2768c6242ef8c3a84ebcf3",
+      "effectSHA256": "d0fcec551d3f85ab2e8330b5e5f5f43096fda8aa384a5d8592e2cb455ce4ef2e"
+    },
+    {
+      "id": "C6",
+      "level": 5,
+      "builds": 36,
+      "effects": 144,
+      "buildSHA256": "948e880292afc57770f6784c29534ed5aa6a9325b6cf4d146c06eea6073c53de",
+      "effectSHA256": "3baecca885dbae20abbf195de84770858062ca1397742ff78ccdf7e3f85c874e"
+    },
+    {
+      "id": "C6",
+      "level": 6,
+      "builds": 108,
+      "effects": 432,
+      "buildSHA256": "6c888935291b0c613179bfa43a4650925b41814793f1659e4a83dd3d6262e547",
+      "effectSHA256": "3a406d4168a9bd743d502a2d45160cb7804473bfcba787d7db572cf3d334c868"
+    },
+    {
+      "id": "C6",
+      "level": 7,
+      "builds": 108,
+      "effects": 432,
+      "buildSHA256": "31def0d2a49f89d71d701cfa35e5be341db574521ca9b3f3f54f89e7f7945726",
+      "effectSHA256": "53ae1dc277f60b39787ab7f7df901c0240db3f04ad67c01f96aefe88a16eba65"
+    },
+    {
+      "id": "C6",
+      "level": 8,
+      "builds": 324,
+      "effects": 1296,
+      "buildSHA256": "da6d9cef530835cdf82adc9b62f335a679c86f7bbe0387ecff83d063139893a7",
+      "effectSHA256": "e2e11347f85110f0b58fa6af399a173810ac680a50ee6c5c02eafd5da5dfa544"
+    },
+    {
+      "id": "C6",
+      "level": 9,
+      "builds": 324,
+      "effects": 1296,
+      "buildSHA256": "d05bafd72b1bdf4711bb61f2d0f2be4bdc20dbbf24cf9b7914ba80d22dd37a82",
+      "effectSHA256": "abffa391a08eff784589f1b187410d068b40eef1d5fd72cb2e3f34f7a65a36a5"
+    },
+    {
+      "id": "C6",
+      "level": 10,
+      "builds": 972,
+      "effects": 3888,
+      "buildSHA256": "516674938ede1f238d2c476b3a1b8b4d28f3dda4439ec16fb4274a8930c4d677",
+      "effectSHA256": "85519ca9fd556186ef9b4b4b0c0873112b238a203e2d84871f480d1a82bc558e"
+    },
+    {
+      "id": "CX",
+      "level": 1,
+      "builds": 4,
+      "effects": 16,
+      "buildSHA256": "fb310d8e84d6786908acb70051b186e4ee938b78993a065c84c0b1246701e8a0",
+      "effectSHA256": "26a915f74e15cbbd752dd524d6bd2ca162e241cb076b819fa683b8ebef4e3470"
+    },
+    {
+      "id": "CX",
+      "level": 2,
+      "builds": 12,
+      "effects": 48,
+      "buildSHA256": "82ca25be77d0f52341aefccbc05dc25591da374537a6e7022374949d7a60c2ec",
+      "effectSHA256": "d9eb763a480c08d72a37310b34fbf15c5cfcee024e6daef7d3c660aaeece9508"
+    },
+    {
+      "id": "CX",
+      "level": 3,
+      "builds": 12,
+      "effects": 48,
+      "buildSHA256": "01e1aca7eb57383943288f4c8051931540b20e5ffabe22ad7155b801ef026b7d",
+      "effectSHA256": "b1f0876b23160726088f029b236d4bb1326e520e3c9c5ed56e6f01b511240fa5"
+    },
+    {
+      "id": "CX",
+      "level": 4,
+      "builds": 36,
+      "effects": 144,
+      "buildSHA256": "cddebd75a288e2ac78ab5d8eeee5093dfd055ba4eeceaedcc7f17e58cca2bcb2",
+      "effectSHA256": "d0fcec551d3f85ab2e8330b5e5f5f43096fda8aa384a5d8592e2cb455ce4ef2e"
+    },
+    {
+      "id": "CX",
+      "level": 5,
+      "builds": 36,
+      "effects": 144,
+      "buildSHA256": "d17eab331e39b7b1cce4417139c4ca35af9d00459355adac9a5051a81a5f1b74",
+      "effectSHA256": "3baecca885dbae20abbf195de84770858062ca1397742ff78ccdf7e3f85c874e"
+    },
+    {
+      "id": "CX",
+      "level": 6,
+      "builds": 108,
+      "effects": 432,
+      "buildSHA256": "23c8e8f303ebfa63244f696b871a51932e98c77a093218de411a7d1c5fdb08c6",
+      "effectSHA256": "3a406d4168a9bd743d502a2d45160cb7804473bfcba787d7db572cf3d334c868"
+    },
+    {
+      "id": "CX",
+      "level": 7,
+      "builds": 108,
+      "effects": 432,
+      "buildSHA256": "d6499d6a7e0aac0e6cccf2491ea0b6ca58936107974429506a2e9a1c19ad3889",
+      "effectSHA256": "53ae1dc277f60b39787ab7f7df901c0240db3f04ad67c01f96aefe88a16eba65"
+    },
+    {
+      "id": "CX",
+      "level": 8,
+      "builds": 324,
+      "effects": 1296,
+      "buildSHA256": "e384d94715fe12e1c9dc4f6bc5966a248e63a15740b013fa9e2b01a62d0ce93a",
+      "effectSHA256": "e2e11347f85110f0b58fa6af399a173810ac680a50ee6c5c02eafd5da5dfa544"
+    },
+    {
+      "id": "CX",
+      "level": 9,
+      "builds": 324,
+      "effects": 1296,
+      "buildSHA256": "976f77e25b9eee39965c2da2521ed97b3f0fd4ee5414408a6370db642c818694",
+      "effectSHA256": "abffa391a08eff784589f1b187410d068b40eef1d5fd72cb2e3f34f7a65a36a5"
+    },
+    {
+      "id": "CX",
+      "level": 10,
+      "builds": 972,
+      "effects": 3888,
+      "buildSHA256": "3f244fb48ce2c871c375911138d80ded3947dcf6b19971b91b33f6025a5bebde",
+      "effectSHA256": "8b29cda5bd6c1aea03a83af3fb35f6aca1c7f9745fe1d4e936c33d5f4ab83898"
+    }
+  ]
+}
