@@ -7,7 +7,7 @@ import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneh
 import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SOLD, FOOTBALL_PETS, footballItemId, footballGrantIds, footballBundleIds, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { COMMON_INGREDIENT_IDS } from './cooking.js';
-import { isMorph, rollMorph, ownedPairs } from './pets.js';
+import { isMorph, rollMorph, ownedPairs, isKnownPet, legalPicks, petLevel } from './pets.js';
 
 export const RARITIES = {
   common:    { label: 'Common',    color: '#9fac9f', w: 52, dupe: 10 },
@@ -1419,15 +1419,15 @@ export function migrateInstances(ownedPetIds, petsRec = {}) {
 }
 // The instance the game FIGHTS with for a species: best lineage, then shiny.
 export function bestInstance(instances, sp) {
-  const of = (instances || []).filter(x => x.sp === sp);
+  const of = (instances || []).filter(x => selectablePetInstance(x) && x.sp === sp);
   if (!of.length) return null;
   return of.slice().sort((a, b) => (b.lineage - a.lineage) || (Number(!!b.shiny) - Number(!!a.shiny)))[0];
 }
-export function speciesCount(instances, sp) { return (instances || []).filter(x => x.sp === sp).length; }
+export function speciesCount(instances, sp) { return (instances || []).filter(x => selectablePetInstance(x) && x.sp === sp).length; }
 // Salvage/breed sacrifices the WORST copy first (lowest lineage, non-shiny first)
 // so a player never loses their best or a shiny to a routine salvage.
 export function removeWorstInstance(instances, sp) {
-  const tagged = (instances || []).map((x, i) => ({ x, i })).filter(o => o.x.sp === sp);
+  const tagged = (instances || []).map((x, i) => ({ x, i })).filter(o => selectablePetInstance(o.x) && o.x.sp === sp);
   if (!tagged.length) return { instances: instances || [], removed: null };
   tagged.sort((a, b) => (a.x.lineage - b.x.lineage) || (Number(!!a.x.shiny) - Number(!!b.x.shiny)));
   const idx = tagged[0].i;
@@ -1435,7 +1435,7 @@ export function removeWorstInstance(instances, sp) {
 }
 export function addInstance(instances, inst) { return [...(instances || []), inst]; }
 export function removeInstance(instances, iid) {
-  const idx = (instances || []).findIndex(x => x.iid === iid);
+  const idx = (instances || []).findIndex(x => selectablePetInstance(x) && x.iid === iid);
   if (idx < 0) return { instances: instances || [], removed: null };
   return { instances: instances.filter((_, i) => i !== idx), removed: instances[idx] };
 }
@@ -1511,10 +1511,10 @@ export async function breedPets(keepIid, feedIid) {
   let keep = null;
   const next = await kvUpdate('petInst', raw => {
     const cur = Array.isArray(raw) ? raw : list;
-    if (!cur.some(x => x.iid === keepIid) || !cur.some(x => x.iid === feedIid)) return undefined;
-    const bumped = cur.map(x => x.iid === keepIid ? { ...x, lineage: (x.lineage || 0) + 1 } : x);
-    keep = bumped.find(x => x.iid === keepIid);
-    return bumped.filter(x => x.iid !== feedIid);
+    if (!cur.some(x => selectablePetInstance(x) && x.iid === keepIid) || !cur.some(x => selectablePetInstance(x) && x.iid === feedIid)) return undefined;
+    const bumped = cur.map(x => selectablePetInstance(x) && x.iid === keepIid ? { ...x, lineage: (x.lineage || 0) + 1 } : x);
+    keep = bumped.find(x => selectablePetInstance(x) && x.iid === keepIid);
+    return bumped.filter(x => !selectablePetInstance(x) || x.iid !== feedIid);
   }, list);
   if (!next) return { ok: false, reason: 'gone' };
   list = next;
@@ -1550,6 +1550,11 @@ export async function breedPets(keepIid, feedIid) {
 let _iidSeq = 0;
 function newIid(sp) { _iidSeq += 1; return `p${Date.now().toString(36)}-${_iidSeq}-${sp}`; }
 
+// Persist unsupported rows verbatim. Only this view may reach pet consumers.
+function selectablePetInstance(row) {
+  return !!row && typeof row.iid === 'string' && row.iid.trim().length > 0 && isKnownPet(row.sp);
+}
+
 // Read the instance list, migrating on first access (additive: never touches the
 // legacy `pets`/`inv` state, so a rollback to a pre-v126 build still works).
 /* PURE: re-id duplicate instance rows. Two rows sharing one iid make every
@@ -1561,12 +1566,14 @@ function newIid(sp) { _iidSeq += 1; return `p${Date.now().toString(36)}-${_iidSe
  * healing, so callers can cheaply tell "no write needed". */
 export function healDupIids(list) {
   const seen = new Set();
+  const reserved = new Set((list || []).filter(x => x && typeof x.iid === 'string').map(x => x.iid));
   let healed = false;
   const out = (list || []).map(x => {
+    if (!selectablePetInstance(x)) return x;
     if (!x || !x.iid || !seen.has(x.iid)) { if (x && x.iid) seen.add(x.iid); return x; }
     healed = true;
     let k = 2, nid = `${x.iid}~${k}`;
-    while (seen.has(nid)) nid = `${x.iid}~${++k}`;
+    while (seen.has(nid) || reserved.has(nid)) nid = `${x.iid}~${++k}`;
     seen.add(nid);
     return { ...x, iid: nid, healedFrom: x.iid };
   });
@@ -1608,13 +1615,13 @@ async function reclaimOwnedPets(list) {
   if (_petsReclaimed) return list;
   _petsReclaimed = true;
   const owned = await ownedCosmeticIds();
-  const wantSpecies = [...owned].filter(id => (BH_BY_ID[id] || {}).slot === 'C');
-  if (!wantSpecies.some(id => !list.some(x => x.sp === id))) return list;   // cheap precheck; the real one is below
+  const wantSpecies = [...owned].filter(isKnownPet);
+  if (!wantSpecies.some(id => !list.some(x => selectablePetInstance(x) && x.sp === id))) return list;   // cheap precheck; the real one is below
   const anchor = await lifetimeStepsSum();
   let added = [];
   const next = await kvUpdate('petInst', raw => {
     const cur = Array.isArray(raw) ? raw : list;
-    const missing = wantSpecies.filter(id => !cur.some(x => x.sp === id));
+    const missing = wantSpecies.filter(id => !cur.some(x => selectablePetInstance(x) && x.sp === id));
     if (!missing.length) return undefined;
     added = missing;
     return [...cur, ...missing.map(sp => ({ iid: `r-${sp}`, sp, lineage: 0, shiny: false, hatchedAtSteps: anchor }))];
@@ -1652,7 +1659,7 @@ export async function petInstances() {
         const bonds = await kvGet('petBonds', null);
         const nicks = await kvGet('petNick', null);
         for (const row of written) {
-          if (!row || !row.healedFrom) continue;
+          if (!selectablePetInstance(row) || !row.healedFrom) continue;
           if (bank && bank[row.healedFrom] != null && bank[row.iid] == null) bank[row.iid] = bank[row.healedFrom];
           if (bonds && bonds[row.healedFrom] != null && bonds[row.iid] == null) bonds[row.iid] = bonds[row.healedFrom];
           if (nicks && nicks[row.healedFrom] != null && nicks[row.iid] == null) nicks[row.iid] = nicks[row.healedFrom];
@@ -1665,11 +1672,11 @@ export async function petInstances() {
           n: dupIids.length,
           sample: dupIids.slice(0, 3),   // iid SHAPE is the diagnosis: m- rows point at the migration, p- rows at the mint
         })).catch(() => {});
-        return reclaimOwnedPets(written);
+        return (await reclaimOwnedPets(written)).filter(selectablePetInstance);
       }
-      return reclaimOwnedPets(list);
+      return (await reclaimOwnedPets(list)).filter(selectablePetInstance);
     }
-    return reclaimOwnedPets(list);
+    return (await reclaimOwnedPets(list)).filter(selectablePetInstance);
   }
   /* ONE-TIME MIGRATION, NOT A READ-MODIFY-WRITE (kept as a plain kvSet,
      claimed-row-audit ACCEPTED): it fires only while 'petInst' is not yet an
@@ -1681,11 +1688,11 @@ export async function petInstances() {
      migration, so nothing can observe a still-missing row and try to kvUpdate
      it before this has run. */
   const owned = await ownedCosmeticIds();
-  const ownedPets = [...owned].filter(id => (BH_BY_ID[id] || {}).slot === 'C');
+  const ownedPets = [...owned].filter(isKnownPet);
   const petsRec = (await kvGet('pets', {})) || {};
   list = migrateInstances(ownedPets, petsRec);
   await kvSet('petInst', list);
-  return list;
+  return list.filter(selectablePetInstance);
 }
 
 // Add one instance of a species (a fresh hatch/dupe). Keeps the `inv` ownership
@@ -1704,8 +1711,10 @@ export async function addPetInstance(sp, opts = {}) {
   return inst;
 }
 async function petInstancePay(sp, { shiny = false, morph = 'base', hatchedAtSteps = null, startLevelSteps = 0 } = {}) {
+  if (!isKnownPet(sp)) throw new Error('unknown pet species');
   await petInstances();   // migrates / heals a legacy save first, same as every other writer
   await petLevelBank();   // migrates the bank to its iid-keyed shape first, so the seed below lands in it
+  await petTalentBank();  // grandfather existing copies before minting a new one
   const anchor = hatchedAtSteps == null ? await lifetimeStepsSum() : hatchedAtSteps;
   // Shiny forces base (rule 0.1/1.2); an unknown morph value renders base too
   // (rule 0.6), so it is refused at the write rather than merely at render.
@@ -1844,8 +1853,8 @@ export async function salvageInstance(iid) {
       kv: {
         petInst: raw => {
           const arr = Array.isArray(raw) ? raw : list;
-          if (!arr.some(x => x.iid === iid)) throw Object.assign(new Error('gone'), { refused: true });
-          next = arr.filter(x => x.iid !== iid);
+          if (!arr.some(x => selectablePetInstance(x) && x.iid === iid)) throw Object.assign(new Error('gone'), { refused: true });
+          next = arr.filter(x => !selectablePetInstance(x) || x.iid !== iid);
           if ((speciesCount(next, inst.sp) === 0) !== last) throw Object.assign(new Error('gone'), { refused: true });   // roster moved under the plan
           return next;
         },
@@ -2068,15 +2077,42 @@ export async function petStepsForIid(iid) {
   const bank = await petLevelBank();
   return Math.max(0, bank[iid] || 0);
 }
-export async function petPicks(petId) {
+// One-time grandfather: each existing copy keeps only choices its own level
+// permits. The original record stays archived, including future species. The
+// marker and iid choices share one kvUpdate, so retries cannot re-grant picks.
+async function petTalentBank() {
   const all = (await kvGet('pettalents', {})) || {};
-  return all[petId] || [];
+  if (all.__iidV === 2) return all;
+  const insts = await petInstances();
+  const bank = await petLevelBank();
+  const migrated = await kvUpdate('pettalents', raw => {
+    const prior = raw || {};
+    if (prior.__iidV === 2) return undefined;
+    const next = { __iidV: 2, __legacy: prior };
+    for (const x of insts) {
+      const picks = Object.hasOwn(prior, x.iid) ? prior[x.iid] : prior[x.sp];
+      next[x.iid] = legalPicks(x.sp, petLevel(bank[x.iid] || 0), Array.isArray(picks) ? picks : []);
+    }
+    return next;
+  }, {});
+  return migrated || (await kvGet('pettalents', {}));
 }
-export async function setPetPick(petId, nodeId, picks) {
-  const all = (await kvGet('pettalents', {})) || {};
-  all[petId] = picks;
-  await kvSet('pettalents', all);
-  return picks;
+
+// Species ids are deliberately not accepted: a species cannot identify which
+// duplicate the player is editing. All callers must supply the instance iid.
+export async function petPicks(iid) {
+  const inst = (await petInstances()).find(x => x.iid === iid);
+  if (!inst) return [];
+  const all = await petTalentBank();
+  return legalPicks(inst.sp, petLevel(await petStepsForIid(iid)), Array.isArray(all[iid]) ? all[iid] : []);
+}
+export async function setPetPick(iid, nodeId, picks) {
+  const inst = (await petInstances()).find(x => x.iid === iid);
+  if (!inst) return [];
+  await petTalentBank();
+  const next = legalPicks(inst.sp, petLevel(await petStepsForIid(iid)), Array.isArray(picks) ? picks : []);
+  await kvUpdate('pettalents', all => ({ ...all, [iid]: next }), {});
+  return next;
 }
 
 // Legacy: unopened egg-type crates become incubating eggs (idempotent sweep).
@@ -2821,6 +2857,8 @@ export async function equipped({ raw = false } = {}) {
   for (const s of BH_SLOTS) if (s.default) base[s.code] = s.default;
   const saved = await kvGet('equipped', {});
   const eq = { ...base, ...saved };
+  // Hide unsupported companions without rewriting their saved rows or slot.
+  if (eq.C && !isKnownPet(eq.C)) delete eq.C;
   if (raw) return eq;
   const tm = (await kvGet('transmog', {})) || {};
   const slots = Object.keys(tm);
@@ -2835,7 +2873,7 @@ export async function equipped({ raw = false } = {}) {
        transmogPrice. */
     if (!lo[slot] && !eq[slot]) continue;
     if (tm[slot] === TRANSMOG_HIDE) delete eq[slot];
-    else if (BH_BY_ID[tm[slot]]) eq[slot] = tm[slot];
+    else if (BH_BY_ID[tm[slot]] && (slot !== 'C' || isKnownPet(tm[slot]))) eq[slot] = tm[slot];
   }
   return eq;
 }
@@ -2847,7 +2885,7 @@ export async function equip(slot, itemId, { keepGear = false } = {}) {
     if (def) eq[slot] = def; else delete eq[slot];
   } else {
     const item = BH_BY_ID[itemId];
-    if (!item || item.slot !== slot) throw new Error('bad item');
+    if (!item || item.slot !== slot || (slot === 'C' && !isKnownPet(itemId))) throw new Error('bad item');
     const owned = await ownedCosmeticIds();
     if (!owned.has(itemId)) throw new Error('not owned');
     /* Football kit, 2026-09-04: the 'refuse' branch of VISOR_EYES_POLICY. Under
