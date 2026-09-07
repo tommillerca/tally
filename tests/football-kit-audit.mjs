@@ -5,10 +5,14 @@
  * cannot break and is the opposite:
  *
  *   1. THE COLOURS ARE A MEASUREMENT, NOT A TASTE. Two claims in the data
- *      file's header are numbers somebody measured once: primaries pairwise
- *      CIE76 dE >= 12 (so two shells read apart at 24px) and a/b WCAG contrast
- *      >= 3:1 (so the stripe reads on the shell). A 33rd team, or a nudge to
- *      one hex, silently breaks a pair. This file RE-MEASURES both rather than
+ *      file's header are numbers somebody measured once: every two teams'
+ *      PAIRS are CIE76 dE >= 12 apart, a-a plus b-b (so two discs read apart
+ *      at 24px) and each team's a/b are CIE76 dE >= 40 apart (so the stripe
+ *      reads on the shell). Until 2026-09-07 the first rule was over primaries
+ *      alone and the second was WCAG 3:1; both changed when the 32 teams took
+ *      the real franchises' brand colours (six navy shells, four black ones,
+ *      and aqua/orange at 1.16:1 that nobody could mistake for one colour). A
+ *      33rd team, or a nudge to one hex, silently breaks a pair. This file RE-MEASURES both rather than
  *      restating them, and if the measured minimum disagrees with the number
  *      the header states, THE HEADER IS THE THING THAT FAILS: a comment that
  *      has drifted from the data is worse than no comment, because it is the
@@ -69,6 +73,12 @@
  *   DE + CONTRAST  gravel-gulls a -> #5B6B80, onto ironhaven's grey.
  *                  "closest gravel-gulls vs ironhaven-anvils at dE 0.61", and
  *                  both -HEADER rows red too: the recorded minimum has moved.
+ *                  RE-RUN 2026-09-07 as PAIR + LEGIBLE on the franchise colours
+ *                  (throwaway tree): sootvale-salamanders a/b -> cinderfall-
+ *                  crows' #000000/#A71930 gives "closest cinderfall-crows vs
+ *                  sootvale-salamanders at pair dE 0.00, DUPLICATES", and
+ *                  shalebank-skates b -> #0A5058 gives "tightest shalebank-
+ *                  skates at dE 1.75"; both -HEADER rows red with them.
  *   HEX            windrow-wasps a -> '#F9DC1'. "windrow-wasps.a=#F9DC1"
  *   ASSETS         mv jersey.mask-a.png away. "1 missing: .../jersey.mask-a.png"
  *   TINT           helmet master re-exported without normalised_grey's x4.08
@@ -191,8 +201,6 @@ ok('HEX every primary and secondary is a full 6-digit hex, which is what the CSS
 /* ---- 2. THE TWO MEASURED CLAIMS, RE-MEASURED ------------------------------ */
 const rgb = hx => [1, 3, 5].map(i => parseInt(hx.slice(i, i + 2), 16));
 const srgbLin = c => { const s = c / 255; return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
-const relLum = hx => { const [r, g, b] = rgb(hx).map(srgbLin); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
-const contrast = (x, y) => { const a = relLum(x), b = relLum(y); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); };
 function lab(hx) {                                   // sRGB -> XYZ (D65) -> CIE L*a*b*
   const [r, g, b] = rgb(hx).map(srgbLin);
   const X = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047;
@@ -205,40 +213,50 @@ function lab(hx) {                                   // sRGB -> XYZ (D65) -> CIE
 const de76 = (x, y) => Math.hypot(...lab(x).map((v, i) => v - lab(y)[i]));
 
 /* The header's own numbers, so a drifted comment is a red row and not a shrug.
-   Sourced from data/football-teams.js, 2026-09-04: "primaries pairwise CIE76 dE
-   >= 12 (min 12.5) ... a/b WCAG contrast >= 3:1 (min 3.02)". */
-const DE_FLOOR = 12, DE_HEADER_MIN = 12.5;
-const CONTRAST_FLOOR = 3, CONTRAST_HEADER_MIN = 3.02;
+   Sourced from data/football-teams.js, 2026-09-07 (art/football-team-colours):
+   "every two teams' PAIRS are CIE76 dE >= 12 apart (min PAIR_HEADER_MIN) ...
+   a/b CIE76 dE >= 40 (min LEGIBLE_HEADER_MIN)".
+   WHY PAIRS AND NOT PRIMARIES, 2026-09-07: the 32 teams now carry the brand
+   colours of the 32 franchises they stand in for (docs/FOOTBALL-KIT.md 4b), and
+   that league has six navy shells and four black ones, so "primaries pairwise
+   dE >= 12" is a rule real football breaks. What tells two navy teams apart on
+   a 24px disc is the OTHER half, so the distinctness rule is over the pair:
+   dE(a,a') + dE(b,b'). And WCAG contrast was the wrong ruler for "reads as two
+   colours": aqua/orange is 1.16:1 and unmistakable, so a/b legibility is CIE76
+   too (hue counts), floor 40. */
+const PAIR_FLOOR = 12, PAIR_HEADER_MIN = 17.59;
+const LEGIBLE_FLOOR = 40, LEGIBLE_HEADER_MIN = 44.46;
 
-let worstPair = null, worstDe = Infinity;
+let worstPair = null, worstDe = Infinity, dupPair = [];
 for (let i = 0; i < TEAMS.length; i++) {
   for (let j = i + 1; j < TEAMS.length; j++) {
-    const d = de76(TEAMS[i].a, TEAMS[j].a);
+    const d = de76(TEAMS[i].a, TEAMS[j].a) + de76(TEAMS[i].b, TEAMS[j].b);
     if (d < worstDe) { worstDe = d; worstPair = `${TEAMS[i].id} vs ${TEAMS[j].id}`; }
+    if (TEAMS[i].a === TEAMS[j].a && TEAMS[i].b === TEAMS[j].b) dupPair.push(`${TEAMS[i].id}=${TEAMS[j].id}`);
   }
 }
 const pairs = (TEAMS.length * (TEAMS.length - 1)) / 2;
-ok(`DE every pair of primaries is at least ${DE_FLOOR} CIE76 apart, so two shells read apart at 24px`,
-  pairs > 0 && worstDe >= DE_FLOOR,
-  `${pairs} pairs, closest ${worstPair} at dE ${worstDe.toFixed(2)}`);
+ok(`PAIR no two teams share a colour pair, and every two pairs are at least ${PAIR_FLOOR} CIE76 apart (a-a plus b-b), so two discs read apart at 24px`,
+  pairs > 0 && worstDe >= PAIR_FLOOR && dupPair.length === 0,
+  `${pairs} pairs, closest ${worstPair} at pair dE ${worstDe.toFixed(2)}${dupPair.length ? `, DUPLICATES ${dupPair.join(' ')}` : ''}`);
 /* THE COMMENT IS UNDER TEST TOO. Re-measuring and then not comparing to the
    recorded minimum would let the header rot to any value while this stayed
    green: the floor is a rule, the recorded minimum is a fact about today's 32
    rows, and only the second one catches a hex edit that stays legal. */
-ok(`DE-HEADER data/football-teams.js still records the measured minimum (${DE_HEADER_MIN})`,
-  pairs > 0 && Math.abs(worstDe - DE_HEADER_MIN) < 0.05,
-  `header says min ${DE_HEADER_MIN}, measured ${worstDe.toFixed(2)}` +
-  (Math.abs(worstDe - DE_HEADER_MIN) < 0.05 ? '' : ': the comment is now wrong, fix the comment or revert the colour'));
+ok(`PAIR-HEADER data/football-teams.js still records the measured minimum (${PAIR_HEADER_MIN})`,
+  pairs > 0 && Math.abs(worstDe - PAIR_HEADER_MIN) < 0.05,
+  `header says min ${PAIR_HEADER_MIN}, measured ${worstDe.toFixed(2)}` +
+  (Math.abs(worstDe - PAIR_HEADER_MIN) < 0.05 ? '' : ': the comment is now wrong, fix the comment or revert the colour'));
 
 let worstTeam = null, worstC = Infinity;
-for (const t of TEAMS) { const c = contrast(t.a, t.b); if (c < worstC) { worstC = c; worstTeam = t.id; } }
-ok(`CONTRAST every team's secondary clears ${CONTRAST_FLOOR}:1 against its primary, so the stripe reads on the shell`,
-  TEAMS.length > 0 && worstC >= CONTRAST_FLOOR,
-  `${TEAMS.length} teams, tightest ${worstTeam} at ${worstC.toFixed(2)}:1`);
-ok(`CONTRAST-HEADER data/football-teams.js still records the measured minimum (${CONTRAST_HEADER_MIN})`,
-  TEAMS.length > 0 && Math.abs(worstC - CONTRAST_HEADER_MIN) < 0.02,
-  `header says min ${CONTRAST_HEADER_MIN}, measured ${worstC.toFixed(2)}` +
-  (Math.abs(worstC - CONTRAST_HEADER_MIN) < 0.02 ? '' : ': the comment is now wrong, fix the comment or revert the colour'));
+for (const t of TEAMS) { const c = de76(t.a, t.b); if (c < worstC) { worstC = c; worstTeam = t.id; } }
+ok(`LEGIBLE every team's two colours are at least ${LEGIBLE_FLOOR} CIE76 apart and not identical, so the stripe reads on the shell and the disc shows two halves`,
+  TEAMS.length > 0 && worstC >= LEGIBLE_FLOOR && TEAMS.every(t => t.a !== t.b),
+  `${TEAMS.length} teams, tightest ${worstTeam} at dE ${worstC.toFixed(2)}`);
+ok(`LEGIBLE-HEADER data/football-teams.js still records the measured minimum (${LEGIBLE_HEADER_MIN})`,
+  TEAMS.length > 0 && Math.abs(worstC - LEGIBLE_HEADER_MIN) < 0.05,
+  `header says min ${LEGIBLE_HEADER_MIN}, measured ${worstC.toFixed(2)}` +
+  (Math.abs(worstC - LEGIBLE_HEADER_MIN) < 0.05 ? '' : ': the comment is now wrong, fix the comment or revert the colour'));
 
 /* ---- 3. ITEM GENERATION --------------------------------------------------- */
 ok('ITEMS FOOTBALL_ITEMS is exactly teams x garments, so no team lost a piece and no piece was generated twice',
@@ -919,11 +937,18 @@ const railGarments = GARMENTS.map(g => {
   const files = new Set(perTeam.map(i => i.file));
   const maskSets = new Set(perTeam.map(i => (FB.footballTints(i) || []).map(x => x.mask).join('|')));
   const hexSets = new Set(perTeam.map(i => (FB.footballTints(i) || []).map(x => x.hex).join('|')));
-  return { key: g.key, files: files.size, maskSets: maskSets.size, hexSets: hexSets.size, layers: (FB.footballTints(perTeam[0]) || []).length };
+  /* HOW MANY COLOURWAYS A GARMENT CAN SHOW is a fact of the data, not always
+     32: the cleats are one-colour (primary only) and since 2026-09-07 three
+     franchise pairs share a shell colour (black/black, navy/navy, black/black),
+     so 32 teams give 29 distinct cleats, exactly as in the league. The counter
+     is compared to that expectation so a tint layer dropped or a hex hard-coded
+     still shows, while a shared real colour is not graded as a bug. */
+  const expectSets = new Set(TEAMS.map(t => g.oneColour ? t.a : `${t.a}|${t.b}`)).size;
+  return { key: g.key, files: files.size, maskSets: maskSets.size, hexSets: hexSets.size, expectSets, layers: (FB.footballTints(perTeam[0]) || []).length };
 });
 ok('RAIL-SHARED every team of a garment is one master behind one pair of masks, so sliding the rail changes only two colours',
-  railGarments.every(r => r.files === 1 && r.maskSets === 1 && r.hexSets === TEAMS.length),
-  railGarments.map(r => `${r.key}: ${r.files} master, ${r.maskSets} mask set, ${r.hexSets} distinct colourways over ${r.layers} layer${r.layers === 1 ? '' : 's'}`).join('; '));
+  railGarments.every(r => r.files === 1 && r.maskSets === 1 && r.hexSets === r.expectSets && r.hexSets >= TEAMS.length - 3),
+  railGarments.map(r => `${r.key}: ${r.files} master, ${r.maskSets} mask set, ${r.hexSets} distinct colourways over ${r.layers} layer${r.layers === 1 ? '' : 's'}${r.hexSets < TEAMS.length ? ` (${TEAMS.length - r.hexSets} shared shell colours)` : ''}`).join('; '));
 /* The negative that makes the row above mean something: the SAME three counters
    over a garment deliberately given per-team art report a different shape. */
 const forked = TEAMS.map(t => ({ ...ITEMS[0], file: `x/${t.id}.png` }));

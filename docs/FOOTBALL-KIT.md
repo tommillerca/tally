@@ -161,49 +161,123 @@ team colour needs a third mask, which is a change to the script, the data
 (helmet stripe and badge, jersey trim). Invented places and mascots in the
 Boneheadz register: no real league's cities or names.
 
-Measured over all 496 pairs, 2026-09-04, and re-measured by the guard on every
-run: **primaries pairwise CIE76 dE >= 12** (min 12.50, Brightwater Barracudas vs
-Shalebank Skates) so two shells read apart at 24px, and **a/b WCAG contrast >=
-3:1** (min 3.02, Thornback Toads) so the stripe reads on the shell.
+**2026-09-07, art/football-team-colours.** Tom: "go back through the football
+colours and try to make them closer to the actual nfl teams, some are very far
+off." Every pair is now the published brand colours of the franchise the team
+stands in for (the mapping is 4b, an internal note; the names in the app are
+unchanged and no real name or hex reaches a player). Two guard rules changed
+with it, because the real league breaks the old ones: six shells are navy and
+four are black, and aqua/orange is 1.16:1 WCAG and unmistakable.
+
+Measured over all 496 pairs and re-measured by the guard on every run: **every
+two teams' pairs are CIE76 dE >= 12 apart, a-a plus b-b** (min 17.59, Cinderfall
+Crows vs Mudflat Minotaurs, who share a red trim over black and steel-navy
+shells) so two discs read apart at 24px, and **a/b CIE76 dE >= 40** (min 44.46,
+Shalebank Skates, midnight green against silver) so the two halves read as two
+colours. Three franchise pairs share a shell colour (black, navy, black), so the
+one-colour cleats come in 29 colourways, not 32, exactly as in the league.
 
 | # | Team | id | `a` | `b` |
 |---|---|---|---|---|
-| 1 | Boneyard Bruisers | `boneyard-bruisers` | `#14213D` | `#F2C14E` |
-| 2 | Hollow Howlers | `hollow-howlers` | `#4B2C83` | `#9BE564` |
-| 3 | Marrow Mammoths | `marrow-mammoths` | `#7A2E2E` | `#F1E3C6` |
-| 4 | Gravel Gulls | `gravel-gulls` | `#9AA3AB` | `#2B2F33` |
-| 5 | Ember Coast Kilns | `ember-coast-kilns` | `#C8401F` | `#FFD27F` |
-| 6 | Rustwater Rats | `rustwater-rats` | `#8C4A1E` | `#B9E2F5` |
-| 7 | Cinderfall Crows | `cinderfall-crows` | `#1B1B1F` | `#E84C3D` |
-| 8 | Saltmarsh Serpents | `saltmarsh-serpents` | `#1E6B4E` | `#F7E27A` |
-| 9 | Ironhaven Anvils | `ironhaven-anvils` | `#5B6B7F` | `#F4F4F4` |
-| 10 | Frostbite Foxes | `frostbite-foxes` | `#FF7F3F` | `#1B2A3A` |
-| 11 | Thornback Toads | `thornback-toads` | `#5B7A1E` | `#FFB7C5` |
-| 12 | Duskmoor Moths | `duskmoor-moths` | `#7D6BA0` | `#F4E9D8` |
-| 13 | Copperhill Cobras | `copperhill-cobras` | `#B5651D` | `#1E2D2B` |
-| 14 | Peatbog Pikes | `peatbog-pikes` | `#3E4A1F` | `#E7D98A` |
-| 15 | Lanternlight Lynx | `lanternlight-lynx` | `#E0912A` | `#2B2118` |
-| 16 | Stormgate Stags | `stormgate-stags` | `#2C5D8F` | `#F0F0F0` |
-| 17 | Sootvale Salamanders | `sootvale-salamanders` | `#4D4D4D` | `#FF8A3D` |
-| 18 | Brightwater Barracudas | `brightwater-barracudas` | `#007C80` | `#FFE066` |
-| 19 | Nettlewood Nightjars | `nettlewood-nightjars` | `#2E4A3F` | `#D9B8FF` |
-| 20 | Quarry Hill Quakes | `quarry-hill-quakes` | `#4E3A52` | `#FFD166` |
-| 21 | Mudflat Minotaurs | `mudflat-minotaurs` | `#8B5E3C` | `#F5D6A8` |
-| 22 | Windrow Wasps | `windrow-wasps` | `#F9DC1A` | `#1C1C1C` |
-| 23 | Shalebank Skates | `shalebank-skates` | `#2F6F7E` | `#8FE3CF` |
-| 24 | Tallow Creek Tusks | `tallow-creek-tusks` | `#3B2A20` | `#EADBC8` |
-| 25 | Gallows Reach Ghouls | `gallows-reach-ghouls` | `#D8CFA8` | `#1E5A3A` |
-| 26 | Hexley Hexes | `hexley-hexes` | `#8E2A6B` | `#FFD9EC` |
-| 27 | Old Kiln Kestrels | `old-kiln-kestrels` | `#A33A2A` | `#F7C59F` |
-| 28 | Pinebarrow Badgers | `pinebarrow-badgers` | `#F4F4F0` | `#222222` |
-| 29 | Rimefall Rooks | `rimefall-rooks` | `#7FB3D5` | `#15243B` |
-| 30 | Bramblegate Bison | `bramblegate-bison` | `#5E3517` | `#E4A34A` |
-| 31 | Lowmarsh Lurkers | `lowmarsh-lurkers` | `#7FA07A` | `#1F3A2A` |
-| 32 | Glasswater Gannets | `glasswater-gannets` | `#3A8FC7` | `#FFFFFF` |
+| 1 | Boneyard Bruisers | `boneyard-bruisers` | `#0B162A` | `#C83803` |
+| 2 | Hollow Howlers | `hollow-howlers` | `#4F2683` | `#FFC62F` |
+| 3 | Marrow Mammoths | `marrow-mammoths` | `#5A1414` | `#FFB612` |
+| 4 | Gravel Gulls | `gravel-gulls` | `#A5ACAF` | `#000000` |
+| 5 | Ember Coast Kilns | `ember-coast-kilns` | `#E31837` | `#FFB81C` |
+| 6 | Rustwater Rats | `rustwater-rats` | `#97233F` | `#FFFFFF` |
+| 7 | Cinderfall Crows | `cinderfall-crows` | `#000000` | `#A71930` |
+| 8 | Saltmarsh Serpents | `saltmarsh-serpents` | `#006778` | `#D7A22A` |
+| 9 | Ironhaven Anvils | `ironhaven-anvils` | `#125740` | `#FFFFFF` |
+| 10 | Frostbite Foxes | `frostbite-foxes` | `#FB4F14` | `#002244` |
+| 11 | Thornback Toads | `thornback-toads` | `#008E97` | `#FC4C02` |
+| 12 | Duskmoor Moths | `duskmoor-moths` | `#003594` | `#FFA300` |
+| 13 | Copperhill Cobras | `copperhill-cobras` | `#D50A0A` | `#34302B` |
+| 14 | Peatbog Pikes | `peatbog-pikes` | `#203731` | `#FFB612` |
+| 15 | Lanternlight Lynx | `lanternlight-lynx` | `#FF3C00` | `#311D00` |
+| 16 | Stormgate Stags | `stormgate-stags` | `#002C5F` | `#FFFFFF` |
+| 17 | Sootvale Salamanders | `sootvale-salamanders` | `#000000` | `#FB4F14` |
+| 18 | Brightwater Barracudas | `brightwater-barracudas` | `#0080C6` | `#FFC20E` |
+| 19 | Nettlewood Nightjars | `nettlewood-nightjars` | `#0C2340` | `#4B92DB` |
+| 20 | Quarry Hill Quakes | `quarry-hill-quakes` | `#101820` | `#FFB612` |
+| 21 | Mudflat Minotaurs | `mudflat-minotaurs` | `#03202F` | `#A71930` |
+| 22 | Windrow Wasps | `windrow-wasps` | `#D3BC8D` | `#101820` |
+| 23 | Shalebank Skates | `shalebank-skates` | `#004C54` | `#A5ACAF` |
+| 24 | Tallow Creek Tusks | `tallow-creek-tusks` | `#002244` | `#B0B7BC` |
+| 25 | Gallows Reach Ghouls | `gallows-reach-ghouls` | `#002244` | `#69BE28` |
+| 26 | Hexley Hexes | `hexley-hexes` | `#241773` | `#9E7C0C` |
+| 27 | Old Kiln Kestrels | `old-kiln-kestrels` | `#AA0000` | `#B3995D` |
+| 28 | Pinebarrow Badgers | `pinebarrow-badgers` | `#0B2265` | `#A71930` |
+| 29 | Rimefall Rooks | `rimefall-rooks` | `#869397` | `#041E42` |
+| 30 | Bramblegate Bison | `bramblegate-bison` | `#00338D` | `#C60C30` |
+| 31 | Lowmarsh Lurkers | `lowmarsh-lurkers` | `#101820` | `#0085CA` |
+| 32 | Glasswater Gannets | `glasswater-gannets` | `#0076B6` | `#B0B7BC` |
+
+### 4b. Which franchise each team stands in for (internal, real names allowed here only)
+
+Nothing recorded this before 2026-09-07: the 32 were invented under two
+distance rules and never against a franchise, which is why some read as nobody.
+The mapping below was DECIDED, not found. Eight teams were pinned first (two by
+name: Bison = Buffalo, Minotaurs = Houston's bull; six by an unmistakable old
+colour: Vikings purple, Raiders silver/black, Falcons black/red, Broncos
+orange/navy, Steelers-yellow Wasps to the other black-and-gold team, Bears
+navy Bruisers) and the other 24 were assigned by minimum total CIE76 distance
+(Hungarian assignment over old pair to franchise pair). Tom can re-pair any row
+by editing this table and the data row together; the guard does not read it.
+
+`a` is the HELMET SHELL, so where a franchise's famous pair is the jersey's
+(Browns brown/orange, Cowboys navy/silver, Saints black/gold) the shell colour
+leads: orange, silver, gold. Where the two brand primaries would not read as
+two colours the third brand colour stands in and the note says so. Real pairs
+kept although dark on dark: Falcons black/red, Texans steel/red, Giants
+blue/red, Bills royal/red; all clear dE 70 and read on the sheet.
+
+Pair dE here is dE(a, franchise a) + dE(b, franchise b), CIE76; "before" is the
+old pair, "after" the shipped one. Sheets: `$SP/teamcolours/before.png` and
+`after.png` (32 discs off the Shop poster strip and 32 helmets off the Wardrobe
+rail, real render at 3x, the same session).
+
+| rank | Team | franchise | old `a` `b` | new `a` `b` | pair dE before | after | note |
+|---|---|---|---|---|---|---|---|
+| 1 | Pinebarrow Badgers | Giants | `#F4F4F0` `#222222` | `#0B2265` `#A71930` | 158.6 | 0.0 |  |
+| 2 | Gallows Reach Ghouls | Seahawks | `#D8CFA8` `#1E5A3A` | `#002244` `#69BE28` | 148.2 | 0.0 |  |
+| 3 | Bramblegate Bison | Bills | `#5E3517` `#E4A34A` | `#00338D` `#C60C30` | 142.2 | 0.0 | pinned by name |
+| 4 | Thornback Toads | Dolphins | `#5B7A1E` `#FFB7C5` | `#008E97` `#FC4C02` | 136.5 | 0.0 |  |
+| 5 | Mudflat Minotaurs | Texans | `#8B5E3C` `#F5D6A8` | `#03202F` `#A71930` | 127.4 | 0.0 | pinned by name |
+| 6 | Lowmarsh Lurkers | Panthers | `#7FA07A` `#1F3A2A` | `#101820` `#0085CA` | 122.4 | 0.0 |  |
+| 7 | Hexley Hexes | Ravens | `#8E2A6B` `#FFD9EC` | `#241773` `#9E7C0C` | 114.6 | 0.0 | purple/black are two darks; metallic gold is the third brand colour |
+| 8 | Duskmoor Moths | Rams | `#7D6BA0` `#F4E9D8` | `#003594` `#FFA300` | 113.7 | 0.0 |  |
+| 9 | Marrow Mammoths | Commanders | `#7A2E2E` `#F1E3C6` | `#5A1414` `#FFB612` | 78.0 | 0.0 |  |
+| 10 | Peatbog Pikes | Packers | `#3E4A1F` `#E7D98A` | `#203731` `#FFB612` | 69.5 | 0.0 |  |
+| 11 | Boneyard Bruisers | Bears | `#14213D` `#F2C14E` | `#0B162A` `#C83803` | 68.1 | 0.0 | pinned by colour |
+| 12 | Nettlewood Nightjars | Titans | `#2E4A3F` `#D9B8FF` | `#0C2340` `#4B92DB` | 67.7 | 0.0 |  |
+| 13 | Windrow Wasps | Saints | `#F9DC1A` `#1C1C1C` | `#D3BC8D` `#101820` | 66.6 | 0.0 | the helmet IS old gold, so gold is the shell and black the trim |
+| 14 | Brightwater Barracudas | Chargers | `#007C80` `#FFE066` | `#0080C6` `#FFC20E` | 66.2 | 0.0 |  |
+| 15 | Lanternlight Lynx | Browns | `#E0912A` `#2B2118` | `#FF3C00` `#311D00` | 61.7 | 0.0 | the helmet IS orange, so orange is the shell and brown the trim |
+| 16 | Hollow Howlers | Vikings | `#4B2C83` `#9BE564` | `#4F2683` `#FFC62F` | 60.6 | 0.0 | pinned by colour |
+| 17 | Sootvale Salamanders | Bengals | `#4D4D4D` `#FF8A3D` | `#000000` `#FB4F14` | 60.0 | 0.0 |  |
+| 18 | Saltmarsh Serpents | Jaguars | `#1E6B4E` `#F7E27A` | `#006778` `#D7A22A` | 56.5 | 0.0 | black is the third; teal and gold are the two that read |
+| 19 | Rustwater Rats | Cardinals | `#8C4A1E` `#B9E2F5` | `#97233F` `#FFFFFF` | 55.6 | 0.0 |  |
+| 20 | Tallow Creek Tusks | Patriots | `#3B2A20` `#EADBC8` | `#002244` `#B0B7BC` | 55.5 | 0.0 | navy/red are both dark (dE 42 but red at L36); silver is the helmet and the third brand colour |
+| 21 | Ember Coast Kilns | Chiefs | `#C8401F` `#FFD27F` | `#E31837` `#FFB81C` | 54.9 | 0.0 |  |
+| 22 | Copperhill Cobras | Buccaneers | `#B5651D` `#1E2D2B` | `#D50A0A` `#34302B` | 52.0 | 0.0 |  |
+| 23 | Quarry Hill Quakes | Steelers | `#4E3A52` `#FFD166` | `#101820` `#FFB612` | 50.0 | 0.0 |  |
+| 24 | Old Kiln Kestrels | 49ers | `#A33A2A` `#F7C59F` | `#AA0000` `#B3995D` | 47.6 | 0.0 |  |
+| 25 | Shalebank Skates | Eagles | `#2F6F7E` `#8FE3CF` | `#004C54` `#A5ACAF` | 47.1 | 0.0 |  |
+| 26 | Ironhaven Anvils | Jets | `#5B6B7F` `#F4F4F4` | `#125740` `#FFFFFF` | 39.1 | 0.0 |  |
+| 27 | Glasswater Gannets | Lions | `#3A8FC7` `#FFFFFF` | `#0076B6` `#B0B7BC` | 37.5 | 0.0 |  |
+| 28 | Frostbite Foxes | Broncos | `#FF7F3F` `#1B2A3A` | `#FB4F14` `#002244` | 36.3 | 0.0 | pinned by colour |
+| 29 | Cinderfall Crows | Falcons | `#1B1B1F` `#E84C3D` | `#000000` `#A71930` | 35.7 | 0.0 | pinned by colour |
+| 30 | Rimefall Rooks | Cowboys | `#7FB3D5` `#15243B` | `#869397` `#041E42` | 32.2 | 0.0 | the helmet IS silver, so silver is the shell and navy the star/trim |
+| 31 | Stormgate Stags | Colts | `#2C5D8F` `#F0F0F0` | `#002C5F` `#FFFFFF` | 26.9 | 0.0 |  |
+| 32 | Gravel Gulls | Raiders | `#9AA3AB` `#2B2F33` | `#A5ACAF` `#000000` | 23.9 | 0.0 | pinned by colour |
+
 ## 5. Eight alternates, if a team has to be replaced
 
-Not in the data. Each was measured against all 39 other primaries (the 32 above
-plus the other seven here) on the same two rules, so any one of them can be
+Not in the data. Measured 2026-09-04 against the ORIGINAL 32 primaries under the
+original rules (primaries pairwise dE >= 12, a/b WCAG 3:1), which the 2026-09-07
+franchise colours replaced; re-measure under section 4's PAIR/LEGIBLE rules before
+using one. Each was measured against all 39 other primaries (the 32 then in the data
+plus the other seven here) on the two rules of the day, so any one of them can be
 pasted into `FOOTBALL_TEAMS` in place of a team Tom does not like and the guard
 stays green. Re-run `node tests/football-kit-audit.mjs` after a swap: the
 DE-HEADER and CONTRAST-HEADER rows will go red if the swap moves the recorded
@@ -229,10 +303,14 @@ all confirmed 2026-09-04 on a throwaway `cp -R` tree.
 - **SAMPLE** the modules loaded with something to grade.
 - **TEAMS / HEX / ITEMS / ITEM-IDS** 32 unique ids and names, 64 valid hexes,
   exactly teams x garments, every id the stable `fb-<team>-<garment>`.
-- **DE / CONTRAST** both header claims re-measured over all 496 pairs and all 32
-  teams. **DE-HEADER / CONTRAST-HEADER** compare the re-measurement to the
-  minimum the data file's comment records, so a comment that has drifted from
-  the data is itself a red row.
+- **PAIR / LEGIBLE** (were DE / CONTRAST until 2026-09-07) both header claims
+  re-measured over all 496 pairs and all 32 teams: no two teams share a pair and
+  every two pairs are >= 12 apart (a-a plus b-b); every team's a/b are >= 40
+  apart and not identical. **PAIR-HEADER / LEGIBLE-HEADER** compare the
+  re-measurement to the minimum the data file's comment records, so a comment
+  that has drifted from the data is itself a red row. Prove-red 2026-09-07 on a
+  throwaway tree: a duplicated pair reads "pair dE 0.00, DUPLICATES", a
+  near-identical a/b reads "dE 1.75", both -HEADER rows red with them.
 - **ASSETS** every master and mask the catalogue can ask for is on disk, plus
   **ASSETS-CONTROL**, which proves the same existence check reports a path that
   is deliberately not there.
