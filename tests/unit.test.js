@@ -6541,10 +6541,23 @@ test('CLAIMED-ROW race: breedPets cannot lose, or be lost to, a concurrent salva
 });
 
 // Football kit critique (2026-09-05), rule 1: the bundle charges only for the
-// garments a player does not already own, min(bundle, 4,200 x missing), never
-// the flat 16,800 for whatever is left. One db per owned-count so each row
-// starts from a clean wallet and a known set of owned garments.
-test('football BUNDLE-QUOTE: buyFootballBundle charges only for the missing garments', async () => {
+// garments a player does not already own, never the flat 16,800 for whatever
+// is left. First fix was min(bundle, 4,200 x missing), which stopped the
+// overcharge but tied the FLAT five-garment price the moment 4 were missing
+// (4,200 x 4 == 16,800 == the bundle price for one garment short of the whole
+// kit) -- proven red below (a plain revert to that formula makes the 1-owned
+// row assert 16,800 where it now asserts 13,400).
+// SUPERSEDED 2026-09-06, Tom: "prorate the discount." The bundle keeps its
+// 20% saving on whatever is missing, rounded to the nearest 100:
+//   0 owned (5 missing)  4,200 x 5 x 0.8 = 16,800  (exact, no rounding)
+//   1 owned (4 missing)  4,200 x 4 x 0.8 = 13,440  -> 13,400
+//   2 owned (3 missing)  4,200 x 3 x 0.8 = 10,080  -> 10,100
+//   3 owned (2 missing)  4,200 x 2 x 0.8 =  6,720  ->  6,700
+//   4 owned (1 missing)  4,200 x 1 x 0.8 =  3,360  ->  3,400
+//   5 owned (0 missing)  refused outright (already owned)
+// One db per owned-count so each row starts from a clean wallet and a known
+// set of owned garments.
+test('football BUNDLE-QUOTE: buyFootballBundle prorates its 20% saving on whatever is missing, rounded to the nearest 100', async () => {
   await import('./mem-idb.mjs');
   const dbm = await import('../js/db.js');
   const FB = await import('../data/football-teams.js');
@@ -6556,34 +6569,34 @@ test('football BUNDLE-QUOTE: buyFootballBundle charges only for the missing garm
     const ids = FB.footballGrantIds(FB.footballItemId(FB.FOOTBALL_TEAMS[0].id, key));
     for (const id of ids) await dbm.db.put('inv', { id: `cos:${id}`, kind: 'cos', itemId: id, source: 'x', ts: Date.now() });
   };
-
-  dbm.useDbName('unit-fbbundle-0');
-  await dbm.kvSet('coins', WALLET);
-  let r = await loot.buyFootballBundle('ignored');
-  assert.equal(r.ok, true, `0 owned must sell, got ${JSON.stringify(r)}`);
-  assert.equal(r.cost, 16800, `0 owned (5 missing) must cost the full bundle price, got ${JSON.stringify(r)}`);
-
-  dbm.useDbName('unit-fbbundle-3');
-  await dbm.kvSet('coins', WALLET);
-  for (const key of ['helmet', 'jersey', 'cleats']) await ownGarment(key);
-  r = await loot.buyFootballBundle('ignored');
-  assert.equal(r.ok, true, `3 owned must still sell the other two, got ${JSON.stringify(r)}`);
-  assert.equal(r.cost, 8400, `3 owned (2 missing) must cost 4,200 x 2, got ${JSON.stringify(r)}`);
-  assert.equal(r.granted, 2, `3 owned must report 2 garments granted, got ${JSON.stringify(r)}`);
-
-  dbm.useDbName('unit-fbbundle-4');
-  await dbm.kvSet('coins', WALLET);
-  for (const key of ['helmet', 'jersey', 'cleats', 'pet-helmet']) await ownGarment(key);
-  r = await loot.buyFootballBundle('ignored');
-  assert.equal(r.ok, true, `4 owned must still sell the last one, got ${JSON.stringify(r)}`);
-  assert.equal(r.cost, 4200, `4 owned (1 missing) must cost one garment's price, got ${JSON.stringify(r)}`);
+  // The five FOOTBALL_SHELF keys Tom priced 2026-09-06 ("prorate the discount"):
+  // this is FOOTBALL_SOLD's own key list, cited here rather than imported so the
+  // owned/missing arithmetic below is legible without a second file open.
+  const ALL_KEYS = ['helmet', 'jersey', 'cleats', 'pet-helmet', 'pet-jersey'];
+  const cases = [
+    { owned: [],                                             cost: 16800 },
+    { owned: ['helmet'],                                     cost: 13400 },
+    { owned: ['helmet', 'jersey'],                            cost: 10100 },
+    { owned: ['helmet', 'jersey', 'cleats'],                  cost: 6700 },
+    { owned: ['helmet', 'jersey', 'cleats', 'pet-helmet'],    cost: 3400 },
+  ];
+  for (const [i, c] of cases.entries()) {
+    dbm.useDbName(`unit-fbbundle-${c.owned.length}`);
+    await dbm.kvSet('coins', WALLET);
+    for (const key of c.owned) await ownGarment(key);
+    const r = await loot.buyFootballBundle('ignored');
+    const missing = ALL_KEYS.length - c.owned.length;
+    assert.equal(r.ok, true, `${c.owned.length} owned must sell, got ${JSON.stringify(r)}`);
+    assert.equal(r.cost, c.cost, `${c.owned.length} owned (${missing} missing) must prorate to ${c.cost}, got ${JSON.stringify(r)}`);
+    assert.equal(r.granted, missing, `${c.owned.length} owned must report ${missing} garments granted, got ${JSON.stringify(r)}`);
+  }
 
   dbm.useDbName('unit-fbbundle-5');
   await dbm.kvSet('coins', WALLET);
-  for (const key of ['helmet', 'jersey', 'cleats', 'pet-helmet', 'pet-jersey']) await ownGarment(key);
-  r = await loot.buyFootballBundle('ignored');
-  assert.equal(r.ok, false, `5 owned must refuse, got ${JSON.stringify(r)}`);
-  assert.equal(r.reason, 'owned', `5 owned must refuse as already owned, got ${JSON.stringify(r)}`);
+  for (const key of ALL_KEYS) await ownGarment(key);
+  const r5 = await loot.buyFootballBundle('ignored');
+  assert.equal(r5.ok, false, `5 owned must refuse, got ${JSON.stringify(r5)}`);
+  assert.equal(r5.reason, 'owned', `5 owned must refuse as already owned, got ${JSON.stringify(r5)}`);
 });
 
 /* P1 (Codex, 2026-09-05): buyFootballBundle quotes its cost from an owned-set
@@ -6609,8 +6622,13 @@ test('football BUNDLE-CONCURRENCY: an overlapping single-garment buy no longer o
   };
 
   // 1 garment already owned (jersey): the bundle quotes for the other 4 at
-  // 16,800 (4 x 4,200 ties the flat bundle price). A tap on a DIFFERENT
-  // missing garment (cleats) races the bundle buy.
+  // 13,400 (proration of 4 x 4,200 x 0.8, rounded). A tap on a DIFFERENT
+  // missing garment (cleats) races the bundle buy, so the bundle only
+  // DELIVERS 3 garments; its overcharge guard re-quotes against what it
+  // actually delivered (missing=3, prorated 10,100) and refunds the 3,300
+  // gap, so the bundle's actual net spend is 10,100, not its 13,400 quote.
+  // Measured on the real functions (node tests/fb-race-check.tmp.mjs, since
+  // deleted): bundleR.cost 13400, itemR.cost 4200, total spent 14300.
   dbm.useDbName('unit-fbrace-1');
   await dbm.kvSet('coins', WALLET);
   await ownGarment('jersey');
@@ -6621,10 +6639,10 @@ test('football BUNDLE-CONCURRENCY: an overlapping single-garment buy no longer o
   ]);
   assert.equal(bundleR.ok, true, `bundle must sell, got ${JSON.stringify(bundleR)}`);
   assert.equal(itemR.ok, true, `single buy must sell, got ${JSON.stringify(itemR)}`);
-  assert.equal(bundleR.cost, 16800, `4 missing at quote time ties the flat bundle price, got ${JSON.stringify(bundleR)}`);
+  assert.equal(bundleR.cost, 13400, `4 missing at quote time prorates to 13,400, got ${JSON.stringify(bundleR)}`);
   assert.equal(itemR.cost, 4200, `one garment must cost one garment's price, got ${JSON.stringify(itemR)}`);
   const spent = WALLET - await loot.coins();
-  assert.equal(spent, 16800, `single (4,200) + what the bundle actually delivered (3 new garments, quote 12,600) must total 16,800 and never more, got ${spent}`);
+  assert.equal(spent, 14300, `single (4,200) + what the bundle actually delivered (3 new garments, re-quoted and refunded to 10,100) must total 14,300 and never more, got ${spent}`);
   const owned = await loot.ownedCosmeticIds();
   const garmentsOwned = FB.FOOTBALL_SOLD.filter(g => FB.FOOTBALL_TEAMS.some(t => owned.has(FB.footballItemId(t.id, g.key))));
   assert.equal(garmentsOwned.length, FB.FOOTBALL_SOLD.length, `all ${FB.FOOTBALL_SOLD.length} garments must be owned after both purchases land, got ${garmentsOwned.map(g => g.key)}`);
@@ -7958,6 +7976,54 @@ test('R41-16 __refreshLevelChip exists and fires on both fight-settle outcomes, 
   assert.ok(winSite, 'the win branch does not refresh the level chip after badges are evaluated (R41-16)');
   const lossSite = openFight.match(/coins = foeCfg\.mode === 'spar'[\s\S]*?window\.__refreshWalletPill\?\.\(\);\n\s*window\.__refreshLevelChip\?\.\(\);/);
   assert.ok(lossSite, 'the loss branch does not refresh the level chip beside the wallet pill (R41-16)');
+});
+
+// ---- master handoff B16: "can this player plausibly win this foe" ----
+// PROVE-RED (pre-fix, before pitMod.isOutmatched existed): every case below
+// throws "pitMod.isOutmatched is not a function".
+test('B16 isOutmatched: a fresh level 2 is outmatched by the Glutton', () => {
+  const stats = { power: 20, marrow: 20, wind: 20, reflex: 20, hype: 20 };
+  const foe = { stats: pitMod.scaleStats(stats, 1.3), talents: ['heavyhands', 'marrowlust', 'bonebreaker'], aiLevel: 3 };
+  assert.equal(pitMod.isOutmatched({ stats, talents: [] }, foe, { seeds: 60 }), true);
+});
+test('B16 isOutmatched: a build with real progress is not outmatched by the Glutton', () => {
+  const stats = { power: 55, marrow: 55, wind: 55, reflex: 55, hype: 55 };
+  const talents = ['callcrows', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'flock', 'flock', 'flock', 'carrion', 'roost', 'roost', 'frenzy', 'frenzy', 'murder'];
+  const foe = { stats: pitMod.scaleStats(stats, 1.3), talents: ['heavyhands', 'marrowlust', 'bonebreaker'], aiLevel: 3 };
+  assert.equal(pitMod.isOutmatched({ stats, talents }, foe, { seeds: 60 }), false);
+});
+test('B16 isOutmatched: a fresh level 2 is outmatched by a specced rival\'s Spire', () => {
+  // the matchup openSpireSheet actually builds for a rival tower: their real
+  // stats/talents, aiLevel always 3 (js/app.js openSpireSheet, the rival branch)
+  const stats = { power: 20, marrow: 20, wind: 20, reflex: 20, hype: 20 };
+  const rivalStats = { power: 55, marrow: 55, wind: 55, reflex: 55, hype: 55 };
+  const rivalTalents = ['heavyhands', 'followthrough', 'followthrough', 'followthrough', 'bonebreaker', 'concussive', 'rage', 'titan', 'ironjaw', 'ironjaw', 'ironjaw'];
+  const foe = { stats: rivalStats, talents: rivalTalents, aiLevel: 3 };
+  assert.equal(pitMod.isOutmatched({ stats, talents: [] }, foe, { seeds: 60 }), true);
+});
+test('B16 isOutmatched: a build with real progress is not outmatched by an unclaimed Spire\'s NPC warden', () => {
+  // the matchup openSpireSheet builds for an NPC-held tower (spires.js wardenFor):
+  // scaled off the player's own stats, aiLevel 2 below character level 12.
+  // Worst-roll tower in wardenFor's 0.90-1.25 range, on purpose.
+  const stats = { power: 55, marrow: 55, wind: 55, reflex: 55, hype: 55 };
+  const talents = ['callcrows', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'flock', 'flock', 'flock', 'carrion', 'roost', 'roost', 'frenzy', 'frenzy', 'murder'];
+  const foe = { stats: pitMod.scaleStats(stats, 1.25), talents: [], aiLevel: 2 };
+  assert.equal(pitMod.isOutmatched({ stats, talents }, foe, { seeds: 60 }), false);
+});
+
+// ---- master handoff B16: the sheets actually show it ----
+// PROVE-RED (pre-fix source): neither string exists in app.js at all.
+test('B16 the Glutton sheet renders the outmatched line conditionally', () => {
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(/openGluttonSheet[\s\S]{0,2000}outmatched \? '<p class="note glutton-outmatched">You are outmatched at this level\.<\/p>'/.test(src),
+    'openGluttonSheet must render the plain outmatched line when isOutmatched fires');
+});
+test('B16 the Spire sheet renders the outmatched line and always states the daily cost', () => {
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(/openSpireSheet[\s\S]{0,4500}outmatched \? '<p class="note spire-outmatched">You are outmatched at this level\.<\/p>'/.test(src),
+    'openSpireSheet must render the plain outmatched line when isOutmatched fires');
+  assert.ok(/dailyAttemptNote = `Win or lose, fighting for/.test(src),
+    'openSpireSheet must always state that fighting a tower you do not hold spends today\'s attempt, win or lose');
 });
 
 await runAll();
