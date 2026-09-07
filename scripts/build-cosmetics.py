@@ -69,13 +69,20 @@ SPECIALS = [
     # Gwart's Menagerie, v421. Bumbleseal and the wardrobe drawn FOR HER: every
     # piece is positioned for her body inside the shared canvas, which is why the
     # accessory slots are hers alone and why they are sold rather than dropped.
-    # hatchChance is what keeps her a 1% egg instead of an even quarter of the
-    # non-common pool; see pickRandomPet in js/loot.js and tests/pet-pool-audit.mjs.
     # These six were hand-added to data/boneheadz.js and were NOT mirrored here,
     # which is exactly what the comment above this list warns about: the next
     # rebuild would have deleted a 50,000-coin pet and five paid accessories out
     # from under everyone who bought them.
-    {'id': 'C6',  'slot': 'C',  'rarity': 'legendary', 'name': 'Bumbleseal', 'hatchChance': 0.01},
+    #
+    # Kennel palettes, 2026-09-05. Tom: "roll Bumbleseal into things, her time
+    # as shop-exclusive has passed." hatchChance used to keep her a 1% egg
+    # instead of an even sixth of the non-exclusive pool; removed, so
+    # pickRandomPet (js/loot.js) now draws her the same as C1-C5, and she is
+    # part of the morph grid (js/pets.js MORPH_SPECIES). She still SELLS in
+    # Gwart's Menagerie for 50,000 coins (PET_SHOP.pet, js/loot.js buyPetItem,
+    # untouched) and her five accessories still sell there too -- only the
+    # egg-pool gate is gone. See tests/pet-pool-audit.mjs.
+    {'id': 'C6',  'slot': 'C',  'rarity': 'legendary', 'name': 'Bumbleseal'},
     {'id': 'CE1', 'slot': 'CE', 'rarity': 'epic',      'name': 'Bug-Eye Shades'},
     {'id': 'CB1', 'slot': 'CB', 'rarity': 'rare',      'name': 'Courier Purse'},
     {'id': 'CB2', 'slot': 'CB', 'rarity': 'epic',      'name': 'Charmed Courier'},

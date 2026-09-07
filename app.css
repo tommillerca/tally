@@ -3732,6 +3732,14 @@ body::before {
   flex: 0 0 auto;
 }
 .cfan-live { position: absolute; top: 8px; right: 8px; z-index: 2; width: 11px; height: 11px; border-radius: 50%; background: var(--accent); border: 2px solid var(--ink); }
+/* CREW-4: the one-line "since last time" signal, its own row under the title
+   line so it never fights the LV pill for space; accent because it is the
+   one thing on the plate that just became true. Selector beats the plain
+   `.cfan-plate small` rule above on specificity, no !important needed. */
+.cfan-plate small.cfan-since { color: var(--accent); text-transform: none; letter-spacing: 0; }
+/* CREW-13: same voice as .lb-spires (the leaderboard's own spire tag) so a
+   spire reads the same wherever it shows up. */
+.cfan-plate small.cfan-spires { color: var(--gold); text-transform: none; letter-spacing: 0; display: flex; align-items: center; gap: 4px; }
 .cfan-fstar { position: absolute; top: 5px; left: 8px; z-index: 2; display: grid; place-items: center;
   /* was a 15px ★ with an ink text-shadow faking a keyline; ICONS.star draws its own
      stroke, so the shadow becomes a drop-shadow on the svg instead of on glyph edges */
@@ -8314,7 +8322,12 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   display: flex; align-items: center; gap: 12px; background: var(--surface);
   border: 2px solid var(--ink); border-radius: var(--radius); box-shadow: var(--sh); padding: 12px 13px;
 }
-.t3-egg .art { flex: none; display: grid; place-items: center; }
+.t3-egg .art { flex: none; display: grid; place-items: center; position: relative; isolation: isolate; }
+/* R39-21: the shell tease is a FLAT palette colour multiplied onto the shell
+   through a mask of the shell itself (--shell from js/app.js eggTint), so an
+   Ember egg reads orange whatever the shell's own hue. Not a hue-rotate. */
+.t3-egg .art.tinted::after { content: ''; position: absolute; inset: 0; background: var(--shell); mix-blend-mode: multiply; pointer-events: none;
+  -webkit-mask: url(assets/icons-pix/egg.png) center / 48px 48px no-repeat; mask: url(assets/icons-pix/egg.png) center / 48px 48px no-repeat; }
 .t3-egg .tx { flex: 1; min-width: 0; }
 .t3-egg .tx b { display: block; font-family: var(--display); font-weight: 400; font-size: 17px; letter-spacing: .04em; color: var(--text); }
 .t3-egg .bar { height: 10px; margin-top: 6px; }
@@ -9833,6 +9846,58 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    selected state, so nothing on the tile said the card belonged to it. */
 .pdk-tile:active, .pdk-teaser:active { transform: translateY(2px); box-shadow: 0 1px 0 #17151d; }
 .pdk-tile.on, .pdk-teaser.on { border-color: #a5e847; box-shadow: 0 3px 0 #17151d, 0 0 0 2px rgba(165, 232, 71, .35); }
+
+/* ---------- The Kennel, Kennel Phase A (2026-09-05) ----------
+   A display screen, not a shop: no glow anywhere on a pet here, deliberately
+   (Tom's ruling) -- .k-cell and .k-dot carry no box-shadow at all, unlike the
+   Paddock's rarity glow above. Owned vs unowned is colour and opacity only. */
+.k-gwart { background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 13px; color: var(--text-2); margin: 4px 0 14px; }
+.k-gwart b { color: var(--text); }
+/* SIX ROWS, ONE SCREEN, EVEN AT 320x568 (the narrowest phone this app
+   supports): a 6-owned-species roster (all six ordinary hatch species,
+   Bumbleseal included per Tom's ruling) must fit with no scroll, which is why
+   the row is 60px, not the plan's original 72px -- measured over budget at
+   72px on the narrow phone with all six owned. */
+.k-roster { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 14px; }
+.k-row { display: flex; align-items: center; gap: 12px; min-height: 60px; background: var(--surface-2); border-radius: var(--radius-sm); padding: 6px 12px; }
+.k-thumb { flex: 0 0 48px; width: 48px; height: 48px; display: grid; place-items: center; }
+.k-id { min-width: 0; flex: 1; }
+.k-id b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.k-dots { display: flex; gap: 6px; margin-top: 4px; }
+.k-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--surface-3); border: 1px solid var(--line-strong); display: inline-block; }
+.k-dot.on { background: var(--accent); border-color: var(--accent); }
+/* R39-6: ONE LINE, ELLIPSISED. "Ember, Frost, Toxic, Midnight owned" wrapped
+   at 320px, grew the row 63 -> 79px and put the sixth row 80px past the fold. */
+.k-cap { font-size: 11.5px; color: var(--text-3); margin: 3px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.k-empty { color: var(--text-3); font-size: 13px; padding: 12px 0; }
+/* LABEL ABOVE, NOT BESIDE: a side label would eat into the same 5-column
+   budget the plan derives from sheet width alone (viewport - outer pad - four
+   12px gutters, over five columns), so the cell size computed in JS would no
+   longer match what CSS actually gives the row. Stacking keeps one formula. */
+/* COLUMN HEADERS, one row, above every species block -- same flex/gap as
+   .k-grid-cells so its 5 labels land over the 5 cells beneath them in every
+   row. DESIGN.md's one section-header idiom (.sect-h: 12px/700/.06em/upper-
+   case/--text-3), sized down for a column as narrow as 40px: "Midnight" does
+   not fit at 12px, so this shrinks the size rather than the tracking or the
+   case, keeping the same voice as every other section header. */
+/* R39-30 (2026-09-06): head and cells share ONE grid track definition.
+   As flex rows, "MIDNIGHT" at 9px could not shrink below its own text and the
+   headers drifted up to 4.52px off the cells at 320px; minmax(0, 1fr) lets
+   both rows split the width identically whatever their content measures. */
+.k-grid-head, .k-grid-cells { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.k-grid-head { margin-bottom: 4px; }
+.k-grid-head-cell { text-align: center; font-size: 9px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--text-3); line-height: 1.2; }
+.k-grid-row { margin-bottom: 10px; }
+.k-grid-label { display: block; font-size: 11px; color: var(--text-3); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* R39-11: the cell is a real <button> (44px floor: 48px at 320 wide) and it
+   shows its pressed state; R39-8/9: the art fills the cell from CSS, so the
+   sheet's 600px cap and a rotation both resize it (croppedPetImg's layers are
+   percentages of .petcrop, which is why !important over its inline px works). */
+.k-cell { position: relative; aspect-ratio: 1; padding: 0; background: var(--surface-2); border-radius: var(--radius-sm); display: grid; place-items: center; overflow: hidden; }
+.k-cell .petcrop { width: 100% !important; height: 100% !important; }
+.k-cell[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: -2px; }
+.k-cell.locked .petcrop img { filter: grayscale(1) brightness(.4); opacity: .55; }
+.k-cell svg { position: absolute; bottom: 4px; right: 4px; color: var(--text-3); }
 
 /* ---------- Discord card hero (Tom, 2026-08-12) ----------
    "the discord icon with a bonehead chillin next to it or something to really

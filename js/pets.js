@@ -228,6 +228,105 @@ export function petSignature(petId) { return PET_SIGNATURE[petId] || null; }
 // passive magnitude scales gently with level (level 1 -> ~6%, level 6 -> ~11%)
 export function passivePct(level) { return 0.04 + (level - 1) * 0.008; }
 
+/* ---- Kennel Phase A / palettes: morphs (cosmetic recolours, no stat touch, no glow) ----
+ * Rolled at egg-grant time (js/loot.js eggRow), read at hatch. Order here IS
+ * tier order for fusion (Phase C), not shipped yet.
+ *
+ * KENNEL PALETTES V2, 2026-09-06. Tom approved the v2 recolour sheet
+ * ("now this is quality work. approved"): anatomy-first, per-fill regions
+ * recoloured against an absolute target hue per morph (not a shared
+ * hue-rotate), with ink/eye-white/cream protected byte-identical -- the fix
+ * for a colour reading wrong on a specific species. One midnight tier (the
+ * three-luminance-tier build was provisional; v2 ships a single midnight).
+ * scripts/build-pet-morphs-v2.py recolors each species' own master into
+ * assets/bh/C/morph/<species>__<morph>.png, and MORPH_ART/morphAsset below are
+ * the gate every render path resolves through -- mirrors SHINY_ART (js/loot.js):
+ * file exists (species is in MORPH_ART) -> use the variant PNG; else base. */
+export const MORPHS = ['base', 'ember', 'frost', 'toxic', 'midnight'];
+export const MORPH_WEIGHT = { base: 40, ember: 22, frost: 22, toxic: 10, midnight: 4 };
+export const MORPH_TIER = { base: 0, ember: 1, frost: 1, toxic: 2, midnight: 3 };
+export const MORPH_LABEL = { base: '', ember: 'Ember', frost: 'Frost', toxic: 'Toxic', midnight: 'Midnight' };
+export function isMorph(m) { return MORPHS.includes(m); }
+
+/* Which species carry per-morph PNG variants (mirrors SHINY_ART's shape: a
+ * plain membership list, not a filesystem check -- a browser cannot read a
+ * folder). CX is absent on purpose: its amethyst art IS its look (section 0.7).
+ * Bumbleseal (C6) IS in here now (Kennel palettes, 2026-09-05: she is a normal
+ * species for the morph grid, see MORPH_SPECIES below and js/loot.js). */
+export const MORPH_ART = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+/* The one path helper every draw path resolves through (mirrors bhAsset,
+ * the cosmetics manifest). '' for base, CX, an unknown morph, or a species with no
+ * morph art -- never guesses, never throws; the caller falls back to the base
+ * asset exactly the way a missing shiny id would. */
+export function morphAsset(petId, morph) {
+  if (!morph || morph === 'base' || !isMorph(morph) || petId === 'CX' || !MORPH_ART.includes(petId)) return '';
+  return `assets/bh/C/morph/${petId}__${morph}.png`;
+}
+
+// Same crypto source loot.js's rng() uses, duplicated rather than imported: pets.js
+// stays a pure module with no DOM/db dependency (loot.js imports FROM here, not the
+// reverse), and tests seed it the same way (monkeypatch crypto.getRandomValues), see
+// "crate levers (a)" in tests/unit.test.js.
+function rng() {
+  const a = new Uint32Array(1);
+  crypto.getRandomValues(a);
+  return a[0] / 0xffffffff;
+}
+
+// Species that COUNT toward the fresh-first pool below: the ordinary
+// dupe-pool pets (spec section 2.2's "(species x morph) pairs"). Excludes CX
+// (exempt from morphs per spec section 0.7 -- its amethyst art IS its look).
+// A hand-kept list, not derived from PET_ASSIGN: this module stays import-free
+// (no cosmetics manifest), and "hatch-pool species" is exactly the distinction
+// pickRandomPet's own `rest` (js/loot.js) draws on, which this list mirrors.
+//
+// C6 (Bumbleseal) WAS excluded here (2026-09-05 morning): she was a 1%
+// shop-exclusive hatch that most players never owned by any morph, so putting
+// her in this accounting alongside C1-C5 left 'base' permanently "fresh" for
+// her sake and starved the other four morphs of any weight -- found by the
+// 200-egg sim, where a player owning all of C1-C5 in base still hatched
+// nothing but base across 200 draws (see git history / KENNEL.md section 3).
+//
+// KENNEL PALETTES, 2026-09-05 afternoon, Tom: "roll Bumbleseal into things,
+// her time as shop-exclusive has passed ... part of the morph grid = 6
+// species x 5 morphs = 30 pairs, fresh-first accounting includes her." The
+// exclusion above is gone: js/loot.js pickRandomPet no longer special-cases
+// her (hatchChance removed from her catalogue entry), so she is now an
+// ordinary member of the same hatch pool as C1-C5 and belongs in this
+// accounting for the same reason they do -- the 200-egg bug this list used to
+// guard against cannot recur, because nothing here treats her as rare anymore.
+const MORPH_SPECIES = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+
+// The (species, morph) pairs a player already owns, as a Set of "sp|morph" keys.
+// Pure: takes the instance list (js/loot.js petInstances()), never reads it itself.
+export function ownedPairs(instances) {
+  return new Set((instances || []).map(x => `${x.sp}|${x.morph || 'base'}`));
+}
+// R39-10 (2026-09-06): how many of those pairs have a CELL in the Kennel grid.
+// owned.size counts CX (exempt, no cell) too: "31 / 30" with a full set.
+export function ownedCellCount(owned, speciesIds) {
+  let n = 0;
+  for (const sp of speciesIds) for (const m of MORPHS) if (owned.has(`${sp}|${m}`)) n++;
+  return n;
+}
+
+function weightedMorph(candidates) {
+  const total = candidates.reduce((a, m) => a + MORPH_WEIGHT[m], 0);
+  let r = rng() * total;
+  for (const m of candidates) { r -= MORPH_WEIGHT[m]; if (r < 0) return m; }
+  return candidates[candidates.length - 1];
+}
+
+/* Fresh-first: prefer a morph for which SOME species is still an unowned (sp,
+ * morph) pair, weighted among those candidates; once every pair is owned, fall
+ * through to the plain weighted draw over all five. The species itself is not
+ * decided here (grantEgg rolls the morph before the species is picked at hatch,
+ * spec section 2.2) -- this only asks "is any species still fresh at this morph". */
+export function rollMorph(owned) {
+  const fresh = MORPHS.filter(m => MORPH_SPECIES.some(s => !owned.has(`${s}|${m}`)));
+  return weightedMorph(fresh.length ? fresh : MORPHS);
+}
+
 // Assemble the battle-pet object makeFighter() takes. picks = array of node ids.
 // opts.shiny flags the ultra-rare variant (a stat bump). The intrinsic stat line
 // (rarity + per-pet tilt + shiny) rides on `.stats` so pit.js's makePetBody stays

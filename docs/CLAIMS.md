@@ -19,6 +19,56 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v498
+1. The integration train (integ/day5) off v497: Kennel phase A, palettes, the approved v2 recolour art and the Kennel UI; crew activity; the Wardrobe paint virtualization; the truthful iOS permission strings (not a player-visible change, documented in docs/PERMISSION-STRINGS.md). Each row below folds the dated sections further down.
+
+2. PROOF: unit.test.js, pet-pool-audit.mjs, pet-morph-audit.mjs, kennel-audit.mjs | REACH: a granted egg rolls a morph fresh-first over species x morph pairs at MORPH_WEIGHT, the hatch reads it, morphs never touch stats; each morph is a per-fill recolour PNG of Cam's master (ink, whites and creams byte-identical, one midnight tier, Tom approved the sheet 2026-09-06) with tiers built; the Kennel sheet inside the Stable lists every species with a 30-cell collection grid and column headers.
+
+3. PROOF: unit.test.js, pet-pool-audit.mjs, friend-paddock-audit.mjs, pet-morph-audit.mjs | REACH: Bumbleseal hatches at the same even share as C1 to C5 with her hatchChance removed; the morph rides the friend wire like shiny and every pet surface (Today hero, Stable card, Paddock scene own and visited, friend profile hero and paddock row, level-up sheet) resolves the variant art, red on the pre-fix scene with 0 of 30 sprites.
+
+4. PROOF: crew-activity-audit.mjs | REACH: a friend's card names what changed since the last look from a cached snapshot (silent on first sight and on nothing changed); GET /friends carries a spire count per side shown on card and profile; the Crew badge counts an improved race rank once.
+
+5. PROOF: unit.test.js, crew-activity-audit.mjs | REACH: raceStanding's gap is to the racer above; raceClockLabel fires "settles tonight" on the last calendar day; settlement writes a reward-less place grant for every non-podium finisher; hasFightableStats demands a real number for every stat before any fight or stat bar renders.
+
+6. PROOF: wardrobe-family-grid-audit.mjs, football-tile-crop-audit.mjs, memory-census.mjs | REACH: hydratePackArt paints only tiles on screen or one screen away via an IntersectionObserver rooted on the real scroller (measured 166 ms to 73 ms main-thread script opening the hat slot at 4x CPU, 185 owned hats; OFF-DOM decoded bitmaps 12.2 MB to 9.3 MB).
+7. PROOF: unit.test.js | REACH: the Pit's board says when the day's twelve paid sparring slots are spent and the victory card drops its coin pill instead of printing +0; Gwart's greeting keeps a persisted anti-repeat bag so consecutive days differ; the daily spin fires on a first-day session and is queued after a level-up sheet instead of skipped; Today's level chip repaints on fight settle the way the wallet pill already did (each row red before the fix, quoted in the dated "the day tells the truth" section).
+
+8. PROOF: take-and-pay-audit.mjs | REACH: openCrate, hatchEgg, disenchantGear, both salvage paths and the legacy-egg conversion spend their input and write their payout in one transaction, so killing every IndexedDB transaction after the take leaves the player with the item or the full payout, never neither (six CRASH rows red on the pre-fix order: crate consumed with 0 coins and no rows, egg gone with no pet, gear gone with no dust).
+
+## kennel round 39 (2026-09-06)
+
+Not stamped to a release: kennel/r39, off integ/day5 (v488). HANDOFFr3920260906.md
+R39-6, 8, 9, 10, 11, 13, 14, 21, 23, 30, 32, re-measured on this tree before fixing.
+
+1. PROOF: pet-morph-audit.mjs | REACH: Own two copies of one species in different colours and equip the second: Today's hero, the splash, the try-on rack, the level-up sheet, the Crew hero and the Boneyard marker paint the copy you equipped, the same one the Pit fights with.
+2. PROOF: pet-morph-audit.mjs | REACH: Open your own Paddock from the Stable with two copies of one species in different colours: each copy is drawn in its own colour, as it already was in a friend's field.
+3. PROOF: kennel-audit.mjs | REACH: Open the Kennel on an iPad or a desktop window, or rotate the phone with it open: every pet sits inside its cell instead of spilling past it.
+4. PROOF: kennel-audit.mjs, unit.test.js | REACH: Open the Kennel owning a Founder's Lizard: the Collection counter reads N / 30 for the cells you have filled, never 31 / 30 or one more than you can see.
+5. PROOF: kennel-audit.mjs | REACH: In the Kennel, tap a grid cell (or focus it and press Enter or Space): the row names that colourway; tap it again and the species name comes back. The dots under a pet are indicators.
+6. PROOF: kennel-audit.mjs | REACH: Open the Kennel on a 320 wide phone owning every colourway of every pet: all six rows fit above the fold, the caption ends in an ellipsis instead of wrapping, and each column header sits over its column.
+7. PROOF: pet-morph-audit.mjs | REACH: Open the Backpack with an incubating Ember egg: the shell reads orange, not blue. Frost reads blue, Toxic green, Midnight purple.
+8. PROOF: hero-share-audit.mjs | REACH: Equip Bumbleseal from the Stable, visit it again and come back to Today: she still stands at her own size (169px box at 390x844) and the Bonehead still steps aside (-27px), because equipping through the Stable writes both the equipped-instance record and the outfit slot. The audit used to seed with the bare outfit slot, which v490's R39-1 heal reverts on the next Stable paint: red on origin/main since 49fc6878 (green at its parent, measured 2026-09-07), not a train regression. Re-premised onto addPetInstance + setEquippedPet, the writer every player path uses.
+## take and pay is one step (2026-09-06)
+
+Not stamped to a release: fix/atomic-take-and-pay, off v492. Lane 2 of the
+2026-09-06 economy audit.
+
+1. PROOF: take-and-pay-audit.mjs (six CRASH rows, each proved red on origin/main
+   bce3a937 with the same file: crate, egg, gear, salvageInstance, salvagePet,
+   legacy egg-crate) | REACH: Opening a crate, hatching an egg, melting a piece of
+   gear or destroying a pet can no longer take the thing away and then fail to
+   pay you for it. Each of those used to spend the input first and hand over the
+   reward a moment later in separate saves, so an app killed between the two left
+   you with neither. The spend and the whole payout are one save now: a kill at
+   any point leaves either the unopened crate, the unhatched egg, the piece, the
+   pet, or the complete reward with the input gone. Nothing pending, nothing to
+   resume. Measured by killing every save after the take: on the old order a Bone
+   Crate vanished with no coins and no items, a walked egg vanished with no pet, a
+   rare piece melted for 0 dust; on the new order the full hand, the pet instance
+   with its ownership row and level seed, and the dust with its revision are all
+   on disk. The legacy egg-crate sweep on the Crates tab converts a crate to an
+   egg in the same one save.
+
 ## the Stable rail tells the truth (2026-09-06)
 
 Not stamped to a release: hotfix/stable-rail-truth, off v493. HANDOFFMASTER20260906.md
@@ -68,6 +118,35 @@ CSS, the kin chips and the Dressing Room family tile's tier.
    a lower-rarity colourway (the one you wear) carries that colourway's tier
    badge and border, at that colourway's price, instead of the family's best
    member's tier.
+## the day tells the truth (2026-09-07)
+
+Not stamped to a release: hotfix/daily-truth, off v496. HANDOFFMASTER20260906.md
+B3, B13, B14, R41-16.
+
+1. PROOF: unit.test.js | REACH: sparring past the day's 12 paid slots no longer
+   prints "+15 coins on a win" over a wall that pays 0, and a capped win's
+   victory card drops its coin pill instead of printing a literal "+0" beside
+   the XP it did earn. Sparring itself stays free and unlimited; only the
+   money stops, the same shape the Pit-charge cap already handles honestly.
+   No economy change: SPAR_DAILY_CAP, SPAR_COINS and claimSpar are untouched.
+
+2. PROOF: unit.test.js | REACH: Gwart's "put your gear on" line no longer
+   repeats for a fortnight of once-a-day opens. The last few lines he said
+   persist to kv (gwRecent) and seed the anti-repeat bag on the next boot,
+   before he speaks.
+
+3. PROOF: unit.test.js | REACH: the daily spin wheel fires on day one (a
+   finished signup and a mid-onboarding restore both reach it now), and a
+   level-up sheet open at boot no longer eats the day's spin outright:
+   closeTopSheet retries it the moment the sheet stack drains. Day one was
+   never a deliberate exclusion (claimDay's first-run branch already lets a
+   brand-new device through like any other day); it was a missing wire.
+
+4. PROOF: unit.test.js | REACH: Today's level chip (Lv, title, XP bar)
+   repaints the moment a Pit fight settles, win or lose, without navigating
+   away and back, the same fix class the wallet pill already got for
+   coins/dust/Vigor.
+
 ## currency and receipts are one transaction (2026-09-06)
 
 Not stamped to a release: fix/currency-revisions, off v493. Codex's read-only
@@ -691,6 +770,70 @@ in its own section below, not folded in here.
 
 11. PROOF: unit.test.js (R-offseam-3) | REACH: Reconnecting (or reopening the app) right as a friends/profile sync attempt failed used to mark that sync as "just tried" even though it never got anywhere, so the next open inside five minutes silently gave up instead of retrying. A failed attempt no longer starts that five-minute wait; the very next open tries again for real.
 
+## crew activity (2026-09-05)
+
+Branch `feat/crew-activity-signal`, not yet stamped to a release. Round 35's
+remaining Crew tickets: CREW-3 (a new player's first race), CREW-4 (a friend's
+play is invisible), CREW-5 (the badge only counts other people), CREW-6 (the
+week close is silent), CREW-13 (spires have no surface on the tab), CREW-14
+(a stranger's empty stats produce "Jab ~NaN dmg").
+
+1. PROOF: unit.test.js (raceStanding: an 11th-place rookie / a rank far outside the visible board / 1st place is never behind anyone, each proven red by reverting the gap back to "against first") | REACH: A new player's race summary now measures the gap to the racer directly above them, never to whoever is first; if that racer is not even visible (a true 40th, say), no gap is shown at all rather than a huge one against a stranger. The minutes estimate on the card is dropped once it passes an hour, and on your first-ever week the card says "Your first race. N friends are in it." instead of any gap.
+2. PROOF: crew-activity-audit.mjs (CREW-4 rows, proved red by dropping the sinceMap wiring in paintFan) | REACH: A friend's card now says the one thing that changed since you last looked -- leveled up, new gear, took a spire -- and stays silent when nothing did. Nothing is invented on the first time you ever see a friend: there is nothing to compare against yet.
+3. PROOF: crew-activity-audit.mjs (CREW-5 rows) | REACH: The Crew badge now also lights up when YOUR OWN race rank improves overnight, not only for cheers, gifts and requests other people sent you.
+4. PROOF: unit.test.js (raceClockLabel, proved red at the `msLeft <= 0` threshold), server/test/api.test.mjs ("a non-podium finisher still gets told where they placed", proved red by disabling the settlement loop) | REACH: The step race card says "settles tonight" for the whole final day instead of never saying it at all; the News row about the race says the purse pays five, not three; and everyone who raced last week, not only the top 5, gets a boot notice naming where they finished, once the week settles.
+5. PROOF: crew-activity-audit.mjs (CREW-13 rows) | REACH: A friend's card and profile show a compact "Holds N spires" line, with a one-line "beat their defender to take one" on the profile, where nothing about spires showed up anywhere on the Crew tab before.
+6. PROOF: unit.test.js (hasFightableStats, proved red by relaxing it to `!!stats`), crew-activity-audit.mjs (CREW-14 rows) | REACH: A friend or stranger whose stats never synced now shows "Their stats will show once they next open the app" instead of five zero-width bars, and offers no Battle button that would otherwise start a fight with no real numbers behind it.
+
+## perf grid and map (2026-09-05)
+
+Branch `perf/grid-and-map`, off `integ/day3`. Round 34 perf lane, two items,
+both measured with `scratchpad/r34/perf/perf-drive.mjs` at CPU 4x, 3 runs,
+medians (a driver row, not a browser-gate audit, per this round's brief).
+
+1. PROOF: wardrobe-family-grid-audit.mjs, football-tile-crop-audit.mjs,
+   memory-census.mjs (wardrobe row, all green), MANUAL medians from
+   perf-drive.mjs `wardrobe` mode, hoarder account (185 owned hats), CPU 4x,
+   opening the Wardrobe's hat slot: main-thread script time 166ms -> 73ms
+   (Performance.getMetrics ScriptDuration), longtask count 3 -> 2, longtask
+   total duration 250ms -> 186ms. memory-census's own OFF-DOM concurrent
+   bitmap row (a stricter, unthrottled instrument) fell from ~12.2 MB to
+   9.3 MB with the fix, TIER stayed 100% trim / 0 masters (292 bh images
+   sampled). | REACH: Wardrobe, any slot with enough colourways to fill more
+   than a couple of screens (Hat on a collector account is the extreme
+   case). Opening the slot no longer decodes and paints every collected
+   tile at once; a canvas paints once it is on screen or about to be
+   (one `.screen`-height of scroll margin on both sides), and a tile
+   scrolled straight past without lingering never pays for a decode it
+   would never show. The family rail, the equipped ring, and the football
+   tint painting are unaffected (all three guards above exercise them
+   directly and stay green).
+2. PROOF: NONE, stopped before writing code; MANUAL cost measured with
+   perf-drive.mjs `boneyard` mode, CPU 4x, 3 runs: a single Boneyard
+   revisit (Today -> Boneyard, map destroyed and rebuilt) costs a median
+   1,089ms of longtask time across 5 tasks, the longest at 462ms
+   (medians of runs at 823/1,267/1,089ms total). | REACH: not shipped.
+   `js/app.js`'s own comments on `holdOutgoing`/`screenCleanup` (the code
+   the task pointed at) say the map's teardown on every navigation away
+   from the Boneyard is deliberate, not an oversight: the "held outgoing
+   copy" mechanism already exists to hide the visual cut and explicitly
+   still runs the real `map.remove()` a moment later, because leaving one
+   map instance's destructor pointed at a DIFFERENT live map after a fast
+   Boneyard -> Today -> Boneyard is the exact bug that comment names.
+   All six marker sets (spawn, den, mini, secret, wanderer, spire) and
+   their poll timers and DOM listeners live inside `renderBoneyard`'s
+   single per-mount closure (~1,500 lines), by design; keeping the map
+   alive across visits means lifting that state to module scope and
+   turning `route()`'s wholesale `#screen` rebuild into a targeted
+   reattach for one screen only, which is a rewrite of the Boneyard's
+   lifecycle, not a surgical fix. None of the three named guards
+   (boneyard-audit.mjs, marker-anchor-audit.mjs, spawn-quiet-audit.mjs)
+   drive a repeated leave-and-return cycle, so a persistence bug (a
+   doubled listener, a marker left in the wrong place after a long time
+   away, a stale follow-cam lock) would ship undetected. Stopping here
+   rather than rearchitecting the screen on a guess; the 1-2s cost is
+   real and measured above but unaddressed.
+
 ## v474
 
 1. PROOF: unit.test.js, football-kit-audit.mjs, MANUAL measured off the rendered Shop screen (buy buttons and the team picker read 40px tall, up from 35.5px and 36px; a buy button below your balance stays enabled and pressable, and a tap answers with the coin shortfall) | REACH: The Locker Room shelf sells five football pieces, a helmet, a jersey, cleats and a matching helmet and jersey for the lizard, each 4,200 coins and yours in all 32 team colours the moment you buy it. Buying the full kit after already owning some of its five pieces charges only for what is missing, never more than the flat 16,800 kit price, and the "you save" line only appears when there really is a saving. Every buy button on the shelf is a full-size tap target, and one you cannot yet afford still responds to a tap and names the shortfall instead of going dead.
@@ -801,6 +944,33 @@ make this changelog (the copy path it fixes was not in scope) and stays here
 unpromoted.
 
 1. PROOF: NONE in the browser gate; this is copy on a 403 branch of a coin-gift and free-gift send that unit.test.js and the browser audits do not drive, so the row says so rather than implying one. Measured live in round 34's SOCIAL lane (a real 403 from a real Worker after one player deleted their account). | REACH: Sending a gift to someone no longer in your Crew now says "They're not in your Crew any more" instead of the generic "Could not send. Try again" that sent the player around a loop that could never succeed.
+
+## kennel phase A (2026-09-05)
+
+Not yet released (WIP on feat/kennel-phase-a, no version bump). Recorded here per the branch's own audit trail, not as a shipped claim.
+
+1. PROOF: unit.test.js (KENNEL rollMorph rows, KENNEL hatchEgg rows, KENNEL addPetInstance rows, KENNEL sim rows), pet-pool-audit.mjs (rewritten SPLIT/NEVER/DUPE-POOL rows), pet-morph-audit.mjs (real-browser, pixel-sampled) | REACH: Every step egg now hatches into one of five colourways (base, Ember, Frost, Toxic, Midnight) alongside its species, decided when the egg is granted and revealed on hatch: "A Frost Bulldog." for a fresh (species, colour) pair, "ANOTHER ONE!" only when you already have that exact pair. The colour is a pure cosmetic recolour of the same art (no new artwork, never touches a pet's stats), applied everywhere that pet is drawn: Today's hero, the Stable, the hatch reveal, the breed picker and reveal, Crew, a friend's profile and paddock, the leaderboard, and your own pet in the Pit. A shiny pet is always its base colour, and Bumbleseal's worn accessories never take the tint. The egg's own shell in your Backpack carries a hint of the colour inside, with no name given away before it hatches. Also fixed in the same pass: duplicate eggs used to never hand back the Catfish or the Beardie (both Common-rarity pets), silently narrowing the dupe pool to three species instead of five; they are back in the pool.
+2. PROOF: NONE beyond unit.test.js's own sim rows: this is an internal fix to the colour-roll, not a player-facing claim of its own | REACH: n/a -- found and fixed while proving the row above. The colour roll originally weighed Bumbleseal (a 1%, mostly shop-bought pet) into the same "which colours has this player never seen" accounting as the five ordinary hatch species, which kept the plain, uncoloured look permanently favoured for almost every player and starved the other four colours of a fair shot at showing up. Scoped to the five ordinary species instead.
+
+## kennel palettes (2026-09-05)
+
+Not yet released (WIP on feat/kennel-palettes, no version bump). Recorded here per the branch's own audit trail, not as a shipped claim.
+
+1. PROOF: unit.test.js (KENNEL MORPH_ART rows, KENNEL Bumbleseal hatch-share row), pet-morph-audit.mjs (real-browser, pixel-sampled, ink diffed against the served files) | REACH: A pet's colourway is now a hand-recolored variant of that species' own drawing, not one shared filter stretched over all six -- the fix for a colour reading wrong on a specific species (Ember used to read blue on the Beardie because a single rotation lands somewhere different depending on what colour the art started as; every colour now targets the same absolute hue on every species). Wherever a coloured pet is drawn -- Today's hero, the Stable, the hatch reveal, the breed picker and reveal, Crew, a friend's profile and paddock, the leaderboard, your own pet in the Pit, and the shop's try-on rack -- the outline ink is untouched pixel-for-pixel and a shiny is always its base colour. One trade: while coloured, the three pets that normally move (the cloud, the catfish, the lizard) hold still and show their static art instead, the same trade already accepted for the football kit.
+2. PROOF: unit.test.js (KENNEL rollMorph fresh-first row for C6, KENNEL sim row, pet-pool-audit.mjs SAMPLE/SPLIT rows) | REACH: Bumbleseal now hatches from a step egg at the same odds as every other species instead of a rare 1% pull. She still sells in Gwart's Menagerie for the same 50,000 coins, and her five accessories are unchanged, cash-shop-only.
+3. RESOLVED, see "kennel v2 recolour" below: the three provisional midnight luminance tiers this row described were never a shipped claim, and are gone (one midnight now).
+
+## kennel v2 recolour (2026-09-06)
+
+Not yet released (WIP on art/kennel-v2-wire, no version bump). Recorded here per the branch's own audit trail, not as a shipped claim.
+
+1. PROOF: unit.test.js (KENNEL rows re-premised for one midnight file per species), pet-morph-audit.mjs, pet-pool-audit.mjs, kennel-audit.mjs (all re-run against the new art) | REACH: Tom approved the pet colourway art itself ("now this is quality work. approved.") and it replaces the placeholder recolour: every fill region is remapped to an absolute target hue per morph with Cam's outline ink, eye-whites and cream highlights kept byte-identical, rather than one shared filter guess. The undecided midnight brightness question above is resolved by shipping a single midnight look instead of three candidates.
+
+## kennel ui (2026-09-05)
+
+Not yet released (WIP on feat/kennel-ui, off feat/kennel-phase-a, no version bump). Recorded here per the branch's own audit trail, not as a shipped claim.
+
+1. PROOF: kennel-audit.mjs (real-browser, gate-registered) | REACH: The Stable's header now carries a Kennel button, next to Done. It opens a new screen with two parts: a roster of every species you own, one row each with a set of dots showing which of the five colourways you have found for it, and a 30-cell collection grid (six species by five colourways -- Bumbleseal counts as a normal species now, not the exclusive she used to be treated as for this purpose) where a cell you own shows the pet in colour and a cell you have not found yet shows a dimmed, locked silhouette of the plain species, never a broken image. Tapping a dot names what it is: the colourway and species if you have it, "Not hatched yet." if you do not. A line from Gwart under the roster says plainly that the colours are cosmetic and never touch a pet's stats. The roster fits on screen with no scrolling even with all six species owned, on the smallest supported phone. Filling the grid earns nothing yet.
 
 ## v473
 

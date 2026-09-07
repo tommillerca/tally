@@ -305,6 +305,9 @@ const SUBFLOOR = {
   'js/app.js:footballDropBodyHtml|coin': '13px in the kit room\'s price line and 12px on its buy buttons, the same chips as renderShop|coin above and set in the same t3-price and drop-buy rules. Football kit, 2026-09-04.',
   'js/app.js:openRenameNotice|coin':      '15px in the rename notice copy. CANDIDATE for 16: one step away.',
   'js/app.js:openRenameNotice|dust':      '15px in the rename notice copy. CANDIDATE for 16: one step away.',
+  /* 2026-09-06, CREW-13: the spire count is a caption line on the crew card and the friend profile; the tombstone sits in that text at its size. */
+  'js/app.js:crewCardHtml|tombstone':     '11px, inline with the crew card\'s spire caption.',
+  'js/app.js:openFriendProfile|tombstone': '13px, inline with the friend profile\'s spire note.',
   'js/app.js:renderFriends|coin':         '13px in the gift row.',
   'js/app.js:renderFriends|dust':         '12px in the gift row.',
   'js/app.js:renderFriends|crate/?':      '15px crate in the gift row; the crate floor is 24 so 16 would not help, it needs crateChip. CANDIDATE.',

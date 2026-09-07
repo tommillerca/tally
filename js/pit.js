@@ -66,6 +66,18 @@ export const STAT_META = [
     spec: 'Casters and showstoppers.' },
 ];
 
+/* CREW-14: a stranger/friend's `stats` object arrives as `{}` for a fresh
+   account (never synced, never `undefined`), and `{}` is truthy: every call
+   site that guarded on "stats exists" showed 5 zero-width bars instead of the
+   honest "will show once they next open the app" line, and openFight handed
+   `{}` straight to the foe, whose every move then computed off `undefined`
+   stat keys -- "Jab ~NaN dmg" (round 35 handoff, driven against a real
+   suite-account stranger). One guard, at the root: real numbers for every
+   stat this game fights with, or it does not count as a stats object at all. */
+export function hasFightableStats(stats) {
+  return !!stats && STAT_META.every(m => Number.isFinite(stats[m.key]));
+}
+
 // Customization: everyone starts from the same flat base (deriveStats), and
 // training points earned from wellbeing-safe behavior (protein-target hits +
 // closing days on budget + lifetime steps) are spent to raise stats. Foes scale

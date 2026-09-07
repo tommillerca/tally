@@ -7,7 +7,8 @@ import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews, habitGrantCard,
   initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, retireGardenIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
-  awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats, claimSpar,
+  awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats, claimSpar, sparBoardState,
+  bagPick, seedBagFromRecent, GW_RECENT_CAP,
 } from './game.js';
 import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, grantCosmetic, inventory, ownedCosmeticIds,
@@ -63,8 +64,8 @@ import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribut
 import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
-import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear } from './loot.js';
-import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature } from './pets.js';
+import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear, bestInstance } from './loot.js';
+import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs, ownedCellCount } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
@@ -87,7 +88,7 @@ import {
 } from './garden.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume, platformTag } from './native.js';
 import {
-  deriveStats, legacyHabitStats, habitGrantPoints, derived, STAT_META, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP, TRAIN_CAP,
+  deriveStats, legacyHabitStats, habitGrantPoints, derived, STAT_META, hasFightableStats, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP, TRAIN_CAP,
   applyAction, endTurn, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks, GUARD_STAMINA,
@@ -262,6 +263,11 @@ const S = {
   sounds: true,
   glow: true,      // rarity/slime glow on your Bonehead's gear (Settings > App)
   shinyPets: new Set(), // pet ids the player owns as the ultra-rare shiny variant
+  // Kennel Phase A: { sp: morph } for the BEST instance of every owned species
+  // (bestInstance -- same "which copy represents this species" rule lineage/stats
+  // already use), so a synchronous render can answer "what colour is my Bulldog"
+  // the same way S.shinyPets answers "is it shiny". Refreshed alongside it.
+  petMorphs: {},
   /* WHAT YOUR OWN PET IS WEARING, { slotCode: itemId }. Cached for the same
      reason S.shinyPets is: croppedPetImg is synchronous and runs on every pet
      render in the app, so the wardrobe cannot be an await. Refreshed before the
@@ -487,6 +493,27 @@ const petWearsFootball = (petId, wear) => petWornTints(petId, wearOf(wear)).some
  * than leaving a hole (anti-regression rule 8), and only a layer that was
  * actually tiered carries it, so the untiered path emits byte-identical markup.
  */
+/* KENNEL PALETTES, 2026-09-05: Phase A's MORPH_TINT (one CSS filter shared by
+ * every species) is gone -- Tom: "morphs are PER-SPECIES Cam-faithful
+ * palettes shipped as PNG variants, the CSS filter table is replaced." Every
+ * render path now resolves a morph through morphAsset (js/pets.js), which
+ * returns the recolored PNG (scripts/build-pet-morphs-v2.py, the approved v2
+ * sheet, Tom approved 2026-09-06) or '' to fall back to base -- see the
+ * MORPH_ART import above and its call sites below.
+ *
+ * MORPH_FILTER survives ONLY for the backpack egg shell tease (eggTint,
+ * section 2.5): the species is not decided yet (rule 0.4), so there is no
+ * petId to resolve a variant PNG for, and a still-uncracked egg's colour is
+ * a tease, not the pet's actual look. */
+/* R39-21 (2026-09-06): a FLAT palette colour multiplied onto the shell
+ * (app.css .t3-egg .art.tinted::after, mix-blend-mode: multiply through a
+ * mask of the shell itself), never a hue-rotate: the old relative rotation
+ * turned the cream shell blue for an EMBER egg (measured mean RGB 155,158,188).
+ * Hues match scripts/build-pet-morphs-v2.py's absolute targets (ember 14deg,
+ * frost 200deg, toxic 98deg, midnight 254deg). */
+const MORPH_SHELL = { ember: '#f0763a', frost: '#5fb8ec', toxic: '#8fd23c', midnight: '#6b4fc4' };
+function eggTint(morph) { return (morph && morph !== 'base' && MORPH_SHELL[morph]) || ''; }
+
 function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = undefined, thumb = null) {
   const src = srcOverride || bhAsset(BH_BY_ID[petId]);
   const c = PET_CROP[petId];
@@ -531,9 +558,9 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = und
      and one spare `;` on every pet layer is a diff on 66KB of shipped Shop markup
      that buys nothing. The tint spans below add their own separator. */
   const geo = `position:absolute;left:0;top:0;width:${pc(imgSize)};height:${pc(imgSize)};max-width:none;transform:translate(${(tx * 100 / imgSize).toFixed(4)}%,${(ty * 100 / imgSize).toFixed(4)}%)`;
-  const layer = (u, cls = '') => {
+  const layer = (u, cls = '', extraStyle = '') => {
     const s = tier ? bhThumb(u, tier) : u;
-    return `<img${cls ? ` class="${cls}"` : ''} src="${s}"${s === u ? '' : ` data-full="${u}" ${THUMB_FALLBACK}`} style="${geo}" alt="">`;
+    return `<img${cls ? ` class="${cls}"` : ''} src="${s}"${s === u ? '' : ` data-full="${u}" ${THUMB_FALLBACK}`} style="${geo}${extraStyle}" alt="">`;
   };
   /* Football kit, 2026-09-04: a tinted garment's two multiply spans take the SAME
      geometry string as its <img>, so they inherit the registration untouched.
@@ -543,6 +570,12 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = und
      to misalign. Tiering it stops the mask decoding at 640 on a tile whose
      garment art is already tiered down. */
   const tintOf = i => (tints[i] || []).map(t => `<span class="fb-tint pw" style="${geo};--fbm:url('${tier ? bhThumb(t.mask, tier) : t.mask}');background:${t.hex}" aria-hidden="true"></span>`).join('');
+  /* KENNEL PALETTES, 2026-09-05: a morph is now baked into `src` itself (the
+     caller passes morphAsset's variant PNG as srcOverride, same slot shiny's
+     `assets/bh/C/shiny/<id>.png` already used), never on worn accessories
+     (Bumbleseal's sunglasses/stinger share her canvas and must not recolor,
+     spec section 2.4) -- `layer(src)` below carries no filter, only shiny/morph's
+     own art. */
   return `<span class="petcrop${worn.length ? ' dressed' : ''}" style="width:${px}px;height:${px}px">${layer(src)}${worn.map((u, i) => layer(u, 'pw') + tintOf(i)).join('')}</span>`;
 }
 // Pet sprite: shiny -> static recolored variant (+ glow); else the animated
@@ -574,10 +607,11 @@ function petFrom(snapshotPet, ownSpecies = null) {
   if (snapshotPet && snapshotPet.id) {
     /* `wear` follows shiny exactly: a snapshot's own wardrobe or NONE, never
        undefined, because undefined means "ask S.petWear", which is the viewer's
-       own and would dress a rival's Bumbleseal in your purse. */
-    return { id: snapshotPet.id, shiny: !!snapshotPet.shiny, level: snapshotPet.level || 1, wear: snapshotPet.wear || null };
+       own and would dress a rival's Bumbleseal in your purse. Same rule for
+       morph (Kennel Phase A): whitelisted with isMorph, unknown/missing -> base. */
+    return { id: snapshotPet.id, shiny: !!snapshotPet.shiny, level: snapshotPet.level || 1, wear: snapshotPet.wear || null, morph: snapPetMorph(snapshotPet) };
   }
-  if (ownSpecies && BH_BY_ID[ownSpecies]) return { id: ownSpecies, shiny: undefined, level: null };
+  if (ownSpecies && BH_BY_ID[ownSpecies]) return { id: ownSpecies, shiny: undefined, level: null, morph: undefined };
   return null;
 }
 /* Draw a pet BESIDE a Bonehead: same baseline, seated unless the species hovers,
@@ -586,7 +620,7 @@ function petFrom(snapshotPet, ownSpecies = null) {
  * is the wrong size" cannot be re-invented per screen. */
 function petAsideHtml(pet, px, { thumb } = {}) {
   if (!pet || !pet.id || !BH_BY_ID[pet.id]) return '';
-  return petSpriteHtml(pet.id, px, !petHovers(pet.id), { mass: true, shiny: pet.shiny, wear: pet.wear, thumb });
+  return petSpriteHtml(pet.id, px, !petHovers(pet.id), { mass: true, shiny: pet.shiny, wear: pet.wear, thumb, morph: pet.morph });
 }
 /* THE THIRD PATH. On the splash, the level-up card, the map marker and the
  * leaderboard the pet stays INSIDE the avatar stack, so it cannot go through
@@ -605,6 +639,22 @@ async function ownShinyPetId(eq) {
   return (await shinyPetIds()).includes(sp) ? sp : null;
 }
 const snapShinyPetId = pet => (pet && pet.shiny && pet.id !== 'CX' ? pet.id : null);
+/* Kennel Phase A: the morph analogue of ownShinyPetId/snapShinyPetId above, same
+ * two honest sources. Unlike shiny (a same-canvas PNG swap keyed by species id),
+ * a morph is a CSS filter that needs an actual value, not just a match -- so
+ * these return a morph string ('base' when none/unknown) rather than an id. */
+async function ownPetMorph(eq) {
+  const sp = eq && eq.C;
+  if (!sp || sp === 'CX') return 'base';               // CX exempt (section 0.7)
+  /* R39-13 (2026-09-06): re-read before answering. The Stable's EQUIP button
+     swaps the equipped copy without touching this cache, and Today's hero
+     repaints off it on the way back, so a stale cache here painted the OTHER
+     copy's colour while the Pit (which reads the equipped instance directly)
+     painted the right one. One extra kv read per hero paint. */
+  await refreshPetMorphs();
+  return (S.petMorphs && S.petMorphs[sp]) || 'base';
+}
+const snapPetMorph = pet => (pet && pet.id !== 'CX' && isMorph(pet.morph) ? pet.morph : 'base');
 /* IS THIS PET DRAWN ON THE BONEHEAD'S CANVAS, OR ON ITS OWN?
  *
  * Tom, 2026-08-21: "also this weird top left glitch with the pet and bonehead is
@@ -681,7 +731,7 @@ function petFightPx(petId, px) {
    is that UI, so tests/pet-wardrobe-audit.mjs taps the real tiles instead, which
    is what tally/CLAUDE.md rule 5 asks for anyway: operate the control, do not
    call the function behind it. */
-function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, thumb } = {}) {
+function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, thumb, morph } = {}) {
   // CX (Day One Lizard) has no shiny static variant; its amethyst art IS the
   // special look, so always render its animated self even if the instance is shiny.
   // Every path scales by the species' visual mass, so a colourway is never a
@@ -728,20 +778,58 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
     // Cropped like every other pet. This used to be a raw <img> at px, which drew
     // the creature tiny inside its box because the source art sits small in a 640²
     // canvas: a shiny lizard came out a fraction of the normal one.
+    // No morph tint: shiny always forces base (rule 0.1/1.2).
     return `<div class="pet-shiny-wrap">${croppedPetImg(petId, S2, ground, `assets/bh/C/shiny/${petId}.png`, wear, thumb)}<span class="shiny-spark">${sparkIco(14)}</span></div>`;
   }
-  return (wearsFootball ? null : animatedPetHtml(petId, S2)) || croppedPetImg(petId, S2, ground, null, wear, thumb);
+  /* Kennel palettes: shiny forces base (rule 0.1/1.2, redundant defense against
+     any caller that somehow got here with isShiny true -- see the branches
+     above, which return first). `morph` explicit, or the own-pet cache the same
+     way `shiny` falls back to S.shinyPets two lines up. */
+  const petMorph = isShiny ? 'base' : (morph !== undefined ? morph : ((S.petMorphs && S.petMorphs[petId]) || 'base'));
+  const morphSrc = morphAsset(petId, petMorph);
+  /* A MORPHED PET FORCES THE STATIC CANVAS, same trade as wearsFootball just
+     above (2026-09-04) and for the identical reason: scripts/build-pet-morphs-v2.py
+     recolors the flat master (assets/bh/C/<id>.png), not the animated species'
+     separate layer PNGs (body, eyes, drops, shadow), so there is no morphed art
+     for the animated stack to draw. Kennel Phase A's own CSS filter used to
+     paint the animated branch too, which is exactly how the reported bug
+     ("ember reads blue on the Beardie") reached C4's lizard: that filter is
+     gone (see js/pets.js morphAsset), so falling back to the animated layers
+     for a morphed pet would silently un-fix it. While morphed, the animated
+     species (cloud/catfish/lizard) stop moving; base morph animates exactly
+     as it always did. */
+  return (wearsFootball || morphSrc ? null : animatedPetHtml(petId, S2)) || croppedPetImg(petId, S2, ground, morphSrc || null, wear, thumb);
 }
 // PORTRAIT: always content-cropped + vertically CENTERED in its box (no animation,
 // no floor-seating), so a pet reads the same in a roster tile regardless of whether
 // it's an animated/hovering/grounded species. Shiny uses its recolour, same crop.
-function petPortraitHtml(petId, px, shiny = false, { mass = false, wear, thumb } = {}) {
+function petPortraitHtml(petId, px, shiny = false, { mass = false, wear, thumb, morph } = {}) {
   if (petId === 'CX') shiny = false; // Day One Lizard: amethyst CX.png is the portrait (no shiny static)
-  const src = shiny ? `assets/bh/C/shiny/${petId}.png` : bhAsset(BH_BY_ID[petId]);
+  // Kennel palettes: shiny forces base (rule 0.1/1.2) -- no morph lookup at all.
+  const src = shiny ? `assets/bh/C/shiny/${petId}.png` : (morphAsset(petId, morph) || bhAsset(BH_BY_ID[petId]));
   const inner = croppedPetImg(petId, mass ? Math.round(px * petScale(petId)) : px, false, src, wear, thumb);
   return shiny ? `<div class="pet-shiny-wrap">${inner}<span class="shiny-spark">${sparkIco(12)}</span></div>` : inner;
 }
 async function refreshShinyPets() { S.shinyPets = new Set(await shinyPetIds()); }
+// Kennel Phase A: one representative morph per owned species (bestInstance, the
+// same copy lineage/stats already treat as "the one that counts"), refreshed
+// alongside S.shinyPets so a synchronous pet render can resolve its own colour.
+async function refreshPetMorphs() {
+  const insts = await petInstances();
+  /* R39-13: the EQUIPPED copy wins for its species. bestInstance sorts on
+     lineage then shiny and keeps the first-hatched copy on a tie, so with a
+     base #1 and a midnight #2 (midnight equipped) every S.petMorphs reader
+     painted base while the Pit painted midnight. bestInstance only answers for
+     species with no equipped copy. */
+  const eqInst = await equippedPetInstance();
+  const map = {};
+  for (const sp of new Set(insts.map(x => x.sp))) {
+    if (sp === 'CX') continue; // exempt from morphs (spec section 0.7)
+    const b = (eqInst && eqInst.sp === sp) ? eqInst : bestInstance(insts, sp);
+    map[sp] = (b && isMorph(b.morph)) ? b.morph : 'base';
+  }
+  S.petMorphs = map;
+}
 async function refreshPetWear() { S.petWear = await petWear(); }
 /* Which avatar slots are wearing SLIMED gear. Cached the same way shiny pets are,
    because the glow has to appear on every avatar render and avatarLayersHtml has
@@ -1194,6 +1282,7 @@ async function showSplash(userEq) {
   // this "EAT." renders in the fallback face and swaps a beat later.
   // your own pet is in that final stack, and it has to be YOUR copy of it
   const splashShiny = await ownShinyPetId(userEq);
+  const splashMorph = await ownPetMorph(userEq);
   const font = document.fonts ? document.fonts.load('60px Bangers').catch(() => {}) : Promise.resolve();
   // Bounded: a slow network must never hold the app on a blank splash.
   await Promise.race([Promise.all([warm, font]), beat(900)]);
@@ -1204,7 +1293,7 @@ async function showSplash(userEq) {
     await beat(430);
   }
   if (done) return;
-  el.innerHTML = `<div class="splash-inner"><div class="splash-stage">${avatarLayersHtml(userEq || { B: 'B0-1', SK: 'SK0-1' }, { shinyPetId: splashShiny })}</div><img class="splash-mark" src="assets/brand/wordmark.png" alt="BONEHEADZ"><div class="splash-title" style="font-size:30px">GYM</div><div class="splash-sub">Feed the bones</div></div>`;
+  el.innerHTML = `<div class="splash-inner"><div class="splash-stage">${avatarLayersHtml(userEq || { B: 'B0-1', SK: 'SK0-1' }, { shinyPetId: splashShiny, petMorph: splashMorph })}</div><img class="splash-mark" src="assets/brand/wordmark.png" alt="BONEHEADZ"><div class="splash-title" style="font-size:30px">GYM</div><div class="splash-sub">Feed the bones</div></div>`;
   await beat(forced ? 2600 : 950);
   finish();
 }
@@ -1514,6 +1603,7 @@ async function boot() {
      failure the figure contract exists to stop, on frame one of every boot. Two
      small IndexedDB reads each, nothing like the replay below. */
   await refreshShinyPets();
+  await refreshPetMorphs();
   await refreshSlimedSlots();
   await refreshPetWear();
   // AWAITED, before the first route(): renderToday reads 'wbReturnDay' at paint
@@ -1603,6 +1693,7 @@ async function boot() {
   /* Again, because the loot backfills above can hand out a pet or slimed gear,
      and the paint-time pass could not have seen those. */
   await refreshShinyPets();
+  await refreshPetMorphs();
   await refreshSlimedSlots();
   /* THE WITNESS BEFORE THE DAY CLOSE (js/social.js settleServerDay). bootSync's
      touchServerDay is fire-and-forget and loses the race with everything above,
@@ -1656,6 +1747,7 @@ async function boot() {
   maybeShowDailyWheel({ sounds: S.sounds }).then(spun => {
     if (spun === true && !sheetStack.length) refresh();
     else if (spun?.dayGuard) dayGuardToast(spun.dayGuard);   // QA round 26 O14: the refused wheel used to vanish without a word
+    else if (spun?.pending) wheelRetryPending = true;   // B14: a sheet was open; closeTopSheet retries once the stack drains
   }).catch(() => {});
   refundStreakFreezes().then(r => {
     if (r) toast(`Streak Freezes have been retired. Your ${r.count} paid out: +${r.coins.toLocaleString()} coins.`, 5200);
@@ -1742,6 +1834,7 @@ async function rollDayIfNeeded() {
     maybeShowDailyWheel({ sounds: S.sounds }).then(spun => {
       if (spun === true && !sheetStack.length) refresh();
       else if (spun?.dayGuard) dayGuardToast(spun.dayGuard);   // QA round 26 O14
+      else if (spun?.pending) wheelRetryPending = true;   // B14: retried by closeTopSheet
     }).catch(() => {});
     refreshNotifSchedules();
     return true;
@@ -2970,6 +3063,10 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
   window.__cheerPresets = () => CHEERS;
   window.__unseenDeliveries = () => unseenDeliveryCount();
   window.__refreshCrewBadge = () => refreshCrewBadge();
+  // CREW-5: isolates the rank-improvement half of the badge from the
+  // network-only social.listFriends() half of refreshCrewBadge, so it is
+  // checkable against the __testRace fixture with no live account.
+  window.__raceRankImproved = () => raceRankImproved();
   // S6: a coins-only gift is the rarest reveal in the game (every other payload
   // shape beats it in the `if` chain above), so an audit needs a direct way to
   // open one rather than farming a real Crew gift server-side.
@@ -2978,15 +3075,38 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
 // The badge is the sum of what is waiting for you in the tab: friend requests
 // AND unread deliveries. It used to count requests only, so a gift never
 // announced itself anywhere you could go back and find it.
-async function setCrewBadgeFrom(incomingCount) {
-  try { setCrewBadge((incomingCount || 0) + (await unseenDeliveryCount())); }
+// CREW-5: `own` adds the player's OWN new milestones the Crew tab shows (see
+// raceRankImproved below) -- everything else here is something someone else
+// did. Optional and defaulted to 0 so checkFriendRequests, which has no
+// reason to re-check the race on every poll, is unchanged.
+async function setCrewBadgeFrom(incomingCount, own = 0) {
+  try { setCrewBadge((incomingCount || 0) + (await unseenDeliveryCount()) + (own || 0)); }
   catch { setCrewBadge(incomingCount || 0); }
+}
+/* CREW-5: "the badge only counts things other people did" -- cheers, gifts and
+   requests, never a fact about the player themselves. The race settling now
+   lands its own placement grant (CREW-6), which already counts as an unread
+   delivery once pulled, so the one real gap left is a rank moving up BETWEEN
+   settlements: the summary line on the tab already says "You are 3rd" and
+   nothing ever pointed at it. kv 'raceRankSeen:<week>' is the last rank this
+   device told the player about; a strictly BETTER rank on this read is new
+   news, once per week per improvement noticed (never fires twice for the same
+   standing, never fires for standing still or falling back). */
+async function raceRankImproved() {
+  const wk = raceWeekKey(dateKey());
+  // __testRace: same webdriver-gated fixture hydrateRace reads (see there).
+  const race = (navigator.webdriver && window.__testRace) || await social.fetchStepRace(wk);
+  if (!race || race.yourRank == null) return false;
+  const seenKey = `raceRankSeen:${wk}`;
+  const seen = await kvGet(seenKey, null);
+  await kvSet(seenKey, race.yourRank);
+  return seen != null && race.yourRank < seen;
 }
 async function refreshCrewBadge() {
   try {
     if (!(await social.isOnline())) { await setCrewBadgeFrom(0); return; }
-    const d = await social.listFriends();
-    await setCrewBadgeFrom((d.incoming || []).length);
+    const [d, rankUp] = await Promise.all([social.listFriends(), raceRankImproved()]);
+    await setCrewBadgeFrom((d.incoming || []).length, rankUp ? 1 : 0);
   } catch { /* noop */ }
 }
 
@@ -3535,6 +3655,44 @@ function announce(msg) {
 }
 
 const sheetStack = [];
+/* B14: set when maybeShowDailyWheel returned { pending: true } (a sheet was
+   open when it wanted to show). closeTopSheet drains it the moment the stack
+   is empty again, so a level-up sheet at boot delays the spin instead of
+   eating it for the day. See the wheel call sites and closeTopSheet below. */
+let wheelRetryPending = false;
+/* Shared by the two call sites that are not boot()'s or rollDayIfNeeded()'s own
+   inline call (both pinned verbatim by tests/unit.test.js R26-O14 and left
+   untouched): the retry below, and enterAppFromOnboarding's day-one fire. Same
+   three outcomes as those two copies. */
+function fireDailyWheel() {
+  maybeShowDailyWheel({ sounds: S.sounds }).then(spun => {
+    if (spun === true && !sheetStack.length) refresh();
+    else if (spun?.dayGuard) dayGuardToast(spun.dayGuard);
+    else if (spun?.pending) wheelRetryPending = true;
+  }).catch(() => {});
+}
+/* refreshLevelChip: same doctrine as renderToday's own refreshWalletPill, for
+   the identical reason (R41-16). A Pit fight settles behind Today's own DOM
+   (the Pit is a sheet over it) and only #pitBody repainted on close, so XP a
+   fight just paid sat unread on the chip until the player navigated away and
+   back: measured, the chip read 0/200 while the ledger already held 65.
+   Repaints exactly the chip's own numbers, never a full re-render (same
+   anti-regression reasons as the wallet pill).
+   DELIBERATELY MODULE SCOPE, not nested beside refreshWalletPill inside
+   renderToday: totalXp() is a full 'xp' store scan on a cache miss, and
+   tests/today-reads-lint.mjs walks every call reachable from renderToday's
+   OWN body (not just what runs synchronously in its render tick), so a
+   closure defined in there reading xp counts as a second scan and that guard
+   goes red (A1). Living out here, it is invisible to that walk. */
+window.__refreshLevelChip = async () => {
+  const chip = $('#lvlChip'); if (!chip || !chip.isConnected) return;
+  const lvl = levelFor(await totalXp());
+  const row = $('.hero-lvrow', chip);
+  if (row) row.innerHTML = `<span class="hero-lv">Lv ${lvl.level}</span><span class="hero-title">${esc(lvl.name)}</span>`;
+  const xprow = $('.hero-xprow', chip);
+  if (xprow) xprow.innerHTML = `<span class="hero-xpn">${lvl.into.toLocaleString()}/${lvl.need.toLocaleString()}</span>`
+    + Array.from({ length: XP_PIPS }, (_, i) => `<i${i < Math.ceil(lvl.pct / (100 / XP_PIPS)) ? ' class="on"' : ''}></i>`).join('');
+};
 /* set when a new service worker took over while a sheet was open, so the
    reload the toast promised happens the moment the last sheet closes */
 let updatePending = false;
@@ -3632,6 +3790,10 @@ function closeTopSheet() {
   if (updatePending && !sheetStack.length) { updatePending = false; location.reload(); return; }
   try { rec.onClose?.(); } catch { /* noop */ }
   try { rec.restoreFocus?.(); } catch { /* noop */ }
+  /* B14: the ONE place every sheet finishes closing, so a spin owed while a
+     level-up (or any) sheet was open fires the moment nothing blocks it any
+     more, rather than waiting for the next boot or midnight roll. */
+  if (!sheetStack.length && wheelRetryPending) { wheelRetryPending = false; fireDailyWheel(); }
   const sheet = $('.sheet', rec.wrap), back = $('.sheet-backdrop', rec.wrap);
   if (reducedMotion || !sheet) { rec.wrap.remove(); return; }
   // slide down + backdrop fade, then remove. pointer-events off immediately so a
@@ -4204,6 +4366,7 @@ async function renderToday(el) {
     everLogged: allLog.length > 0,
     freshInstall: !!S.settings.createdAt && dateKey(new Date(S.settings.createdAt)) === S.date,
   };
+  await loadGwMemory(); // B13: seed the anti-repeat bag from the last reload before he speaks
   const gwLine = gwartLine(gwCtx);
   /* HE MAKES HIS ENTRANCE ONCE A SESSION, NOT ONCE A TAP. Read AND set here, in
      the render that emits the markup, so the very first Today of the session
@@ -5327,20 +5490,33 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
  * The bag is keyed on the STRINGS, not on a bucket, so a state change
  * mid-session (the crate gets opened) carries the memory across instead of
  * resetting it, and an interpolated line (`Day 4.`) behaves like any other. It
- * is bounded by the pool it is drawing from, because that is what empties it. */
+ * is bounded by the pool it is drawing from, because that is what empties it.
+ *
+ * B13: the bag above was module scope, so it died on every reload. A player
+ * who opens the app once a day never keeps a session alive long enough for
+ * it to matter, and got the same line twelve days running. Persist the last
+ * few lines said (kv `gwRecent`) and seed the bag from them at the first
+ * renderToday of a fresh load (loadGwMemory, called there before he first
+ * speaks), so a boot's first pick still excludes what was said last time
+ * instead of starting the bag empty. The picking algorithm itself
+ * (bagPick/seedBagFromRecent) lives in js/game.js so it is one thing, not
+ * two, and a guard can drive it without a DOM. */
 const gwSaid = new Set();
 let gwLast = '';
+let gwMemoryLoaded = false;
+async function loadGwMemory() {
+  if (gwMemoryLoaded) return;
+  gwMemoryLoaded = true;
+  try { gwLast = seedBagFromRecent(gwSaid, await kvGet('gwRecent', [])) || gwLast; }
+  catch { /* cosmetic; never block a render on this */ }
+}
 function gwPick(pool) {
-  if (!pool.length) return gwLast;
-  let fresh = pool.filter(l => !gwSaid.has(l));
-  if (!fresh.length) {
-    gwSaid.clear();
-    fresh = pool.filter(l => l !== gwLast);
-    if (!fresh.length) fresh = pool;            // a one-line pool has no second choice
-  }
-  const line = fresh[Math.floor(Math.random() * fresh.length)];
+  const line = bagPick(pool, gwSaid, gwLast);
   gwSaid.add(line);
   gwLast = line;
+  // B13: fire-and-forget; gwPick stays sync so every caller (tap, idle timer,
+  // the opening line) is unchanged. Only the last few survive a reload.
+  kvSet('gwRecent', [...gwSaid].slice(-GW_RECENT_CAP)).catch(() => {});
   return line;
 }
 /* THE CRATE REMINDER FIRES ONCE PER APP OPEN. Tom, 2026-08-22: "If you have an
@@ -5965,8 +6141,12 @@ function avatarLayersHtml(eq, opts = {}) {
     // opts.shinyPetId: the ONE renderer that keeps the pet inside the stack
     // (the leaderboard) needs the shiny recolour swapped in; the shiny PNG
     // shares the base art's canvas geometry so it stacks identically
-    const full = s.code === 'C' && itemId !== 'CX' && opts.shinyPetId === itemId
-      ? `assets/bh/C/shiny/${itemId}.png` : bhAsset(item);
+    const isPetShiny = s.code === 'C' && itemId !== 'CX' && opts.shinyPetId === itemId;
+    // opts.petMorph (Kennel palettes): same idea as shinyPetId, a file swap
+    // rather than a filter now (js/pets.js morphAsset). Shiny forces base
+    // (rule 0.1/1.2) -- never both on the one image.
+    const morphFull = s.code === 'C' && !isPetShiny ? morphAsset(itemId, opts.petMorph) : '';
+    const full = isPetShiny ? `assets/bh/C/shiny/${itemId}.png` : (morphFull || bhAsset(item));
     const src = opts.thumb ? bhThumb(full, opts.thumb === true ? 192 : opts.thumb) : full;
     /* Football kit, 2026-09-05: a pet stacked ON THE BODY CANVAS is a layer in
        THIS stack, so its worn garments (petWear's CH/CT) belong here too, not
@@ -6018,17 +6198,21 @@ function avatarLayersHtml(eq, opts = {}) {
     // must degrade to a missing garment, never iOS's blue "?" box over the body.
     // On a THUMBNAILED layer it first retries the full-size art, so a missing
     // thumbnail costs memory rather than the garment.
-    const clipStyle = clipMask ? ` style="--fbm:url('${clipMask}')"` : '';
+    // Kennel palettes: the morph is now baked into `full`/`src` above, so this
+    // style attribute is clipMask (slot E) only.
+    const styleAttr = clipMask ? ` style="--fbm:url('${clipMask}')"` : '';
     // Worn pet garments, same tiering as the species image above, each with its
     // own football tint spans -- see the note on wornPetItems above. `pw`
     // matches croppedPetImg's own class for a worn layer (see THE WORN LAYERS
     // ARE MARKED there), so a worn piece reads the same way wherever it draws.
+    // Never a morph variant: Bumbleseal's accessories share her canvas and
+    // must not recolor (spec section 2.4), same rule as croppedPetImg.
     const wornHtml = wornPetItems.map(w => {
       const wfull = bhAsset(w);
       const wsrc = opts.thumb ? bhThumb(wfull, opts.thumb === true ? 192 : opts.thumb) : wfull;
       return `<img class="pw" src="${wsrc}"${wsrc !== wfull ? ` data-full="${wfull}"` : ''} alt="" ${THUMB_FALLBACK}>${footballTintHtml(w, '', opts.thumb)}`;
     }).join('');
-    return `<img${glow}${clipStyle} src="${src}"${src !== full ? ` data-full="${full}"` : ''} alt="" ${THUMB_FALLBACK}>${footballTintHtml(item, '', opts.thumb)}${wornHtml}`;
+    return `<img${glow}${styleAttr} src="${src}"${src !== full ? ` data-full="${full}"` : ''} alt="" ${THUMB_FALLBACK}>${footballTintHtml(item, '', opts.thumb)}${wornHtml}`;
   }).join('');
   // Visible by DEFAULT. v233 shipped this with bh-composing baked into the
   // markup, which meant any stack injected somewhere composeAvatars() never
@@ -6149,7 +6333,7 @@ function wornArtHtml(id, css) {
 // (how Brock's shiny lizard rendered base-purple on the board).
 const lbAvatar = (p, cls = 'lb-av') =>
   `<div class="${cls}">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' },
-    { noYard: true, skip: ['BG'], thumb: true, foreign: true, shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null })}</div>`;
+    { noYard: true, skip: ['BG'], thumb: true, foreign: true, shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null, petMorph: snapPetMorph(p.pet) })}</div>`;
 /* THE BOARD SHOWS THE BONEHEAD, NOT A THUMBNAIL. Tom, 2026-08-08: "make the
    leaderboard look cooler, maybe the number is on top of the bonehead art? right
    now the art is soooo small in the list" and "show the art proudly over 1. 2. 3.
@@ -6188,7 +6372,7 @@ function lbHeadInner(p, px) {
   const oy = px / 2 - SKULL_BOX.cy * scale;
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
   return `<span class="tz-head-in" style="transform:translate(${ox.toFixed(1)}px,${oy.toFixed(1)}px) scale(${scale.toFixed(4)})">
-      <span class="bh-stage">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], thumb: bhTierFor(640 * scale), foreign: true, shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null })}</span>
+      <span class="bh-stage">${avatarLayersHtml(eq, { foreign: true, noYard: true, skip: ['BG'], thumb: bhTierFor(640 * scale), shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null, petMorph: snapPetMorph(p.pet) })}</span>
     </span>`;
 }
 // Test hook (webdriver only): the board renders from a server payload, so
@@ -10047,6 +10231,7 @@ async function renderShop(el) {
      the exact colourway they want and then refuses to sell it to them. */
   // the try-on stage is YOUR OWN stack, so your own collection answers for shiny
   const rackShiny = await ownShinyPetId(playerEq);
+  const rackMorph = await ownPetMorph(playerEq);
   const rackTryOn = (id, coin, dust) => {
     const aura = id === 'AURA';
     const it = aura ? null : BH_BY_ID[id];
@@ -10067,7 +10252,7 @@ async function renderShop(el) {
        640 master, so the thumbnail holds about 9x9 of them. The rack TILES stay
        on the thumbnail deliberately: nine tiles times eight layers of master art
        is 72 full-size PNGs for a difference nobody can see at tile size. */
-    const figHtml = eq => avatarLayersHtml(eq, { skip: ['BG'], shinyPetId: rackShiny,
+    const figHtml = eq => avatarLayersHtml(eq, { skip: ['BG'], shinyPetId: rackShiny, petMorph: rackMorph,
       wpnAura: aura ? RACK_AURA.key : (auraOwned ? RACK_AURA.key : null) });
     /* HONEST ABOUT REACH, and only when neither price is reachable. It states
        the gap and points at the one route that closes it. Not a pitch and not a
@@ -11716,7 +11901,7 @@ const CHEERS = [
 
 function friendRowAvatar(f) {
   const eq = (f.profile && f.profile.outfit) || { B: 'B0-1', SK: 'SK0-1' };
-  return `<div class="fl-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], thumb: true, foreign: true, shinyPetId: snapShinyPetId(f.profile && f.profile.pet) })}</div>`;
+  return `<div class="fl-av">${avatarLayersHtml(eq, { foreign: true, noYard: true, skip: ['BG'], thumb: true, shinyPetId: snapShinyPetId(f.profile && f.profile.pet), petMorph: snapPetMorph(f.profile && f.profile.pet) })}</div>`;
 }
 
 /* A NICKNAME IS A NOTE, NOT A RENAME. Tom, 2026-08-07: "When you set a note for a
@@ -11751,11 +11936,53 @@ function nameWithAlias(f) {
 function crewCardArtHtml(f) {
   const p = f.profile || {};
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
-  const pet = p.pet && p.pet.id ? `<div class="cfan-pet">${petPortraitHtml(p.pet.id, 58, !!p.pet.shiny, { mass: true, wear: p.pet.wear || null, thumb: true })}</div>` : '';
+  const pet = p.pet && p.pet.id ? `<div class="cfan-pet">${petPortraitHtml(p.pet.id, 58, !!p.pet.shiny, { mass: true, wear: p.pet.wear || null, thumb: true, morph: snapPetMorph(p.pet) })}</div>` : '';
   return (eq.BG && BH_BY_ID[eq.BG] ? `<img class="cfan-bg" src="${bhThumb(bhAsset(BH_BY_ID[eq.BG]))}" alt="">` : '')
     + avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'], thumb: 384, foreign: true }) + pet;
 }
-function crewCardHtml(f) {
+/* CREW-4: a friend's ordinary play was invisible on their card -- seven faked
+   days of one friend walking and gearing up (round 35 handoff) changed not one
+   string on the tab. GET /friends already carries level, gear count, badges
+   and (CREW-13) spire count for every accepted friend; this diffs THIS open
+   against the LAST open's cached numbers (kv 'friendSnaps', one object for
+   the whole Crew rather than a row per friend) and returns at most one label
+   per friend, priority order: a spire, then a level, then new gear, then a
+   badge. A friend seen for the first time gets no label (nothing to compare
+   against yet), never a false "since yesterday". */
+/* 2026-09-06, nav-perf bisect: this ran an uncached kvGet + kvSet on EVERY
+   Friends render (warm lap 58-63 ms -> 67-74 ms across nine runs, the step
+   landing exactly on the CREW-4 commit). The diff only has new information
+   when the friends payload changed, so it is memoised on a signature of the
+   fields it reads; an unchanged payload returns the same labels with zero
+   kv traffic, which also keeps a label on screen for a whole session instead
+   of vanishing on the next repaint. */
+let sinceMemo = { sig: null, labels: {} };
+async function friendSinceYesterdayMap(friends) {
+  const sig = (friends || []).map(f => { const p = f.profile || {}; return `${f.playerId}:${p.level || 1}:${p.gearCount ?? (p.gear ? p.gear.length : 0)}:${p.badges || 0}:${f.spires || 0}`; }).join('|');
+  if (sig === sinceMemo.sig) return sinceMemo.labels;
+  const cache = (await kvGet('friendSnaps', null)) || {};
+  const next = {}, labels = {};
+  for (const f of friends || []) {
+    const p = f.profile || {};
+    const now = {
+      level: p.level || 1,
+      gear: p.gearCount ?? (p.gear ? p.gear.length : 0),
+      badges: p.badges || 0,
+      spires: f.spires || 0, // sibling of `profile`, not inside it -- see GET /friends
+    };
+    next[f.playerId] = now;
+    const was = cache[f.playerId];
+    if (!was) continue;
+    if (now.spires > was.spires) labels[f.playerId] = now.spires === 1 ? 'Just took a spire' : `Holds ${now.spires} spires now`;
+    else if (now.level > was.level) labels[f.playerId] = `Leveled up to ${now.level}`;
+    else if (now.gear > was.gear) labels[f.playerId] = 'New gear since last time';
+    else if (now.badges > was.badges) labels[f.playerId] = 'Earned a new badge';
+  }
+  await kvSet('friendSnaps', next);
+  sinceMemo = { sig, labels };
+  return labels;
+}
+function crewCardHtml(f, since) {
   const p = f.profile || {};
   const ol = onlineLabel(f.lastSeen);
   /* THE STAGE SHIPS EMPTY. paintFan built every friend's full layered stack
@@ -11767,7 +11994,11 @@ function crewCardHtml(f) {
     <div class="cfan-stage"></div>
     ${ol.on ? '<span class="cfan-live" title="Online now"></span>' : ''}
     <span class="cfan-fstar" hidden>${ICONS.star(15)}</span>
-    <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small><span class="cfan-title">${p.title ? esc(p.title) : p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}</span><span class="lv">LV ${p.level || 1}</span></small></div>
+    <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small><span class="cfan-title">${p.title ? esc(p.title) : p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}</span><span class="lv">LV ${p.level || 1}</span></small>${since ? `<small class="cfan-since">${esc(since)}</small>` : ''}${
+      /* CREW-13: spires had zero surface anywhere on the Crew tab. Skipped
+         when `since` already said so (e.g. "Just took a spire") -- one card
+         does not need to say the same true thing twice. */
+      f.spires && !(since && /spire/i.test(since)) ? `<small class="cfan-spires">${badgePixHtml('tombstone', 11)} Holds ${f.spires} spire${f.spires === 1 ? '' : 's'}</small>` : ''}</div>
   </button>`;
 }
 
@@ -12403,7 +12634,8 @@ async function renderFriends(el) {
     }
     // The cards ship with EMPTY stages; applyFan (below) mounts the art for the
     // seven seated ones and composes each stack as it lands.
-    deck.innerHTML = fanOrder.map(id => crewCardHtml(fanFriend(id))).join('');
+    const sinceMap = await friendSinceYesterdayMap(data.friends);
+    deck.innerHTML = fanOrder.map(id => crewCardHtml(fanFriend(id), sinceMap[id])).join('');
 
     /* A search that matches nobody must SAY so. Hiding the deck and leaving the
        space blank would read as the crew having vanished, which is the same
@@ -12743,7 +12975,7 @@ async function renderFriends(el) {
       const p = players.find(x => x.playerId === row.dataset.lbview);
       if (!p) return;
       openFriendProfile(
-        { name: p.name, playerId: p.playerId, addToken: p.addToken, lastSeen: p.lastSeen,
+        { name: p.name, playerId: p.playerId, addToken: p.addToken, lastSeen: p.lastSeen, spires: p.spires,
           profile: { outfit: p.outfit, pet: p.pet, level: p.level, levelName: p.levelName,
             badges: p.badges, stats: p.stats, gearCount: p.gearCount } },
         null,
@@ -12812,7 +13044,10 @@ async function renderFriends(el) {
         await social.syncProfile(await socialSnapshot(), APP_SOCIAL_V);
       } catch { /* a failed push must never cost you the board */ }
     }
-    const race = await social.fetchStepRace(wk);
+    // __testRace: webdriver-gated fixture, same idiom as __testLb / __testFriends.
+    // The race card's copy (the settlement clock, the gap line) is otherwise only
+    // checkable against a live account with a real week's board on it.
+    const race = (navigator.webdriver && window.__testRace) || await social.fetchStepRace(wk);
     const card = $('#raceCard', el);
     if (!card || !card.isConnected) return;
     /* THE STEP-RACE TILE ASKS 24 ON PURPOSE, in both banners below. The footprint
@@ -12842,8 +13077,10 @@ async function renderFriends(el) {
       return;
     }
     const endsMs = Date.parse(wk + 'T00:00:00') + RACE_DAYS * 86400000;
-    const daysLeft = Math.max(0, Math.ceil((endsMs - Date.now()) / 86400000));
-    const clock = daysLeft <= 0 ? 'settles tonight' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
+    const msLeft = Math.max(0, endsMs - Date.now());
+    // CREW-6: split out as social.raceClockLabel so a fake clock proves the
+    // "settles tonight" fix without a browser (see its own comment there).
+    const clock = social.raceClockLabel(msLeft);
     /* CREW-2: yourRank is the SERVER's (server/src/index.js ~3229, computed
        over up to 25 racers), rendered as-is, never recomputed here. The bug
        this replaces: splicing your own row into the 10-row `players` slice
@@ -12855,8 +13092,17 @@ async function renderFriends(el) {
        when it already sent a real rank. Absent and un-computable reads
        "unranked", never a made-up position. */
     const own = await weekStepsNow();
-    const { rows, mine, behind, standing } = social.raceStanding(race.players || [], race, wk, own, await social.displayName(), myFit, ordinal, esc);
+    const { rows, mine, behind, standing, aboveName } = social.raceStanding(race.players || [], race, wk, own, await social.displayName(), myFit, ordinal, esc);
     const lead = rows.length ? rows[0].steps : 0;
+    /* CREW-3: on a device's first-ever race week, a gap (to first OR to the
+       lane above) is a number about a stranger's whole week against a few
+       hours of this player's. kv 'raceDebutWk' is stamped once, the first time
+       this device ever opens the race, so it stays true for the rest of that
+       same week even after the player has walked and moved up. */
+    let debutWk = await kvGet('raceDebutWk', null);
+    if (!debutWk) { debutWk = wk; await kvSet('raceDebutWk', wk); }
+    const firstRace = debutWk === wk;
+    const friendCount = (data.friends || []).length;
 
     const podium = race.podium || [];
     card.innerHTML = `
@@ -12904,7 +13150,16 @@ async function renderFriends(el) {
             </${tag}>`;
           }).join('')}
         </div>` : '<p class="note" style="margin:0">Nobody has walked a step yet this race. The top of this board is going spare.</p>'}
-        ${behind ? `<div class="race-gap">You are <b>${behind.toLocaleString()} steps</b> off first. About <b>${Math.max(1, Math.round(behind / 5500 * 60))} minutes</b> of walking.</div>` : ''}
+        ${/* CREW-3: a brand-new player got "196,000 behind Howling Fibula. About
+             2084 minutes of walking" -- a whale's whole week measured against a
+             few hours of theirs. First week: say what is true and encouraging
+             instead (friends, not a gap). After that: the gap is to the racer
+             directly ABOVE (never first, which raceStanding already enforces),
+             and the minutes estimate is dropped once it stops being a number
+             anyone would act on. */ ''}
+        ${firstRace
+          ? `<div class="race-gap">Your first race${friendCount ? `. ${friendCount} friend${friendCount === 1 ? '' : 's'} ${friendCount === 1 ? 'is' : 'are'} in it` : ''}.</div>`
+          : behind ? `<div class="race-gap">You are <b>${behind.toLocaleString()} steps</b> behind ${esc(aboveName || 'the racer above you')}${behind / 5500 * 60 <= 60 ? ` · about <b>${Math.max(1, Math.round(behind / 5500 * 60))} minutes</b> of walking` : ''}.</div>` : ''}
         ${podium.length ? `<div class="race-purse">
           <span class="lab">When it settles, the top ${podium.length} take</span>
           <div class="rows">
@@ -13111,7 +13366,7 @@ function openFriendProfile(f, onChange, opts = {}) {
         <div class="fp-yard-h"><span>THEIR PADDOCK</span><b>${yard.n} PET${yard.n === 1 ? '' : 'S'}</b></div>
         <div class="fp-yard-row">${yard.pets.map(x => `
           <span class="fp-yard-pet${x.shiny ? ' shiny' : ''}" title="${esc((BH_BY_ID[x.sp] || {}).name || x.sp)}">
-            ${petPortraitHtml(x.sp, 54, !!x.shiny, { mass: true, wear: yardWear, thumb: true })}
+            ${petPortraitHtml(x.sp, 54, !!x.shiny, { mass: true, wear: yardWear, thumb: true, morph: isMorph(x.morph) ? x.morph : 'base' })}
           </span>`).join('')}</div>
         ${yard.n > yard.pets.length ? `<p class="note fp-yard-more">and ${yard.n - yard.pets.length} more back at the paddock</p>` : ''}
         <!-- THE SHELF IS THE DOOR NOW, not the destination: openFriendPaddock
@@ -13119,22 +13374,35 @@ function openFriendProfile(f, onChange, opts = {}) {
              their own herd in. Tom, 2026-08-24. -->
         <button class="btn ghost fp-yard-go" id="fpYardGo" type="button">Visit their paddock ›</button>
       </div>` : '';
-  const statBars = p.stats ? STAT_META.map(m => {
+  /* CREW-14: `p.stats` truthy is not "has stats" -- a never-synced account
+     sends `{}`, and that used to draw five zero-width bars ("stats will show"
+     is a lie once you have already drawn them). hasFightableStats demands a
+     real number for every stat, the same bar the Battle button below is held
+     to, so the two never disagree about whether this profile has fight data. */
+  const statBars = hasFightableStats(p.stats) ? STAT_META.map(m => {
     const v = p.stats[m.key] ?? 0;
     return `<div class="fps-row"><span class="fps-lab">${m.label}</span><div class="fps-bar"><i style="width:${Math.max(4, Math.min(100, v))}%"></i></div><span class="fps-val">${v}</span></div>`;
   }).join('') : '';
+  /* CREW-13: spires had zero surface on the friend profile -- "the only trace
+     is a non-tappable '1 spire' span in the leaderboard sheet". A compact line
+     here, plus the how-to right on it (rather than a separate one-time popup
+     this sync function has no clean way to gate), since a stranger's profile
+     is exactly where "how do I get one of those" comes up. */
+  const spireCount = f.spires || 0;
+  const spireHtml = spireCount ? `<p class="note" style="text-align:center;margin:2px 0 0">${badgePixHtml('tombstone', 13)} Holds ${spireCount} spire${spireCount === 1 ? '' : 's'} · beat their defender to take one</p>` : '';
   const wrap = openSheet(`
     <div class="sheet-head"><h2 id="fpTitle">${nameWithAlias(f)}</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
       <div class="fp-hero${eq.BG && BH_BY_ID[eq.BG] ? ' framed' : ''}">
         ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fp-hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
-        <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'], foreign: true })}</div>
-        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true, shiny: !!p.pet.shiny, wear: yardWear, thumb: true })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
+        <div class="bh-stage lg">${avatarLayersHtml(eq, { foreign: true, noYard: true, skip: ['BG', 'C'] })}</div>
+        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true, shiny: !!p.pet.shiny, wear: yardWear, thumb: true, morph: snapPetMorph(p.pet) })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
         <div class="fp-lvlbadge">Lv ${p.level ?? '?'}</div>
       </div>
       <div class="fp-title"><div class="fp-class">${p.title ? `${esc(p.title)} · ` : ''}${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal" hidden></div></div>
+      ${spireHtml}
 
-      ${p.stats && p.outfit ? `<button class="btn fp-battle" id="fpBattle">${ICONS.pit(18)} Battle their bonehead</button>` : ''}
+      ${hasFightableStats(p.stats) && p.outfit ? `<button class="btn fp-battle" id="fpBattle">${ICONS.pit(18)} Battle their bonehead</button>` : ''}
       ${stranger ? (opts.isCrew
         ? `<p class="note" style="text-align:center;margin:6px 0 0">Already in your Crew.</p>`
         : opts.sent
@@ -13458,6 +13726,7 @@ function openSurveySheet(source = 'auto') {
       if (!(await kvGet('surveyDone', false))) { await grantPet('CX', 'survey'); granted = true; }
       await kvSet('surveyDone', true);
       await refreshShinyPets();
+      await refreshPetMorphs();
     } catch { /* grant best-effort; gating below still marks done */ }
     sendSurvey({ name, email, emailOptin: optin, feedback, mostWanted, features }); // fire-and-forget
     trackEvent('survey_submit', { optin: optin ? 1 : 0, hasEmail: email ? 1 : 0, feats: features.length });
@@ -13993,7 +14262,7 @@ const NEWS = [
     thumb: () => headshotHtml({ B: 'B0-1', SK: 'SK0-1', H: 'HS13', E: 'ES13', G: 'GS1' }, 52),
     open: () => openCosmeticTeaser() },
   { id: 'race', date: 'Aug 7', title: 'The weekly step race',
-    blurb: 'Every Bonehead on one track. The purse pays the top three.',
+    blurb: 'Every Bonehead on one track. The purse pays the top five.',
     /* the race art IS your own Bonehead on the track, so the row shows that,
        not a generic star (Tom: "doesn't have the right art in some of the drop
        downs") */
@@ -14250,7 +14519,11 @@ async function renderSettings(el) {
      them and have setNotifPrefs write the change, for a control that will
      never push anything. Denied disables them visibly, not just in theory. */
   const notifRow = (key, label, sub) => `
-    <div class="settings-row"${notifPerm === 'denied' ? ' style="opacity:.45;pointer-events:none"' : ''}>
+    ${/* 2026-09-06: dimmed, and the buttons carry `disabled` below; NOT pointer-events:none.
+         a11y-audit's rule (its own header): a disabled control still has to be
+         reachable at its centre. The v481 row blocked the hit test with the card
+         and went red on 16 tap probes. */''}
+    <div class="settings-row"${notifPerm === 'denied' ? ' style="opacity:.45"' : ''}>
       <div class="lab"><b>${label}</b><span>${sub}</span></div>
       <div class="seg" style="width:110px"><button data-noti="${key}" data-on="1" class="${np[key] ? 'on' : ''}"${notifPerm === 'denied' ? ' disabled' : ''}>On</button><button data-noti="${key}" data-on="0" class="${np[key] ? '' : 'on'}"${notifPerm === 'denied' ? ' disabled' : ''}>Off</button></div>
     </div>`;
@@ -15135,6 +15408,14 @@ function enterAppFromOnboarding() {
   bindAppLifecycle(); // R37-1: this session took the onboarding path, not boot(), and never got resume/day-roll/notif/autoSync binding
   location.hash = '#/today';
   route();
+  /* B14: boot()'s own maybeShowDailyWheel call never runs for this session
+     (boot() returned before reaching it, the moment it found no S.settings),
+     and nothing else on this path ever called it, so day one never fired the
+     day's spin at all -- not a deliberate exclusion (claimDay's first-run
+     branch seeds and lets a fresh device through same as any other day), just
+     a wiring gap this exit point owns for both a finished onboarding and a
+     mid-onboarding restore. */
+  fireDailyWheel();
 }
 
 /* ================= game: celebrations + progress ================= */
@@ -15352,6 +15633,7 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
 async function openLevelUpMoment({ levelUp, levelRewards, fromLevel, ms, extras = [] }) {
   const eq = await equipped();
   const lvlShiny = await ownShinyPetId(eq);
+  const lvlMorph = await ownPetMorph(eq);
   const line = LEVELUP_LINES[levelUp.level % LEVELUP_LINES.length];   // cycles, so back-to-back levels never repeat
   S.pendingLevelLine = line;
   /* Every producer supplies fromLevel now (onFoodLogged and the bh-levelup
@@ -15386,7 +15668,7 @@ async function openLevelUpMoment({ levelUp, levelRewards, fromLevel, ms, extras 
         </div>
         <div class="lu-stage">
           ${[1, 2, 3, 4, 5].map(k => `<span class="lu-spark k${k}">${sparkIco(16, '#d9f79e')}</span>`).join('')}
-          <div class="lu-figure"><div class="bh-stage lu-avatar">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], shinyPetId: lvlShiny })}</div></div>
+          <div class="lu-figure"><div class="bh-stage lu-avatar">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], shinyPetId: lvlShiny, petMorph: lvlMorph })}</div></div>
         </div>
         <div class="lu-chips">
           <span class="lu-chip was">Lv ${was}</span>
@@ -15542,8 +15824,14 @@ function openHatchReveal(res, charWrap) {
         ${shards}
       </div>
     </div>` : `<div class="hatch-stage"><div class="hatch-glow"></div></div>`;
+  /* Kennel Phase A, section 2.5: the hatch line names the colour, "A Frost
+     Bulldog!" (MORPH_LABEL + species name); base morph's empty MORPH_LABEL
+     collapses that to "A Bulldog!". "ANOTHER ONE!" stays for a true (sp,
+     morph) duplicate (res.dupe, section 2.3's pair-aware dupe), not merely a
+     species repeat. */
+  const hatchName = `A ${MORPH_LABEL[res.morph] || ''} ${item ? item.name : ''}`.replace(/\s+/g, ' ').trim() + '!';
   const revealHtml = item
-    ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? `${sparkIco(24)} SHINY! ${sparkIco(24)}` : res.dupe ? 'ANOTHER ONE!' : 'IT HATCHED!'}</div>
+    ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? `${sparkIco(24)} SHINY! ${sparkIco(24)}` : res.dupe ? 'ANOTHER ONE!' : esc(hatchName)}</div>
        <div class="hatch-prize r-${item.rarity}${res.shiny ? ' is-shiny' : ''}">
          <canvas class="hatch-art" width="512" height="512"></canvas>
          <b>${esc(item.name)}${res.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</b>
@@ -15568,7 +15856,8 @@ function openHatchReveal(res, charWrap) {
   const stage = $('#hatchStage', wrap2);
   const revealEl = $('.hatch-reveal', wrap2);
   // draw the pet big + centered (the source PNG parks it in a corner)
-  if (item) { const cv = $('.hatch-art', wrap2); if (cv) drawTrimmedArt(cv, res.shiny ? `assets/bh/C/shiny/${item.id}.png` : bhAsset(item)); }
+  // No morph tint on shiny art: shiny forces base (rule 0.1/1.2).
+  if (item) { const cv = $('.hatch-art', wrap2); if (cv) drawTrimmedArt(cv, res.shiny ? `assets/bh/C/shiny/${item.id}.png` : (morphAsset(item.id, res.morph) || bhAsset(item))); }
   const okBtn = $('#hatchOk', wrap2);
   /* ADOPT USED TO CLOSE THE SHEET, and the cinematic is 5.75s long, so any
      player who tapped it early dismissed a pet they never saw. Tom hit exactly
@@ -15748,6 +16037,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
   const rackTurned = rk.week !== rackSeenWeek && tab !== 'shop';
   if (tab === 'shop') await kvSet('rackSeenWeek', rk.week);
   const chShiny = await ownShinyPetId(eq);   // your own stack, so your own collection answers
+  const chMorph = await ownPetMorph(eq);
   const crates = inv.filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
   // Opening a crate re-renders this screen in place (no route()), so the tab
   // badge is synced here too, off the same rows the tab is about to render.
@@ -15800,7 +16090,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <span class="bh-pill ward-fits">${fitCount}/${MAX_FITS} fits</span>
     </div>` : tab === 'shop' ? gwartHeroHtml(rk) : `
     <div class="bh-hero mini">
-      <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny, petWear: S.petWear })}</div>
+      <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny, petMorph: chMorph, petWear: S.petWear })}</div>
       <div class="bh-hero-meta">
         <b class="bh-title">Lv ${lvl.level} · ${esc(myTitle || lvl.name)}</b>
         <div class="xp-mini" style="width:110px"><i style="width:${lvl.pct}%"></i></div>
@@ -16523,7 +16813,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
        was a ~20px speck in an ~80px tile while the doll drew it 4-5x larger
        (Tom, 2026-08-11: "they should be a larger size so you can see what you
        are transmogging"). Same trim as the doll slots. */
-    hydratePackArt(content, '.pd-art[data-art], .ward-art[data-art]');
+    hydratePackArt(content, '.pd-art[data-art]');
+    lazyHydrateWardArt(content);       // PERF-4: the grid's tiles paint as they near the viewport, not all at once
     const wirePd = b => b.addEventListener('click', async () => {
       S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null;
       await renderCharacter(wrap, 'wardrobe', { instant: true });
@@ -17084,8 +17375,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ${eggs.map(e => {
         const p = eggProgress(e, lifeSteps);
         const pct = p.goal > 0 ? Math.min(100, Math.round(p.walked / p.goal * 100)) : 100;
+        // Kennel Phase A, section 2.5: the shell carries a tint of what's inside
+        // (no colour name in the copy below -- the tint is the whole tease).
+        const eTint = eggTint(e.morph);
         return `<div class="t3-egg" style="margin-bottom:9px">
-          <span class="art">${crateIcon('egg', 48)}</span>
+          <span class="art${eTint ? ' tinted' : ''}"${eTint ? ` style="--shell:${eTint}"` : ''}>${crateIcon('egg', 48)}</span>
           <div class="tx">
             <b>${p.ready ? 'READY TO HATCH' : 'STEP EGG'}</b>
             <div class="bar"><i style="width:${pct}%"></i></div>
@@ -17218,6 +17512,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (!res.ready) { toast('Keep walking: this egg is not ready yet.'); return; }
       trackEvent('hatch');
       await refreshShinyPets();
+      await refreshPetMorphs();
       openHatchReveal(res, wrap);
     }));
     $$('[data-open]', content).forEach(b => b.addEventListener('click', async () => {
@@ -17686,6 +17981,8 @@ function drawTrimmedArt(canvas, src, pad = 0.08, tints = null) {
         from = off2; sx = 0; sy = 0; sw = bw * k; sh = bh * k;
       }
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      // Kennel palettes: a morph is baked into `src` itself now (the caller
+      // passes morphAsset's variant PNG), so this draw needs no filter.
       ctx.drawImage(from, sx, sy, sw, sh, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
       if (tints && tints.length) {
         paintFootballTints(ctx, tints, [x0, y0, bw, bh], [(cw - dw) / 2, (ch - dh) / 2, dw, dh]).then(res, res);
@@ -18111,6 +18408,42 @@ const BURST = {
   epic:      { light: '#9b92e8', amp: .3,  haze: .06 },
   legendary: { light: '#ffc961', amp: .55, haze: .07 },
 };
+/* PERF-4 (2026-09-05): the Wardrobe grid mounts one .ward-art canvas per
+   family tile (and per look-picker tile), and hydratePackArt used to fire
+   every one of them through Promise.all the instant the screen rendered.
+   memory-census's hoarder account owns every hat, and the family collapse
+   still leaves ~250 tiles on that one slot: 250 concurrent decodes is the
+   long-task burst, not the grid markup itself (the DOM stays cheap either
+   way). Paint only what is on screen or one screen away in either
+   direction, unobserving a tile the moment it is painted so a second scroll
+   past it is free. A tile that never scrolls into view never pays for a
+   decode it would never show. */
+function lazyHydrateWardArt(scope) {
+  const els = $$('.ward-art[data-art]', scope);
+  if (!els.length) return;
+  if (!('IntersectionObserver' in window)) { hydratePackArt(scope, '.ward-art[data-art]'); return; }
+  /* ROOT MUST BE THE REAL SCROLLER, NOT THE IMPLICIT DOCUMENT. renderCharacter's
+     comment above says it straight: "#chBody is a plain div... .screen is the
+     element with overflow-y". root:null margins the top-level viewport, but a
+     scrollable ancestor between the tile and that viewport still clips the
+     intersection test to ITS OWN box, margin-free -- so a tile one row below
+     `.screen`'s fold measured isIntersecting:false forever, at every scroll
+     depth, with rootBounds correctly widened and its own rect correctly
+     inside that widened box. Root has to BE the clipping ancestor for the
+     margin to reach it. */
+  const root = scope.closest('.screen');
+  const vh = (root ? root.clientHeight : window.innerHeight) || 932;
+  const io = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      io.unobserve(e.target);
+      const cv = e.target;
+      drawTrimmedArt(cv, cv.getAttribute('data-art'), parseFloat(cv.getAttribute('data-pad')) || undefined,
+        cv.dataset.tints ? JSON.parse(cv.dataset.tints) : null);
+    }
+  }, { root, rootMargin: `${vh}px 0px` });
+  els.forEach(cv => io.observe(cv));
+}
 function hydratePackArt(scope, sel = '.pc-canvas[data-art]') {
   /* A MANNEQUIN CARD HAS NO CANVAS, AND SILENCE HERE WOULD MEAN AN UNDECODED
      ENTRANCE. Every caller uses this promise as "the art is ready": renderCard
@@ -18716,6 +19049,7 @@ function openPetLevelUp(petId, level, prevLevel, newTalent, inst = null) {
   const petName = (BH_BY_ID[petId] && BH_BY_ID[petId].name) || fam.name;
   const shiny = inst ? !!inst.shiny : S.shinyPets.has(petId);
   const lineage = inst ? (inst.lineage || 0) : 0;
+  const morph = inst ? (inst.morph || 'base') : ((S.petMorphs && S.petMorphs[petId]) || 'base');
   const before = petBattleStats(petId, prevLevel, shiny, lineage);
   const after = petBattleStats(petId, level, shiny, lineage);
   const rows = [['PWR', before.power, after.power], ['HP', before.hp, after.hp], ['REF', before.reflex, after.reflex]];
@@ -18723,7 +19057,7 @@ function openPetLevelUp(petId, level, prevLevel, newTalent, inst = null) {
   confettiRain(70); levelSound(S.sounds);
   const wrap = openSheet(`
     <div class="sheet-body" style="text-align:center;padding-top:12px">
-      <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${(BH_BY_ID[petId] || {}).rarity || 'common'} lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">${petPortraitHtml(petId, 104, shiny, { thumb: true })}</div></div>
+      <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${(BH_BY_ID[petId] || {}).rarity || 'common'} lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">${petPortraitHtml(petId, 104, shiny, { thumb: true, morph })}</div></div>
       <div class="lvl-stamp" style="font-size:30px">PET LEVEL ${level}!</div>
       <div class="cele-sub" style="font-size:15px;margin-top:2px">${esc(petName)}${lineage ? ` <span class="lin-tag">${ICONS.star(11)}${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
       <div class="pet-gains">${gains}</div>
@@ -18870,7 +19204,7 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
   const petHtml = r => {
     const p = places[r.iid];
     if (!p) return '';
-    const art = petSpriteHtml(r.sp, p.w, p.kind === 'walk' || p.kind === 'flop', { shiny: r.shiny, wear: r.wear || null, thumb: true });
+    const art = petSpriteHtml(r.sp, p.w, p.kind === 'walk' || p.kind === 'flop', { shiny: r.shiny, wear: r.wear || null, thumb: true, morph: r.morph });   // 2026-09-06: the paddock scene carries the Kennel morph like it carries shiny (own instance record, or the friend's wire)
     const rarity = (BH_BY_ID[r.sp] || {}).rarity;
     const glow = p.kind === 'fly' && rarity === 'legendary' ? ' pdk-gold' : p.kind === 'hover' && rarity === 'epic' ? ' pdk-epic' : '';
     const pos = p.kind === 'walk'
@@ -19080,7 +19414,7 @@ async function openFriendPaddock(f) {
   const { placePaddock, PDK_SCENE, motionFor } = await import('./paddock.js');
   const eqVisitor = await equipped();        // YOUR worn look, so you are in their field too
   const wear = yard.wear || null;             // THEIRS or bare, never undefined
-  const roster = yard.pets.map((x, i) => ({ iid: `y${i}`, sp: x.sp, shiny: !!x.shiny, motion: motionFor(x.sp), wear }));
+  const roster = yard.pets.map((x, i) => ({ iid: `y${i}`, sp: x.sp, shiny: !!x.shiny, morph: isMorph(x.morph) ? x.morph : 'base', motion: motionFor(x.sp), wear }));
   const places = placePaddock(roster, PDK_SCENE, dateKey());
   const out = roster.filter(r => places[r.iid]).length;
   openSheet(`
@@ -19120,9 +19454,16 @@ async function openStable(opts = {}) {
   // CLOSED. Both used to be null, so render() re-opened the active pet's tree
   // every time you closed it and the control looked broken.
   let openIid = focusIid || undefined;   // which pet's talent tree is expanded inline
+  /* THE KENNEL LIVES HERE (Tom's ruling, 2026-09-05): one button in the header,
+     not a sixth Today door and not the Paddock (off limits this phase, see
+     scratchpad/kennel/KENNEL-UX.md section 1). Grouped with Done in its own
+     flex wrapper so `justify-content:space-between` on .sheet-head still puts
+     exactly two things apart (the title, and the trailing controls) rather than
+     centring this button between them. */
   const wrap = openSheet(`
-    <div class="sheet-head"><h2>The Stable</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-head"><h2>The Stable</h2><div style="display:flex;gap:8px"><button class="btn ghost small" id="kennelBtn">Kennel</button><button class="sheet-close">Done</button></div></div>
     <div class="sheet-body" id="stableBody"></div>`, { cls: 'full', onClose: () => { if (currentTab() === 'today') refresh(); } });
+  $('#kennelBtn', wrap)?.addEventListener('click', () => openKennel());
   async function render() {
     const body = $('#stableBody', wrap);
     if (!body) return;
@@ -19250,7 +19591,7 @@ async function openStable(opts = {}) {
              contract -- there are no animated SHINY variants, so a shiny pet
              (except CX, whose amethyst art IS its special look) renders its
              recoloured still instead of quietly losing the shiny. -->
-        <span class="cf-art">${petSpriteHtml(x.sp, 124, false, { mass: true, shiny: x.shiny, thumb: true })}</span>
+        <span class="cf-art">${petSpriteHtml(x.sp, 124, false, { mass: true, shiny: x.shiny, thumb: true, morph: x.morph })}</span>
         ${bySp[x.sp].length > 1 ? `<span class="cf-n" aria-label="${bySp[x.sp].length} of this species">×${bySp[x.sp].length}</span>` : ''}
         ${isEq ? '<span class="cf-eq">Out with you</span>' : ''}
         ${inSel && !isEq ? '<span class="cf-eq sel">Breeding</span>' : ''}
@@ -19348,7 +19689,7 @@ async function openStable(opts = {}) {
         // product shot uses beside it. Census SHOT row, 2026-09-05: a copied
         // 192 from the Locker Room's much bigger tiles (measured there to
         // legitimately clear no tier) was reading a 384-eligible box as 192.
-        const tile = a.football ? croppedPetImg(sp, 62, false, null, { [a.slot]: i.id }, true) : petShotHtml(i.id, 62);
+        const tile = a.football ? croppedPetImg(sp, 62, false, morphAsset(sp, (S.petMorphs && S.petMorphs[sp]) || 'base') || null, { [a.slot]: i.id }, true) : petShotHtml(i.id, 62);
         return `<button class="pw-item r-${a.rarity}${fam ? ' fam' : ''}${on ? ' on' : ''}" type="button" data-petwear="${i.id}" aria-pressed="${on}"${fam ? ` aria-label="${esc(a.name)}, ${fam.length} colourways"` : ''}>
           <span class="pw-art">${tile}${fam ? `<span class="ward-fam-n" aria-hidden="true">${fam.length}</span>` : ''}</span>
           <b>${esc(a.name)}</b>
@@ -19503,7 +19844,7 @@ async function openStable(opts = {}) {
            will always fight the row above it, so the instruction moved to the top
            of the sheet where nothing it refers to can be behind it. -->
       ${!pair && sel.length === 1 ? `<div class="breed-waiting">
-          <span class="bw-pet">${(() => { const one = insts.find(x => x.iid === sel[0]); return one ? petPortraitHtml(one.sp, 34, one.shiny, { thumb: true }) : ''; })()}</span>
+          <span class="bw-pet">${(() => { const one = insts.find(x => x.iid === sel[0]); return one ? petPortraitHtml(one.sp, 34, one.shiny, { thumb: true, morph: one.morph }) : ''; })()}</span>
           <span class="bw-say"><b>Now pick the second pet</b><small>Swipe across and tap BREED on it</small></span>
           <button class="btn ghost bw-cancel" id="breedCancel" type="button">Cancel</button>
         </div>` : ''}
@@ -19535,12 +19876,12 @@ async function openStable(opts = {}) {
           <div class="breed-h">What breeding does</div>
           <div class="breed-trade">
             <span class="bt-out">
-              <span class="bt-row"><span class="bt-pet keep">${petPortraitHtml(keeper.sp, 44, keeper.shiny, { thumb: true })}</span></span>
+              <span class="bt-row"><span class="bt-pet keep">${petPortraitHtml(keeper.sp, 44, keeper.shiny, { thumb: true, morph: keeper.morph })}</span></span>
               <small>Kept &middot; lineage ${keeper.lineage || 0} &rarr; ${offLineage}</small>
             </span>
             <span class="bt-arrow">${ICONS.chev(20)}</span>
             <span class="bt-in">
-              <span class="bt-row"><span class="bt-pet">${petPortraitHtml(spare.sp, 38, spare.shiny, { thumb: true })}</span></span>
+              <span class="bt-row"><span class="bt-pet">${petPortraitHtml(spare.sp, 38, spare.shiny, { thumb: true, morph: spare.morph })}</span></span>
               <small>Fed in &middot; gone</small>
             </span>
           </div>
@@ -20211,6 +20552,100 @@ async function openStable(opts = {}) {
   render();
 }
 
+/* THE SIX ORDINARY HATCH SPECIES, Kennel Phase A. Tom's ruling 2026-09-05:
+   Bumbleseal (C6) is a normal species now, so the collection grid is 6 x 5 =
+   30 cells, not the plan's original 25 -- she just never counts toward the
+   hatch-pool fresh-first bookkeeping in js/pets.js (unrelated, unchanged).
+   CX stays exempt throughout (spec 0.7 / KENNEL.md rulings): no row, no cell,
+   no swatch. Alphabetical by name, matching the plan's own wireframe order. */
+const KENNEL_SPECIES = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6']
+  .map(id => BH_BY_ID[id]).filter(Boolean)
+  .sort((a, b) => a.name.localeCompare(b.name));
+
+/* THE KENNEL: a sibling sheet of the Stable (scratchpad/kennel/KENNEL-UX.md
+   section 1), reached from the button openStable's header now carries.
+   A display screen, not a shop: no dust, no stat line, no glow anywhere on a
+   pet here (KENNEL.md rulings) -- the roster and the grid below are colour and
+   opacity only, never a second image, so nothing here adds a decode beyond one
+   thumb per roster species and one per grid cell (see the pixel-budget note in
+   the plan; measured by tests/memory-census.mjs). */
+async function openKennel() {
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>The Kennel</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body" id="kennelBody"></div>`, { cls: 'full' });
+  const body = $('#kennelBody', wrap);
+  if (!body) return;
+  const insts = await petInstances();
+  const owned = ownedPairs(insts);   // Set of "sp|morph", pure (js/pets.js)
+  const ownedSp = KENNEL_SPECIES.filter(s => insts.some(x => x.sp === s.id));
+  // The roster's tile shows the HIGHEST-TIER owned morph for that species
+  // (plan section 3), not merely "an" owned copy: MORPH_TIER orders midnight
+  // above toxic above ember/frost above base, matching Phase C's fusion order.
+  const bestMorphFor = sp => MORPHS.filter(m => owned.has(`${sp}|${m}`))
+    .sort((a, b) => MORPH_TIER[b] - MORPH_TIER[a])[0] || 'base';
+  const dotLabel = (sp, m, name) => owned.has(`${sp}|${m}`)
+    ? `${MORPH_LABEL[m] ? MORPH_LABEL[m] + ' ' : ''}${name}`
+    : 'Not hatched yet.';
+  const rosterRow = s => {
+    const morph = bestMorphFor(s.id);
+    // R39-11: the dots are indicators, not controls (the grid cells are).
+    const dots = MORPHS.map(m => `<i class="k-dot${owned.has(`${s.id}|${m}`) ? ' on' : ''}"></i>`).join('');
+    const morphNames = MORPHS.filter(m => owned.has(`${s.id}|${m}`) && m !== 'base').map(m => MORPH_LABEL[m]);
+    return `<div class="k-row">
+      <span class="k-thumb">${croppedPetImg(s.id, 48, false, morphAsset(s.id, morph) || null, undefined, 192)}</span>
+      <div class="k-id">
+        <b>${esc(s.name)}</b>
+        <div class="k-dots" aria-hidden="true">${dots}</div>
+        <p class="k-cap" data-cap="${esc(s.id)}">${esc(morphNames.length ? `${morphNames.join(', ')} owned` : 'Base owned')}</p>
+      </div>
+    </div>`;
+  };
+  /* R39-8/9 (2026-09-06): the art is NOT sized from window.innerWidth. The
+     sheet caps at 600px, so a viewport-derived size overflowed its clipped
+     cell above 605px (43% of the pet visible at 1280x800) and a size frozen
+     at open survived a rotation (154px art in a 48px cell). croppedPetImg's
+     layers are percentages of their box, so the box is drawn at a nominal 48
+     and app.css (.k-cell .petcrop, 100%) lets the grid track size it, live. */
+  const gridRow = s => `<div class="k-grid-row">
+      <span class="k-grid-label" data-sp="${esc(s.id)}">${esc(s.name)}</span>
+      <div class="k-grid-cells">${MORPHS.map(m => {
+        const isOwned = owned.has(`${s.id}|${m}`);
+        const art = croppedPetImg(s.id, 48, false, isOwned ? (morphAsset(s.id, m) || null) : null, undefined, 192);
+        // R39-11/23: the cell IS the control (a real <button>, so Enter and Space
+        // come free), and it toggles the row label back on a second press.
+        return `<button type="button" class="k-cell${isOwned ? '' : ' locked'}" data-sp="${esc(s.id)}" data-morph="${esc(m)}" aria-pressed="false" aria-label="${esc(dotLabel(s.id, m, s.name))}">${art}${isOwned ? '' : ICONS.lock(14)}</button>`;
+      }).join('')}</div>
+    </div>`;
+  // COLUMN HEADERS, one row above every species block, matching DESIGN.md's
+  // one section-header idiom (.sect-h) so the grid reads as a table: which
+  // colourway a column is, without repeating it 6 times per species.
+  const morphColLabel = m => m === 'base' ? 'Base' : MORPH_LABEL[m];
+  const gridHead = `<div class="k-grid-head">${MORPHS.map(m => `<span class="k-grid-head-cell">${esc(morphColLabel(m))}</span>`).join('')}</div>`;
+  /* GWART'S LINE SITS BELOW THE ROSTER, NOT ABOVE IT: the roster is the part
+     that must fit one screen at 390x844 AND 320x568 with no scroll (up to six
+     owned species, one row each), and a callout above it was budget the narrow
+     phone did not have -- measured at 320x568 with all six owned, the last
+     roster row's own bottom landed at 693px before this moved, 125px past the
+     fold. It reads fine here: still the first thing under "Your pets", it is
+     simply the first thing under the LAST row instead of the section header. */
+  body.innerHTML = `
+    <p class="sect-h">Your pets</p>
+    <div class="k-roster">${ownedSp.length ? ownedSp.map(rosterRow).join('') : '<p class="k-empty">Hatch an egg to start your collection.</p>'}</div>
+    <p class="k-gwart"><b>Gwart says:</b> It's paint, not power. Ember, Frost, Toxic, Midnight, same skeleton underneath.</p>
+    <p class="sect-h">Collection &middot; ${ownedCellCount(owned, KENNEL_SPECIES.map(s => s.id))} / ${KENNEL_SPECIES.length * MORPHS.length}</p>
+    <div class="k-grid">${gridHead}${KENNEL_SPECIES.map(gridRow).join('')}</div>`;
+  $$('.k-cell', body).forEach(c => c.addEventListener('click', () => {
+    const { sp, morph: m } = c.dataset;
+    const name = (BH_BY_ID[sp] || {}).name || sp;
+    const label = $(`.k-grid-label[data-sp="${CSS.escape(sp)}"]`, body);
+    const was = c.getAttribute('aria-pressed') === 'true';
+    $$(`.k-cell[data-sp="${CSS.escape(sp)}"]`, body).forEach(o => o.setAttribute('aria-pressed', 'false'));
+    c.setAttribute('aria-pressed', String(!was));
+    if (label) label.textContent = was ? name : dotLabel(sp, m, name);
+  }));
+}
+if (typeof window !== 'undefined' && navigator.webdriver) window.__openKennel = openKennel;
+
 // Breeding pay-off reveal, styled like the level-up: the offspring on a burst of
 // rays with its new lineage star.
 function openPetBreedResult(off) {
@@ -20224,12 +20659,12 @@ function openPetBreedResult(off) {
       <div class="reveal-stamp">Lineage ${off.lineage}</div>
       <div class="reveal-sub">${esc(it.name || off.sp)} got stronger</div>
       <div class="reveal-body">
-        <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${it.rarity || 'common'} lin-${Math.min(off.lineage, 6)}${off.shiny ? ' is-shiny' : ''}">${petPortraitHtml(off.sp, 104, off.shiny, { thumb: true })}</div></div>
+        <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${it.rarity || 'common'} lin-${Math.min(off.lineage, 6)}${off.shiny ? ' is-shiny' : ''}">${petPortraitHtml(off.sp, 104, off.shiny, { thumb: true, morph: off.morph })}</div></div>
         <div class="reveal-sub" style="font-size:var(--fs-3)">${esc(it.name || off.sp)}${off.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
         <div class="cele-bubble">A stronger bloodline: +${Math.round(off.lineage * 5)}% to every stat, and a brighter glow.</div>
         ${parents.length ? `<div class="fused">
           <div class="fused-row">
-            <span class="gone-pet">${petPortraitHtml(parents[0].sp, 42, parents[0].shiny, { thumb: true })}</span>
+            <span class="gone-pet">${petPortraitHtml(parents[0].sp, 42, parents[0].shiny, { thumb: true, morph: parents[0].morph })}</span>
           </div>
           <div class="fused-note">${esc((BH_BY_ID[parents[0].sp] || {}).name || parents[0].sp)} was fed in</div>
         </div>` : ''}
@@ -21172,9 +21607,10 @@ async function renderBoneyard(el) {
 
     // player marker: mini bonehead + facing cone + the collect-radius ring
     const mapShiny = await ownShinyPetId(eq);   // your own stack, so your own collection answers
+    const mapMorph = await ownPetMorph(eq);
     const youEl = document.createElement('div');
     youEl.className = 'map-you';
-    youEl.innerHTML = `<div class="map-radius" hidden><b>${COLLECT_RADIUS_M} M</b></div><div class="map-cone" hidden></div><div class="map-you-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], shinyPetId: mapShiny })}</div>`;
+    youEl.innerHTML = `<div class="map-radius" hidden><b>${COLLECT_RADIUS_M} M</b></div><div class="map-cone" hidden></div><div class="map-you-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], shinyPetId: mapShiny, petMorph: mapMorph })}</div>`;
     composeAvatars(youEl);   // marker is built outside route(), so it needs its own call
     const youMarker = domMarker(maplibregl, map, { lat, lng, el: youEl });
     const youWalk = attachWalk($('.map-you-av', youEl)); // puppet walk while GPS fixes move
@@ -22699,7 +23135,7 @@ async function buildFighter(pre = {}) {
     const pl = petLevel(steps);
     const picks = await petPicks(petInst.sp);
     battlePet = buildBattlePet(petInst.sp, pl, picks, { shiny: !!petInst.shiny, lineage: petInst.lineage || 0 });
-    petMeta = { id: petInst.sp, iid: petInst.iid, level: pl, picks, steps, lineage: petInst.lineage || 0, shiny: !!petInst.shiny };
+    petMeta = { id: petInst.sp, iid: petInst.iid, level: pl, picks, steps, lineage: petInst.lineage || 0, shiny: !!petInst.shiny, morph: isMorph(petInst.morph) ? petInst.morph : 'base' };
   }
   // habitStats is gone with the habit base (R21-P1). Nothing read it.
   return { stats, baseStats: gearedBase, gearBonus: gBonus, gearArmor: gArmor, gearLo, alloc, tpTotal, tpAvail, behavior, talents, fightTalents, battlePet, petMeta, setInfo };
@@ -22787,7 +23223,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v497'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v498'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -23022,7 +23458,7 @@ async function socialSnapshot() {
     pets: insts.slice()
       .sort((a, b) => (b.shiny ? 1 : 0) - (a.shiny ? 1 : 0))
       .slice(0, 24)
-      .map(x => ({ sp: x.sp, shiny: !!x.shiny })),
+      .map(x => ({ sp: x.sp, shiny: !!x.shiny, morph: isMorph(x.morph) ? x.morph : 'base' })),
     wear: wear && Object.keys(wear).length ? wear : null,
   };
   return {
@@ -23040,7 +23476,7 @@ async function socialSnapshot() {
     gearLo: fighter.gearLo,
     gear: [...gOwned].slice(0, 400),
     badges: earned.size ?? [...earned].length,
-    pet: fighter.petMeta ? { id: fighter.petMeta.id, level: fighter.petMeta.level, shiny: !!fighter.petMeta.shiny, lineage: fighter.petMeta.lineage || 0 } : null,
+    pet: fighter.petMeta ? { id: fighter.petMeta.id, level: fighter.petMeta.level, shiny: !!fighter.petMeta.shiny, lineage: fighter.petMeta.lineage || 0, morph: fighter.petMeta.morph || 'base' } : null,
     yard,
   };
 }
@@ -23110,6 +23546,9 @@ async function renderPit(wrap) {
   const fighter = await buildFighter();
   const xpRows = await db.all('xp');
   const beaten = pitBeatKeys(xpRows);
+  // B3: today's paid sparring slots, for the board line only (see sparBoardState).
+  const sparUsed = xpRows.filter(r => r.type === 'spar' && r.date === date).length;
+  const sparBoard = sparBoardState(sparUsed);
   const rungsBeaten = LADDER.filter(r => beaten.has(`pitrung-${r.rung}`)).length;
   const champOpen = rungsBeaten >= LADDER.length;
   const champBeaten = beaten.has('pitchamp');
@@ -23149,7 +23588,7 @@ async function renderPit(wrap) {
     <div class="t3-sect"><b>Sparring · no stakes</b><i></i><span class="r chip" style="font-size:11px">Always free</span></div>
     ${[['easy', 'Loose Bones', 0.8], ['even', 'Your Shadow', 1.0], ['hard', 'Mean Mirror', 1.15]].map(([id, name, m]) => `
       <div class="t3-row"><span class="t3-med">${ICONS.pit(24)}</span>
-        <div class="t3-tx"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · +15 coins on a win</small></div>
+        <div class="t3-tx"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · ${sparBoard.line}</small></div>
         <button class="btn ghost" data-spar="${m}" data-name="${name}" aria-label="Fight ${esc(name)}">FIGHT</button>
       </div>`).join('')}`;
   const ladderSect = `
@@ -23538,8 +23977,14 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const foe = makeFighter({
     name: foeCfg.name,
     // friend battles use the friend's REAL stats + outfit (a faithful AI clone);
-    // Pit/boss foes scale off the player's stats by the tier multiplier
-    stats: foeCfg.foeStats ? foeCfg.foeStats : scaleStats(fighter.stats, foeCfg.bossMult || foeCfg.mult),
+    // Pit/boss foes scale off the player's stats by the tier multiplier.
+    // CREW-14: a stranger/friend whose profile never synced real numbers
+    // carries `stats: {}` -- truthy, so the old `foeCfg.foeStats ?` check
+    // handed it straight through and every move computed off `undefined`
+    // ("Jab ~NaN dmg"). hasFightableStats demands real numbers for every
+    // stat or falls back to the same scaled-off-the-player foe every other
+    // mode already uses.
+    stats: hasFightableStats(foeCfg.foeStats) ? foeCfg.foeStats : scaleStats(fighter.stats, foeCfg.bossMult || foeCfg.mult),
     style: foeCfg.style || 'plain',
     outfit: foeCfg.foeOutfit || foeOutfitFor(foeCfg.name),
     talents: foeTalents,
@@ -23581,6 +24026,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const fxMs = fast ? 30 : 300;
   const petBody = fight.pAux;                              // your pet as a real body
   const petArtId = fighter.petMeta ? fighter.petMeta.id : null;
+  const petArtMorph = fighter.petMeta ? (fighter.petMeta.morph || 'base') : 'base';
   const venue = foeCfg.venue || PIT_VENUES[foeCfg.mode === 'champ' ? 'champ' : foeCfg.mode === 'rung' ? foeCfg.rung : 'spar'] || 'The Pit';
   /* __giForce: gateintro.js already honors it so its harness can run under
      webdriver; honoring it HERE too lets an audit drive the real call site,
@@ -23605,7 +24051,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
            same markup the arena uses". */
         spriteHtml: foeCfg.mage
           ? '<img src="assets/bh/mage/mage-fight.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain">'
-          : avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], foreign: true, shinyPetId: snapShinyPetId(foe.pet) }),
+          : avatarLayersHtml(foe.outfit, { foreign: true, noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(foe.pet), petMorph: snapPetMorph(foe.pet) }),
         sounds: S.sounds,
       });
     } else {
@@ -23800,17 +24246,17 @@ async function openFight(pitWrap, fighter, foeCfg) {
              would put his lantern in the wrong hand. */
           : foeCfg.mimic ? mimicPlateHtml()
           : foeCfg.wanderer ? `<img class="mage-plate" src="assets/bh/wanderer/wanderer.png" alt="">`
-          : `<div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], foreign: true, shinyPetId: snapShinyPetId(foe.pet) })}</div>`}</div>
+          : `<div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { foreign: true, noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(foe.pet), petMorph: snapPetMorph(foe.pet) })}</div>`}</div>
         ${add ? `
         <div class="pet-fighter add" id="addG" data-target="fa">
-          <div class="bh-stage fstage petmini${foeCfg.add && foeCfg.add.beast ? ' beast' : ''}" id="addStage"><div class="mirror-wrap">${avatarLayersHtml(add.outfit, { foreign: true, noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(add.pet) })}</div></div>
+          <div class="bh-stage fstage petmini${foeCfg.add && foeCfg.add.beast ? ' beast' : ''}" id="addStage"><div class="mirror-wrap">${avatarLayersHtml(add.outfit, { foreign: true, noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(add.pet), petMorph: snapPetMorph(add.pet) })}</div></div>
         </div>` : ''}
       </div>
       <div class="fighterG you-side" id="youG">
         <div class="bh-stage fstage" id="youStage">${avatarLayersHtml(player.outfit, { noYard: true, skip: ['BG', 'C'] })}</div>
         ${petBody ? `
         <div class="pet-fighter" id="petG">
-          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''}${petArtId && petFacesLeft(petArtId) ? ' faces-away' : ''} r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'} lin-${Math.min((petBody.kit && petBody.kit.lineage) || 0, 6)}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, petFightPx(petArtId, 76), !petHovers(petArtId), { thumb: true }) : ''}</div>
+          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''}${petArtId && petFacesLeft(petArtId) ? ' faces-away' : ''} r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'} lin-${Math.min((petBody.kit && petBody.kit.lineage) || 0, 6)}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, petFightPx(petArtId, 76), !petHovers(petArtId), { thumb: true, morph: petArtMorph }) : ''}</div>
         </div>` : ''}
       </div>
       <div id="floats"></div>
@@ -25188,6 +25634,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
          (150 wanderer + 10 fight + 25 badge). Counted from the badges
          evaluateBadges actually claimed, so a duplicate can never inflate it. */
       xp += badges.length * BADGE_XP;
+      /* R41-16: after evaluateBadges, so the xp store already carries every
+         row this win minted (badges included; awardOnce writes on the spot). */
+      window.__refreshLevelChip?.();
       confettiRain(90); levelSound(S.sounds);
       if (badges.length) queueCelebration({ newBadges: badges });
     } else if (fight.over.winner === 'f') {
@@ -25198,6 +25647,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       coins = foeCfg.mode === 'spar' ? (await claimSpar(fightId, false)).coins : 5;
       if (coins) await coinsAdd(coins);
       window.__refreshWalletPill?.();
+      window.__refreshLevelChip?.();   // R41-16: no xp on a loss, but stays true to "like the wallet pill does"
     }
     /* Spend the day's attempt on this tower, whatever the outcome. Outside the
        win/lose branches on purpose: a loss and a draw have to consume it too, or
@@ -25217,7 +25667,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       ? `<p class="note" style="margin:8px 0 16px">${won ? 'Nice win!' : 'Good scrap.'} You already claimed today's reward against ${esc(foeCfg.name)}. Battle a different friend for more coins + XP.</p>`
       : won
       ? `<div class="reward-row">
-           <span class="reward-pill">${ICONS.coin(15)} +${coins}</span>
+           ${coins ? `<span class="reward-pill">${ICONS.coin(15)} +${coins}</span>` : ''}
            ${xp ? `<span class="reward-pill">${ICONS.star(14)} +${xp} XP</span>` : ''}
            ${extras.map(e => `<span class="reward-pill">${esc(e)}</span>`).join('')}
          </div>

@@ -4,6 +4,15 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 498, date: '2026-09-06', title: 'The Kennel opens, and the Crew tells you what changed', items: [
+    'Pets hatch in colourways now. Every egg rolls a colour for the species inside: the plain one most of the time, or ember, frost, toxic or midnight. Each is a proper recolour of Cam\'s art, not a filter, and the Kennel in the Stable shows every species and colour you have collected, with the gaps you have not.',
+    'Bumbleseal hatches from step eggs like every other pet now instead of sitting behind a 50,000 coin price. Your morph pets show everywhere your pets already show: Today\'s hero, the Stable, the Paddock, your friends\' paddocks and profiles.',
+    'A friend\'s Crew card says the one thing that changed since you last looked: leveled up, new gear, took a spire. Cards and profiles show how many spires a friend holds, and the Crew badge lights when your own race rank improves overnight.',
+    'The race gap is to the racer directly above you, not to first place. Settles tonight fires for the whole last day of the week. Everyone outside the podium gets told where they placed. And a friend whose stats never synced says so instead of showing a fight with NaN damage.',
+    'The Wardrobe grid only paints the tiles on screen and one screen ahead, so opening a slot with two hundred hats no longer stalls.',
+    'Sparring says when the day\'s paid slots are spent instead of printing a silent +0 on a win, Gwart stops greeting you with the same line every morning, the daily spin can land on your first day, and the level chip on Today updates the moment a fight settles.',
+    'Opening a crate, hatching an egg, melting gear or salvaging a pet now happens in one step: the thing you spent and the thing you got are written together, so a crash in between can no longer leave you with neither.',
+  ] },
   { n: 497, date: '2026-09-07', title: 'The Stable rail tells the truth', items: [
     'The lizard\'s team rail puts the teams you own first, parks on the team you picked last time, and tapping a team you own applies it to every football piece she has in that team. Tapping a team you do not own says which piece is missing, never that a helmet you own is not in your wardrobe.',
     'The Locker Room price line fits inside its card at every phone width, the pet copy chips meet the 44 px tap floor, a pet armed for breeding stays visible when you step to another copy, and a family tile\'s rarity badge matches the piece it shows.',

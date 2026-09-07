@@ -26,8 +26,8 @@ import {
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct, fetchOffProductEx } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
-import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins, dayCloseNews, habitGrantCard } from '../js/game.js';
-import { STAT_META, STYLES } from '../js/pit.js';
+import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins, dayCloseNews, habitGrantCard, sparBoardState, SPAR_DAILY_CAP, bagPick, seedBagFromRecent, GW_RECENT_CAP } from '../js/game.js';
+import { STAT_META, STYLES, hasFightableStats } from '../js/pit.js';
 import * as pitMod from '../js/pit.js';
 const mkFighter = pitMod.makeFighter;
 import {
@@ -39,14 +39,16 @@ import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, gearDustValue, gearSt
   removeInstance, breedParents, transmogCost, TRANSMOG_HIDE,
   nickProblem, cleanNick, NICK_MAX,
   RACK_RARITY_PRICE, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_REROLL_LADDER,
-  rollCosmetic, crateEligible } from '../js/loot.js';
+  rollCosmetic, crateEligible,
+  eggRow, grantEgg, hatchEgg, addPetInstance, petInstances, pickRandomPet } from '../js/loot.js';
+import { MORPHS, MORPH_WEIGHT, isMorph, rollMorph, ownedPairs, PET_ASSIGN, MORPH_ART, morphAsset, ownedCellCount } from '../js/pets.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset, PET_SLOTS } from '../data/boneheadz.js';
 import {
   rollSeeds, harvestYield, SEED_ODDS, PLOTS_FREE, PLOTS_MAX, PLOT_PRICES, plotPrice,
   SEED_IDS, seedName, isRareSeed, growMinutes, GROW_MIN, GROW_MIN_RARE,
   HARVEST_BASE, HARVEST_BASE_RARE, COMPOSTS_PER_DAY, SPAWN_SEED_CHANCE, rollSpawnSeed,
 } from '../js/garden.js';
-import { phraseProblem, recoveryIdProblem, RECOVERY_ID_RE, RECOVERY_ITERS, RECOVERY_MIN_LEN, raceStanding } from '../js/social.js';
+import { phraseProblem, recoveryIdProblem, RECOVERY_ID_RE, RECOVERY_ITERS, RECOVERY_MIN_LEN, raceStanding, raceClockLabel } from '../js/social.js';
 import { MINI_THEMES } from '../js/poi.js';
 import { THEME_POOL, themedLook, FAMILIES } from '../js/bosses.js';
 /* notifGateOk, clampQuietHours, immRateCheck, nextImmId are PURE (no
@@ -1907,6 +1909,75 @@ test('raceStanding: nobody has walked -> the empty-board line, not a crash', () 
   const r = raceStanding([], race, '2026-09-01', own, 'Me', {}, ord, escT);
   assert.equal(r.rows.length, 0);
   assert.match(r.standing, /Nobody has walked/);
+});
+
+/* ---- CREW-3: the gap that matters is to the lane ABOVE you, never to first.
+   PROVE-RED: revert social.js's `behind` to `lead - mine.steps` (the pre-fix
+   form) and the first two rows below fail -- a true 11th, one past the top-10
+   the server actually sent, would read "196,000 behind" the whale in 1st
+   instead of the true, small gap to 10th. ---- */
+test('raceStanding: an 11th-place rookie is measured against 10th, never against the whale in 1st', () => {
+  // server's top 10: a 200,000-step whale in 1st, everyone else close together
+  const top10 = [{ rank: 1, name: 'Whale', steps: 200000, you: false },
+    ...Array.from({ length: 9 }, (_, i) => ({ rank: i + 2, name: `P${i + 2}`, steps: 5200 - i * 100, you: false }))];
+  const race = { yourRank: 11, players: top10 }; // the server already ranked this rookie 11th
+  const own = { weekKey: '2026-09-01', steps: 4000 };
+  const r = raceStanding(top10, race, '2026-09-01', own, 'Me', {}, ord, escT);
+  assert.equal(r.yourRank, 11);
+  assert.equal(r.aboveName, 'P10', 'the neighbour above 11th is 10th, not the whale in 1st');
+  assert.equal(r.behind, top10[9].steps - 4000, 'the gap is to 10th\'s steps, not to the whale\'s 200,000');
+  assert.ok(r.behind <= 400, `a real gap to the racer just above should be small, got ${r.behind}`);
+  assert.ok(!/200,000/.test(r.standing), 'the whale\'s total must never appear in a new player\'s standing line');
+});
+
+test('raceStanding: a rank far outside the visible board gets no gap at all, never first\'s', () => {
+  const top10 = Array.from({ length: 10 }, (_, i) => ({ rank: i + 1, name: `P${i + 1}`, steps: 50000 - i * 1000, you: false }));
+  const race = { yourRank: 40, players: top10 }; // rank 39 (the true neighbour) is not in view
+  const own = { weekKey: '2026-09-01', steps: 500 };
+  const r = raceStanding(top10, race, '2026-09-01', own, 'Me', {}, ord, escT);
+  assert.equal(r.behind, 0, 'an unknowable neighbour must not fall back to a gap against first');
+  assert.equal(r.aboveName, null);
+  assert.ok(/40th/.test(r.standing) && !/behind/.test(r.standing), `expected a bare "40th" with no gap clause, got: ${r.standing}`);
+});
+
+test('raceStanding: 1st place is never told it is behind anyone', () => {
+  const top10 = Array.from({ length: 3 }, (_, i) => ({ rank: i + 1, name: `P${i + 1}`, steps: 9000 - i * 1000, you: i === 0 }));
+  const race = { yourRank: 1, players: top10 };
+  const own = { weekKey: '2026-09-01', steps: 9000 };
+  const r = raceStanding(top10, race, '2026-09-01', own, 'Me', {}, ord, escT);
+  assert.equal(r.behind, 0);
+  assert.match(r.standing, /in front/);
+});
+
+/* ---- CREW-14: `stats: {}` is truthy and must not read as "has stats" -- a
+   never-synced account sends exactly this, and it used to draw 5 zero bars
+   and hand the Pit a foe whose every move computed off `undefined`
+   ("Jab ~NaN dmg"). PROVE-RED: change hasFightableStats back to `!!stats`
+   and the second assertion below fails. ---- */
+/* ---- CREW-6: "settles tonight" never rendered because daysLeft (a ceiling)
+   jumps 1 -> 7 the instant the week rolls and can never observe 0. PROVE-RED:
+   change the threshold back to `msLeft <= 0` and the first two rows fail. ---- */
+test('raceClockLabel: the whole last calendar day settles tonight, not "1 day left"', () => {
+  assert.equal(raceClockLabel(30000), 'settles tonight', '30s left, same as 23:59:30');
+  assert.equal(raceClockLabel(86400000 - 1000), 'settles tonight', 'anywhere in the final day, e.g. 00:00:01 in');
+  assert.equal(raceClockLabel(0), 'settles tonight');
+});
+test('raceClockLabel: more than a day out still counts down in days', () => {
+  assert.equal(raceClockLabel(86400001), '2 days left');
+  assert.equal(raceClockLabel(7 * 86400000), '7 days left');
+  assert.equal(raceClockLabel(86400000 * 1.5), '2 days left', 'a fraction of a day rounds UP, never claims settling early');
+});
+
+test('hasFightableStats: a real snapshot passes, an empty object does not', () => {
+  const real = { power: 20, marrow: 20, wind: 20, reflex: 20, hype: 20 };
+  assert.equal(hasFightableStats(real), true);
+  assert.equal(hasFightableStats({}), false, 'FAIL: an empty stats object must not count as fightable');
+  assert.equal(hasFightableStats(null), false);
+  assert.equal(hasFightableStats(undefined), false);
+  assert.equal(hasFightableStats({ power: 20, marrow: 20, wind: 20, reflex: 20, hype: undefined }), false,
+    'one missing key is still not fightable');
+  assert.equal(hasFightableStats({ power: NaN, marrow: 20, wind: 20, reflex: 20, hype: 20 }), false,
+    'NaN is not a real stat either');
 });
 
 /* ---- v240 safe-area guard ------------------------------------------------
@@ -5392,9 +5463,12 @@ test('R26 O1 (a) openVeil pushes the stack; a popped history entry and a route c
   let api;
   // back() runs the shipped popstate handler, verbatim (asserted above)
   const history = { pushState: st => pushes.push(st), back: () => { backs.push(1); if (sheetStack.length) api.closeTopSheet(); } };
-  api = new Function('sheetStack', 'history', 'document', '$', 'reducedMotion', 'updatePending', 'location',
+  // B14: closeTopSheet now reads wheelRetryPending and calls fireDailyWheel()
+  // when the stack drains; both are harmless stand-ins here (false / no-op),
+  // since this test is about the veil/history plumbing, not the wheel retry.
+  api = new Function('sheetStack', 'history', 'document', '$', 'reducedMotion', 'updatePending', 'location', 'wheelRetryPending', 'fireDailyWheel',
     `${src}; return { openVeil, closeTopSheet, closeAllSheets };`)(
-    sheetStack, history, { body: { appendChild: v => { v.appended = true; } } }, () => null, true, false, { reload() {} });
+    sheetStack, history, { body: { appendChild: v => { v.appended = true; } } }, () => null, true, false, { reload() {} }, false, () => {});
   const { openVeil, closeAllSheets } = api;
   const mkVeil = () => ({ appended: false, removed: false, remove() { this.removed = true; }, addEventListener(t, f) { this.tap = f; } });
 
@@ -6855,6 +6929,354 @@ test('R-claimhyg-2 initLootIfNeeded: two interleaved boots grant exactly one wel
   assert.equal(r3, null, 'a later boot after the race must still find the kit already claimed');
 });
 
+/* ============ KENNEL PHASE A (2026-09-05): morphs (cosmetic pet recolours) ==
+ * Spec: BUILDpetskennel20260905.md section 2.6. Morphs never touch battle
+ * stats (rule 0.1), and the species stays a hatch-time roll after db.take
+ * with the rng order in hatchEgg unchanged (rule 0.4) -- these rows exist to
+ * catch a regression on either guarantee, not just to exercise the feature. */
+
+test('KENNEL rollMorph: all pairs owned draws MORPH_WEIGHT within 1.5% over 20,000 draws', () => {
+  /* N and tolerance, MEASURED: N=10,000 at +/-0.01 (the spec's own numbers)
+     false-positived 3/50 clean-code trials (found here, not assumed) -- real
+     rng, no seed, and 'base' at weight 40/98 sits closer to the tolerance
+     band than the smaller morphs. N=20,000 at +/-0.015 clean-code-false-red
+     0/50 over the same probe. */
+  const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+  const owned = new Set();
+  for (const sp of species) for (const m of MORPHS) owned.add(`${sp}|${m}`);
+  const N = 20000;
+  const TOL = 0.015;
+  const tally = {};
+  for (let i = 0; i < N; i++) { const m = rollMorph(owned); tally[m] = (tally[m] || 0) + 1; }
+  const totalW = Object.values(MORPH_WEIGHT).reduce((a, b) => a + b, 0);
+  for (const m of MORPHS) {
+    const expected = MORPH_WEIGHT[m] / totalW;
+    const got = (tally[m] || 0) / N;
+    assert.ok(Math.abs(got - expected) <= TOL,
+      `${m}: expected ${expected.toFixed(4)} +/- ${TOL}, got ${got.toFixed(4)} over ${N} draws (tally ${JSON.stringify(tally)})`);
+  }
+});
+
+/* PROVE-RED, 2026-09-05 morning: this row is what caught the actual Phase A
+ * bug, not a hypothetical one. rollMorph's own "which species count" list
+ * originally included C6 (Bumbleseal, then a 1% shop-exclusive hatch): since
+ * almost no player owned her in ANY morph, (C6, base) stayed "unowned"
+ * forever, which kept 'base' itself in the fresh-first candidate set
+ * alongside the four real morphs and swamped them (base carries the highest
+ * MORPH_WEIGHT, 40). A 200-egg sim below caught it directly: an owner of all
+ * five species hatched nothing but base across 200 draws. Fixed by scoping
+ * the fresh-first accounting to the five ordinary dupe-pool species
+ * (js/pets.js MORPH_SPECIES), matching this file's own then-current "25
+ * (species x morph) pairs" language (5 x 5, not 6 x 5).
+ *
+ * KENNEL PALETTES, 2026-09-05 afternoon: Tom's ruling reversed the premise --
+ * "roll Bumbleseal into things, her time as shop-exclusive has passed ...
+ * fresh-first accounting includes her." hatchChance is gone from her
+ * catalogue entry, she is now an ordinary member of the hatch pool exactly
+ * like C1-C5, and the pathological case above (a species nobody ever owns)
+ * cannot recur for her -- so MORPH_SPECIES is back to all six (js/pets.js),
+ * and this test owns all 6 species' pairs except the one deliberate gap. */
+test('KENNEL rollMorph: fresh-first -- only (C5, midnight) unowned draws midnight every time', () => {
+  const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+  const owned = new Set();
+  for (const sp of species) for (const m of MORPHS) { if (sp === 'C5' && m === 'midnight') continue; owned.add(`${sp}|${m}`); }
+  for (let i = 0; i < 200; i++) {
+    assert.equal(rollMorph(owned), 'midnight', 'the only unowned pair left is (C5, midnight); fresh-first must draw it every time');
+  }
+});
+
+/* PROVE-RED for the 6-species ruling specifically: the row above owns ALL of
+ * C6's pairs, so it cannot tell a MORPH_SPECIES of five (C6 excluded) from six
+ * (C6 included) -- C6 is irrelevant to it either way. This row leaves the ONE
+ * gap on C6 instead of C5, so it only stays green while fresh-first actually
+ * counts her: reverting js/pets.js MORPH_SPECIES to the five-species list
+ * (dropping C6) makes rollMorph ignore her gap entirely and this FAILS
+ * (measured: with the 5-species list restored, this row fails immediately --
+ * fresh becomes empty since C1-C5 are fully owned, so rollMorph falls through
+ * to a plain weighted draw over all five morphs instead of always 'toxic'). */
+test('KENNEL rollMorph: fresh-first also reacts to a gap on C6 (Bumbleseal) specifically', () => {
+  const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+  const owned = new Set();
+  for (const sp of species) for (const m of MORPHS) { if (sp === 'C6' && m === 'toxic') continue; owned.add(`${sp}|${m}`); }
+  for (let i = 0; i < 200; i++) {
+    assert.equal(rollMorph(owned), 'toxic', 'the only unowned pair left is (C6, toxic); fresh-first must count Bumbleseal and draw it every time');
+  }
+});
+
+test('KENNEL hatchEgg: reads the granted egg\'s morph, and the rng stream spends no new call', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-kennel-hatchmorph-basic');
+  await dbm.db.put('inv', { id: 'egg-1', kind: 'egg', stepsAtStart: 0, goal: 0, source: 'test', morph: 'toxic', ts: Date.now() });
+  const origGRV = globalThis.crypto.getRandomValues;
+  /* hatchEgg's own stream, unchanged by this feature: shinyRoll (rolls 0.5,
+     misses SHINY_CHANCE 0.03), then the final uniform pick (rolls 0.2, index 1
+     of the 6-pet pool [C6,C1,C2,C3,C4,C5] -- C1). A morph read that spent an
+     rng() call of its own would shift every index after it and this count
+     would no longer be 2.
+     KENNEL PALETTES, 2026-09-05: this used to be 3 calls (pickRandomPet's C6
+     shop-pet gate rolled a third, between these two) -- that gate is gone
+     along with C6's hatchChance field, so the stream and the count both
+     shrank by one. Measured directly (node -e against js/loot.js) rather than
+     hand-derived, because the catalogue lists C6 BEFORE C1-C5 (see
+     data/boneheadz.js), so the pool's index order is not the obvious one. */
+  const stream = [0.5, 0.2];
+  let n = 0;
+  globalThis.crypto.getRandomValues = a => { a[0] = Math.floor(stream[n++ % stream.length] * 0xffffffff); return a; };
+  let res;
+  try {
+    res = await hatchEgg('egg-1');
+  } finally {
+    globalThis.crypto.getRandomValues = origGRV;
+  }
+  assert.equal(n, 2, `hatchEgg must spend exactly 2 rng() calls on this stream (shiny roll, the final pick); a new call means the morph read is no longer free, got ${n}`);
+  assert.equal(res.ready, true);
+  assert.equal(res.item.id, 'C1', 'setup check: this fixed stream must pick C1');
+  assert.equal(res.morph, 'toxic', 'hatchEgg must return the morph the egg was granted with');
+  const insts = await petInstances();
+  assert.equal(insts.length, 1);
+  assert.equal(insts[0].morph, 'toxic', 'the persisted instance must carry the egg\'s morph');
+});
+
+test('KENNEL hatchEgg: shiny forces base even when the egg carries a colour (rule 0.1/1.2)', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-kennel-hatchmorph-shiny');
+  await dbm.db.put('inv', { id: 'egg-2', kind: 'egg', stepsAtStart: 0, goal: 0, source: 'test', morph: 'toxic', ts: Date.now() });
+  const origGRV = globalThis.crypto.getRandomValues;
+  // shinyRoll rolls 0 (< SHINY_CHANCE: shiny); the final pick rolls 0.2 (index
+  // 1 of the 6-pet pool [C6,C1,C2,C3,C4,C5] -- C1, which has shiny art --
+  // SHINY_ART). KENNEL PALETTES, 2026-09-05: no more C6 shop gate roll
+  // between these two (see the note on the test above).
+  const stream = [0, 0.2];
+  let n = 0;
+  globalThis.crypto.getRandomValues = a => { a[0] = Math.floor(stream[n++ % stream.length] * 0xffffffff); return a; };
+  let res;
+  try {
+    res = await hatchEgg('egg-2');
+  } finally {
+    globalThis.crypto.getRandomValues = origGRV;
+  }
+  assert.equal(res.shiny, true, 'setup check: this stream must mint a shiny');
+  assert.equal(res.morph, 'base', 'shiny forces base even though the egg rolled toxic');
+  const insts = await petInstances();
+  assert.equal(insts[0].shiny, true);
+  assert.equal(insts[0].morph, 'base');
+});
+
+test('KENNEL hatchEgg: a pre-Phase-A egg row with no morph field, or an unknown one, hatches base', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-kennel-hatchmorph-legacy');
+  await dbm.db.put('inv', { id: 'egg-3', kind: 'egg', stepsAtStart: 0, goal: 0, source: 'test', ts: Date.now() }); // no `morph` key at all
+  await dbm.db.put('inv', { id: 'egg-4', kind: 'egg', stepsAtStart: 0, goal: 0, source: 'test', morph: 'rainbow', ts: Date.now() }); // unknown value
+  const origGRV = globalThis.crypto.getRandomValues;
+  const stream = [0.5, 0.5, 0];
+  let n = 0;
+  globalThis.crypto.getRandomValues = a => { a[0] = Math.floor(stream[n++ % stream.length] * 0xffffffff); return a; };
+  let res3, res4;
+  try {
+    res3 = await hatchEgg('egg-3');
+    res4 = await hatchEgg('egg-4');
+  } finally {
+    globalThis.crypto.getRandomValues = origGRV;
+  }
+  assert.equal(res3.morph, 'base', 'a row with no morph field at all must hatch base, never throw or read undefined');
+  assert.equal(res4.morph, 'base', 'a row with an unknown morph value must hatch base rather than mint a phantom colour');
+});
+
+test('KENNEL addPetInstance: an unknown morph is refused at the write, stored as base (rule 0.6)', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-kennel-addinst-unknown');
+  await addPetInstance('C1', { morph: 'rainbow' });
+  const insts = await petInstances();
+  assert.equal(insts[0].morph, 'base');
+});
+
+test('KENNEL addPetInstance: shiny forces base even when a morph is explicitly requested', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-kennel-addinst-shinybase');
+  await addPetInstance('C1', { shiny: true, morph: 'ember' });
+  const insts = await petInstances();
+  assert.equal(insts[0].shiny, true);
+  assert.equal(insts[0].morph, 'base');
+});
+
+/* SIM, spec section 2.6, re-scoped by KENNEL PALETTES (2026-09-05): 200 eggs
+ * granted+hatched one after another for an owner of all SIX species (so every
+ * hatch is a same-species dupe and the morph is the only thing left to
+ * discover) must surface all 30 (species, morph) pairs -- Tom's own count,
+ * "6 species x 5 morphs = 30 pairs" -- with no morph outside MORPHS ever
+ * appearing. This used to own five species and require 25 pairs (Bumbleseal
+ * was a 1% shop-exclusive, excluded from fresh-first accounting); her
+ * hatchChance gate is gone (js/loot.js pickRandomPet, data/boneheadz.js), she
+ * is an ordinary member of MORPH_SPECIES (js/pets.js) same as C1-C5, and this
+ * sim now owns and grades her the same way. Real rng() throughout (unseeded):
+ * re-probed at 200 draws with 6 species/30 pairs (this checkout), 0/30 trials
+ * missed a single pair -- the extra species does not need more draws because
+ * fresh-first the same identical mechanism, one more candidate deep. */
+test('KENNEL sim: 200 eggs from an owner of six species surface all 30 (sp, morph) pairs, no phantom morph', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-kennel-sim-200eggs');
+  const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+  for (const sp of species) await addPetInstance(sp, { morph: 'base' });
+  for (let i = 0; i < 200; i++) {
+    const row = await grantEgg('test', 0);
+    await hatchEgg(row.id);
+  }
+  const insts = await petInstances();
+  const pairs = new Set(insts.map(x => `${x.sp}|${x.morph || 'base'}`));
+  const phantom = [...pairs].filter(p => { const [sp, m] = p.split('|'); return !species.includes(sp) || !MORPHS.includes(m); });
+  assert.equal(phantom.length, 0, `no morph outside MORPHS, and no species outside the hatch pool, got ${JSON.stringify(phantom)}`);
+  const required = species.flatMap(sp => MORPHS.map(m => `${sp}|${m}`));
+  const missing = required.filter(p => !pairs.has(p));
+  assert.equal(missing.length, 0,
+    `all 30 (species, morph) pairs among the six owned species must appear across 200 hatches, missing: ${missing.join(', ') || 'none'} (${pairs.size} total distinct pairs seen)`);
+});
+
+/* SIM, spec section 2.6: two eggs granted the same "day" (before either
+ * hatches) for a player missing several species must still hatch two
+ * DIFFERENT species -- pickRandomPet's pre-existing fresh-species rule
+ * (js/loot.js), unaffected by the morph riding along on the egg row. 20
+ * independent trials, not 1: a single trial only catches "species decided
+ * from stale/no ownership" a fraction of the time (the other fresh species
+ * could still coincidentally differ), so one green trial proves nothing. 20
+ * trials all agreeing is a high catch rate for that regression while staying
+ * non-flaky on real code.
+ *
+ * KENNEL PALETTES, 2026-09-05: this player now owns 2 of SIX species (was 2
+ * of five), missing C3/C4/C5/C6 -- C6's hatchChance gate is gone, so she is
+ * one more ordinary fresh species pickRandomPet can draw here, same as
+ * before for C3-C5. */
+test('KENNEL sim: two eggs granted the same day for a player missing four species hatch two different species', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  for (let trial = 0; trial < 20; trial++) {
+    dbm.useDbName(`unit-kennel-sim-twoeggs-${trial}`);
+    await addPetInstance('C1', { morph: 'base' });
+    await addPetInstance('C2', { morph: 'base' });   // owns 2 of 6, missing C3/C4/C5/C6
+    const row1 = await grantEgg('test', 0);
+    const row2 = await grantEgg('test', 0);
+    const res1 = await hatchEgg(row1.id);
+    const res2 = await hatchEgg(row2.id);
+    assert.equal(res1.ready, true); assert.equal(res2.ready, true);
+    assert.notEqual(res1.item.id, res2.item.id,
+      `trial ${trial}: two eggs granted before either hatched must still mint two different species when four are missing, got ${res1.item.id} twice`);
+  }
+});
+
+/* ============ KENNEL v2 (2026-09-06): per-species morph PNG variants ========
+ * scripts/build-pet-morphs-v2.py writes assets/bh/C/morph/<sp>__<morph>.png,
+ * one file per (species, morph) pair including a single midnight (no tier
+ * suffix); scripts/build-bh-thumbs.py tiers them into thumb/{192,384,trim}.
+ * morphAsset (js/pets.js) is the gate every render path resolves through,
+ * mirroring SHINY_ART: a MORPH_ART species with a real morph returns the
+ * variant path, everything else returns '' (base). */
+
+const MORPH_ROOT = join(here, '..', 'assets', 'bh', 'C');
+const thumbPath = (tier, rel) => join(here, '..', 'assets', 'bh', 'thumb', String(tier), 'C', rel);
+
+test('KENNEL MORPH_ART: every one of the 30 (species, morph) pairs resolves to a real file at every tier', () => {
+  const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+  const missing = [];
+  for (const sp of species) {
+    for (const morph of MORPHS) {
+      const p = morphAsset(sp, morph);
+      if (morph === 'base') {
+        if (p !== '') missing.push(`${sp}|base: morphAsset returned ${JSON.stringify(p)}, expected '' (base falls back to the master)`);
+        const master = join(MORPH_ROOT, `${sp}.png`);
+        if (!existsSync(master)) missing.push(`${sp}|base master missing: ${master}`);
+        for (const tier of [192, 384, 'trim']) if (!existsSync(thumbPath(tier, `${sp}.png`))) missing.push(`${sp}|base thumb/${tier} missing`);
+        continue;
+      }
+      if (!p) { missing.push(`${sp}|${morph}: morphAsset returned '' (expected a variant path)`); continue; }
+      const rel = p.replace(/^assets\/bh\/C\//, '');
+      const abs = join(MORPH_ROOT, rel);
+      if (!existsSync(abs)) missing.push(`${sp}|${morph}: master missing at ${abs}`);
+      for (const tier of [192, 384, 'trim']) if (!existsSync(thumbPath(tier, rel))) missing.push(`${sp}|${morph}: thumb/${tier} missing at ${thumbPath(tier, rel)}`);
+    }
+  }
+  assert.equal(missing.length, 0, missing.join('; '));
+});
+
+/* PROVE-RED: petId 'CX' (exempt, spec section 0.7), an unknown morph string,
+ * and a species outside MORPH_ART must all resolve to '' (base), never throw,
+ * never guess a path. Flipping any one of the three guard clauses inside
+ * morphAsset (js/pets.js) to always pass reproduces a FAIL below (a CX path,
+ * a 'rainbow.png' path, or a path for a made-up species id). */
+test('KENNEL MORPH_ART: CX, an unknown morph, and an unlisted species all resolve to base', () => {
+  assert.equal(morphAsset('CX', 'ember'), '', 'CX is exempt from morphs (its amethyst art IS its look)');
+  assert.equal(morphAsset('C1', 'rainbow'), '', 'an unknown morph value must fall back to base, never guess a path');
+  assert.equal(morphAsset('C1', 'base'), '', 'base never resolves to a variant');
+  assert.equal(morphAsset('SK15', 'ember'), '', 'a species outside MORPH_ART falls back to base');
+  assert.deepEqual(MORPH_ART, ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'], 'MORPH_ART is exactly the six ordinary species, CX excluded');
+});
+
+/* KENNEL v2, 2026-09-06: Tom approved the recolour sheet with ONE midnight
+ * look (the three provisional luminance tiers from the earlier build were
+ * never shipped -- MIDNIGHT_TIER is gone from js/pets.js). morphAsset's stem
+ * is just the morph name now, same shape as ember/frost/toxic.
+ * PROVE-RED: reintroducing a tier suffix in morphAsset (`midnight-medium`
+ * instead of `midnight`) makes the plain-name file below missing and fails;
+ * a leftover `__midnight-<tier>.png` file in the folder (an artifact of the
+ * old build) fails the second assertion. */
+/* R39-10 (2026-09-06): the Kennel's "Collection N / 30" counted owned.size,
+   which includes CX (the Founder's Lizard, exempt, no cell): "31 / 30" with a
+   full set, "2 / 30" with one cell. Only pairs that have a cell count.
+   PROVE-RED (2026-09-06): with ownedCellCount returning owned.size (the old
+   counter) in a throwaway copy, this row alone failed: "a Founder's Lizard
+   owner with one cell reads 1, not 2 / 2 !== 1", 336 passed, 1 failed. */
+test('KENNEL ownedCellCount: CX and an off-grid species never count; a full 6x5 set is exactly 30', () => {
+  const grid = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+  const one = ownedPairs([{ sp: 'CX', morph: 'base' }, { sp: 'C1', morph: 'ember' }]);
+  assert.equal(one.size, 2, 'control: ownedPairs itself still counts CX (that is the bug the counter must not inherit)');
+  assert.equal(ownedCellCount(one, grid), 1, 'a Founder\'s Lizard owner with one cell reads 1, not 2');
+  const full = ownedPairs([{ sp: 'CX', morph: 'base' }, ...grid.flatMap(sp => MORPHS.map(m => ({ sp, morph: m })))]);
+  assert.equal(full.size, 31);
+  assert.equal(ownedCellCount(full, grid), 30, 'a full set reads 30 / 30, never 31');
+  // two copies of one pair are one cell
+  assert.equal(ownedCellCount(ownedPairs([{ sp: 'C2', morph: 'frost' }, { sp: 'C2', morph: 'frost' }, { sp: 'C2' }]), grid), 2);
+});
+
+test('KENNEL midnight: exactly one midnight file per species, no leftover luminance-tier files', () => {
+  const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+  const missing = [];
+  for (const sp of species) {
+    const resolved = morphAsset(sp, 'midnight');
+    assert.equal(resolved, `assets/bh/C/morph/${sp}__midnight.png`,
+      `morphAsset('${sp}', 'midnight') must name the single midnight file, got ${resolved}`);
+    if (!existsSync(join(MORPH_ROOT, 'morph', `${sp}__midnight.png`))) missing.push(`${sp} midnight`);
+    for (const tier of ['dark', 'medium', 'dusk']) {
+      const stale = join(MORPH_ROOT, 'morph', `${sp}__midnight-${tier}.png`);
+      assert.ok(!existsSync(stale), `stale luminance-tier file must not exist: ${stale}`);
+    }
+  }
+  assert.equal(missing.length, 0, `every species must have a midnight file, missing: ${missing.join(', ')}`);
+});
+
+/* Bumbleseal (C6), re-premised 2026-09-05: Tom, "roll Bumbleseal into things,
+ * her time as shop-exclusive has passed." She no longer carries hatchChance
+ * (data/boneheadz.js, scripts/build-cosmetics.py), so pickRandomPet must draw
+ * her at the same even share as C1-C5, not the 1% she used to hatch at.
+ * PROVE-RED: putting `"hatchChance": 0.01` back on her catalogue entry moves
+ * her measured share to ~0.01 and every row below fails (see
+ * tests/pet-pool-audit.mjs for the fuller pool audit; this row is the
+ * unit-level pin the task asked for). */
+test('KENNEL Bumbleseal (C6) hatches at the same even ~1/6 share as C1-C5 over 20,000 seeded draws', () => {
+  const N = 20000, TOL = 0.015;
+  const tally = {};
+  for (let i = 0; i < N; i++) { const p = pickRandomPet(new Set()); tally[p.id] = (tally[p.id] || 0) + 1; }
+  const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+  for (const sp of species) {
+    const got = (tally[sp] || 0) / N;
+    assert.ok(Math.abs(got - 1 / 6) <= TOL,
+      `${sp}: expected ${(1 / 6).toFixed(4)} +/- ${TOL}, got ${got.toFixed(4)} over ${N} draws (tally ${JSON.stringify(tally)})`);
+  }
+});
+
 /* ---- notifications consent (2026-09-06): R37-3/4/10/12 -------------------
    HANDOFFr3720260906.md, measured on v471. The Settings test button lied to a
    player who had denied notifications (native branch hardcoded `return true`
@@ -7360,6 +7782,182 @@ test("R39-31 the Stable's wardrobe heading escapes the species name at both site
   const escaped = (src.match(/<div class="pw-h">\$\{esc\(her\)\}'s wardrobe/g) || []).length;
   const raw = (src.match(/<div class="pw-h">\$\{her\}'s wardrobe/g) || []).length;
   assert.ok(escaped === 2 && raw === 0, `both wardrobe headings must go through esc(): ${escaped} escaped, ${raw} raw`);
+});
+
+test('B3 sparBoardState tells the truth at slots 12 of 12', () => {
+  /* PROVE-RED: before this selector existed, the board line was a hardcoded
+     "+15 coins on a win" with no state check at all, so at 12 of 12 (the cap)
+     it still claimed a coin reward that claimSpar no longer pays. */
+  assert.equal(SPAR_DAILY_CAP, 12, 'cap moved; sparBoardState fixture below assumes 12');
+  const under = sparBoardState(11);
+  assert.equal(under.capped, false, '11 of 12 spent must not read as capped');
+  assert.equal(under.line, '+15 coins on a win');
+  const at = sparBoardState(12);
+  assert.equal(at.capped, true, '12 of 12 spent (the cap) must read as capped');
+  assert.notEqual(at.line, '+15 coins on a win', 'the board must stop promising a coin reward once paid slots are spent');
+  assert.match(at.line, /paid spars are done/i);
+  const over = sparBoardState(13);
+  assert.equal(over.capped, true, 'past the cap must still read as capped');
+});
+
+test('B3 the victory card omits the +0 coin pill', () => {
+  /* PROVE-RED: the reward-row used to render `+${coins}` unconditionally, so a
+     capped spar win (coins:0 from claimSpar) printed a literal "+0" coin pill
+     under a card that also offers XP. */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(/\$\{coins \? `<span class="reward-pill">\$\{ICONS\.coin\(15\)\} \+\$\{coins\}<\/span>` : ''\}/.test(src),
+    'the coin reward pill must be conditional on coins, same as the XP pill beside it');
+});
+
+test('B13 Gwart\'s bag survives 5 consecutive boots with no immediate repeat', () => {
+  /* A "boot" is a fresh module load: a brand-new `said` Set (the bag dies on
+     reload, that part is correct and unchanged), seeded from whatever was
+     persisted to kv last time (gwRecent), then one pick. Deterministic RNG
+     (always take index 0 of the eligible pool) makes this reproducible: it
+     is also the shape that PROVES the old bug, below.
+     2026-09-06, B13: POOL below is a fixture stand-in (7 dummy lines), not the
+     app's real Gwart line table. */
+  const POOL = ['gear1', 'gear2', 'gear3', 'gear4', 'gear5', 'gear6', 'gear7'];
+  const rand0 = () => 0;
+  let persisted = []; // stands in for kv 'gwRecent' across boots
+  let prevLine = null;
+  for (let boot = 0; boot < 5; boot++) {
+    const said = new Set();
+    const seededLast = seedBagFromRecent(said, persisted);
+    const line = bagPick(POOL, said, seededLast, rand0);
+    if (prevLine !== null) assert.notEqual(line, prevLine, `boot ${boot} immediately repeated boot ${boot - 1}'s line ("${line}")`);
+    prevLine = line;
+    said.add(line);
+    persisted = [...said].slice(-GW_RECENT_CAP);
+  }
+});
+
+test('B13 PROVE-RED: the same 5 boots repeat every time with no seeding', () => {
+  /* This is the bug as shipped: gwSaid/gwLast were module-scope with nothing
+     read back from kv, so every reload started the bag empty and unaware of
+     what was last said. Same pool, same deterministic RNG, just skip
+     seedBagFromRecent (the fix): every boot pulls the same first line.
+     2026-09-06, B13: POOL below is the same fixture stand-in as above. */
+  const POOL = ['gear1', 'gear2', 'gear3', 'gear4', 'gear5', 'gear6', 'gear7'];
+  const rand0 = () => 0;
+  const linesSaid = [];
+  for (let boot = 0; boot < 5; boot++) {
+    const said = new Set(); // dies on reload, never seeded: the reported bug
+    linesSaid.push(bagPick(POOL, said, '', rand0));
+  }
+  assert.ok(linesSaid.every(l => l === linesSaid[0]),
+    'sanity check on the bug shape: an unseeded bag with a fixed RNG must repeat every boot');
+});
+
+test('B13 renderToday seeds the bag before Gwart speaks, and gwPick persists it', () => {
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const gwLineAt = src.indexOf('const gwLine = gwartLine(gwCtx);');
+  assert.ok(gwLineAt > -1, 'renderToday\'s opening gwartLine call is gone from js/app.js');
+  const before = src.slice(Math.max(0, gwLineAt - 200), gwLineAt);
+  assert.match(before, /await loadGwMemory\(\);/, 'renderToday must seed the bag from kv before Gwart\'s opening line');
+  assert.match(src, /function gwPick\(pool\) \{[\s\S]{0,300}kvSet\('gwRecent'/, 'gwPick must persist the bag to kv so the next boot can seed from it');
+});
+
+/* ---- B14: the daily spin cannot fire on day one, and is skipped when a
+   level-up sheet is open at boot (R41-11) ----
+   Two independent gaps, both source-pinned since maybeShowDailyWheel needs a
+   real browser to drive behaviourally (tests/wheel-audit.mjs covers that).
+   1. sheetStackOpen() used to `return false`, indistinguishable from "already
+      claimed today" to every caller, so nothing ever retried once the
+      blocking sheet closed. PROVE-RED: reverting to `return false` here
+      would still pass every other wheel.js test in this file (day-guard,
+      claimSpin) but this assertion goes red on that exact line.
+   2. boot() only reaches its own maybeShowDailyWheel call after `if
+      (!S.settings) { renderOnboarding(...); return; }`, so a fresh install
+      never ran it that session, and enterAppFromOnboarding (the only exit
+      from onboarding) never called it either. Not a deliberate exclusion:
+      claimDay's first-run branch seeds and lets a brand-new device through
+      exactly like any other day (js/db.js: "FIRST RUN ... seed and let the
+      player through"), so day one differs from day two only by this missing
+      wire. PROVE-RED: dropping the fireDailyWheel() call from
+      enterAppFromOnboarding removes the only site that fires the wheel on
+      this path (boot's own copy never runs for it) and this test goes red. */
+test('B14 sheetStackOpen no longer returns a bare false (nothing could ever retry it)', () => {
+  const wheel = readFileSync(join(here, '..', 'js', 'wheel.js'), 'utf8');
+  assert.match(wheel, /if \(sheetStackOpen\(\)\) return \{ pending: true \};/,
+    'maybeShowDailyWheel must hand back a distinguishable "still owed" signal when a sheet blocks it, not a bare false (B14)');
+  assert.ok(!/if \(sheetStackOpen\(\)\) return false;/.test(wheel),
+    'the old unretriable false is still here alongside the new return (B14)');
+});
+
+test('B14 app.js retries the wheel once the blocking sheet stack drains, and fires it on day one', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /let wheelRetryPending = false;/, 'the retry flag is missing (B14)');
+  const helper = app.match(/function fireDailyWheel\(\) \{[\s\S]*?\n\}\n/);
+  assert.ok(helper, 'fireDailyWheel (the shared retry/day-one caller) is missing (B14)');
+  assert.match(helper[0], /maybeShowDailyWheel\(\{ sounds: S\.sounds \}\)\.then\(spun => \{/, 'fireDailyWheel must call the real maybeShowDailyWheel');
+  assert.match(helper[0], /else if \(spun\?\.pending\) wheelRetryPending = true;/, 'fireDailyWheel must re-arm the retry flag on a pending result');
+  // closeTopSheet: the ONE place every sheet finishes closing (Escape, backdrop
+  // tap, the Done button and popstate all route through it) drains the flag.
+  const cts = app.match(/function closeTopSheet\(\) \{[\s\S]*?\n\}\n/);
+  assert.ok(cts, 'closeTopSheet not found');
+  assert.match(cts[0], /if \(!sheetStack\.length && wheelRetryPending\) \{ wheelRetryPending = false; fireDailyWheel\(\); \}/,
+    'closeTopSheet does not drain a pending wheel retry when the stack empties (B14)');
+  // both of boot()'s and rollDayIfNeeded's OWN inline calls (pinned verbatim
+  // elsewhere by the R26-O14 test) must also feed the same flag, or a sheet
+  // open at exactly one of those two moments would still eat the spin silently.
+  const boot = app.match(/maybeShowDailyWheel\(\{ sounds: S\.sounds \}\)\.then\(spun => \{\n {4}if \(spun === true[\s\S]*?\n {2}\}\)\.catch\(\(\) => \{\}\);/);
+  assert.ok(boot && /else if \(spun\?\.pending\) wheelRetryPending = true;/.test(boot[0]), 'boot()\'s wheel call does not arm the retry flag on pending (B14)');
+  const roll = app.match(/maybeShowDailyWheel\(\{ sounds: S\.sounds \}\)\.then\(spun => \{\n {6}if \(spun === true[\s\S]*?\n {4}\}\)\.catch\(\(\) => \{\}\);/);
+  assert.ok(roll && /else if \(spun\?\.pending\) wheelRetryPending = true;/.test(roll[0]), 'rollDayIfNeeded\'s wheel call does not arm the retry flag on pending (B14)');
+  // day one: enterAppFromOnboarding is the only exit from onboarding (a
+  // finished signup AND a mid-onboarding restore both land there), and boot()
+  // returns before its own call ever runs for this session.
+  const eafo = app.match(/function enterAppFromOnboarding\(\) \{[\s\S]*?\n\}\n/);
+  assert.ok(eafo, 'enterAppFromOnboarding not found');
+  assert.match(eafo[0], /fireDailyWheel\(\);/, 'enterAppFromOnboarding never fires the daily wheel: day one gets zero chance at it (B14)');
+});
+
+/* ---- R41-16: the Today level chip repaints on fight settle, like the
+   wallet pill does ----
+   __refreshWalletPill already fixed this class for coins/dust/vigor (see its
+   own comment: "the Pit is a sheet OVER this screen ... only #pitBody was
+   re-rendered on close"). The level chip had no equivalent, so a fight that
+   leveled you up (or just moved XP within the level) left #lvlChip reading
+   its pre-fight numbers until the player left Today and came back, measured
+   at chip 0/200 against a ledger of 65.
+   PROVE-RED: dropping either window.__refreshLevelChip?.() call below (win
+   or loss) removes the only place that repaints the chip for that outcome,
+   and this test goes red on the missing call. */
+test('R41-16 __refreshLevelChip exists and fires on both fight-settle outcomes, beside the wallet pill', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const helper = app.match(/window\.__refreshLevelChip = async \(\) => \{[\s\S]*?\n\};\n/);
+  assert.ok(helper, '__refreshLevelChip is missing');
+  // MUST live at module scope, not nested inside renderToday: today-reads-lint.mjs
+  // (A1) walks every call reachable from renderToday's own body, so a closure
+  // defined in there that reaches totalXp() -> db.all('xp') on a cache miss
+  // would count as a second 'xp' scan and that guard goes red.
+  const rt = app.match(/\nasync function renderToday\(el\) \{\n([\s\S]*?)\n\}\n/);
+  assert.ok(rt, 'renderToday not found');
+  assert.ok(!rt[1].includes('window.__refreshLevelChip ='), '__refreshLevelChip must not be defined inside renderToday (today-reads-lint.mjs A1 would double-count its xp read)');
+  /* totalXp(), not a literal db.all('xp') here: cached, reuses the existing
+     epoch check instead of re-scanning on every call. */
+  assert.match(helper[0], /levelFor\(await totalXp\(\)\)/, '__refreshLevelChip must re-derive the level from a fresh xp total (totalXp(), not a stale in-memory one)');
+  assert.ok(!/\bdb\.all\('xp'\)/.test(helper[0]), '__refreshLevelChip must not add a second literal db.all(\'xp\') inside renderToday (R17-P2)');
+  assert.match(helper[0], /hero-lvrow/, '__refreshLevelChip must repaint the level/name row');
+  assert.match(helper[0], /hero-xprow/, '__refreshLevelChip must repaint the XP/pips row');
+  // the fight-settle function (openFight's nested settle()): both outcomes
+  // must call it next to the wallet pill's own call, the same way B3 made the
+  // spar board and victory card agree with each other rather than drift apart.
+  // openFight is a huge, deeply-nested function (settle/aiPlay/doEndTurn/etc),
+  // so bound it by its own start and the next top-level function's start
+  // rather than a brace-matching regex.
+  const ofStart = app.indexOf('async function openFight(pitWrap, fighter, foeCfg) {');
+  assert.ok(ofStart > 0, 'openFight not found');
+  const ofEnd = app.indexOf('\nfunction buildFaqHtml(', ofStart);
+  assert.ok(ofEnd > ofStart, 'openFight\'s end boundary (buildFaqHtml) not found; the function moved');
+  const openFight = app.slice(ofStart, ofEnd);
+  // bounded to the win branch's own few lines, so a removed call cannot be
+  // masked by the loss branch's own (separate) call further down the file
+  const winSite = openFight.match(/window\.__refreshWalletPill\?\.\(\);[^\n]*\n\s*const badges = await evaluateBadges\(\);\n[\s\S]{0,900}?\n\s*window\.__refreshLevelChip\?\.\(\);\n\s*confettiRain\(90\);/);
+  assert.ok(winSite, 'the win branch does not refresh the level chip after badges are evaluated (R41-16)');
+  const lossSite = openFight.match(/coins = foeCfg\.mode === 'spar'[\s\S]*?window\.__refreshWalletPill\?\.\(\);\n\s*window\.__refreshLevelChip\?\.\(\);/);
+  assert.ok(lossSite, 'the loss branch does not refresh the level chip beside the wallet pill (R41-16)');
 });
 
 await runAll();
