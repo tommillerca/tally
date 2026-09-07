@@ -29,6 +29,35 @@ audit of v485 (the aggregator handoff of 2026-09-06, lanes 1 and 3).
 2. PROOF: currency-revision-lint.mjs | REACH: the next place somebody writes a coin or dust balance cannot forget the revision. A static scan of every script forbids a raw balance write, requires the revision function beside every balance function in a claim's pay map, and requires the three shared helpers to route through the one revisioned primitive. Red on v493 with four findings (RAW, MAP, ASSIGN, PRIM), then red on the fixed tree for each of three single-site mutations, one check each.
 
 3. PROOF: inv-tombstone-audit.mjs | REACH: a consumed item stays consumed. Using a draught or a Battle Charm, opening a crate, or losing a pet's last cosmetic copy deletes the row and writes its receipt in one transaction, and the receipt list has no size cap any more (it kept the newest 500, so the 501st use let an old backup bring item 1 back). Measured bound: about 23 bytes a receipt, so 10,000 consumed items is about 230 KB inside a 2.2 MB backup ceiling; a merge unions receipts from both devices and never drops one. Red before, on v493: RING 1 revived (the oldest: yes); RING-CRATE 1 revived (the oldest: yes); ATOMIC row gone: true, receipt: false; ATOMIC-CRATE row gone: true, receipt: false.
+## open all recovers, cancel is one step (2026-09-06)
+
+Not stamped to a release: fix/openall-kitchen-atomic, off v493. HANDOFFr3920260906.md
+Lane 5 (open-all recovery) and Lane 6 (Kitchen cancel atomicity), both re-measured
+on this tree before fixing.
+
+1. PROOF: crate-reveal-audit.mjs | REACH: the Backpack's "Open all" control on a
+   row of Common Crates used to be able to spend several crates, hit a bad row
+   partway through, and lose the whole batch: nothing already opened was shown,
+   the crates the loop never reached still sat spent-looking in inventory, and
+   the button never came back. Poisoning the third of five crates mid-loop
+   reproduced it (0 cards shown, the button staying disabled forever). Now a
+   mid-loop failure still reveals whatever was actually taken, leaves every
+   untouched crate exactly where it was, and the control comes back the same
+   way a clean run leaves it.
+
+2. PROOF: kitchen-atomic-audit.mjs | REACH: cancelling a pot in the Kitchen
+   refunds its ingredients and empties the pot in one step. A crash between the
+   two used to be possible (the pot cleared with nothing refunded, or the
+   reverse), because they ran as two separate saves; forcing that exact
+   mid-cancel failure now leaves the pot and the ingredients both exactly where
+   they were before you tapped Cancel, never half-done. kitchen-day-one-strand-audit.mjs
+   (the recovery from the day-one mis-tap this shares its Cancel path with)
+   stays green.
+
+CORRECTION to "## v483" item 4 below: it called the pot-and-refund cancel "one
+atomic step" on the day it shipped. It was not; that was two separate saves with
+a real gap between them, exactly the failure item 2 above fixes. Corrected rather
+than left standing, because this file is read to check whether a note is true NOW.
 
 ## pit readout and exit (2026-09-06)
 
@@ -284,7 +313,7 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 
 3. PROOF: pit-kitchen-hint-audit.mjs | REACH: the Pit carries one line naming the active dish buff, or pointing at the Kitchen when ingredients or a dish are owned, and nothing when there is nothing to cook (BUFF and NUDGE rows red with the line removed, QUIET grades the absence).
 
-4. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a cooking pot can be cancelled and refunds its ingredients in one atomic step, and the day-one Kitchen says which recipe the starter kit is for before the first tap (TIP and CANCEL rows red when reverted separately; the strand itself reproduced first: marrow 1, salt 0, 0 of 13 buttons).
+4. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a cooking pot can be cancelled and refunds its ingredients, and the day-one Kitchen says which recipe the starter kit is for before the first tap (TIP and CANCEL rows red when reverted separately; the strand itself reproduced first: marrow 1, salt 0, 0 of 13 buttons). (This called the cancel "one atomic step" when it shipped. It was not: the pot was cleared and the ingredients refunded as two separate saves, with a real gap a crash could land in. See "## open all recovers, cancel is one step (2026-09-06)" above for the actual fix. Corrected rather than left standing, because this file is read to check whether a note is true NOW.)
 ## health card today (2026-09-06)
 
 1. PROOF: health-intake-audit.mjs | REACH: Open Today before connecting Apple

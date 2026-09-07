@@ -4,7 +4,7 @@
 // (stew / zombie-fajita flavor), fully separate from real calorie logging, and
 // buffs only ever ADD (wellbeing-safe: nothing here rewards eating less).
 
-import { kvGet, kvSet, kvUpdate, claimDay } from './db.js';
+import { kvGet, kvSet, kvUpdate, kvUpdateMulti, claimDay } from './db.js';
 import { dateKey } from './nutrition.js';
 
 export const INGREDIENTS = {
@@ -455,21 +455,39 @@ export async function collectDish(slotIndex = null, now = Date.now()) {
  * cancelled), which slotsFrom's !arr[slotIndex] check covers for free. Works
  * whether the pot is still cooking or sitting ready-to-serve: either way the
  * dish has not been SERVED (collectDish never ran), so nothing has been paid
- * out yet and a full ingredient refund is honest. */
+ * out yet and a full ingredient refund is honest.
+ *
+ * THE POT AND THE REFUND ARE NOW THE SAME TRANSACTION (fixed 2026-09-06). This
+ * used to null the pot here, then call refundIngredients as a separate
+ * kvUpdate: correct against a same-instant double-cancel, but a crash between
+ * the two committed transactions left the pot gone with the ingredients never
+ * returned, exactly the gap CLAIMS wrongly called atomic. kvUpdateMulti runs
+ * both kv rows in one IndexedDB transaction: the ingredients fn only refunds
+ * once the cooking fn has actually found something to cancel, and a throw in
+ * either aborts both, so a crash mid-cancel leaves the pot cooking with its
+ * ingredients unspent rather than either half alone. */
 export async function cancelCook(slotIndex) {
   const pots = await potsOwned();
   let cancelled = null;
-  await kvUpdate('cooking', (raw) => {
-    const arr = slotsFrom(raw, pots);
-    if (slotIndex == null || !arr[slotIndex]) return undefined;
-    cancelled = arr[slotIndex];
-    arr[slotIndex] = null;
-    return arr;
-  }, null);
+  await kvUpdateMulti({
+    cooking: raw => {
+      const arr = slotsFrom(raw, pots);
+      if (slotIndex == null || !arr[slotIndex]) return undefined;
+      cancelled = arr[slotIndex];
+      arr[slotIndex] = null;
+      return arr;
+    },
+    ingredients: inv => {
+      if (!cancelled) return undefined;             // nothing cancelled: refund nothing
+      const r = RECIPE_BY_ID[cancelled.recipeId];
+      if (!r) return undefined;                      // stale/unknown recipe: nothing owed
+      const cur = { ...(inv || {}) };
+      for (const [id, n] of Object.entries(r.needs)) cur[id] = (cur[id] || 0) + n;
+      return cur;
+    },
+  }, { cooking: null, ingredients: {} });
   if (!cancelled) return null;
-  const r = RECIPE_BY_ID[cancelled.recipeId];
-  if (r) await refundIngredients(r);
-  return r;
+  return RECIPE_BY_ID[cancelled.recipeId] || null;
 }
 
 /* ---------- Pantry (v152): cooked dishes stockpile until you choose to use one ----------
