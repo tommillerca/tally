@@ -72,6 +72,36 @@ with it mounted and 16.7ms with it hidden.
 
 1. PROOF: crate-reveal-audit.mjs | REACH: Open a Bone Crate from your Backpack and flick through its three cards: each card leaves and the next one arrives at full frame rate instead of half. Measured over the 520ms of the move, dropped frames 8-16 before and 1-5 after, frames rendered 18-27 before and 47-59 after. Nothing about what a crate pays, the reveal's copy, the tap guards (R37-5) or the Open all recovery (R39) changes.
 
+## the Wanderer walks in front (2026-09-07)
+
+Not stamped to a release: hotfix/wanderer-z, off v500. Tom, live: "Boneyard:
+icons on map on top of wanderer should be behind him."
+
+MEASURED BEFORE FIXING, on the real Boneyard: `.map-wanderer-mark { z-index: 0 }`
+against `.map-you, .map-spawn, .map-den-mark, .map-mini-mark, .map-spire,
+.map-glutton-mark { z-index: 1 }` (js/wanderer.js, dated 2026-08-23), so every
+other marker painted over him. A forced, deterministic overlap (two synthetic
+markers dropped at his own lat/lng) sampled the real render at that pixel: with
+him hidden the pixel read the synthetic colour exactly; with him visible it
+read the same synthetic colour, proving nothing of his own art survived the
+overlap.
+
+FIXED by reordering the same rule: `.map-wanderer-mark` now carries z-index 2,
+the marker group (spawns, dens, POIs, spires, coin piles) carries z-index 1, and
+`.map-you` alone carries z-index 3. The player's own marker is the one
+exception, kept on top of him: its 75 m collect ring is functional, not
+decorative, and burying it was the reason he was pushed to the back in the
+first place (js/wanderer.js note, 2026-08-23). No change to his cone, his patrol,
+or any marker's size.
+
+PROVEN RED on a throwaway `cp -R` with the old rule restored: PINS-SURVIVE and
+STACK-LIVE both failed, exit 1 --
+`FAIL  STACK-LIVE his art wins the overlap in real pixels, not just in z-index,
+against 2 other marker kinds  | at device pixel (196,344): visible
+rgba(0,0,255,255), hidden rgba(0,0,255,255)`. Fixed: 19/19, exit 0.
+
+1. PROOF: wanderer-patrol-live-audit.mjs, marker-anchor-audit.mjs | REACH: on the Boneyard map, the Wanderer's coat now paints over every spawn, den, POI, spire and coin-pile marker he overlaps; your own marker and its collect ring still paint over him. Measured on the real render at the forced overlap point: with him visible the pixel is his own colour (not the marker's), and with him hidden it becomes the marker's colour, so the fix is proven in pixels, not only in the stacking rule.
+
 ## kennel round 39 (2026-09-06)
 
 Not stamped to a release: kennel/r39, off integ/day5 (v488). HANDOFFr3920260906.md

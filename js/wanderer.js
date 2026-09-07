@@ -395,17 +395,22 @@ export function ensureWandererStyle() {
    .map-mini-mark off the map (legendHtml, js/app.js). Graded live in
    tests/marker-anchor-audit.mjs (ANCHORED, GROUND), which also lints that no
    runtime-injected stylesheet does this again. */
-.map-wanderer-mark { position: absolute; width: ${MARK_PX}px; height: ${MARK_PX}px; pointer-events: none; z-index: 0; }
-/* HE GOES TO THE BACK OF THE MARKER LAYER, and this rule names other people's
-   classes on purpose. MapLibre markers are DOM siblings with no z-index at all,
-   so they paint in creation order and he is created after the player: measured
-   at 260px, his coat covered the player's own marker AND the 75 m collect ring,
-   which is the one thing on that screen that tells you what "in reach" means.
-   He is the only marker big enough to bury another one, so the rule is his, and
-   it lives here rather than in app.css for the same reason the rest of this
-   stylesheet does. Raising all six together leaves their order among themselves
-   exactly as it was; the only thing that changes is that they clear him. */
-.map-you, .map-spawn, .map-den-mark, .map-mini-mark, .map-spire, .map-glutton-mark { z-index: 1; }
+.map-wanderer-mark { position: absolute; width: ${MARK_PX}px; height: ${MARK_PX}px; pointer-events: none; z-index: 2; }
+/* HE PAINTS OVER EVERY OTHER MARKER, and this rule names other people's classes
+   on purpose because MapLibre markers are DOM siblings with no z-index of their
+   own: they paint in creation order otherwise, which is why this needs stating
+   at all. Tom, 2026-09-07, live on v500: "icons on map on top of wanderer
+   should be behind him." Reverses the 2026-08-23 rule below this comment used
+   to carry (he was pushed to the BACK then, because at the since-corrected
+   260px size his coat buried the player's own marker and the 75 m collect
+   ring). That reasoning still holds for the PLAYER specifically -- the ring is
+   the one thing on screen that says what "in reach" means, not decoration --
+   so .map-you keeps its own higher z-index below and stays on top of him. Every
+   other marker here (spawns, dens, POIs, spires, coin piles) is exactly the
+   "icons" Tom means, and now clears the group below rather than covering him.
+   Graded live in tests/wanderer-patrol-live-audit.mjs (PINS-SURVIVE, STACK-LIVE). */
+.map-spawn, .map-den-mark, .map-mini-mark, .map-spire, .map-glutton-mark { z-index: 1; }
+.map-you { z-index: 3; }
 /* The plate is shifted so the LANTERN lands on the marker's centre, which is the
    anchor, which is his lat/lng. Percentages of the marker's own box, so this
    stays correct at any MARK_PX. */
