@@ -282,6 +282,15 @@ with it mounted and 16.7ms with it hidden.
 
 1. PROOF: crate-reveal-audit.mjs | REACH: Open a Bone Crate from your Backpack and flick through its three cards: each card leaves and the next one arrives at full frame rate instead of half. Measured over the 520ms of the move, dropped frames 8-16 before and 1-5 after, frames rendered 18-27 before and 47-59 after. Nothing about what a crate pays, the reveal's copy, the tap guards (R37-5) or the Open all recovery (R39) changes.
 
+## the first hour keeps its promises (2026-09-07)
+
+Not stamped to a release: hotfix/first-hour-polish, off v503. Three items from
+the QA master handoff that needed no ruling: R41-20, R39-25 and R41-21.
+
+1. PROOF: toast-sheet-audit.mjs | REACH: A toast can no longer sit on top of a control you are being asked to use. The welcome-kit message fires 1.2s after onboarding and a new player is five taps from their first fight, so it landed on the move tray: measured at 375x667 it covered six move buttons, Jab (110.3x54.8) and Bone Spike whole, and at 393x852 on a nine-move tray it took 104.8x27.8 of Haymaker and 116.3x27.8 of Bone Guard. Fixed for every sheet rather than for the Pit, because every sheet in the app puts its controls at the bottom and the toast's seat is 96px off the bottom: while a sheet is open the toast takes a seat under the sheet head, clear of the Flee button as well. Everywhere else it has not moved (96px, graded).
+2. PROOF: new-cosmetic-mark-audit.mjs | REACH: Win a cosmetic and it stays findable. From the moment it is granted, the Wardrobe's paper doll marks the slot it landed in with a dot, and the tile inside that slot carries one too, in the same accent-on-dark language the crate count and the News dot already use. Both clear when you open that slot's grid, and stay clear after a reload. Nothing you already owned is marked: the flag is written by the grant, so an existing collection is quiet.
+3. PROOF: streak-card-audit.mjs | REACH: A longer streak is no longer a thinner screen. Measured at 393x852: day 7's card carried three blocks of content and day 14's carried two, because there is a badge at 7 and none at 14, so with the number taken out day 14 said nothing day 7 did not. Every streak milestone now carries a line of its own and a row of counts you can check yourself (pieces found, pets, badges, each one a length of something you own, dropped when it is zero), and the sub-line names the golden Bone Crate the milestone has always paid and never mentioned. No badge was added at 14: that pays XP and is an economy change, not a copy fix.
+
 ## the Kennel explains itself (2026-09-07)
 
 Not stamped to a release: hotfix/kennel-ux, off v500. Tom's four items from

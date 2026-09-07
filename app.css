@@ -686,6 +686,25 @@ svg { display: block; }
    Guard: tests/toast-map-audit.mjs. */
 body:has(.map-act:not([hidden])) .toast { bottom: calc(var(--sab) + 158px); }
 
+/* AND IT MUST NOT LAND ON A SHEET'S CONTROLS EITHER. R41-20: the welcome-kit
+   toast fires 1.2s after onboarding and a new player is five taps from their
+   first fight, so it arrives on top of the move tray it is not talking about.
+   Measured 2026-09-07 against a real fight: at 375x667 the toast (26.3,506.5
+   322.5x64.5) covered Jab whole (110.3x54.8 of a 110.3x54.8 button) and 100.0px
+   of Peck the Eyes and Swing; at 393x852 it took 104.8x27.8 of Haymaker and
+   116.3x27.8 of Bone Guard.
+   Fixed generally rather than for the fight tray: EVERY sheet in this app puts
+   its controls at the bottom (the move tray, a shop's buy row, the Wardrobe's
+   bar, every .btn-row) and the toast's shipped seat is 96px off the bottom, so
+   the collision is structural, not the Pit's. While a sheet is up the toast
+   takes a seat under the sheet head instead: sheet top is --sat + 24, the grab
+   handle is 15.5 and the head is ~62, so 110 clears it. A short bottom sheet
+   leaves the toast over the backdrop, which asks nothing of anybody.
+   Keyed on a sheet EXISTING rather than on any route or class, the same way the
+   .map-act rule is keyed on the card being visible.
+   Guard: tests/toast-sheet-audit.mjs. */
+body:has(#sheets .sheet) .toast { top: calc(var(--sat) + 110px); bottom: auto; }
+
 /* progress bar (ocr) */
 .progress { height: 6px; border-radius: 4px; background: var(--surface-3); overflow: hidden; margin: 10px 0; }
 .progress i { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.3s ease; }
@@ -753,6 +772,13 @@ a { color: var(--accent); text-decoration: none; }
 
 .cele-big { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; }
 .cele-sub { font-size: 14px; color: var(--text-2); font-weight: 600; margin-top: 3px; }
+/* R41-21. The streak card's own line, and the counts under it. Deliberately
+   quiet: the number is the headline, this is the sentence and the receipt.
+   .bh-pill is the app's existing chip, the same one the level-up rewards row
+   and the Wardrobe's "N found" wear, so nothing new is being taught here. */
+.cele-line { margin-top: 12px; font-size: 14.5px; line-height: 1.45; color: var(--text-2); padding: 0 10px; }
+.cele-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; margin-top: 14px; padding: 0 6px; }
+
 .cele-badge {
   display: flex; align-items: center; gap: 12px; text-align: left;
   background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px;
@@ -1000,6 +1026,23 @@ a { color: var(--accent); text-decoration: none; }
 .map-spawn { position: relative; }
 .map-spawn .spawn-ing { position: absolute; bottom: -6px; right: -8px; font-size: 13px; line-height: 1; filter: drop-shadow(0 1px 1px rgba(0,0,0,.6)); }
 .ro-ing { color: var(--text-2); font-weight: 600; }
+/* R39-25's unread mark. THE APP ALREADY HAS THIS LANGUAGE and this borrows it
+   rather than inventing a second one: accent plate, --bg ring, the crewBadgePop
+   the tab badge uses, sized down to a dot because it counts nothing.
+   TOP-LEFT on a tile, which is the one free corner: the equipped tick owns
+   top-right (.ward-cell.equipped::after), the tier letter bottom-left
+   (.ward-rar) and the colourway count bottom-right (.ward-fam-n). On a paper-doll
+   slot it goes top-right, clear of .pd-mog (bottom-left) and of the label
+   (.pd-tag, bottom), above .pd-gear's top strip so it is never painted over. */
+.new-dot {
+  position: absolute; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 2px var(--bg, #0d0c12);
+  pointer-events: none; animation: crewBadgePop 0.3s ease;
+}
+.ward-cell .new-dot { top: 5px; left: 5px; z-index: 3; }
+.pd-slot .new-dot { top: 4px; right: 4px; z-index: 4; }
+@media (prefers-reduced-motion: reduce) { .new-dot { animation: none; } }
+
 .ward-cell.equipped::after {
   content: "✓"; position: absolute; top: 4px; right: 4px; width: 20px; height: 20px;
   background: var(--accent); color: var(--accent-ink); border-radius: 7px;

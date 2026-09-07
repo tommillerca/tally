@@ -999,7 +999,17 @@ export async function ownedCosmeticIds() {
  * untouched; the ownership check above still short-circuits for anyone who
  * already owns the item, so no existing save changes shape. */
 // eggRow's sibling, same reason: the row a cosmetic grant writes, without the write.
-export function cosRow(itemId, source) { return { id: `cos:${itemId}`, kind: 'cos', itemId, source, ts: Date.now() }; }
+/* `nw: 1` IS THE UNREAD MARK, AND IT LIVES ON THE ROW THAT IS ALREADY BEING
+   WRITTEN. R39-25: "the cosmetic you just won is never named again: 19 taps
+   across the Backpack, the Wardrobe and all 14 slot rails, nothing." The claim
+   toast at the reveal (v487) says WHAT you won; this is what lets you FIND it
+   afterwards. On the row rather than in a kv key of seen-timestamps because a
+   timestamp needs a backfill answer for every account that already exists, and
+   the honest one ("everything you own is new") is a wall of dots. An absent
+   flag reads as seen, so an existing collection stays quiet and only what is
+   granted from here on is marked. Cleared by clearNewInSlot() when the
+   Wardrobe opens that slot's grid; see js/app.js. */
+export function cosRow(itemId, source) { return { id: `cos:${itemId}`, kind: 'cos', itemId, source, ts: Date.now(), nw: 1 }; }
 export async function grantCosmetic(itemId, source) {
   const owned = await ownedCosmeticIds();
   if (owned.has(itemId)) return null;
@@ -1030,7 +1040,32 @@ export async function grantGear(gearId, source, opts = {}) {
   return g;
 }
 export function gearRow(gearId, source, opts = {}) {
-  return { id: `gear:${gearId}`, kind: 'gear', gearId, source, ts: Date.now(), ...(opts.slimed ? { slimed: true } : {}) };
+  return { id: `gear:${gearId}`, kind: 'gear', gearId, source, ts: Date.now(), nw: 1, ...(opts.slimed ? { slimed: true } : {}) };
+}
+
+/* THE UNREAD SET, AND HOW IT IS CLEARED. Both take the inv rows a caller
+   already has where one is available, so nothing here adds a second scan.
+   `newCosmeticIds` is what the Wardrobe's tiles and slot rail are marked from;
+   `newSlotCodes` is the same set collapsed to the 14 slot codes, which is all
+   the paper doll needs. */
+const invSlotOf = row => (row.kind === 'cos' ? (BH_BY_ID[row.itemId] || {}).slot
+  : row.kind === 'gear' ? (GEAR_BY_ID[row.gearId] || {}).slot : null);
+export async function newCosmeticIds(inv) {
+  inv = inv || await db.all('inv');
+  return new Set(inv.filter(r => r.nw).map(r => r.itemId || r.gearId));
+}
+export async function newSlotCodes(inv) {
+  inv = inv || await db.all('inv');
+  return new Set(inv.filter(r => r.nw).map(invSlotOf).filter(Boolean));
+}
+/* Clearing is a put per NEW row in that one slot, and only ever the rows that
+   still carry the flag, so an already-seen slot costs zero writes. The bound is
+   how many pieces landed in one slot since the last visit, which is small; a
+   whole-collection rewrite is not reachable from here. */
+export async function clearNewInSlot(slot) {
+  const rows = (await db.all('inv')).filter(r => r.nw && invSlotOf(r) === slot);
+  for (const r of rows) { const { nw, ...rest } = r; await db.put('inv', rest); }
+  return rows.length;
 }
 
 // Gear ids the player owns a SLIMED copy of (Glutton drops).
