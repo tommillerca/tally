@@ -93,11 +93,22 @@ try {
   await seed(page, { level: 24, coins: 60000 });
   await setWidth(page, 390, 844);
 
+  /* THE PET IS EQUIPPED THROUGH THE INSTANCE, NOT THE PAPER-DOLL SLOT.
+     Re-premised 2026-09-07. This used to seed with grantCosmetic + equip('C', id),
+     which loot.js has called "the v421 defect" since the Menagerie fix: it is
+     ownership plus a slot, and the equipped pet lives in petEquipped. v490
+     (#398, R39-1) made the slot FOLLOW that record: equippedPetIid heals eq.C to
+     the equipped instance's species, and the Stable calls it first on every
+     paint. So the hop to #/bonehead below quietly put C1 back and both BIG rows
+     went red on v490+ with `pet box 108px` (green at 49fc6878^, red at 49fc6878,
+     measured 2026-09-07). No player takes that path: the Stable's EQUIP button
+     is setEquippedPet, which writes both records. addPetInstance is the writer
+     hatchEgg, grantPet and buyPetItem all route through. */
   const wear = async (id) => {
     await page.evaluate(async (pid) => {
       const loot = await import('./js/loot.js');
-      await loot.grantCosmetic(pid, 'audit');
-      await loot.equip('C', pid);
+      const inst = await loot.addPetInstance(pid);
+      await loot.setEquippedPet(inst.iid);
     }, id);
     await page.evaluate(() => { location.hash = '#/bonehead'; });
     await sleep(300);
