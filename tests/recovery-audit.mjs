@@ -44,6 +44,8 @@ const { browser, page } = await boot(base);
    that would reach a real server is refused, so a stray write can never touch
    production from a test run. */
 let recoveryMode = 'miss';       // 'miss' = 404, 'meta' = a real-looking blob
+let unreachableRestore = false;
+let registerCalls = 0, backupCalls = 0;
 /* COUNT THE NETWORK CALLS. "It showed an error" does not distinguish a client
    that refused a malformed id from one that shipped it to the server and got a
    404 back: both surface a message. Proven by disabling the validator, where
@@ -55,6 +57,15 @@ page.on('request', req => {
   const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,PUT,POST,OPTIONS', 'Access-Control-Allow-Headers': '*' };
   const u = req.url();
   if (req.method() === 'OPTIONS') return req.respond({ status: 204, headers: cors, body: '' });
+  if (unreachableRestore && /\/register(?:\?|$)/.test(u)) {
+    registerCalls++;
+    return req.respond({ status: 200, contentType: 'application/json', headers: cors,
+      body: JSON.stringify({ playerId: 'recovered-player', handle: 'Recovered Bone', friendCode: 'BONE-TEST-0001', name: null }) });
+  }
+  if (unreachableRestore && /\/backup(?:\?|$)/.test(u)) {
+    backupCalls++;
+    return req.abort('failed');
+  }
   if (/\/recovery\//.test(u)) {
     recoveryCalls++;
     if (recoveryMode === 'miss') return req.respond({ status: 404, headers: cors, body: '{}' });
@@ -162,7 +173,34 @@ ok('INTACT the save survives a wrong phrase', afterWrong.logRows === before.logR
 ok('INTACT and the local identity was not swapped by a failed restore',
   afterWrong.identity === before.identity, `${afterWrong.identity} vs ${before.identity}`);
 
-/* 4. The player must be able to leave. A restore sheet that traps someone
+/* 4. UNREACHABLE: registration accepts the recovered key, then the backup
+      server disappears. This is the one path that reaches adoptIdentity's
+      restore latch. It must leave bootRestored false so the next boot retries. */
+unreachableRestore = true;
+registerCalls = 0; backupCalls = 0;
+const unreachable = await page.evaluate(async () => {
+  const social = await import('./js/social.js');
+  const { kvGet, kvSet } = await import('./js/db.js');
+  const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const bundle = {
+    privJwk: await crypto.subtle.exportKey('jwk', kp.privateKey),
+    pubJwk: await crypto.subtle.exportKey('jwk', kp.publicKey),
+    createdAt: Date.now(),
+  };
+  await kvSet('bootRestored', true); // stale one-shot state from the old identity
+  const result = await social.adoptIdentity(bundle);
+  return { result, bootRestored: await kvGet('bootRestored', null) };
+});
+unreachableRestore = false;
+ok('UNREACHABLE SAMPLE registration succeeded and the backup request reached the dead server',
+  registerCalls === 1 && backupCalls > 0, `register=${registerCalls} backup=${backupCalls}`);
+ok('UNREACHABLE the accepted identity reports the failed backup pull honestly',
+  unreachable.result?.ok === true && unreachable.result?.restored === false
+    && !['none', 'empty'].includes(unreachable.result?.pullReason), JSON.stringify(unreachable.result));
+ok('UNREACHABLE a failed backup pull does not burn the restore one-shot',
+  unreachable.bootRestored === false, `bootRestored=${JSON.stringify(unreachable.bootRestored)}`);
+
+/* 5. The player must be able to leave. A restore sheet that traps someone
       after a failed attempt is its own bug on a screen people reach in a panic. */
 await page.evaluate(() => document.querySelector('.sheet-close')?.click());
 await sleep(900);
