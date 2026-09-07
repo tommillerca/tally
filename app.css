@@ -645,7 +645,19 @@ svg { display: block; }
   position: fixed; bottom: calc(var(--sab) + 96px); left: 50%; transform: translateX(-50%);
   background: var(--surface-3); border: 1px solid var(--line-strong); color: var(--text);
   font-size: 15px; font-weight: 600; padding: 11px 18px; border-radius: 22px;
-  z-index: 80; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  /* ABOVE THE FULL-SCREEN VEILS (R43-7, 2026-09-07). At z-index 80 the toast sat
+     under every takeover this app raises: the daily wheel (.dw, 210, up at 3.7s
+     and it never times out), the gate intro and the mimic (200), the graverise
+     (210), the wanderer (220), the drop veil (300) and a takeover sheet (310).
+     Measured 3 of 3 returning boots with the one line telling a lapsed player
+     they were PAID for the day they walked away drawn underneath the wheel, and
+     the fault is not the wheel's: a message channel that is invisible whenever
+     anything is on top of it is broken for every caller, not just this one, so
+     the fix goes here rather than in the wheel's timing. 320 clears every veil
+     and stays under the splash (400), which is the one cover a message must not
+     jump. Safe BECAUSE of the rule below: pointer-events: none, so raising it
+     cannot take a tap from the wheel it now paints over. */
+  z-index: 320; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   /* IT STOPS EATING TAPS. Fixed, z-index 80, and until 2026-08-31 it was
      hit-testable, so for the 2.2 to 3.6 seconds a message is up
      document.elementFromPoint over the Bonehead, Stable and Kitchen doors on
@@ -673,6 +685,25 @@ svg { display: block; }
    the card rides --sab the same way this rule does) with a 14px gap.
    Guard: tests/toast-map-audit.mjs. */
 body:has(.map-act:not([hidden])) .toast { bottom: calc(var(--sab) + 158px); }
+
+/* AND IT MUST NOT LAND ON A SHEET'S CONTROLS EITHER. R41-20: the welcome-kit
+   toast fires 1.2s after onboarding and a new player is five taps from their
+   first fight, so it arrives on top of the move tray it is not talking about.
+   Measured 2026-09-07 against a real fight: at 375x667 the toast (26.3,506.5
+   322.5x64.5) covered Jab whole (110.3x54.8 of a 110.3x54.8 button) and 100.0px
+   of Peck the Eyes and Swing; at 393x852 it took 104.8x27.8 of Haymaker and
+   116.3x27.8 of Bone Guard.
+   Fixed generally rather than for the fight tray: EVERY sheet in this app puts
+   its controls at the bottom (the move tray, a shop's buy row, the Wardrobe's
+   bar, every .btn-row) and the toast's shipped seat is 96px off the bottom, so
+   the collision is structural, not the Pit's. While a sheet is up the toast
+   takes a seat under the sheet head instead: sheet top is --sat + 24, the grab
+   handle is 15.5 and the head is ~62, so 110 clears it. A short bottom sheet
+   leaves the toast over the backdrop, which asks nothing of anybody.
+   Keyed on a sheet EXISTING rather than on any route or class, the same way the
+   .map-act rule is keyed on the card being visible.
+   Guard: tests/toast-sheet-audit.mjs. */
+body:has(#sheets .sheet) .toast { top: calc(var(--sat) + 110px); bottom: auto; }
 
 /* progress bar (ocr) */
 .progress { height: 6px; border-radius: 4px; background: var(--surface-3); overflow: hidden; margin: 10px 0; }
@@ -741,6 +772,13 @@ a { color: var(--accent); text-decoration: none; }
 
 .cele-big { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; }
 .cele-sub { font-size: 14px; color: var(--text-2); font-weight: 600; margin-top: 3px; }
+/* R41-21. The streak card's own line, and the counts under it. Deliberately
+   quiet: the number is the headline, this is the sentence and the receipt.
+   .bh-pill is the app's existing chip, the same one the level-up rewards row
+   and the Wardrobe's "N found" wear, so nothing new is being taught here. */
+.cele-line { margin-top: 12px; font-size: 14.5px; line-height: 1.45; color: var(--text-2); padding: 0 10px; }
+.cele-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; margin-top: 14px; padding: 0 6px; }
+
 .cele-badge {
   display: flex; align-items: center; gap: 12px; text-align: left;
   background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px;
@@ -988,6 +1026,23 @@ a { color: var(--accent); text-decoration: none; }
 .map-spawn { position: relative; }
 .map-spawn .spawn-ing { position: absolute; bottom: -6px; right: -8px; font-size: 13px; line-height: 1; filter: drop-shadow(0 1px 1px rgba(0,0,0,.6)); }
 .ro-ing { color: var(--text-2); font-weight: 600; }
+/* R39-25's unread mark. THE APP ALREADY HAS THIS LANGUAGE and this borrows it
+   rather than inventing a second one: accent plate, --bg ring, the crewBadgePop
+   the tab badge uses, sized down to a dot because it counts nothing.
+   TOP-LEFT on a tile, which is the one free corner: the equipped tick owns
+   top-right (.ward-cell.equipped::after), the tier letter bottom-left
+   (.ward-rar) and the colourway count bottom-right (.ward-fam-n). On a paper-doll
+   slot it goes top-right, clear of .pd-mog (bottom-left) and of the label
+   (.pd-tag, bottom), above .pd-gear's top strip so it is never painted over. */
+.new-dot {
+  position: absolute; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 2px var(--bg, #0d0c12);
+  pointer-events: none; animation: crewBadgePop 0.3s ease;
+}
+.ward-cell .new-dot { top: 5px; left: 5px; z-index: 3; }
+.pd-slot .new-dot { top: 4px; right: 4px; z-index: 4; }
+@media (prefers-reduced-motion: reduce) { .new-dot { animation: none; } }
+
 .ward-cell.equipped::after {
   content: "✓"; position: absolute; top: 4px; right: 4px; width: 20px; height: 20px;
   background: var(--accent); color: var(--accent-ink); border-radius: 7px;
@@ -2465,6 +2520,37 @@ body::before {
    there. 600px is the same breakpoint the discarded shrink used. */
 @media (max-height: 600px) {
   .fight-body { position: relative; overflow-y: auto; }
+  /* R43-6: THE FOURTH MOVE HAS TO BE PRESSABLE WHERE IT SITS.
+     Measured at 320x568 on a real den fight, before this, every number off the
+     render: .fight-body is 465.5px and its parts are arena 283 + meta 52 +
+     tray(margin 12) + endrow(margin 8, 58.8) + 10px pad, which leaves the tray
+     41.7px and its own floor then forced it to 96 and overflowed the column.
+     The four moves are two 68.3px rows, 145px of content, so Bone Guard
+     rendered at 527.8 to 596 and the tray clipped at 547.5: its centre hit
+     div#fightBody, a real click there did nothing, and the log still read
+     "Round one. Your turn." The sticky End Turn row (499.3 to 558) was over the
+     rest of it. Both larger viewports hand the tray its full 143px and all four
+     moves answer at rest.
+     TWO FULL ROWS ARE NOT AFFORDABLE HERE and this is the one place the
+     2026-08-16 "pin, do not shrink" call has to bend: 145px of tray needs 105px
+     from somewhere and the only line item that size is the arena. Everything
+     else is squeezed first (meta margins 20 -> 8, the two row margins 20 -> 14)
+     and the arena gives the remaining 63, 283 -> 220, at this breakpoint only.
+     That buys a 122px tray: row one whole, row two exposed 46px, above the 40px
+     tap floor, with its centre inside the tray, so ALL FOUR MOVES ARE HIT AT
+     REST at 320x568. The tray still scrolls for the last 23px of row two and
+     still draws its fade, and the type, the hints and the button sizes are
+     untouched. The figures scale with the arena by design (container-type:size
+     above), so nothing needs re-derivation. */
+  .fight-body > .arena { height: 220px; }
+  .fight-body > .fight-meta { margin: 4px 2px 4px; }
+  .fight-body > .fight-actions { margin-top: 8px; min-height: 0; }
+  .fight-body > .fight-endrow { margin-top: 6px; }
+  /* Snap so a rest position is always a whole row: the tray can still only show
+     one and a half, and stopping between them is what put a button's centre in
+     dead space in the first place. */
+  .fight-actions { scroll-snap-type: y proximity; }
+  .fight-act { scroll-snap-align: start; }
   .fight-body > .fight-endrow {
     position: sticky; bottom: 0; z-index: 4;
     /* opaque, or the tray scrolls through the button it is supposed to sit under */
@@ -7922,10 +8008,47 @@ body::before {
    ONBOARDING (market-quality-mockups/onb-*.html, approved 2026-08-07).
    The first 90 seconds: sell the product, hand over the character, capture the
    plan honestly. Launch funnel: every step tracks. ============================================================================ */
+/* THE STEP OWNS THE WHOLE SCREEN BOX, like the Boneyard route above.
+   #screen pads `calc(var(--sat) + 14px) var(--pad) 24px` and .onb pads
+   `calc(var(--sat) + 22px) 22px` on top of that, so the onboarding counted the
+   notch TWICE (the same double-count the .screen--map note calls out) and the
+   footer's full-bleed negative margins stopped 16px short of the screen at both
+   edges. Measured at 320x568 before this: .onb runs 14 to 582 against a 568
+   viewport, so a 100dvh step hung 14px past the fold and clipped the last line
+   of the footer, and the footer's backing painted 38 to 282 of 320.
+   A :has() rule rather than a class, because renderOnboarding does not go
+   through route() and route() is what clears the screen-- classes: a class set
+   here would leak onto Today. .survey-feat and body:has(.map-act) above already
+   rely on :has. */
+.screen:has(> .onb) { padding: 0; }
 .onb {
-  position: relative; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column;
-  align-items: center; padding: calc(var(--sat) + 22px) 22px calc(var(--sab) + 24px);
+  position: relative; height: 100vh; height: 100dvh; display: flex; flex-direction: column;
+  align-items: center; padding: calc(var(--sat) + 22px) 22px 0;
   max-width: 600px; margin: 0 auto;
+}
+/* R43-4 / R43-5: THE STEP OWNS TWO BANDS, IT DOES NOT OVERLAY ONE ON THE OTHER.
+   The sticky footer below fixed R39-15 (the CTA under the fold) by floating an
+   OPAQUE 160px bar up to the scrollport edge, which is an overlay: at 320x568 it
+   painted over the bottom 159.8px of every step at every scroll offset. Measured
+   on the shipped tip: the nameplate on THIS ONE'S YOURS was 0% visible, a real
+   click at the reroll's coordinates left the name unchanged, and recovering the
+   plate took 144px of scroll. On THE PLAN a selected chip sat behind the footer
+   at all three viewports, 393x852 included.
+   Padding on the scroller cannot fix an overlay: reserved space at the END of
+   the document does nothing at scrollTop 0, which is where the defect lives.
+   So the content gets its OWN scrollport and the footer sits beside it, static,
+   as the second child of a viewport-height column. That is why neither defect
+   can come back: the button is a flex item of a box that is exactly one
+   viewport tall, so it is on screen at first paint by construction and does not
+   depend on the content fitting; and the content is clipped by a scrollport
+   that ends where the footer begins, so nothing can be underneath it. */
+.onb-scroll {
+  flex: 1; min-height: 0; width: 100%;
+  display: flex; flex-direction: column; align-items: center;
+  overflow-y: auto; overscroll-behavior: contain;
+  /* bleed to the screen edges: the parent's 22px gutter is re-applied inside so
+     scrolled content keeps its margin without the scrollport stopping short */
+  margin: 0 -22px; padding: 0 22px 10px;
 }
 .onb-in { animation: onbIn .26s ease-out; }
 @keyframes onbIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -7975,15 +8098,21 @@ body::before {
    height, so there is no leftover space to push into and the button just sits
    wherever the content stack ends: measured 22px under the fold at 375x667 and
    293px under it on the plan step, with no scroll cue either time.
-   sticky, not fixed: #screen is the scrolling ancestor (see the #app comment
-   above on why a position:fixed bottom bar detaches from iOS momentum scroll),
-   and a sticky element is laid out by the scroller itself so it can't detach.
-   Measured on a throwaway probe that a sticky bottom:0 footer inside a taller-
-   than-viewport flex column already sits flush with the scrollport's bottom
-   edge at scrollTop 0, so this fixes first paint, not just later scrolling.
+   The first fix for it was `position: sticky; bottom: 0`, and that overshot:
+   see R43-4 below. The footer is a static flex item of a viewport-height column
+   now, which pins it to the fold without overlaying anything.
    The negative margin + padding bleeds the backing colour to the screen edges
    (the parent's 22px gutter would otherwise show scrolled content beside it). */
-.onb-foot { width: 100%; margin-top: auto; position: sticky; bottom: 0; z-index: 2; margin-left: -22px; margin-right: -22px; padding: 14px 22px calc(var(--sab) + 16px); background: var(--bg); }
+/* R43-4: static, not sticky. See the .onb-scroll note above for why the sticky
+   form of this rule was an overlay and what replaced it. The footer keeps the
+   full-bleed backing (a hairline separates it from the scrolled content) and it
+   owns the bottom safe-area inset, which is why .onb's padding-bottom is 0. */
+/* align-self + width:auto, NOT width:100%: .onb is a centred flex column, and a
+   100% width is 100% of its CONTENT box, so the negative margins this rule has
+   carried since it was written moved nothing and the "full bleed" backing
+   measured 22 to 298 of a 320px screen. Stretching to the cross axis first is
+   what lets them reach the edges. */
+.onb-foot { width: auto; align-self: stretch; flex: none; z-index: 2; margin-left: -22px; margin-right: -22px; padding: 14px 22px calc(var(--sab) + 16px); background: var(--bg); border-top: 1px solid var(--line); }
 .onb-foot .btn { width: 100%; }
 .onb-quiet { display: block; width: 100%; text-align: center; font-size: 13px; font-weight: 700; color: var(--text-3); margin-top: 13px; line-height: 1.5; }
 .onb-quiet b { color: var(--coral); }
@@ -8011,6 +8140,33 @@ body::before {
 .onb-plan h1 { align-self: flex-start; text-align: left; font-size: 30px; }
 .onb-plan #pfHost { width: 100%; }
 .onb-plan .btn { width: 100%; margin-top: 4px; }
+
+/* SHORT PHONES GET A COMPACT FOOTER, NOT A SMALLER BUTTON. At 320x568 the step-3
+   footer measured 183.3px, a third of the screen, and all of it above the fold
+   now that it no longer overlaps. The button keeps its size and its 40px floor;
+   only the quiet secondary line tightens. */
+@media (max-height: 600px) {
+  .onb-foot { padding-top: 10px; padding-bottom: calc(var(--sab) + 10px); }
+  .onb-quiet { font-size: 12px; margin-top: 8px; line-height: 1.35; }
+  /* R43-4, THE OTHER HALF. Un-overlaying the footer stops the nameplate being
+     PAINTED OVER; it does not by itself put it on screen. Measured at 320x568
+     with the footer static: the step-2 scroller is 395px and its content 646px,
+     and the nameplate starts at 432px, so the screen titled THIS ONE'S YOURS
+     still opened with no name on it, one scroll away instead of one overlay
+     away. The overflow is 251px and the poster is 240 of it, so the poster is
+     where it comes from: the character shrinks on a 568px phone, the NAME does
+     not, because the name is what this step is for. Type stays on the design
+     scale (34px display, above the 30px THE PLAN already ships) and nothing
+     here is a tap target. The earns row is deliberately left to peek below the
+     fold: it is supporting copy, and a half-row is the scroll cue. */
+  .onb-dots { margin-bottom: 10px; }
+  .onb h1 { font-size: 34px; }
+  .onb-back ~ h1 { margin-top: 40px; }
+  .onb-poster { min-height: 140px; margin: 10px 0; }
+  .onb-nameplate { margin-top: 10px; }
+  .onb-earns { margin: 10px 0 10px; }
+  .onb-earn { padding: 8px 4px 6px; }
+}
 
 /* ---- Phase 4: FEEL. Exits for things that only knew how to enter. ---- */
 .sheet.closing { animation: sheetOut .2s ease-in forwards; }

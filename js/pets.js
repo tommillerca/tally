@@ -5,8 +5,10 @@
 // Pure module: no DOM. The engine (pit.js) consumes buildBattlePet() output and
 // resolves abilities via petAbilityEffect(); the family passive folds into
 // resolveHit/dealDamage like a talent.
+import { BH_BY_ID } from '../data/boneheadz.js';
 
 // ---- families (fixed per pet, echoing hunter specs) ----
+// cooldown is authoritative for the manual special action in PET_ACTIONS.
 export const PET_FAMILIES = {
   hound: {
     key: 'hound', name: 'Hound', role: 'DPS', color: '#ff7a45',
@@ -17,7 +19,7 @@ export const PET_FAMILIES = {
   warden: {
     key: 'warden', name: 'Warden', role: 'Support', color: '#8fd0ff',
     blurb: 'Shields and mends you.',
-    cooldown: 3,
+    cooldown: 2,
     passive: 'damageTaken',         // -X% damage you take
   },
   imp: {
@@ -46,7 +48,42 @@ export const PET_ASSIGN = {
      fight at all, not because the family was designed for her. */
   C6: 'hound',    // Bumbleseal (Gwart's Emporium, 50,000 coins)
 };
-export function familyOf(petId) { return PET_FAMILIES[PET_ASSIGN[petId] || 'hound']; }
+export function familyOf(petId) {
+  const family = Object.hasOwn(PET_ASSIGN, petId) ? PET_ASSIGN[petId] : 'hound';
+  requirePetFamily(family);
+  return PET_FAMILIES[family];
+}
+
+function hasPetFamily(family) {
+  return Object.hasOwn(PET_FAMILIES, family) && PET_FAMILIES[family]?.key === family
+    && Object.hasOwn(PET_ACTIONS, family) && Array.isArray(PET_ACTIONS[family])
+    && Object.hasOwn(PET_ABILITIES, family) && typeof PET_ABILITIES[family] === 'function'
+    && Object.hasOwn(PET_TREES, family) && Array.isArray(PET_TREES[family]);
+}
+
+function requirePetFamily(family) {
+  if (!hasPetFamily(family)) throw new Error(`Unknown or incomplete pet family: ${String(family)}`);
+}
+
+// Species must have both renderable catalogue identity and a complete combat kit.
+export function isKnownPet(petId) {
+  return typeof petId === 'string' && Object.hasOwn(PET_ASSIGN, petId)
+    && Object.hasOwn(BH_BY_ID, petId) && BH_BY_ID[petId].slot === 'C'
+    && Object.hasOwn(PET_STATS, petId) && hasPetFamily(PET_ASSIGN[petId]);
+}
+
+// Keep the first legal choice in each tier, in the caller's order. Invalid save
+// data is discarded here; callers decide where to persist the returned subset.
+export function legalPicks(petId, level, picks) {
+  if (!isKnownPet(petId) || !Number.isFinite(level) || !Array.isArray(picks)) return [];
+  const tree = PET_TREES[PET_ASSIGN[petId]], seen = new Set();
+  return picks.filter(id => {
+    const row = tree.find(row => level >= row.tier && row.opts.some(opt => opt.id === id));
+    if (!row || seen.has(row.tier)) return false;
+    seen.add(row.tier);
+    return true;
+  });
+}
 
 // Pets that HOVER in mid-air in combat — only genuinely airborne creatures (the
 // flying duck C2). The cloud (C1) also flies but carries a baked ground shadow so
@@ -204,10 +241,14 @@ export function petLevel(stepsSinceHatch) {
   for (let i = 1; i < PET_LEVEL_STEPS.length; i++) { if (s >= PET_LEVEL_STEPS[i]) lvl = i + 1; else break; }
   return lvl;
 }
-// talent tiers unlock at pet level 2 / 4 / 6 / 8 / 10 (one choice every two levels)
-export const PET_TIERS = [2, 4, 6, 8, 10];
-export function unlockedTiers(level) {
-  return PET_TIERS.filter(t => level >= t);
+// Trees own the schedule. The aggregate remains available for existing callers;
+// pass a species id for celebrations and UI describing one pet's actual tree.
+function treeTiers(rows) { return [...new Set(rows.map(row => row.tier))].sort((a, b) => a - b); }
+export const PET_TIERS = treeTiers(Object.values(PET_TREES).flat());
+export function unlockedTiers(level, petId) {
+  const rows = petId === undefined ? Object.values(PET_TREES).flat()
+    : (isKnownPet(petId) ? PET_TREES[PET_ASSIGN[petId]] : []);
+  return treeTiers(rows).filter(t => level >= t);
 }
 
 // ---- SPECIES SIGNATURE: a unique capstone per PET (not family), auto-unlocked at
@@ -332,12 +373,16 @@ export function rollMorph(owned) {
 // (rarity + per-pet tilt + shiny) rides on `.stats` so pit.js's makePetBody stays
 // a pure consumer and the pet-card UI reads the exact same numbers.
 export function buildBattlePet(petId, level = 1, picks = [], opts = {}) {
-  if (!petId || !PET_ASSIGN[petId]) return null;
+  if (!petId || !Object.hasOwn(PET_ASSIGN, petId)) return null;
   const fam = familyOf(petId);
   const has = id => picks.includes(id);
   const shiny = !!opts.shiny;
   const lineage = Math.max(0, Math.floor(opts.lineage || 0));
   const stats = petBattleStats(petId, level, shiny, lineage);
+  // Deprecated auto-companion field: retain the serialized battle-pet contract,
+  // including Warden's historical 3. No engine reads it; manual specials use
+  // PET_ACTIONS.cd, sourced from PET_FAMILIES. Remove only with a schema change.
+  const legacyCooldown = fam.key === 'warden' ? 3 : fam.cooldown;
   return {
     id: petId,
     family: fam.key,
@@ -354,7 +399,7 @@ export function buildBattlePet(petId, level = 1, picks = [], opts = {}) {
       * (fam.key === 'warden' && has('w-guardstance') ? 1.35 : 1)
       * (fam.key === 'warden' && has('w-immortal') ? 1.5 : 1)
       * (fam.key === 'imp' && has('i-showoff') ? 2 : 1),
-    cooldown: fam.cooldown === 2 && has('h-pack') ? 1 : fam.cooldown,
+    cooldown: legacyCooldown === 2 && has('h-pack') ? 1 : legacyCooldown,
     picks: new Set(picks),
     signature: petSignature(petId),                 // the species capstone (for UI + effect)
     signatureActive: level >= PET_MAX_LEVEL,         // lit only on a fully-maxed pet
@@ -368,31 +413,40 @@ export function buildBattlePet(petId, level = 1, picks = [], opts = {}) {
 // tuned petAbilityEffect below.
 export const PET_ACTIONS = {
   hound: [
-    { id: 'bite', name: 'Bite', kind: 'special', cd: 2, desc: 'Savage bite: damage + poison' },
+    { id: 'bite', name: 'Bite', kind: 'special', cd: PET_FAMILIES.hound.cooldown, desc: 'Savage bite: damage + poison' },
     { id: 'nip', name: 'Nip', kind: 'basic', desc: 'Quick chip damage' },
     { id: 'guard', name: 'Guard', kind: 'guard', desc: 'Steady up (heal a little)' },
   ],
   warden: [
-    { id: 'shield', name: 'Shield', kind: 'special', cd: 2, desc: 'Ward + mend you' },
+    { id: 'shield', name: 'Shield', kind: 'special', cd: PET_FAMILIES.warden.cooldown, desc: 'Ward + mend you' },
     { id: 'tend', name: 'Tend', kind: 'basic', desc: 'Small heal for you' },
     { id: 'guard', name: 'Guard', kind: 'guard', desc: 'Steady up (heal a little)' },
   ],
   imp: [
-    { id: 'hex', name: 'Hex', kind: 'special', cd: 2, desc: 'Curse: weaken + blind/mark' },
+    { id: 'hex', name: 'Hex', kind: 'special', cd: PET_FAMILIES.imp.cooldown, desc: 'Curse: weaken + blind/mark' },
     { id: 'zap', name: 'Zap', kind: 'basic', desc: 'Chip damage + a little Hype for you' },
     { id: 'guard', name: 'Guard', kind: 'guard', desc: 'Steady up (heal a little)' },
   ],
 };
-export function petActionMeta(family) { return PET_ACTIONS[family] || PET_ACTIONS.hound; }
+export function petActionMeta(family) {
+  requirePetFamily(family);
+  return PET_ACTIONS[family];
+}
 
 // Resolve the pet's on-use ability. Pure: returns a list of intents the engine
 // applies (so the engine keeps its dealDamage/status authority). `self`/`foe`
 // are the fighters; `atkDamageBase` scales the hound bite off the owner's power.
 export function petAbilityEffect(pet, self, foe) {
+  requirePetFamily(pet.family);
   const has = id => pet.picks.has(id);
   const lvl = pet.level;
   const sig = id => pet.signatureActive && pet.id === id; // species signature is lit
-  if (pet.family === 'hound') {
+  return PET_ABILITIES[pet.family]({ has, lvl, sig, self, foe });
+}
+
+// A new family needs an explicit effect as well as actions and a tree.
+const PET_ABILITIES = {
+  hound({ has, lvl, sig, self, foe }) {
     let base = Math.round((2 + lvl * 0.7) * self.d.powerMult * (has('h-savage') ? 1.35 : 1));
     const bites = (has('h-frenzy') && foe.hp <= foe.d.maxHp * 0.25) ? 2 : 1;
     let stacks = (has('h-rabid') ? 2 : 1) + (has('h-plague') ? 1 : 0);
@@ -409,8 +463,8 @@ export function petAbilityEffect(pet, self, foe) {
       lifesteal: has('h-bloodscent') ? 0.06 : 0,
       poison: { per, turns: 3 + (has('h-gore') ? 2 : 0), stacks },
     };
-  }
-  if (pet.family === 'warden') {
+  },
+  warden({ has, lvl, sig, self }) {
     // tuned down for the pet-as-body era: the pet already adds a soak layer, so
     // its support kit is lighter than the v34 companion version
     let shield = Math.round((7 + lvl * 1.5) * (has('w-bulwark') ? 1.5 : 1) * (has('w-fortify') ? 1.4 : 1));
@@ -424,16 +478,17 @@ export function petAbilityEffect(pet, self, foe) {
       armLastStand: sig('C2'),
       lastStandHeal: sig('C2') ? 0.4 : 0,
     };
-  }
-  // imp
-  const pct = 0.12 * (has('i-doublehex') ? 1.5 : 1) * (has('i-deephex') ? 1.5 : 1) * (sig('C1') ? 1.2 : 1);
-  return {
-    kind: 'petdebuff', weakenPct: pct,
-    turns: (has('i-doublehex') ? 3 : 2) + (has('i-oblivion') ? 2 : 0),
-    blind: has('i-jinx') || has('i-havoc'),
-    staminaDrain: has('i-drain') ? 16 : (has('i-siphon') ? 8 : 0),
-    mark: has('i-mark'), stagger: has('i-trick') || has('i-havoc'),
-    // C1 Cosmic Storm: the curse also lays a burning storm on the foe
-    burn: sig('C1') ? { per: 6 + lvl, turns: 3 } : null,
-  };
-}
+  },
+  imp({ has, lvl, sig }) {
+    const pct = 0.12 * (has('i-doublehex') ? 1.5 : 1) * (has('i-deephex') ? 1.5 : 1) * (sig('C1') ? 1.2 : 1);
+    return {
+      kind: 'petdebuff', weakenPct: pct,
+      turns: (has('i-doublehex') ? 3 : 2) + (has('i-oblivion') ? 2 : 0),
+      blind: has('i-jinx') || has('i-havoc'),
+      staminaDrain: has('i-drain') ? 16 : (has('i-siphon') ? 8 : 0),
+      mark: has('i-mark'), stagger: has('i-trick') || has('i-havoc'),
+      // C1 Cosmic Storm: the curse also lays a burning storm on the foe
+      burn: sig('C1') ? { per: 6 + lvl, turns: 3 } : null,
+    };
+  },
+};

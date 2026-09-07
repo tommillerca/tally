@@ -26,6 +26,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { spawn, execSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -979,6 +980,12 @@ export async function serveTree(root, { timeoutMs = 15000, forcePort = null } = 
     s.once('error', rej);
     s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => res(port)); });
   });
+  /* A random file in the requested tree proves identity even when two checkouts
+     contain byte-identical commits. A hash of repository content cannot do that. */
+  const proofName = `.serve-tree-${randomUUID()}`;
+  const proofPath = path.join(root, proofName);
+  const proofToken = randomUUID();
+  fs.writeFileSync(proofPath, proofToken, { flag: 'wx' });
   const srv = spawn('python3', ['-m', 'http.server', String(port), '--bind', '127.0.0.1'],
     { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
   /* Track BEFORE anything downstream can throw, same reason as boot(): the caller
@@ -987,16 +994,50 @@ export async function serveTree(root, { timeoutMs = 15000, forcePort = null } = 
   let err = '';
   srv.stderr.on('data', d => { err += d; });
   srv.stdout.on('data', () => {});
+  /* THE CHILD MUST NOT HOLD THE EVENT LOOP OPEN. A live child process, plus the
+     two piped stdio sockets these listeners put into flow mode, are all refed
+     handles, so an audit that falls off the end of its file after browser.close()
+     never exits: node has nothing left to do and stays alive anyway. Measured on
+     contrast-audit.mjs, which self-serves via boot(): report printed, no
+     failures, then >30 minutes alive with zero open TCP handles, killable only by
+     SIGTERM, which reports as exit 143 and reads as a red audit. It is in the
+     FULL tier of the release gate, so that stalls the gate.
+     Fixed here rather than in each audit because boot() self-serves whenever no
+     URL is given and never hands the handle back (see boot()). Most audits end
+     with an explicit process.exit, which masks this; the ones whose success path
+     falls off the end of the file do not, and a dozen of them can self-serve
+     (arena-static-probe, crew-cheers, gwart-guide, news-banner, both wardrobe
+     ones, ...). Measured: debuff-chips-audit, which self-serves and DOES call
+     process.exit(0), exits 0 either way.
+     Liveness only: this changes nothing about which tree is served or measured,
+     and the callers that do call close() still do. The exit hooks below (and
+     _trackServer's reaper) still kill the child, so unref cannot orphan it. */
+  srv.unref();
+  srv.stderr.unref?.();
+  srv.stdout.unref?.();
   let exited = null;
   srv.on('exit', (code, sig) => { exited = sig || `exit ${code}`; });
 
   const url = `http://127.0.0.1:${port}/`;
   const t0 = Date.now();
-  for (;;) {
-    if (exited) throw new Error(`serveTree: python died before serving ${url} (${exited}). stderr: ${err.trim().split('\n').pop() || '(silent)'}`);
-    try { if ((await fetch(url + 'index.html')).ok) break; } catch { /* not up yet */ }
-    if (Date.now() - t0 > timeoutMs) { srv.kill('SIGKILL'); throw new Error(`serveTree: nothing answered on ${url} within ${timeoutMs}ms. stderr: ${err.trim() || '(silent)'}`); }
-    await new Promise(r => setTimeout(r, 100));
+  try {
+    for (;;) {
+      if (exited) throw new Error(`serveTree: python died before serving ${url} (${exited}). stderr: ${err.trim().split('\n').pop() || '(silent)'}`);
+      try {
+        const answer = await fetch(url + encodeURIComponent(proofName), { cache: 'no-store' });
+        const body = await answer.text();
+        if (answer.ok && body === proofToken) break;
+        srv.kill('SIGKILL');
+        throw new Error(`serveTree: something else is already serving that port (${url}) instead of ${path.resolve(root)}; the audit would otherwise have graded a different tree. Stop the server on port ${port} and retry.`);
+      } catch (e) {
+        if (/^serveTree: something else is already serving that port/.test(e.message)) throw e;
+        /* A refused connection means python is not ready yet. */
+      }
+      if (Date.now() - t0 > timeoutMs) { srv.kill('SIGKILL'); throw new Error(`serveTree: nothing answered on ${url} within ${timeoutMs}ms. stderr: ${err.trim() || '(silent)'}`); }
+      await new Promise(r => setTimeout(r, 100));
+    }
+  } finally {
+    fs.unlinkSync(proofPath);
   }
   return { url, port, close: () => { try { srv.kill('SIGKILL'); } catch { /* already gone */ } } };
 }

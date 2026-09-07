@@ -84,42 +84,47 @@ export const VISOR_BLOCKED_EYES = new Set(['E11-1', 'E11-2', 'ES22']);
 /* THIRTY-TWO TEAMS. Invented places and mascots in the Boneheadz register, no
  * real league's cities or names. `a` is the primary (the helmet shell, the
  * jersey numbers, the cleats), `b` the secondary (the helmet stripe and badge,
- * the jersey trim). Checked, not asserted: primaries pairwise CIE76 dE >= 12
- * (min 12.5) so two shells read apart at 24px, and a/b WCAG contrast >= 3:1
- * (min 3.02). Eight alternates live in docs/FOOTBALL-KIT.md. */
+ * the jersey trim). 2026-09-07, Tom: "go back through the football colours and
+ * try to make them closer to the actual nfl teams, some are very far off": each
+ * pair is now the published brand colours of the franchise the team stands in
+ * for, helmet shell first (the mapping is docs/FOOTBALL-KIT.md 4b, internal).
+ * Checked, not asserted: every two teams' PAIRS are CIE76 dE >= 12 apart, a-a
+ * plus b-b (min 17.59) so two discs read apart at 24px, and a/b CIE76 dE >= 40
+ * (min 44.46) so the two halves read as two colours. Three franchise pairs
+ * share a shell colour, so the one-colour cleats come in 29, not 32. */
 export const FOOTBALL_TEAMS = [
-  { id: 'boneyard-bruisers',      name: 'Boneyard Bruisers',      a: '#14213D', b: '#F2C14E' },
-  { id: 'hollow-howlers',         name: 'Hollow Howlers',         a: '#4B2C83', b: '#9BE564' },
-  { id: 'marrow-mammoths',        name: 'Marrow Mammoths',        a: '#7A2E2E', b: '#F1E3C6' },
-  { id: 'gravel-gulls',           name: 'Gravel Gulls',           a: '#9AA3AB', b: '#2B2F33' },
-  { id: 'ember-coast-kilns',      name: 'Ember Coast Kilns',      a: '#C8401F', b: '#FFD27F' },
-  { id: 'rustwater-rats',         name: 'Rustwater Rats',         a: '#8C4A1E', b: '#B9E2F5' },
-  { id: 'cinderfall-crows',       name: 'Cinderfall Crows',       a: '#1B1B1F', b: '#E84C3D' },
-  { id: 'saltmarsh-serpents',     name: 'Saltmarsh Serpents',     a: '#1E6B4E', b: '#F7E27A' },
-  { id: 'ironhaven-anvils',       name: 'Ironhaven Anvils',       a: '#5B6B7F', b: '#F4F4F4' },
-  { id: 'frostbite-foxes',        name: 'Frostbite Foxes',        a: '#FF7F3F', b: '#1B2A3A' },
-  { id: 'thornback-toads',        name: 'Thornback Toads',        a: '#5B7A1E', b: '#FFB7C5' },
-  { id: 'duskmoor-moths',         name: 'Duskmoor Moths',         a: '#7D6BA0', b: '#F4E9D8' },
-  { id: 'copperhill-cobras',      name: 'Copperhill Cobras',      a: '#B5651D', b: '#1E2D2B' },
-  { id: 'peatbog-pikes',          name: 'Peatbog Pikes',          a: '#3E4A1F', b: '#E7D98A' },
-  { id: 'lanternlight-lynx',      name: 'Lanternlight Lynx',      a: '#E0912A', b: '#2B2118' },
-  { id: 'stormgate-stags',        name: 'Stormgate Stags',        a: '#2C5D8F', b: '#F0F0F0' },
-  { id: 'sootvale-salamanders',   name: 'Sootvale Salamanders',   a: '#4D4D4D', b: '#FF8A3D' },
-  { id: 'brightwater-barracudas', name: 'Brightwater Barracudas', a: '#007C80', b: '#FFE066' },
-  { id: 'nettlewood-nightjars',   name: 'Nettlewood Nightjars',   a: '#2E4A3F', b: '#D9B8FF' },
-  { id: 'quarry-hill-quakes',     name: 'Quarry Hill Quakes',     a: '#4E3A52', b: '#FFD166' },
-  { id: 'mudflat-minotaurs',      name: 'Mudflat Minotaurs',      a: '#8B5E3C', b: '#F5D6A8' },
-  { id: 'windrow-wasps',          name: 'Windrow Wasps',          a: '#F9DC1A', b: '#1C1C1C' },
-  { id: 'shalebank-skates',       name: 'Shalebank Skates',       a: '#2F6F7E', b: '#8FE3CF' },
-  { id: 'tallow-creek-tusks',     name: 'Tallow Creek Tusks',     a: '#3B2A20', b: '#EADBC8' },
-  { id: 'gallows-reach-ghouls',   name: 'Gallows Reach Ghouls',   a: '#D8CFA8', b: '#1E5A3A' },
-  { id: 'hexley-hexes',           name: 'Hexley Hexes',           a: '#8E2A6B', b: '#FFD9EC' },
-  { id: 'old-kiln-kestrels',      name: 'Old Kiln Kestrels',      a: '#A33A2A', b: '#F7C59F' },
-  { id: 'pinebarrow-badgers',     name: 'Pinebarrow Badgers',     a: '#F4F4F0', b: '#222222' },
-  { id: 'rimefall-rooks',         name: 'Rimefall Rooks',         a: '#7FB3D5', b: '#15243B' },
-  { id: 'bramblegate-bison',      name: 'Bramblegate Bison',      a: '#5E3517', b: '#E4A34A' },
-  { id: 'lowmarsh-lurkers',       name: 'Lowmarsh Lurkers',       a: '#7FA07A', b: '#1F3A2A' },
-  { id: 'glasswater-gannets',     name: 'Glasswater Gannets',     a: '#3A8FC7', b: '#FFFFFF' },
+  { id: 'boneyard-bruisers',      name: 'Boneyard Bruisers',      a: '#0B162A', b: '#C83803' },
+  { id: 'hollow-howlers',         name: 'Hollow Howlers',         a: '#4F2683', b: '#FFC62F' },
+  { id: 'marrow-mammoths',        name: 'Marrow Mammoths',        a: '#5A1414', b: '#FFB612' },
+  { id: 'gravel-gulls',           name: 'Gravel Gulls',           a: '#A5ACAF', b: '#000000' },
+  { id: 'ember-coast-kilns',      name: 'Ember Coast Kilns',      a: '#E31837', b: '#FFB81C' },
+  { id: 'rustwater-rats',         name: 'Rustwater Rats',         a: '#97233F', b: '#FFFFFF' },
+  { id: 'cinderfall-crows',       name: 'Cinderfall Crows',       a: '#000000', b: '#A71930' },
+  { id: 'saltmarsh-serpents',     name: 'Saltmarsh Serpents',     a: '#006778', b: '#D7A22A' },
+  { id: 'ironhaven-anvils',       name: 'Ironhaven Anvils',       a: '#125740', b: '#FFFFFF' },
+  { id: 'frostbite-foxes',        name: 'Frostbite Foxes',        a: '#FB4F14', b: '#002244' },
+  { id: 'thornback-toads',        name: 'Thornback Toads',        a: '#008E97', b: '#FC4C02' },
+  { id: 'duskmoor-moths',         name: 'Duskmoor Moths',         a: '#003594', b: '#FFA300' },
+  { id: 'copperhill-cobras',      name: 'Copperhill Cobras',      a: '#D50A0A', b: '#34302B' },
+  { id: 'peatbog-pikes',          name: 'Peatbog Pikes',          a: '#203731', b: '#FFB612' },
+  { id: 'lanternlight-lynx',      name: 'Lanternlight Lynx',      a: '#FF3C00', b: '#311D00' },
+  { id: 'stormgate-stags',        name: 'Stormgate Stags',        a: '#002C5F', b: '#FFFFFF' },
+  { id: 'sootvale-salamanders',   name: 'Sootvale Salamanders',   a: '#000000', b: '#FB4F14' },
+  { id: 'brightwater-barracudas', name: 'Brightwater Barracudas', a: '#0080C6', b: '#FFC20E' },
+  { id: 'nettlewood-nightjars',   name: 'Nettlewood Nightjars',   a: '#0C2340', b: '#4B92DB' },
+  { id: 'quarry-hill-quakes',     name: 'Quarry Hill Quakes',     a: '#101820', b: '#FFB612' },
+  { id: 'mudflat-minotaurs',      name: 'Mudflat Minotaurs',      a: '#03202F', b: '#A71930' },
+  { id: 'windrow-wasps',          name: 'Windrow Wasps',          a: '#D3BC8D', b: '#101820' },
+  { id: 'shalebank-skates',       name: 'Shalebank Skates',       a: '#004C54', b: '#A5ACAF' },
+  { id: 'tallow-creek-tusks',     name: 'Tallow Creek Tusks',     a: '#002244', b: '#B0B7BC' },
+  { id: 'gallows-reach-ghouls',   name: 'Gallows Reach Ghouls',   a: '#002244', b: '#69BE28' },
+  { id: 'hexley-hexes',           name: 'Hexley Hexes',           a: '#241773', b: '#9E7C0C' },
+  { id: 'old-kiln-kestrels',      name: 'Old Kiln Kestrels',      a: '#AA0000', b: '#B3995D' },
+  { id: 'pinebarrow-badgers',     name: 'Pinebarrow Badgers',     a: '#0B2265', b: '#A71930' },
+  { id: 'rimefall-rooks',         name: 'Rimefall Rooks',         a: '#869397', b: '#041E42' },
+  { id: 'bramblegate-bison',      name: 'Bramblegate Bison',      a: '#00338D', b: '#C60C30' },
+  { id: 'lowmarsh-lurkers',       name: 'Lowmarsh Lurkers',       a: '#101820', b: '#0085CA' },
+  { id: 'glasswater-gannets',     name: 'Glasswater Gannets',     a: '#0076B6', b: '#B0B7BC' },
 ];
 export const FOOTBALL_TEAM_BY_ID = Object.fromEntries(FOOTBALL_TEAMS.map(t => [t.id, t]));
 

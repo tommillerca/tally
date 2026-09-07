@@ -1,23 +1,70 @@
 # What each patch note claims, and what backs it
 
-Written 2026-08-24 after four notes in twenty-four hours told players things that
-were not true for them. `tests/claim-evidence-lint.mjs` reds the gate if the
-newest changelog entry has an item that is not answered here.
+## Lane D: pet family contract (2026-09-07)
 
-Two fields per claim, both required:
+1. PROOF: pet-family-audit.mjs | REACH: A family registered without actions or an ability implementation is refused by name at the battle seams. The original source silently supplied Hound's Bite and Imp's petdebuff to the dummy family; both guards were run red on a throwaway copy, then green on this checkout. The shared isKnownPet and legalPicks helpers reject unknown species and retain only unlocked, in-family choices, first pick per tier and original order. Each pick rule also failed independently when its predicate was removed from a throwaway copy. Consumer integration belongs to lanes A and C.
 
-- **PROOF** the audit that grades it. It must exist and be registered in the gate,
-  or citing it is citing a check nobody runs. `NONE <reason>` is allowed and
-  honest; a claim with no audit at all is not.
-- **REACH** how a PLAYER gets to it, written the way you would tell them. Or one
-  of three honest not-yet states, any of which fails the gate on a shipped entry:
-  - `GATED <flag>` the code is there and switched off for players
-  - `PENDING-DEPLOY <what>` the client is out, the server half is not
-  - `NEEDS-PEER <what>` it only fills in once somebody else updates
+2. PROOF: pet-family-audit.mjs | REACH: Existing combat output stays unchanged. Before editing pets.js, captured SHA256 fingerprints of 13,552 complete serialized battle-pet builds and 54,208 ability results across all seven species, all three families, levels 1 through 10, every legal pick combination including empty tiers, four shiny/lineage configurations and four fighter contexts. All fingerprints match after the refactor. Separate stat and effect mutations fail this comparison. PET_FAMILIES now supplies each manual special's cooldown of 2, and real engine actions set and exhaust that same timer. The unused auto-companion cooldown field on serialized Warden pets remains 3 solely to preserve the frozen output contract; it is documented as deprecated.
 
-The three states exist so the author writes down the thing that makes a false note
-obvious. Every one of the four bad notes would have been caught at the moment
-somebody typed `GATED ?mogv2` next to it and had to look at that.
+3. PROOF: pet-family-audit.mjs | REACH: Talent unlocks derive from family trees, including an injected Warden-only tier. unlockedTiers(level, petId) supplies the applicable species' schedule. The no-species overload retains an aggregate schedule for compatibility. Full family-specific celebrations still require the app.js owner to pass inst.sp in checkPetLevelUp, and openPetsHelp must describe each distinct family schedule instead of assuming the first tree applies to every pet. Neither app.js change is claimed here. C6 still has no Signature entry, capstone panel or species-specific level-10 effect; its design and economy impact remain Tom's decision.
+
+## the submission build asserts itself (2026-09-07)
+
+Not stamped to a release: no shipped file changed, so no version bump. This is
+the upload path and its guards.
+
+1. PROOF: store-copy-lint.mjs | REACH: `native/build-ios.sh`, the only script that archives and uploads, called plain `./build-www.sh` and `npx cap sync ios` against the unmodified `native/capacitor.config.json`, which carries `server.url = https://tommillerca.github.io/tally/`. So every build ever uploaded shipped `STORE_BUILD=false` (the Crew invite strip, the THANK YOU card, the News row, the "Open TestFlight" button and the Settings Diagnostics row all reachable) AND loaded the live site over the network rather than its own bundle, which is the blank-shell-on-bad-wifi failure the bundled path exists to prevent. `native/build-store.sh` did it correctly but nothing called it, and its own comment expected a human to swap the two configs by hand between prep and upload. `SUBMISSION=1` is now an explicit mode that delegates the bundle and the no-server config to `build-store.sh` (one copy, so the two cannot drift), swaps the config in for the sync, restores it on EXIT even when the archive fails, and runs the preflight before archiving. The default path is unchanged, deliberately: Tom ruled the remote shell stays wired for internal builds. Five rows grade the shape of that branch and were each proven red by breaking it (delegation, the trap, the preflight call, the mode itself, and the surviving default path).
+
+2. PROOF: submission-preflight-audit.mjs | REACH: `native/submission-preflight.mjs` runs after `npx cap sync ios` and grades the bundle that is about to be archived rather than the repo: the bundle declares `STORE_BUILD = true`, the synced iOS config has no `server` key, and no TestFlight or beta string is reachable. It exits non-zero, so `set -e` stops the script before the archive. The audit drives all three refusals plus a healthy control against real invocations, because a guard that cannot fail is not a guard. Verified against a real `build-store.sh` output (passes) and against a real internal `build-www.sh` output, where it names both defects: "does not declare STORE_BUILD = true" and "still has a server key, so the app would load the live site over the network instead of its own bundle".
+
+3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
+
+
+## v509
+1. A hotfix off v508: three first-hour defects from the R41/R39 packs. Its dated section is further down, folded here.
+
+2. PROOF: toast-sheet-audit.mjs, toast-map-audit.mjs | REACH: any sheet with controls at its foot, with a toast firing. Measured unfixed in a real fight: at 375x667 the toast box 26.3,466 322.5x105 covered SIX move buttons, Jab and Bone Spike entirely; at 393x852 it clipped Haymaker and Bone Guard. The collision is structural rather than the Pit's, because every sheet puts its controls at the bottom and `.toast` sits 96px off the bottom, so the fix is one CSS rule keyed on a sheet existing (`body:has(#sheets .sheet) .toast`), the same shape as the shipped map rule and out-specifying it. Deferring the toast until the sheet closed was rejected on inspection of the call sites: most toasts in this app ARE a sheet's own feedback, so holding them detaches the answer from the action. After: toast at y=110 at both widths, zero intersection with 10 controls including Flee, and toast-map-audit's SEAT still 96px. The 393x852 row is declared in the audit header as a fence rather than a reproduction, because with an eight-move tray the toast lands in the tray's empty tail and the row is green on the unfixed tree.
+
+3. PROOF: new-cosmetic-mark-audit.mjs | REACH: win a cosmetic, then open the Wardrobe. A piece arrived with nothing marking it, so a crate reward disappeared into a full collection. Every grant path already routes through two row builders, so `nw: 1` on the row covers crates, drops, hatches, shop and quest payouts in two lines, rendered as a dot in the app's existing badge language on the slot rail and the tile and cleared when the grid renders. The flag lives on the row rather than in a table of per-slot seen-timestamps deliberately: a timestamp needs a backfill answer for every existing account and the honest one is a wall of dots on a shipped collection, so an absent flag reads as seen. Measured after: dots on 14 slots and 1 of 3 tiles, both zero on the next render and after a reload. Cost is one extra inv read on the Wardrobe render and zero on Today's tick, with today-reads-lint green.
+
+4. PROOF: streak-card-audit.mjs | REACH: reach a streak milestone. Measured at 393x852: day 7 drew three content blocks and day 14 drew two, because BADGES has streak-3, streak-7 and streak-30 and nothing at 14, so with the number stripped day 14 said strictly less than day 7. No streak-14 badge was added: that pays XP and lands in the badge grid, which is an economy change and Tom's call. Instead every milestone gains a line of its own, a row of counts read straight off what the player owns with a chip dropped at zero, and the golden Bone Crate that streakAwards has always granted and no card ever mentioned. After: day 7 five blocks, day 14 four, and day 14 carries a line day 7 does not. The audit's CONTROL row goes red if a streak-14 badge is ever added, which is a signal to re-read the file rather than delete the row.
+
+## v508
+1. A hotfix off v507: the App Store reviewer's small-screen pass from round 43, including a regression this project shipped in v489. Its dated section is further down, folded here.
+
+2. PROOF: onb-audit.mjs | REACH: onboarding, the screen titled THIS ONE'S YOURS, at 320x568. PR #395 fixed the primary button falling below the fold by making `.onb-foot` sticky with a full-bleed background. The cure overshot: the opaque footer measured 159.8px of a 568px viewport and the nameplate's visible fraction measured 0.000, so the screen that names your Bonehead showed no name, and a real click at the reroll button's coordinates hit `span` (the footer's own copy) and left the name unchanged. At 375x667 the nameplate measured 0.467 visible. The step is now a viewport-height column of two bands: content in its own scrollport, footer static beside it. It cannot regress in either direction by construction, which is the point: the button is a flex item of a box exactly one viewport tall, so it is on screen at first paint whether or not the content fits, and the content is clipped by a scrollport that ends where the footer begins, so nothing can sit under it. Padding on the scroller was rejected because reserved space at the end of a document does nothing at scrollTop 0, which is where the defect lived. Nameplate now 1.000 at all three viewports and the reroll click rerolls at all three. R39-15's own rows were asserted green on both trees in the same pass, so neither fix can be bought with the other.
+
+3. PROOF: onb-audit.mjs | REACH: onboarding, THE PLAN. The chips you had just selected sat behind the footer at every viewport, including 393x852 where the entire Goal row was behind the save button, measured as 1 of 4 rows covered with a clip fraction of 1.000 and the centre hitting `#onbSave`. Now 0 of 4 at all three. CHIPS-REACHABLE was green on both trees, so a chip past the form's own fold was never the defect.
+
+4. PROOF: fight-tray-audit.mjs, fight-press-audit.mjs | REACH: a fight at 320x568. The fourth move, Bone Guard, exposed 19.8px against a 40px tap floor, its centre hit `div#fightBody`, and a real press left the log reading "Round one. Your turn." Now 44.5px exposed and the press takes the turn, at all three viewports.
+
+## v507
+1. A hotfix off v506: the boot a lapsed player gets, which round 43 found was the one boot nobody had ever graded. Its dated section is further down, folded here.
+
+2. PROOF: returning-boot-audit.mjs | REACH: come back after a gap. The day-close line telling a returning player they were paid for the day they walked away measured 0.0% of its own box painted with its own surface, mean rgb(10,12,10), on 3 of 3 boots: the daily wheel's veil covered it. The cause was NOT the z-index the ticket named. `#toast` lived inside `#app`, which is `position: relative; z-index: 1`, a stacking context, so no number inside it could ever beat a veil appended to `document.body`; raising it to 320 alone still measured 0.0%, and moving it alone was also red. Both halves were proven red separately. It now measures 83.8% against a 25% floor. Graded on PIXELS rather than a hit test on purpose: `.toast` is `pointer-events: none` by design, so an elementFromPoint row could never pass and would have looked like a working guard.
+
+3. PROOF: returning-boot-audit.mjs | REACH: Today, on a returning save. The welcome-back card measured 1411px against a 785.8px fold, so the app's only greeting to somebody coming back was unread at every gap length, 3 of 3. Moved above the hero, because the layout was measured rather than nudged: hero 0 to 641, doors 653 to 718, news pill 740 to 781, quests 791 to 845, and NOTHING that renders under the hero is above the fold at 393x852. It stays outside `section.dayblk`, so the 2026-09-05 trade that moved it out still holds: `.dayblk` at 320x568 measures 398.1px against a 501.8px screen, unchanged. The copy no longer claims everything survived while the streak reads zero; the day-close clause only renders when the ledger really paid, read off rows the render already holds.
+
+4. PROOF: unit.test.js | REACH: a returning player's daily board. 164 of 365 dates drew three dailies with nothing a meal could finish, which is the day-one under-filled board arriving at the other end of the lifecycle; now 0 of 365, by reusing the day-one anchor rule rather than adding a second one.
+
+5. PROOF: unit.test.js | REACH: Today's Gwart plaque, on a save with a long gap. His empty-ledger scold, "Half the day gone and not a crumb on the page", was in the bag for a returning player at 6 of 36 renders and guaranteed within 8, so somebody coming back after three months could be greeted with a scold. It is now withheld on a return, the same way v491 withheld it on the install day, and the row also asserts the remaining pool is still a pool rather than one line, because an emptied pool would pass the first assertion and break the plaque.
+
+## v506
+1. A hotfix off v505 from Tom's own photograph of the live app on his phone: a dark strip with a card edge in it near the top of Today. Its dated section is further down, folded here.
+
+2. PROOF: top-strip-audit.mjs, today-peek-audit.mjs | REACH: Today, while the running build is behind the live one. `#updBanner` sat between `.today-plate` and `.hero-card`, and `.hero-scene`'s upward bleed is a negative top margin that collapses out through `.hero-card` and lands the art at y=0 only while nothing above it has height. With the banner mounted the negative margin ate the banner instead of the scroller's padding: hero top measured 91.9 instead of 0 (73 padding + 79.9 banner + 12 margin - 73 bleed) at --sat 59, leaving 18.9px of the plate's dark backdrop with the banner's amber top edge on it, between the safe-area strip and the hero. The banner moved below `.hero-actions` to become the first card of the feed, which also puts it where the scroll peek carries a player to it. The hero at rest is unchanged, because the div is empty and zero-height at every other time. Proven red at both insets on a stale client, with both fresh configurations green as the control.
+
+## v505
+1. A hotfix off v504: the two App Store submission blockers from the R43 audit pack, both of them copy and reachability rather than behaviour. Its dated section is further down, folded here.
+
+2. PROOF: screen-sweep.mjs, unit.test.js | REACH: Settings, ABOUT, "Privacy policy", Read. App Store guideline 5.1.1(i) requires the policy to be reachable in the app; before this it was linked from exactly two places, both inside the survey sheet, and that row is gated on !surveyDone, so a DOM sweep of all six routes on a save with the survey already filled returned zero anchors matching privacy|terms|legal|eula. The row is now permanent and ungated, needs no account, and resolves offline and inside the store build because privacy.html was added to sw.js's PRECACHE and to native/build-www.sh's copy list (it had never been in the native bundle at all, so a relative href would have 404'd in the exact build App Review opens, and shell() answers a navigation miss with index.html, which would have handed a reviewer the app instead of the policy). The browser row fetches the href rather than trusting the anchor, for that reason. Proven red at 0 matches across 7 routes.
+
+3. PROOF: unit.test.js | REACH: open the Boneyard map. The intro said, at the moment of the location grant, "Your location is used on this phone only, never stored, never uploaded", while the map's own boot sends a 0.02-degree grid cell of about 2.2 km to the server for Spires (js/spires.js SPIRE_CELL_DEG). The copy now says spawns and dens are worked out on the phone and exact coordinates never leave it, and that the map cell goes to the server for the shared towers, which matches the iOS purpose string corrected in v498 and privacy.html's "Location and the map" section. Nothing on the wire changed. The guard is a conjunction, so if Spires ever stop sending a cell it goes red and asks for the copy to be revisited rather than letting "never uploaded" become true by accident. Proven red with the line restored.
+
+## v504
+1. A hotfix off v503: the 32 football colourways repainted to the palettes players recognise, approved by Tom on the rendered before and after sheet, 2026-09-07. Its dated section is further down, folded here.
+
+2. PROOF: football-kit-audit.mjs, football-render-audit.mjs, football-rail-audit.mjs | REACH: each team's two colours are now the published brand pair of the franchise it stands in for, measured as a CIE76 distance from that pair: the worst five before were 158.6, 148.2, 142.2, 136.5 and 127.4, and every team reads 0.0 after. Team names, ids and the tint pipeline are untouched. The PAIR row keeps every team's two colours a readable distance apart on a 24 px disc (minimum 17.59) and no two teams share a pair; the LEGIBLE row keeps each team's own two colours apart (minimum 44.46), which replaced a contrast rule the real league would fail (six navy shells, four black, and one aqua-on-orange pair at 1.16 to 1). Both were proven red on a tree with a duplicated and a near-identical pair.
 
 ## v503
 1. A hotfix off v502 from Tom's play of the Kennel: blurry pets, the entry nobody finds, the grid nobody can read, and a copy rail worth no scroll. Its dated section is further down, folded here.
@@ -111,6 +158,162 @@ is the harness declining to answer rather than a finding. The audit re-measures
 every claim on each gate run instead of pinning the string; proved red three
 ways (a weak dish given the strong sentence, an unmeasurable dish given any
 sentence, a claim deleted): 3, 6 and 1 rows, exit 1 each.
+## an audit cannot grade the wrong worktree (2026-09-07)
+PROOF: serve-tree-identity-audit.mjs
+
+## the app says where it stands (2026-09-07)
+
+Not stamped to a release: hotfix/privacy-and-location-copy, off v504. Two
+submission blockers from the R43 audit pack, both of them copy and reachability
+rather than behaviour. Nothing about what the app sends changed.
+
+1. PROOF: screen-sweep.mjs, unit.test.js | REACH: Settings, ABOUT, "Privacy policy", Read. The row is never gated, needs no account, and works offline and inside the store build because privacy.html is now in sw.js's PRECACHE and in native/build-www.sh's copy list. Before this, privacy.html was linked from exactly two places, both inside the survey sheet, whose Settings row is gated on `!surveyDone`, so the only route to the policy vanished the moment a player filled the survey: App Store guideline 5.1.1(i), and a rejection. PRIVACY-LINK walks all seven routes with `surveyDone` forced TRUE and fetches the href rather than trusting the anchor, because sw.js answers a navigation miss with index.html and a 404 would otherwise read as a pass. Proven red on origin/main: 0 matches across 7 routes, and the static half fails with "Settings must carry a privacy policy row".
+
+2. PROOF: unit.test.js | REACH: open the Boneyard map. The intro used to say, at the moment of the location grant, "Your location is used on this phone only, never stored, never uploaded", while the map's own boot sends a 0.02-degree grid cell (about 2.2 km, `GET /spires?ids=sp-2464--6156` from 49.2827, -123.1207) to the server for Spires. It now says spawns and dens are worked out on the phone and exact coordinates never leave it, and that the map cell you are in, about 2.2 km across, goes to the server for the shared towers. That matches the iOS purpose string corrected in v498 and privacy.html's "Location and the map" section; nothing on the wire changed. The guard is a conjunction, so if Spires ever stop sending a cell it goes red and asks for the copy to be revisited rather than letting "never uploaded" become true by accident. Proven red with the line restored: `js/app.js:21449: "used on this phone only"`.
+## the top of the screen is one colour (2026-09-07)
+
+Not stamped to a release: fix/top-sliver, off v504. Tom, from a screenshot of
+the live app on his own iPhone: "ive noticed this top sliver recently a couple
+times sometimes it goes away i think after an update but looks glitchy". A black
+band across the full width a few tens of points down from the top, with the top
+two rounded corners and the warm amber top edge of a card clipped inside it, and
+CORRECT hero green both above and below it.
+
+DIAGNOSED OFF A RENDER RATHER THAN OFF THE CSS, and reproduced on demand. The
+band is `.today-plate::before` (the page backdrop, rgb(13,12,18)) and the clipped
+card is `.upd-banner`, the "Update available" banner. `#updBanner` was the second
+child of the Today screen, between `.today-plate` and `.hero-card`, and it is
+EMPTY unless version.json says the live build is ahead of the running one: that
+is the whole of the intermittency, and it is exactly why an update clears it.
+The hero's bleed under the island is a negative `margin-top: calc(-1 * (--sat +
+14px))` on `.hero-scene` which collapses out through `.hero-card`, and it only
+lands the art at y=0 while nothing above it has height. Measured at 393x852,
+--sat 59, with the banner mounted: `#updBanner` 73 -> 152.9 (79.9 tall) and
+`.hero-scene` 91.9, i.e. 73 + 79.9 + 12 - 73. The negative margin ate 73px of the
+BANNER instead of the scroller's padding, the opaque hero painted over the rest,
+and the 18.9px left over is the band. At --sat 0 the same arithmetic leaves
+77.9px of it. Not a fade and not a gap: an overlap.
+
+RULED OUT, each against the render rather than in the abstract: a restored
+scrollTop (the band is there at scrollTop 0); a transform or containing block
+clipping the bleed (with the banner absent the hero's box measures top 0 at both
+insets); a crate or news plate mounting above the hero (the screen's child list
+is plate, hero-card, hero-actions, and nothing else can precede the hero: the only
+other insert in js/app.js is one `grid.insertBefore` in the Boneyard); and the
+service worker pairing a stale app.css with a fresh js/app.js (sw.js precaches
+both into ONE cache named VERSION, all-or-nothing on install, and serves the
+shell cache-first out of that single cache, so the two cannot disagree).
+
+1. PROOF: top-strip-audit.mjs | REACH: on the Bonehead tab the colour behind the status bar and the Dynamic Island runs unbroken into the hero art, including while you are on an old build with the "Update available" banner showing. That banner moved from above the hero to under the four doors, where it is the first card of the feed. Proven red on the pre-fix tree at both insets: hero top 91.9 against a ceiling of 0.5, and 144 of 408 (--sat 0) and 40 of 644 (--sat 59) page-background pixels in the strip above the currency chips.
+## coming back is a welcome (2026-09-07)
+
+Not stamped to a release: hotfix/returning-player, off v504. Round 43 played
+three five-day players end to end through the shipped UI and brought each one
+back after 10, 30 and 90 days. The DATA was perfect at every gap: zero rows lost,
+zero duplicated, the pet, the coins, the XP, the crates and every quest claim
+intact, and the day close they had earned on the day they walked away paid, crate
+and all. Nothing here is a data fix. What was wrong was the screen they came back
+to, and every fault was the same fault: the app had something true and kind to
+say and no way for the player to read it.
+
+MEASURED BEFORE FIXING, on origin/main, at 393x852 on a 90-day-gap save driven
+through a real boot (kv `lastOpenDay` backdated and the page reloaded, so
+maybeWelcomeBack decides the return rather than a stamped flag):
+
+- the day-close line was drawn under the daily wheel's veil in 36 of 36 samples.
+  0.0% of the toast's own box was painted with its own surface; mean rgb(10, 12,
+  10), which is the veil's near-black.
+- `#wbCard` sat at 1411px against a 785.8px fold (1220px on round 43's own
+  saves, which carry no news pill). Nothing that renders under the hero is above
+  the fold on that screen: the hero card alone is 0 to 641, the doors 653 to 718,
+  the news pill 740 to 781, the quests 791 to 845.
+- 164 of 365 dates drew a returning player a daily board with nothing on it that
+  logging a meal could finish.
+
+1. PROOF: returning-boot-audit.mjs | REACH: open the app after two or more days away and the line telling you the last day you logged was closed and paid is readable on top of the daily wheel instead of behind it. Measured on the same boot: 0.0% of the toast's box was its own colour before, 83.8% after, floor 25%. The toast moved out of `#app`, which is `z-index: 1` and therefore a stacking context, so no number inside it could ever beat a veil appended to the body; it is `pointer-events: none` either way, so it still cannot take a tap from the wheel it now paints over. Every full-screen takeover this app raises is covered, not just the wheel.
+
+2. PROOF: returning-boot-audit.mjs, today-peek-audit.mjs, today-container-audit.mjs | REACH: the card that greets you when you come back is the first thing on Today instead of 368px below the fold: measured top 1411 before and 14 after at 393x852, with the screen asserted at the top in the same read. It stays OUTSIDE the day container, so the collapsed day summary still fits a 568px screen (398.1px against 501.8px); putting the card back inside the day, its position before 2026-09-05, reds that row at 539.1px. The card is still one tap to dismiss and still never comes back.
+
+3. PROOF: returning-boot-audit.mjs | REACH: the card no longer says "Everything is where you left it." while your streak reads 0. It says the streak starts over and nothing else does, then names what is still there: your Bonehead, pets, coins, gear and claimed quests, and the last day you logged if the ledger really paid its close. No day count, nothing invented, and the streak is not mentioned anywhere else on Today.
+
+4. PROOF: unit.test.js, quest-pick-audit.mjs, quest-daymore-audit.mjs | REACH: a returning player's three daily quests always include one that logging a meal can finish. This is the rule v491 already applied to a day-one board, which fails for the opposite reason: on day one every capability is off, and on a return every capability is on, so nothing is filtered and the draw can be three quests that all need a walk, a fight or a spawn. 164 of 365 dates drew such a board before and none do after, swept over a year. Quest rewards, coin values, the ladder and every other gate state are untouched.
+
+5. PROOF: unit.test.js | REACH: Gwart does not greet somebody back from a long gap with "Half the day gone and not a crumb on the page." He has a line of his own for it. This is the same exemption v491 gave the install day and the never-logged player, extended to the case it missed.
+## small screens keep their controls (2026-09-07)
+
+Not stamped to a release: hotfix/small-screen-fold, off v504. QA round 43,
+R43-4, R43-5 and R43-6, the App Store reviewer pass on small screens.
+
+R43-4 and R43-5 are a regression I shipped. PR #395 (v489) fixed "the primary
+button sits below the fold on iPhone SE" by making `.onb-foot` sticky at the
+bottom of #screen with an opaque full-bleed backing. That is an overlay, and it
+cost the bottom band of every onboarding step at every scroll offset.
+
+MEASURED ON origin/main (v504, 6e55bbf), off the render at each viewport, with
+only the two audit files changed. Visible means the rect clipped by the viewport
+and by every scrollport above it, minus what the footer paints over.
+
+| | 320x568 | 375x667 | 393x852 |
+|---|---|---|---|
+| .onb-foot height | 159.8px of 568 | 140.3px of 667 | 140.3px of 852 |
+| nameplate visible, THIS ONE'S YOURS | **0.000** | **0.467** | 1.000 |
+| what its centre hits | span (footer copy) | div.onb-foot | span#onbName |
+| real click at the reroll's coordinates | **no change** | **no change** | rerolls |
+| selected chips behind the footer, THE PLAN | **1 of 4** | **1 of 4** | **1 of 4** |
+| "That's me" bottom vs fold | 443.5 / 568 | 562 / 667 | 747 / 852 |
+
+R43-6 is older. At 320x568 .fight-body is 465.5px and holds arena 283 + meta 52
++ tray + End Turn 58.8 + 10px pad, which leaves the tray 41.7px; its own 96px
+floor then overflowed the column, so the four base moves (145px of content in
+two 68.3px rows) were clipped at 547.5 with Bone Guard rendered 527.8 to 596.
+Its centre hit div#fightBody, only 19.8px of it was inside the tray, and a real
+click there left the log on "Round one. Your turn." Both larger viewports were
+fine.
+
+AFTER, same method, same three viewports:
+
+| | 320x568 | 375x667 | 393x852 |
+|---|---|---|---|
+| .onb-foot height | 119.7px | 141.3px | 141.3px |
+| nameplate visible | 1.000 | 1.000 | 1.000 |
+| real click at the reroll | rerolls | rerolls | rerolls |
+| selected chips behind the footer | 0 of 4 | 0 of 4 | 0 of 4 |
+| "That's me" bottom vs fold | 517.6 / 568 | 599 / 667 | 784 / 852 |
+| "Start tracking" bottom vs fold | 501.4 / 568 | 599 / 667 | 784 / 852 |
+| 4th move exposed in the tray | 44.5px | 54.8px | 54.8px |
+| 4th move clicked at its own centre | takes the turn | takes the turn | takes the turn |
+
+1. PROOF: onb-audit.mjs | REACH: on a 320px or 375px phone, the screen that
+   names your Bonehead shows the name. The onboarding step is a viewport-height
+   column of two bands now: the content scrolls in its own box and the footer
+   sits beside it, static, so the button is on screen at first paint by
+   construction and nothing can be underneath it. Under 600px of height the
+   poster gives up 100px so the nameplate clears the fold without scrolling, the
+   display type steps 40 to 34 (THE PLAN already ships 30) and the earns row is
+   left to peek as the scroll cue. NAMEPLATE-VISIBLE and REROLL-CLICK are red on
+   v504 at 320x568 and 375x667 with the numbers above; R39-15's own rows, which
+   is what the sticky footer bought, stay green on both trees, and they are
+   asserted in the same pass so nothing can fix one by giving up the other.
+
+2. PROOF: onb-audit.mjs | REACH: on THE PLAN, the chips you picked are readable
+   where they sit instead of under the Start tracking bar, at every viewport
+   including 393x852 where the whole Goal row was behind it. CHIPS-CLEAR is red
+   on v504 at all three (clip 1.000, covered 1.000, centre hitting #onbSkip or
+   #onbSave); CHIPS-REACHABLE stays green on both trees, because a chip scrolled
+   past the form's own fold was never the defect and grading the two the same
+   way is how a fixed tree would have excused the real one.
+
+3. PROOF: fight-tray-audit.mjs | REACH: on a 320x568 phone all four moves are
+   pressed where they sit, with no scrolling. Two full rows cost 105px the
+   screen does not have, so the meta and row margins give 26 and the arena gives
+   the rest, 283 to 220 at this breakpoint only: the one place the 2026-08-16
+   "pin the primary action, do not shrink the arena" call has to bend, and it is
+   flagged rather than buried. That buys a 120.8px tray, three moves exposed
+   68.3px each and the fourth 44.5px, over the 40px tap floor, with the tray
+   still scrolling for the last 23px and still drawing its fade. HIT and PRESS
+   are red on v504 at 320x568 (centre hits div#fightBody, 19.8px exposed, log
+   unchanged) and green at both larger viewports on both trees. Type sizes,
+   hints, button sizes and the fight's rules are untouched.
 
 ## the crate deals its cards smoothly (2026-09-07)
 
@@ -136,6 +339,15 @@ frame. Back to back in one process, two passes agreeing, median frame 33.3ms
 with it mounted and 16.7ms with it hidden.
 
 1. PROOF: crate-reveal-audit.mjs | REACH: Open a Bone Crate from your Backpack and flick through its three cards: each card leaves and the next one arrives at full frame rate instead of half. Measured over the 520ms of the move, dropped frames 8-16 before and 1-5 after, frames rendered 18-27 before and 47-59 after. Nothing about what a crate pays, the reveal's copy, the tap guards (R37-5) or the Open all recovery (R39) changes.
+
+## the first hour keeps its promises (2026-09-07)
+
+Not stamped to a release: hotfix/first-hour-polish, off v503. Three items from
+the QA master handoff that needed no ruling: R41-20, R39-25 and R41-21.
+
+1. PROOF: toast-sheet-audit.mjs | REACH: A toast can no longer sit on top of a control you are being asked to use. The welcome-kit message fires 1.2s after onboarding and a new player is five taps from their first fight, so it landed on the move tray: measured at 375x667 it covered six move buttons, Jab (110.3x54.8) and Bone Spike whole, and at 393x852 on a nine-move tray it took 104.8x27.8 of Haymaker and 116.3x27.8 of Bone Guard. Fixed for every sheet rather than for the Pit, because every sheet in the app puts its controls at the bottom and the toast's seat is 96px off the bottom: while a sheet is open the toast takes a seat under the sheet head, clear of the Flee button as well. Everywhere else it has not moved (96px, graded).
+2. PROOF: new-cosmetic-mark-audit.mjs | REACH: Win a cosmetic and it stays findable. From the moment it is granted, the Wardrobe's paper doll marks the slot it landed in with a dot, and the tile inside that slot carries one too, in the same accent-on-dark language the crate count and the News dot already use. Both clear when you open that slot's grid, and stay clear after a reload. Nothing you already owned is marked: the flag is written by the grant, so an existing collection is quiet.
+3. PROOF: streak-card-audit.mjs | REACH: A longer streak is no longer a thinner screen. Measured at 393x852: day 7's card carried three blocks of content and day 14's carried two, because there is a badge at 7 and none at 14, so with the number taken out day 14 said nothing day 7 did not. Every streak milestone now carries a line of its own and a row of counts you can check yourself (pieces found, pets, badges, each one a length of something you own, dropped when it is zero), and the sub-line names the golden Bone Crate the milestone has always paid and never mentioned. No badge was added at 14: that pays XP and is an economy change, not a copy fix.
 
 ## the Kennel explains itself (2026-09-07)
 
@@ -506,6 +718,30 @@ Not stamped to a release: fix/gate-hygiene-c, off v493.
    a bounded time for real decode evidence, while a missing image still fails;
    test browsers launched through an explicit browser path are reaped if their
    owning audit is killed.
+## team colours read as the teams (2026-09-07)
+
+Not stamped to a release: art/football-team-colours, off v493, waiting on Tom's
+review of the before/after sheet. Tom, overnight: "go back through the football
+colours and try to make them closer to the actual nfl teams, some are very far
+off."
+
+1. PROOF: football-kit-audit.mjs | REACH: Shop, Locker Room poster, the strip of
+   32 discs, and the Wardrobe rail with any football piece worn: each team's two
+   colours are now the brand colours of the franchise it stands in for (helmet
+   shell first). Measured as CIE76 distance from each old pair to its
+   franchise's pair: the worst eight were 105 to 159 apart and all 32 are now 0.
+   The rows PAIR and LEGIBLE re-measure that no two teams share a pair (every
+   two pairs >= 12 apart, min 17.59) and that each team's two colours read as
+   two (>= 40 apart, min 44.46).
+
+2. PROOF: football-render-audit.mjs | REACH: the lizard's helmet and jersey, on
+   the Stable and on Today, take the new colours: rendered under Boneyard
+   Bruisers (navy) and Windrow Wasps (old gold), the pixels that differ between
+   the two renders sit nearer their own team's shell colour.
+
+3. PROOF: football-rail-audit.mjs | REACH: sliding the Wardrobe rail recolours
+   both Boneheads to the new pairs, the worn helmet holds one colour on arrival,
+   and nothing is worn until the bar says so.
 
 ## pit readout and exit (2026-09-06)
 

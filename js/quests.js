@@ -406,7 +406,19 @@ export function dailyQuests(date, opts = {}) {
      player with every gate off can reach). */
   const dayOne = opts.hkConnected === false && opts.huntEnabled === false && opts.socialOn === false
     && opts.pitTried === false && opts.kitchenReady === false;
-  if (!dayOne) return quests;
+  /* R43-9: THE SAME GUARANTEE FOR THE OTHER END OF THE LIFECYCLE. A player back
+     after a long gap is the mirror image of day one: every gate is OPEN (they
+     earned them before they left) so pick() filters nothing and the three it
+     draws can all need a walk, a fight or a spawn. Measured 3 of 3 returning
+     players with 0 claimable after three meals, and 164 of 365 dates drawing a
+     board with nothing a meal could finish. Whether they are back is not this
+     module's judgement: js/app.js passes the flag off kv 'wbReturnDay', which
+     maybeWelcomeBack already owns. Deliberately the SAME branch as dayOne rather
+     than a second one, so there is one anchor rule and not two, and it is still
+     scoped to a named gate state so pick()'s general algorithm and the
+     reachable-quest ceiling every other combination is held to are untouched
+     (tests/quest-pick-audit.mjs). */
+  if (!dayOne && !opts.returning) return quests;
   const reachable = pick(DAILY_POOL, seed, DAILY_POOL.length, opts);
   const anchor = reachable.find(hasAnchor) || DAILY_POOL.find(q => q.id === 'q-first');
   const out = quests.slice();

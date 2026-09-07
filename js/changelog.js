@@ -4,6 +4,32 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 509, date: '2026-09-07', title: 'The first hour keeps its promises', items: [
+    'A message popping up could sit on top of the buttons you were about to press. In a fight on a smaller phone it covered six of your moves, including the one you were reaching for. Messages now sit clear of any panel\'s controls.',
+    'A piece you have just won is marked with a dot until you have actually looked at it, on both the slot rail and the tile, so a crate reward does not vanish into a full wardrobe.',
+    'Every streak milestone now says something the last one did not: a line of its own, the golden Bone Crate it hands you, and a count of what you have collected so far. Day fourteen used to say strictly less than day seven.',
+  ] },
+  { n: 508, date: '2026-09-07', title: 'Small screens keep their controls', items: [
+    'On the smallest phones the naming screen showed no name. The footer had grown to 160px of a 568px screen and swallowed the whole nameplate, and the reroll button did nothing where it sat, because the thing you were tapping was the footer covering it. That was our fix from four days ago overshooting the problem it was solving. The name is visible at every size now, and the button under your thumb is the button you pressed.',
+    'The plan screen was hiding the choices you had just made behind its own save button, at every screen size. Your selections stay visible.',
+    'On a 320px-wide phone the fourth combat move hung below the fold and a tap on it landed on the fight behind it. All four moves are reachable.',
+  ] },
+  { n: 507, date: '2026-09-07', title: 'Coming back is a welcome', items: [
+    'If you have been away, the app now says so properly, at the top of Today where you will actually see it, instead of 368px below the fold where nobody ever read it. It no longer claims everything is where you left it while your streak reads zero: it says the streak starts over and nothing else does, and it names what survived, including the last day you logged, which was closed and paid.',
+    'The line telling you that you were paid for the day you walked away was being printed underneath the daily wheel, so nobody read it on the one boot where it matters. It sits above the wheel now.',
+    'A returning player\'s quest board was drawing three quests that a meal could not finish, so there was nothing to do on the day you came back. It now always offers something you can complete by logging food, the same rule day one already had.',
+    'Gwart will no longer greet somebody returning after three months by telling them half the day is gone and there is not a crumb on the page.',
+  ] },
+  { n: 506, date: '2026-09-07', title: 'One colour at the top of the screen', items: [
+    'A dark strip with the edge of a card poking out of it could appear near the top of Today, between two bands of the right colour. It only ever showed up while your phone was running an older build than the live one, which is why it seemed to fix itself after an update: the banner telling you the update was ready sat in the one spot where the artwork behind it reaches up under the status bar, and the two were fighting over the same space. The banner now sits with the rest of your cards, where you will actually read it.',
+  ] },
+  { n: 505, date: '2026-09-07', title: 'The app says where it stands', items: [
+    'The privacy policy now has a permanent home in Settings, under ABOUT. It used to be reachable only through a link inside the Day One survey, which disappeared once you filled the survey in, so most players had no way to read it at all. It works with no account and it works offline.',
+    'The line you see when the map asks for your location said your position was never uploaded. That was not true: the Boneyard asks the server about the map cell you are standing in, about 2.2 km across, because Spires are shared with other players. Spawns and dens really are worked out on your phone and your exact coordinates really do stay on it, and the copy now says exactly that instead of promising more.',
+  ] },
+  { n: 504, date: '2026-09-07', title: 'The kit finally looks like the teams', items: [
+    'Every one of the 32 team colourways was redrawn to its real colours. Some were a long way off: the ones you would picture as royal blue and red, or navy and neon green, were painted cream and grey, brown and gold, moss and pink. The names have not changed, only the paint.',
+  ] },
   { n: 503, date: '2026-09-07', title: 'The Kennel explains itself', items: [
     'Pets in the Kennel were drawn from art smaller than the space they fill, so some looked soft. They are sharp now, at every phone size.',
     'The Kennel moved out of the corner of the Stable header into a proper door under the Paddock\'s, showing your colours and how many of the thirty you have found, and a line above the grid says what a filled cell and a locked one mean.',

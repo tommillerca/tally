@@ -287,6 +287,107 @@ for (const [W, H] of SIZES) {
   await sleep(400);
 }
 
+/* ---- R43-6: THE FOURTH MOVE, PRESSED WHERE IT SITS, ON A SHORT PHONE ----
+ *
+ * Everything above runs at 390x844, 375x667 and 430x932 and every row of it was
+ * green on the build where this shipped: at 320x568 the fourth move, Bone Guard,
+ * rendered at 527.8 to 596 inside a tray clipped at 547.5, a real click at its
+ * centre landed on div#fightBody, and the log still read "Round one. Your turn."
+ * REACH could not see it because REACH scrolls to a button first (deliberately,
+ * see its note); REST could not see it because it grades the RESTING row and 3
+ * of the 4 buttons rest fine. What was missing is the state the player is in
+ * (anti-regression rule 12): a base four-move turn on a 568px screen, pressed
+ * without scrolling anything.
+ *
+ * SO THIS BLOCK ASSERTS THE END OF THE CHAIN, NOT THE BOX. A geometry row would
+ * have passed on the shipped bug too, because Bone Guard's rect was perfectly
+ * well-formed; it was the pixels at its centre that belonged to something else.
+ * Every move gets a REAL MOUSE CLICK at its own centre and the fight log has to
+ * change. It is the base fight (no talents) because four moves in a 3-column
+ * grid is the exact shape that puts one button alone on a second row.
+ *
+ * DIRECTION AND BOUND: failure is a move whose centre answers anything but
+ * itself, or whose exposed height inside the tray falls under the 40px tap
+ * floor. Measured after the fix at 320x568: tray 120.8px, rows one to three
+ * exposed 68.3px each, Bone Guard 44.5px, all four clicked at rest.
+ *
+ * PROVE-RED: run against origin/main (v504, 6e55bbf) with only this file
+ * changed. Expected and observed there: 320x568 fails on Bone Guard, centre
+ * hits div#fightBody, exposed 19.7px of the 40px floor, log unchanged; 375x667
+ * and 393x852 pass. */
+for (const [W, H] of [[320, 568], [375, 667], [393, 852]]) {
+  await setWidth(page, W, H);
+  await sleep(400);
+  await dismissOverlays(page);
+  const opened = await page.evaluate(async () => {
+    const db = await import('./js/db.js');
+    await db.kvSet('talents', []);              // the BASE four moves, nothing bought
+    if (typeof window.__denFight !== 'function') return false;
+    window.__denFight(1.0, 0, {});
+    return true;
+  });
+  ok(`R43-6 SETUP ${W}x${H}: a base den fight opened`, opened, opened ? '' : 'no __denFight seam');
+  if (!opened) continue;
+  await sleep(3000);
+  await page.evaluate(() => {
+    document.querySelectorAll('#floats > *, .drop-veil').forEach(n => n.remove());
+    const t = document.getElementById('toast');
+    if (t) { t.textContent = ''; t.hidden = true; }
+  });
+  await sleep(250);
+
+  const moves = await page.evaluate(() => {
+    const tray = document.querySelector('#factions');
+    const tr = tray.getBoundingClientRect();
+    const desc = e => e ? `${e.tagName.toLowerCase()}${e.id ? '#' + e.id : ''}` : 'none';
+    return [...tray.querySelectorAll('button[data-act]')].map(b => {
+      const r = b.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const e = document.elementFromPoint(cx, cy);
+      return {
+        act: b.dataset.act,
+        label: (b.querySelector('b')?.textContent || '').trim().slice(0, 18),
+        cx, cy,
+        /* the part of the button the tray actually shows: a rect that runs past
+           the tray's edge is not a tap target, whatever its height says */
+        exposed: +(Math.min(r.bottom, tr.bottom) - Math.max(r.top, tr.top)).toFixed(1),
+        hit: desc(e), self: !!e && (e === b || b.contains(e)),
+      };
+    });
+  });
+  ok(`R43-6 MOVES ${W}x${H}: the base turn offers four moves`, moves.length === 4, `${moves.length} moves: ${moves.map(m => m.label).join(', ')}`);
+
+  const stray = moves.filter(m => !m.self);
+  const thin = moves.filter(m => m.exposed < 40);
+  ok(`R43-6 HIT ${W}x${H}: every move answers its own centre at rest`,
+    moves.length === 4 && stray.length === 0 && thin.length === 0,
+    [stray.length ? `hits elsewhere: ${stray.map(m => `"${m.label}" -> ${m.hit}`).join(', ')}` : null,
+     thin.length ? `under the 40px tap floor: ${thin.map(m => `"${m.label}" ${m.exposed}px`).join(', ')}` : null,
+    ].filter(Boolean).join('; ') || moves.map(m => `${m.label} ${m.exposed}px`).join(', '));
+
+  /* AND THE CLICK HAS TO DO SOMETHING. The bug's signature was a tap that left
+     the log on "Round one. Your turn.", so the log is what is asserted. One
+     move per fight: taking a turn hands the turn over, so only the first click
+     is the player's. The last move is the one that was broken, so it is the one
+     driven. */
+  const last = moves[moves.length - 1];
+  const before = await page.evaluate(() => document.querySelector('.fight-log')?.textContent.trim());
+  await page.mouse.click(last.cx, last.cy);
+  await sleep(1200);
+  const after = await page.evaluate(() => document.querySelector('.fight-log')?.textContent.trim());
+  ok(`R43-6 PRESS ${W}x${H}: a real click on "${last.label}" at its own coordinates takes the turn`,
+    !!before && after !== before,
+    `log "${before}" -> "${after}" (clicked ${last.cx.toFixed(1)},${last.cy.toFixed(1)}, centre hit ${last.hit})`);
+
+  for (let i = 0; i < 6; i++) {
+    const open = await page.evaluate(() => !!document.querySelector('#sheets > div')).catch(() => false);
+    if (!open) break;
+    await page.evaluate(() => history.back()).catch(() => {});
+    await sleep(450);
+  }
+  await sleep(400);
+}
+
 /* THE PIN IS GONE, because the error it pinned was this file's own doing.
    It was recorded as pre-existing and handed to the crash-risk lane on the
    strength of reproducing against unmodified origin/main, which it did: this

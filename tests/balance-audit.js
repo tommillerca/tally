@@ -1,9 +1,11 @@
+import { createSimFight } from './fight-sim.mjs';
+import { pathToFileURL } from 'node:url';
 import { buildBattlePet } from '../js/pets.js';
 import { escalateDen } from '../js/poi.js';
 // Balance audit: hunt for no-strategy exploit builds across the ladder.
 import {
-  makeFighter, createFight, actionsFor, applyAction, endTurn,
-  aiTakeTurn, scaleStats, LADDER, CHAMPION, RUNG_TALENTS,
+  actionsFor, applyAction, endTurn,
+  aiTakeTurn, LADDER, CHAMPION, RUNG_TALENTS, smartPetTurn,
 } from '../js/pit.js';
 
 const MID = { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 };
@@ -28,7 +30,7 @@ const BUILDS = {
 
 // ---- player policies: from "smart" down to brainless ----
 // each returns an action id from `legal` (enabled only) or null to end turn
-const POLICIES = {
+export const POLICIES = {
   // reasonable player: guards on reads, spends casts, manages wind
   smart(fight, legal, pick) {
     const p = fight.p;
@@ -112,22 +114,14 @@ const POLICIES = {
   },
 };
 
-function runFight({ stats, talents, foeCfg, seed, policy, pet }) {
-  const player = makeFighter({ name: 'P', stats, talents, pet: pet ? buildBattlePet(pet.id, pet.level, pet.picks || [], { lineage: pet.lineage || 0, shiny: pet.shiny || false }) : null });
-  const foe = makeFighter({
-    name: 'F',
-    stats: scaleStats(stats, foeCfg.mult),
-    style: foeCfg.style || 'plain',
-    talents: foeCfg.talents || [],
+export function runFight({ stats, talents, foeCfg, seed, policy, pet }) {
+  const fight = createSimFight({ stats, talents, foeCfg, seed,
+    pet: pet ? buildBattlePet(pet.id, pet.level, pet.picks || [], {
+      lineage: pet.lineage || 0, shiny: pet.shiny || false,
+    }) : null,
   });
-  const add = foeCfg.add ? makeFighter({
-    name: 'A',
-    stats: scaleStats(stats, foeCfg.add.mult),
-    talents: foeCfg.add.talents || [],
-  }) : null;
-  const fight = createFight({ player, foe, add, seed, aiLevel: foeCfg.rung || 5 });
   let guard = 0;
-  const m = { foeActions: 0, foeAttacks: 0, foeBraces: 0, playerActions: 0, foeWindSum: 0, foeWindSamples: 0 };
+  const m = { foeActions: 0, foeAttacks: 0, foeBraces: 0, playerActions: 0, petActions: 0, foeWindSum: 0, foeWindSamples: 0 };
   while (!fight.over && guard++ < 400) {
     if (fight.active === 'p') {
       let inner = 0;
@@ -142,6 +136,7 @@ function runFight({ stats, talents, foeCfg, seed, policy, pet }) {
         if (fight.ap === before) break; // illegal/no-op guard
         m.playerActions++;
       }
+      if (smartPetTurn(fight)) m.petActions++;
       if (!fight.over) endTurn(fight);
     } else {
       m.foeWindSum += fight.f.wind; m.foeWindSamples++;
@@ -156,14 +151,17 @@ function runFight({ stats, talents, foeCfg, seed, policy, pet }) {
       if (!fight.over) endTurn(fight);
     }
   }
+  if (!fight.over) throw new Error('balance-audit exhausted its loop guard before a result');
   return {
-    winner: fight.over ? fight.over.winner : 'draw',
+    winner: fight.over.winner,
     turns: fight.turn,
     hpLeft: fight.p.hp / fight.p.d.maxHp,
     ...m,
   };
 }
 
+// Importable by balance.mjs so the pet policy is guarded at its consumer.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
 const N = 200;
 function cell({ stats, talents, foeCfg, policy }) {
   let w = 0, d = 0, turns = 0, hp = 0, atk = 0, act = 0, brace = 0, fw = 0;
@@ -186,9 +184,9 @@ function cell({ stats, talents, foeCfg, policy }) {
 }
 
 const FOES = [
-  { key: 'mirror', mult: 1.0, rung: 3 },
-  ...LADDER.map(l => ({ key: 'rung' + l.rung, mult: l.mult, rung: l.rung, talents: RUNG_TALENTS[l.rung] || [] })),
-  { key: 'CHAMP', mult: CHAMPION.mult, rung: 5, talents: CHAMPION.talents, style: CHAMPION.style, champ: true },
+  { key: 'mirror', mult: 1.0, aiLevel: 3 },
+  ...LADDER.map(l => ({ key: 'rung' + l.rung, mult: l.mult, aiLevel: 2, talents: RUNG_TALENTS[l.rung] || [] })),
+  { key: 'CHAMP', mult: CHAMPION.mult, aiLevel: 3, talents: CHAMPION.talents, style: CHAMPION.style, champ: true },
 ];
 
 const statsName = process.argv[2] === 'tom' ? 'TOM' : 'MID';
@@ -235,11 +233,11 @@ const ESC_DEN = { mult: 1.05, aiLevel: 2, boss: 'Gnash', talents: ['heavyhands']
 // generic pet the escalateDen ramp was tuned against, so rarer pets only make the
 // ramp easier (the incentive to collect). C3 is a common hound.
 const escPet = { id: 'C3', level: 6, picks: [] };
-console.log('\n--- v123 boss scaling ramp (player + maxed pet, add modeled) ---');
+console.log('\n--- v123 boss scaling ramp (player + level-6 pet, add modeled) ---');
 console.log('  wins  effMult  ai  add   smart-win%  spam-win%  smart-turns');
 for (const wins of [0, 3, 6, 9, 12, 18, 30]) {
   const e = escalateDen(ESC_DEN, wins);
-  const foeCfg = { key: 'boss', mult: e.bossMult != null ? e.bossMult : e.mult, rung: e.aiLevel, talents: ESC_DEN.talents, add: e.add };
+  const foeCfg = { key: 'boss', mult: e.bossMult != null ? e.bossMult : e.mult, aiLevel: e.aiLevel, talents: ESC_DEN.talents, add: e.add };
   const smart = cellPet({ stats, foeCfg, policy: POLICIES.smart, pet: escPet });
   const spam = cellPet({ stats, foeCfg, policy: POLICIES.spamMelee, pet: escPet });
   const addTag = e.add ? 'yes' : ' no';
@@ -252,7 +250,7 @@ console.log('\n--- v128 lineage boost vs a low-progression boss (wins 0) ---');
 console.log('  lineage  smart-win%   (should climb but not hit ~100%)');
 {
   const e0 = escalateDen(ESC_DEN, 0);
-  const foeCfg0 = { key: 'boss', mult: e0.bossMult != null ? e0.bossMult : e0.mult, rung: e0.aiLevel, talents: ESC_DEN.talents, add: e0.add };
+  const foeCfg0 = { key: 'boss', mult: e0.bossMult != null ? e0.bossMult : e0.mult, aiLevel: e0.aiLevel, talents: ESC_DEN.talents, add: e0.add };
   for (const lin of [0, 3, 6]) {
     const r = cellPet({ stats, foeCfg: foeCfg0, policy: POLICIES.smart, pet: { id: 'C3', level: 6, picks: [], lineage: lin } });
     console.log(`  ${String(lin).padStart(7)}  ${String(r.win).padStart(8)}%`);
@@ -267,4 +265,6 @@ function cellPet({ stats, foeCfg, policy, pet }) {
     turns += r.turns;
   }
   return { win: Math.round(100 * w / N), turns: +(turns / N).toFixed(1), hpLeft: w ? Math.round(100 * hp / w) : 0 };
+}
+
 }

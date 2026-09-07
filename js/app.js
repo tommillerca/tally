@@ -20,6 +20,7 @@ import {
   boneDust, boneDustAdd, disenchantGear, salvagePet, gearDustValue, petDustValue, slimedGearIds,
   shinyPetIds,
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
+  newCosmeticIds, newSlotCodes, clearNewInSlot,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
   stripAll, stripAllPlan,
   DROP, buyDropItem, buyFootballItem, buyFootballBundle, refundStreakFreezes,
@@ -4153,6 +4154,12 @@ async function renderToday(el) {
   // them; with Health connected the walk row would double-ask for data the
   // sync already has. null = hide the row entirely.
   const manualWalks = wellness && !S.settings.hkConnected ? await manualWalksToday(S.date) : null;
+  /* IS THIS PLAYER COMING BACK? One read, two consumers: the return card below
+     and the daily quest draw. maybeWelcomeBack() is the only writer of
+     'wbReturnDay' (it stamps the return date, so it expires with the day) and
+     #wbOk clears it, so this is the app's existing answer rather than a second
+     opinion about what a gap is. */
+  const returning = S.date === dateKey() && allLog.length > 0 && (await kvGet('wbReturnDay', null)) === S.date;
   const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled,
     /* R38-8: isOnline() only means "has an API and an account", so a
        zero-friend account was handed q-friend as one of two dailies. Gate on
@@ -4170,7 +4177,14 @@ async function renderToday(el) {
     kitchenReady: Object.values(await ingredients()).some(n => n > 0),
     // R39-3: per-install salt for the daily seed (dailyQuests folds this in),
     // so two accounts installing on the same date do not share a board.
-    createdAt: S.settings.createdAt };
+    createdAt: S.settings.createdAt,
+    /* R43-9: the day-one board's problem, arriving at the other end of the
+       lifecycle. A returning player's capabilities are all KNOWN, so nothing is
+       gated out and pick() draws three at random from the whole pool; measured
+       3 of 3 returning players whose entire board needed a walk, a fight or a
+       spawn, 0 claimable after three meals. dailyQuests guarantees the same
+       anchor here that it already guarantees on day one. */
+    returning };
   const healthRows = await db.all('health');
   // Surface an auto watch sleep read in the wellness card when the player hasn't
   // hand-logged tonight (so it reads "from your watch" instead of asking).
@@ -4254,7 +4268,7 @@ async function renderToday(el) {
      state this render already computed: a finished weekly quest waiting to
      claim, unopened crates. "Today's quests are new" only stands in when
      neither is live, so the card never pads itself. */
-  const wbShow = isToday && allLog.length > 0 && (await kvGet('wbReturnDay', null)) === S.date;
+  const wbShow = returning;   // one read, hoisted above qopts; see `returning`
   /* THE DAY GUARD'S ONE LINE OF VOICE. After a clock set-back or a westbound
      date-line hop, the high-water mark (js/db.js claimDay, rule 1) sits AHEAD
      of the device's today, so every daily gate quietly refuses: no wheel, no
@@ -4274,6 +4288,17 @@ async function renderToday(el) {
      own, so this and the quest-claim toast can never drift apart. Display only;
      it decides no award, and it clears itself on the next answer. */
   const unwitnessed = isToday && await dayIsUnwitnessed(S.date);
+  /* THE DAY CLOSE, CLAIMED ONLY IF THE LEDGER REALLY PAID IT. The card names it
+     as something that survived the gap, so it is read off the same rows
+     awardDayCloseIfDue writes (js/game.js: `dayclose-<date>` on budget,
+     `dayeffort-<date>` otherwise) for the last day this player logged before
+     today. allLog and allXp are already in hand, so this costs no extra reads. */
+  let wbClosePaid = false;
+  if (wbShow) {
+    let last = null;
+    for (const r of allLog) if (r.date < S.date && (!last || r.date > last)) last = r.date;
+    wbClosePaid = !!last && allXp.some(r => r.key === `dayclose-${last}` || r.key === `dayeffort-${last}`);
+  }
   let wbFacts = [];
   if (wbShow) {
     const wk = questTiers.find(tier => tier.period === 'week');
@@ -4372,6 +4397,8 @@ async function renderToday(el) {
     // is still on the day they installed.
     everLogged: allLog.length > 0,
     freshInstall: !!S.settings.createdAt && dateKey(new Date(S.settings.createdAt)) === S.date,
+    // R43-12: nor somebody back after a long gap; same signal as the return card.
+    returning,
   };
   await loadGwMemory(); // B13: seed the anti-repeat bag from the last reload before he speaks
   const gwLine = gwartLine(gwCtx);
@@ -4410,7 +4437,50 @@ async function renderToday(el) {
        First child, so it starts at the scroll origin and can never paint into
        the strip a pull opens. */''}
   <div class="today-plate" aria-hidden="true"></div>
-  <div id="updBanner"></div>
+  ${/* ABOVE THE DAY, NOT INSIDE IT AND NOT BELOW IT (R43-8, 2026-09-07).
+       On 2026-09-05 this card was moved OUT of .dayflow, for a real reason: inside
+       the day it painted a panel in the flat day (today-container LEDGER) and made
+       the collapsed summary taller than a 568px screen (today-peek WHOLE). It was
+       parked BELOW the whole day container, and measured on three returning
+       players at three gap lengths it landed at 1220px on an 852px viewport, 368px
+       under the fold: the app's only greeting to somebody coming back, unread at
+       every gap, 3 of 3.
+       MEASURED, ON THIS TREE, AT 393x852, WITH THE FOLD AT 785.8: the hero card
+       alone runs 0 to 641, the four doors 653 to 718, the news pill 740 to 781
+       and the quests 791 to 845. NOTHING under the hero is above the fold on this
+       screen, so "move it up a bit" has no answer: below the day put the card at
+       1411, under the quests at 857, and directly under the doors at 740.2
+       against a ceiling of 741.8, which is a pass by 1.6px and a lie about being
+       readable. The only place the app's one greeting to a returning player is
+       genuinely on screen is above the hero, which is where the app already keeps
+       a one-off announcement: #updBanner is the line right above this one. It
+       costs the Bonehead the top of the screen for exactly one boot, on the boot
+       where a sentence matters more than the portrait, and #wbOk takes the card
+       away for good.
+       BOTH SIDES OF THE 2026-09-05 TRADE STILL HOLD, which is why this is not a
+       revert: the card is OUTSIDE section.dayblk, so the day is not a panel in a
+       panel and the collapsed summary still fits a 568px screen. Graded from both
+       sides in tests/returning-boot-audit.mjs (FOLD at 393x852, WHOLE at
+       320x568); either old position fails one of them. */''}
+  ${wbShow ? `
+  <div class="card wb-back" id="wbCard">
+    ${/* IT SAYS WHAT IS TRUE, WHICH USED TO BE THE OTHER FAILURE. The headline was
+         "Everything is where you left it." while the streak read 5 to 0 at every
+         gap and nothing else on Today mentions the streak at all (it lives as a
+         pill on Trends). The design note on maybeWelcomeBack is right that a day
+         count is an accusation; claiming everything survived when the one thing
+         that did not is invisible is the opposite error, and a player who opens
+         Trends finds it out for themselves. So the streak is named, in the same
+         voice: no number, no question, nothing to apologise for, and the reset is
+         a fresh start rather than a loss. The list beside it is the answer to
+         "then what did I lose", and every item on it is read off state this
+         render already has: the day close is claimed only when the ledger really
+         paid it. */''}
+    <b>The streak starts over. Nothing else does.</b>
+    <span>Your Bonehead, pets, coins, gear and claimed quests are exactly as you left them${wbClosePaid ? ', and the last day you logged was closed and paid' : ''}. ${wbFacts.join(' ')}</span>
+    <button class="btn small ghost" id="wbOk">Good to be back</button>
+  </div>` : ''}
+
   <!-- The scene is CORAL by default (the deck's hero colour), but an equipped
        backdrop covers it completely, and on a tab switch the card paints a frame
        or two before that image decodes: Tom, 2026-08-08, "im seeing the coral
@@ -4537,6 +4607,28 @@ async function renderToday(el) {
     <button class="hero-act" id="kitchenActBtn">${pixCur('kitchen', 24) || bhIcon('dish-broth', 23)}<span>Kitchen${(cook && cook.ready) || cropsRipe ? ' <i class="hero-badge">!</i>' : ''}</span></button>
     <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(24)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
   </div>
+
+  ${/* THE UPDATE BANNER SITS UNDER THE DOORS, AND THAT IS GEOMETRY RATHER THAN
+       TASTE. It was the second child of the screen, between .today-plate and
+       .hero-card, and EMPTY almost always: checkForUpdate only fills it when
+       version.json says the live build is ahead of this one. Tom, 2026-09-07,
+       from his own phone: "ive noticed this top sliver recently a couple times
+       sometimes it goes away i think after an update but looks glitchy".
+
+       The hero's bleed under the island is a negative margin-top of
+       `--sat + 14px` on .hero-scene that collapses out through .hero-card, and
+       it only lands the art at y=0 while nothing above it has height. Measured
+       at 393x852, --sat 59, with the banner mounted:
+         #updBanner   73 -> 152.9      .hero-scene  91.9  (73 + 79.9 + 12 - 73)
+       so the negative margin ate 73 of the banner's 79.9 instead of the
+       scroller's padding, the hero painted opaquely over the rest, and the 18.9
+       px left over was .today-plate's backdrop with the banner's amber top edge
+       clipped inside it: a black band between two correct greens. Anything with
+       height here does that; only its size changes.
+       So it moves below the four doors, where it is the first card of the feed
+       and the peek is what carries a player to it. tests/top-strip-audit.mjs
+       drives the stale state and grades the strip, at both insets. */''}
+  <div id="updBanner"></div>
 
   ${newsBannerHtml(newsUnseen, eq, dayCloseNews(allXp))}
 
@@ -4716,15 +4808,8 @@ async function renderToday(el) {
     <span>${esc(rebal.body)}</span>
     <button class="btn" id="habitGrantGo">${esc(rebal.button)}</button>
   </div>` : ''}
-  ${/* BELOW THE DAY, like the rebalance card under it (2026-09-05): inside .dayflow the
-       return card painted a panel inside the flat day and pushed the collapsed summary
-       past a 568px screen (today-container LEDGER, today-peek WHOLE on a lapsed seed). */''}
-  ${wbShow ? `
-  <div class="card wb-back" id="wbCard">
-    <b>Everything is where you left it.</b>
-    <span>${wbFacts.join(' ')}</span>
-    <button class="btn small ghost" id="wbOk">Good to be back</button>
-  </div>` : ''}
+  ${/* THE RETURN CARD MOVED UP (R43-7/8, 2026-09-07): see the emit above the day
+       container. Nothing takes its place here. */''}
 
   ${/* THE PROMO SLOT IS GONE. Tom, 2026-09-03: "today still has the step
        challenge winner and monster banner at the bottom these should be gone now
@@ -5566,7 +5651,7 @@ function gwartLine(ctx) {
    at the bottom. The general pool is the only one that is pure character. */
 function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
   steps = 0, dishReady = false, cropsRipe = 0, fightsReady = 0,
-  gearOwned = 0, gearWorn = 0, everLogged = true, freshInstall = false }) {
+  gearOwned = 0, gearWorn = 0, everLogged = true, freshInstall = false, returning = false }) {
   const hour = new Date().getHours();
   if (crates.length) return [
     'A crate by his feet, still shut. I gave him hands for this.',
@@ -5647,7 +5732,16 @@ function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
        still on the very day they installed) gets the welcome line no matter
        the hour. "Half the day gone" reads as a scold, and nobody has failed
        at anything yet on their first day, or before their first entry. */
+    /* R43-12: and not somebody who has just come back either. The install-day
+       and never-logged exemptions above (R39-28) both say the same thing -- do
+       not scold a player for a blank page they have not had a chance to fill --
+       and a 90-day gap is that case, not a different one. Measured 6 of 36
+       renders on a returning save and guaranteed within 8, so somebody back
+       after three months could be greeted with it. He gets his own line rather
+       than the morning one: "Morning" at 3pm is a second small untruth, and this
+       is the same welcome in the afternoon's voice. */
     (hour < 11 || freshInstall || !everLogged) ? 'Morning. The ledger is blank. It usually starts that way.'
+      : returning ? 'Blank page. Same as the first one. Start it again.'
       : 'Half the day gone and not a crumb on the page.',
     'Whatever you ate, write it. Accurate beats flattering.',
     'Feed the ledger and he does the rest. Fair deal.',
@@ -14777,6 +14871,15 @@ async function renderSettings(el) {
     <div class="card-title">ABOUT</div>
     <div class="settings-row"><div class="lab"><b>Join the community</b><span>Bone Boiz on Discord: where feedback lands and future features get decided</span></div><a class="btn small" id="communityBtn" href="${DISCORD_URL}" target="_blank" rel="noopener" style="text-decoration:none">Join</a></div>
     <div class="settings-row"><div class="lab"><b>Send feedback</b><span>Tell the developer what you think</span></div><button class="btn small ghost" id="feedbackBtn">Write</button></div>
+    <!-- PERMANENT AND UNGATED (R43-1, App Store 5.1.1(i)). privacy.html shipped and
+         answered 200 for months, and the only two links to it were inside the survey
+         sheet, whose Settings row is gated on !surveyDone: fill the survey and the
+         app has no privacy link at all. A DOM sweep of all six routes matched
+         privacy|terms|legal|eula ZERO times. This row is never conditional, needs no
+         account, and privacy.html is in sw.js's PRECACHE and in build-www.sh's copy
+         list so the relative href resolves offline AND inside the native shell,
+         which is the build App Review actually opens. -->
+    <div class="settings-row"><div class="lab"><b>Privacy policy</b><span>What stays on this phone, what gets sent, and what nobody else can read</span></div><a class="btn small ghost" id="privacyBtn" href="privacy.html" target="_blank" rel="noopener" style="text-decoration:none">Read</a></div>
     ${surveyDone ? '' : `<div class="settings-row"><div class="lab"><b>Day One survey 💜</b><span>Share your thoughts, keep the exclusive Day One Lizard</span></div><button class="btn small" id="surveyBtn" style="background:#b96cf0;color:#1a0f26">Claim</button></div>`}
     <div class="settings-row"><div class="lab"><b>What's New</b><span>See what changed in recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</button></div>
     <div class="settings-row"><div class="lab"><b>App version</b><span id="buildLine">Build ${APP_BUILD}${shellV} · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>
@@ -15361,6 +15464,7 @@ function renderOnboarding(step = 0, ctx = {}) {
   if (step === 0) {
     el.innerHTML = `
     <div class="onb onb-in">
+      <div class="onb-scroll">
       ${dots}
       <h1>FEED THE<br>BONES</h1>
       <p class="onb-sub">The food tracker with a <b>skeleton in it</b>. Log your meals, and your Bonehead earns the loot.</p>
@@ -15368,6 +15472,7 @@ function renderOnboarding(step = 0, ctx = {}) {
       <div class="onb-poster">
         ${['B0-1', 'FW1', 'P1', 'SK0-1', 'H11-1', 'IL1-1', 'IR1'].map(ly).join('')}
         <div class="onb-pet"><img src="assets/bh/anim/cloud/body-noeyes.png" alt=""><img src="assets/bh/anim/cloud/eyes.png" alt=""></div>
+      </div>
       </div>
       <div class="onb-foot">
         <button class="btn" id="onbGo">Meet your Bonehead</button>
@@ -15387,6 +15492,7 @@ function renderOnboarding(step = 0, ctx = {}) {
     if (!ctx.pick) { ctx.pick = randomName(); stamp(); }
     el.innerHTML = `
     <div class="onb onb-in">
+      <div class="onb-scroll">
       ${back}${dots}
       <h1>THIS ONE'S<br>YOURS</h1>
       <div class="onb-poster bare">${['B0-1', 'SK0-1'].map(ly).join('')}</div>
@@ -15401,6 +15507,7 @@ function renderOnboarding(step = 0, ctx = {}) {
              icons in a three-icon row drawn in a different medium. */''}
         <div class="onb-earn"><span class="ic">${pixCur('egg', 18) || bhIcon('egg', 18)}</span><b>WALK</b><small>Hatch pets, find loot</small></div>
         <div class="onb-earn"><span class="ic">${ICONS.pit(18)}</span><b>FIGHT</b><small>Spend it all in the Pit</small></div>
+      </div>
       </div>
       <div class="onb-foot">
         <button class="btn" id="onbMe">That's me</button>
@@ -15425,10 +15532,12 @@ function renderOnboarding(step = 0, ctx = {}) {
 
   el.innerHTML = `
   <div class="onb onb-in onb-plan">
+    <div class="onb-scroll">
     ${back}${dots}
     <h1>THE PLAN</h1>
     ${onbGwartHtml(2)}
     <div id="pfHost">${profileFormHtml({}, 'lb')}</div>
+    </div>
     <div class="onb-foot">
       <button class="btn" id="onbSave">Start tracking</button>
       <button class="onb-quiet" id="onbSkip">Skip for now: uses a rough default plan <b>(30 yr &middot; 5'10" &middot; 180 lb)</b> you can fix any time in Settings.</button>
@@ -15627,6 +15736,26 @@ addEventListener('bh-levelup', e => {
   maybeCelebrate();
 });
 
+/* R41-21: WHAT THIS PARTICULAR STREAK MEANS. Measured 2026-09-07 at 393x852,
+   before this change: day 7's card carried three content blocks (🔥 7 days /
+   "Streak milestone · +100 XP" / the "On a roll" badge) and day 14's carried
+   two, because BADGES has streak-3, streak-7 and streak-30 and nothing at 14.
+   Day 14's card was therefore a strict subset of day 7's: the LONGER streak was
+   the thinner screen.
+   Adding a streak-14 badge would have fixed the shape and it is not mine to add:
+   a badge pays +25 XP and lands in the badge grid, which is an economy change
+   and Tom's call. This is copy plus counts the app already holds, and it is on
+   EVERY milestone, not bolted onto 14: a card keyed to one number would break
+   again at 50. Nothing here is computed, invented or projected; see celeStats. */
+const STREAK_LINES = {
+  3: 'Three days. Three is the one that usually breaks.',
+  7: 'A full week. Seven days, none of them missed.',
+  14: 'Two weeks. Nobody keeps fourteen days by accident.',
+  30: 'A month of it. That is not a run any more, it is how you eat.',
+  50: 'Fifty days. Most people never see the far side of a month.',
+  100: 'A hundred days. There is no trick left to tell you about.',
+};
+
 const LEVELUP_LINES = [
   'Another level? I felt that in my femurs.',
   'New level, same beautiful skull.',
@@ -15655,6 +15784,26 @@ function maybeCelebrate() {
     S.celebration = null;
     if (c) openCelebration(c);
   }, 380);
+}
+
+/* THE COUNTS ARE READ, NEVER DERIVED. Every chip here is a length of something
+   the player owns, printed as-is: pieces found, pets in the Stable, badges
+   earned. No averages, no projections, no "you are on track for" (Tom's ruling:
+   no fabricated numbers). A count of zero gets no chip, because "0 pets" is a
+   sentence about an absence and this screen is about what they have built.
+   Returns null when there is nothing true to say, so the card is unchanged for
+   a player with nothing yet rather than carrying an empty row. */
+async function celeStats() {
+  let pieces = 0, pets = 0, badges = 0;
+  try {
+    const [cos, insts, earned] = await Promise.all([ownedCosmeticIds(), petInstances(), earnedBadgeIds()]);
+    pieces = cos.size; pets = insts.length; badges = earned.size;
+  } catch { return null; }
+  const chips = [];
+  if (pieces) chips.push(`<span class="bh-pill">${ICONS.bone(16)} ${pieces} piece${pieces === 1 ? '' : 's'} found</span>`);
+  if (pets) chips.push(`<span class="bh-pill">${crateIcon('egg', 16)} ${pets} pet${pets === 1 ? '' : 's'}</span>`);
+  if (badges) chips.push(`<span class="bh-pill">${ICONS.star(16)} ${badges} badge${badges === 1 ? '' : 's'}</span>`);
+  return chips.length ? `<div class="cele-stats">${chips.join('')}</div>` : null;
 }
 
 async function openCelebration({ levelUp = null, levelRewards = null, newBadges = [], streakMilestone = null, fromLevel = null, note = null, newPet = null }) {
@@ -15687,7 +15836,16 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
     return;
   }
   const bits = [];
-  if (streakMilestone) bits.push(`<div class="cele-big">🔥 ${streakMilestone} days</div><div class="cele-sub">Streak milestone · +100 XP</div>`);
+  if (streakMilestone) {
+    /* "· Bone Crate" is not decoration: streakAwards() grants a GOLDEN crate on
+       every milestone (js/game.js, `grantCrate('golden', 'streak-' + ...)`) and
+       no card has ever said so. */
+    bits.push(`<div class="cele-big">🔥 ${streakMilestone} days</div><div class="cele-sub">Streak milestone · +100 XP · Bone Crate</div>`);
+    const line = STREAK_LINES[streakMilestone];
+    if (line) bits.push(`<div class="cele-line">${esc(line)}</div>`);
+    const stats = await celeStats();
+    if (stats) bits.push(stats);
+  }
   for (const b of newBadges) bits.push(`<div class="cele-badge"><span>${badgeIconHtml(b.icon,26)}</span><div><b>${esc(b.name)}</b><small>${esc(b.desc)} · +25 XP</small></div></div>`);
   if (!levelUp && !bits.length) return;
   // Confetti stays for badges and streaks. The level-up moment has its own
@@ -15718,6 +15876,12 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
   $('#celeOk', wrap).addEventListener('click', () => history.back());
 }
 
+
+/* Test seam, webdriver-gated like __packReveal / __spireSheet / __toast.
+   A streak milestone is reachable only by logging on N real consecutive days,
+   so tests/streak-card-audit.mjs would otherwise have to hand-roll the markup
+   it is grading, which grades nothing. This is the shipped function. */
+if (typeof window !== 'undefined' && navigator.webdriver) window.__celebrate = openCelebration;
 
 /* The level-up MOMENT. A breathing lime glow bursts behind the player's own
    Bonehead. Never a stock figure, this surface is under the figure contract and
@@ -16294,9 +16458,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
   if (tab === 'wardrobe') {
     const owned = await ownedCosmeticIds();
     // tm and dustBal are reassigned by restageLook after a paid commit (QA round 23 F1)
-    let [gOwnedSet, gearLo, fighter, slimedSet, tm, looks, dustBal, fitList] = await Promise.all([
-      ownedGearIds(), gearLoadout(), buildFighter(), slimedGearIds(), transmogMap(), collectedLooks(), boneDust(), fits(),
+    let [gOwnedSet, gearLo, fighter, slimedSet, tm, looks, dustBal, fitList, invRows] = await Promise.all([
+      ownedGearIds(), gearLoadout(), buildFighter(), slimedGearIds(), transmogMap(), collectedLooks(), boneDust(), fits(), db.all('inv'),
     ]);
+    /* R39-25, THE UNREAD MARK. One inv scan, shared by both readers, on the
+       WARDROBE's render only: nothing here runs on Today's tick, which is what
+       today-reads-lint exists to keep true. The rows are read BEFORE the clear
+       below, so the slot you land on shows its dots once and is quiet on the
+       next render and after a reload. */
+    const newIds = await newCosmeticIds(invRows);
+    const newSlots = await newSlotCodes(invRows);
     const fitPrices = await Promise.all(fitList.map(f => fitPrice(f)));
     // What "Take it all off" would actually take off, computed by the same
     // function that does it, so the chip cannot offer a strip that does nothing
@@ -16386,6 +16557,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
               : `<canvas class="pd-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}"${fbTintAttr(art)}${code === 'SK' ? ' data-pad="0.2"' : ''}></canvas>`)
           : `<span class="pd-empty">${mog === TRANSMOG_HIDE ? ICONS.hidden(18) : '+'}</span>`}
         ${mog ? `<span class="pd-mog" title="Look changed">${sparkIco(11)}</span>` : ''}
+        ${newSlots.has(code) ? '<span class="new-dot" role="img" aria-label="New"></span>' : ''}
         <span class="pd-tag">${esc(label)}</span>
         ${g ? `<span class="pd-gear">${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>` : ''}
       </button>`;
@@ -16645,6 +16817,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
           <button class="ward-cell r-${i.rarity} ${eq[slot] === i.id && !gearLo[slot] ? 'equipped' : ''}" data-equip="${i.id}" title="${esc(i.name)} · ${esc(i.rarity)}">
             ${famArtHtml(i)}
             ${rarityTagHtml(i.rarity)}
+            ${newIds.has(i.id) ? NEW_DOT : ''}
           </button>`;
           /* data-equip AND data-family: the tap equips what the tile is showing
              (so wearing this piece still costs exactly one tap, as it does
@@ -16657,6 +16830,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             ${famArtHtml(i)}
             ${rarityTagHtml(best.rarity)}
             <span class="ward-fam-n" aria-hidden="true">${fam.length}</span>
+            ${fam.some(v => newIds.has(v.id)) ? NEW_DOT : ''}
           </button>`;
         }).join('')}
         ${gearItems.map(g => {
@@ -16668,6 +16842,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             ${rarityTagHtml(g.rarity)}
             <span class="gear-stat">${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>
             ${locked ? `<span class="gear-lock">Lv ${g.minLevel}</span>` : ''}
+            ${newIds.has(g.id) ? NEW_DOT : ''}
           </button>`;
         }).join('')}
       </div>
@@ -16918,6 +17093,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
        are transmogging"). Same trim as the doll slots. */
     hydratePackArt(content, '.pd-art[data-art]');
     lazyHydrateWardArt(content);       // PERF-4: the grid's tiles paint as they near the viewport, not all at once
+    /* R39-25: THE GRID FOR THIS SLOT IS NOW ON SCREEN, SO IT HAS BEEN SEEN.
+       After the HTML, never before it: the marks above were rendered from the
+       pre-clear rows so the slot you land on shows its dots once. Clearing is a
+       put per still-flagged row in THIS slot only, so a slot with nothing new
+       writes nothing. Awaited so a reload straight after cannot race it. */
+    if (newSlots.has(slot)) await clearNewInSlot(slot);
     const wirePd = b => b.addEventListener('click', async () => {
       S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null;
       await renderCharacter(wrap, 'wardrobe', { instant: true });
@@ -17923,6 +18104,11 @@ const RAR_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
    and its title, and it is the same vocabulary the crate odds sheet already
    prints. Bottom-left, because the equipped tick owns the top-right corner and
    the SLIMED tag owns the top-left. */
+/* R39-25's unread mark, in the app's own badge language: the same accent plate
+   and --bg ring the crate count and the News dot wear, at dot size. One string,
+   used by the paper-doll slot rail and by all three wardrobe tile shapes, so a
+   tile that grew a mark and a rail that did not cannot happen. */
+const NEW_DOT = '<span class="new-dot" role="img" aria-label="New"></span>';
 function rarityTagHtml(rarity) {
   const r = String(rarity || '');
   return RAR_ORDER.includes(r) ? `<span class="ward-rar" aria-hidden="true">${r[0].toUpperCase()}</span>` : '';
@@ -21446,7 +21632,15 @@ async function renderBoneyard(el) {
       <div id="mapBody">
         <div id="mapIntro" style="padding:16px 16px 0">
           <p class="note" style="margin-bottom:6px">The Boneyard is your real neighborhood, skinned for skeletons. Fresh spawns appear around you every day: walk within ${COLLECT_RADIUS_M} m of one and collect it.</p>
-          <p class="note" style="margin-bottom:14px">Your location is used on this phone only, never stored, never uploaded. Spawns are computed on-device; the map itself loads over the network.</p>
+          <!-- SAYS WHAT THE APP ACTUALLY SENDS (R43-2). This read "used on this phone
+               only, never stored, never uploaded" while js/spires.js quantizes the
+               fix to a 0.02-degree grid cell (~2.2 km, see js/spires.js) and the map boot
+               sends GET /spires?ids=sp-2464--6156. The iOS purpose string was
+               corrected in v498 (docs/PERMISSION-STRINGS.md), so this was the last
+               place contradicting the wire. Wording tracks the plist string and
+               privacy.html's "Location and the map" section; the behaviour is
+               unchanged. -->
+          <p class="note" style="margin-bottom:14px">Spawns and dens are worked out on this phone from your position, and your exact coordinates never leave it. Spires are shared with other players, so the app asks the server about the map cell you are in, about 2.2 km across, and claiming one tells the server which tower it was. The map itself loads over the network.</p>
           <button class="btn" id="mapStart">Open the map</button>
           <!-- WAS A HAND-ROLLED COPY OF THE KEY, and it had drifted: four rows
                against the key's nine, no Herb patch, no mini-boss, no dens, and
@@ -23422,7 +23616,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v503'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v509'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

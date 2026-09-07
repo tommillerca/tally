@@ -17,16 +17,18 @@ npx cap sync ios
 npx cap open ios        # opens Xcode
 ```
 
-For an App Store archive, build the web bundle with the store flag enabled:
+For an App Store archive and upload, select the self-checking submission mode:
 
 ```
 cd native
-STORE_BUILD=1 ./build-www.sh
-npx cap sync ios
+SUBMISSION=1 ./build-ios.sh
 ```
 
-The flag is applied only to the copied `native/www/js/app.js`. The shared web
-source and ordinary internal native builds keep the beta feedback surfaces.
+This mode applies the store flag only to the copied `native/www/js/app.js`,
+temporarily replaces the Capacitor config with a generated local-bundle config,
+syncs iOS, and asserts both results before archiving. An EXIT trap restores the
+tracked config even when a later step fails. With `SUBMISSION` absent,
+`build-ios.sh` keeps the remote-shell internal/TestFlight path unchanged.
 
 ### Submission prep: bundling www instead of the remote shell
 
@@ -46,19 +48,7 @@ bundle instead of the live site. Both `www/` and `capacitor.config.store.json`
 are gitignored and regenerated on every run; `capacitor.config.json` in the
 repo is never modified.
 
-At submission time, to actually archive against the bundle:
-
-```
-cd native
-./build-store.sh
-cp capacitor.config.json capacitor.config.json.bak   # restore after archiving
-cp capacitor.config.store.json capacitor.config.json
-npx cap sync ios
-# ... archive in Xcode ...
-mv capacitor.config.json.bak capacitor.config.json    # put the remote shell back
-```
-
-To verify the bundle before archiving (no Xcode/signing needed):
+To verify the prepared bundle without archiving (no Xcode/signing needed):
 - `grep 'const STORE_BUILD' www/js/app.js` should read `= true;`
 - `node ../tests/store-copy-lint.mjs` (checks the shared source + this build
   script's sed line; the same gating logic ships into the bundle)

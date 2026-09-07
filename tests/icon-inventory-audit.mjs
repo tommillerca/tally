@@ -310,6 +310,10 @@ const SUBFLOOR = {
   'js/app.js:openFriendProfile|tombstone': '13px, inline with the friend profile\'s spire note.',
   'js/app.js:renderFriends|coin':         '13px in the gift row.',
   'js/app.js:renderFriends|dust':         '12px in the gift row.',
+  /* 2026-09-07, R41-21: the streak card's counts row. bone and star are AT their 16 floor and draw pixel;
+     the egg is the crate concept, whose floor is 24, and 24px beside 14.5px chip text is a different
+     component. Same reason as renderToday|crate/? and racePrizeHtml|crate/? above. */
+  'js/app.js:celeStats|crate/egg':        '16px egg in a .bh-pill on the streak-milestone card; the crate floor is 24 and this chip is text height.',
   'js/app.js:renderFriends|crate/?':      '15px crate in the gift row; the crate floor is 24 so 16 would not help, it needs crateChip. CANDIDATE.',
   'js/app.js:openGiftSheet|coin':         '14px in the gift amount row. CANDIDATE for 16: one step away.',
   'js/app.js:openLevelUpMoment|crate/egg':'15px. Not bumped with the rest of this row: the 24 step for the egg is assets/icons-pix/egg-24.png and that file does not exist (see ASSETS below), and Tom rejected the small egg sprite on sight in the last pass ("i feel like the step egg looks worse for the icon maybe we keep the egg icon and just swap the chests"). Open question for Tom, not a silent choice.',
