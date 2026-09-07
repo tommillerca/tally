@@ -2465,6 +2465,37 @@ body::before {
    there. 600px is the same breakpoint the discarded shrink used. */
 @media (max-height: 600px) {
   .fight-body { position: relative; overflow-y: auto; }
+  /* R43-6: THE FOURTH MOVE HAS TO BE PRESSABLE WHERE IT SITS.
+     Measured at 320x568 on a real den fight, before this, every number off the
+     render: .fight-body is 465.5px and its parts are arena 283 + meta 52 +
+     tray(margin 12) + endrow(margin 8, 58.8) + 10px pad, which leaves the tray
+     41.7px and its own floor then forced it to 96 and overflowed the column.
+     The four moves are two 68.3px rows, 145px of content, so Bone Guard
+     rendered at 527.8 to 596 and the tray clipped at 547.5: its centre hit
+     div#fightBody, a real click there did nothing, and the log still read
+     "Round one. Your turn." The sticky End Turn row (499.3 to 558) was over the
+     rest of it. Both larger viewports hand the tray its full 143px and all four
+     moves answer at rest.
+     TWO FULL ROWS ARE NOT AFFORDABLE HERE and this is the one place the
+     2026-08-16 "pin, do not shrink" call has to bend: 145px of tray needs 105px
+     from somewhere and the only line item that size is the arena. Everything
+     else is squeezed first (meta margins 20 -> 8, the two row margins 20 -> 14)
+     and the arena gives the remaining 63, 283 -> 220, at this breakpoint only.
+     That buys a 122px tray: row one whole, row two exposed 46px, above the 40px
+     tap floor, with its centre inside the tray, so ALL FOUR MOVES ARE HIT AT
+     REST at 320x568. The tray still scrolls for the last 23px of row two and
+     still draws its fade, and the type, the hints and the button sizes are
+     untouched. The figures scale with the arena by design (container-type:size
+     above), so nothing needs re-derivation. */
+  .fight-body > .arena { height: 220px; }
+  .fight-body > .fight-meta { margin: 4px 2px 4px; }
+  .fight-body > .fight-actions { margin-top: 8px; min-height: 0; }
+  .fight-body > .fight-endrow { margin-top: 6px; }
+  /* Snap so a rest position is always a whole row: the tray can still only show
+     one and a half, and stopping between them is what put a button's centre in
+     dead space in the first place. */
+  .fight-actions { scroll-snap-type: y proximity; }
+  .fight-act { scroll-snap-align: start; }
   .fight-body > .fight-endrow {
     position: sticky; bottom: 0; z-index: 4;
     /* opaque, or the tray scrolls through the button it is supposed to sit under */
