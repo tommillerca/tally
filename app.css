@@ -2477,6 +2477,37 @@ body::before {
    there. 600px is the same breakpoint the discarded shrink used. */
 @media (max-height: 600px) {
   .fight-body { position: relative; overflow-y: auto; }
+  /* R43-6: THE FOURTH MOVE HAS TO BE PRESSABLE WHERE IT SITS.
+     Measured at 320x568 on a real den fight, before this, every number off the
+     render: .fight-body is 465.5px and its parts are arena 283 + meta 52 +
+     tray(margin 12) + endrow(margin 8, 58.8) + 10px pad, which leaves the tray
+     41.7px and its own floor then forced it to 96 and overflowed the column.
+     The four moves are two 68.3px rows, 145px of content, so Bone Guard
+     rendered at 527.8 to 596 and the tray clipped at 547.5: its centre hit
+     div#fightBody, a real click there did nothing, and the log still read
+     "Round one. Your turn." The sticky End Turn row (499.3 to 558) was over the
+     rest of it. Both larger viewports hand the tray its full 143px and all four
+     moves answer at rest.
+     TWO FULL ROWS ARE NOT AFFORDABLE HERE and this is the one place the
+     2026-08-16 "pin, do not shrink" call has to bend: 145px of tray needs 105px
+     from somewhere and the only line item that size is the arena. Everything
+     else is squeezed first (meta margins 20 -> 8, the two row margins 20 -> 14)
+     and the arena gives the remaining 63, 283 -> 220, at this breakpoint only.
+     That buys a 122px tray: row one whole, row two exposed 46px, above the 40px
+     tap floor, with its centre inside the tray, so ALL FOUR MOVES ARE HIT AT
+     REST at 320x568. The tray still scrolls for the last 23px of row two and
+     still draws its fade, and the type, the hints and the button sizes are
+     untouched. The figures scale with the arena by design (container-type:size
+     above), so nothing needs re-derivation. */
+  .fight-body > .arena { height: 220px; }
+  .fight-body > .fight-meta { margin: 4px 2px 4px; }
+  .fight-body > .fight-actions { margin-top: 8px; min-height: 0; }
+  .fight-body > .fight-endrow { margin-top: 6px; }
+  /* Snap so a rest position is always a whole row: the tray can still only show
+     one and a half, and stopping between them is what put a button's centre in
+     dead space in the first place. */
+  .fight-actions { scroll-snap-type: y proximity; }
+  .fight-act { scroll-snap-align: start; }
   .fight-body > .fight-endrow {
     position: sticky; bottom: 0; z-index: 4;
     /* opaque, or the tray scrolls through the button it is supposed to sit under */
@@ -7934,10 +7965,47 @@ body::before {
    ONBOARDING (market-quality-mockups/onb-*.html, approved 2026-08-07).
    The first 90 seconds: sell the product, hand over the character, capture the
    plan honestly. Launch funnel: every step tracks. ============================================================================ */
+/* THE STEP OWNS THE WHOLE SCREEN BOX, like the Boneyard route above.
+   #screen pads `calc(var(--sat) + 14px) var(--pad) 24px` and .onb pads
+   `calc(var(--sat) + 22px) 22px` on top of that, so the onboarding counted the
+   notch TWICE (the same double-count the .screen--map note calls out) and the
+   footer's full-bleed negative margins stopped 16px short of the screen at both
+   edges. Measured at 320x568 before this: .onb runs 14 to 582 against a 568
+   viewport, so a 100dvh step hung 14px past the fold and clipped the last line
+   of the footer, and the footer's backing painted 38 to 282 of 320.
+   A :has() rule rather than a class, because renderOnboarding does not go
+   through route() and route() is what clears the screen-- classes: a class set
+   here would leak onto Today. .survey-feat and body:has(.map-act) above already
+   rely on :has. */
+.screen:has(> .onb) { padding: 0; }
 .onb {
-  position: relative; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column;
-  align-items: center; padding: calc(var(--sat) + 22px) 22px calc(var(--sab) + 24px);
+  position: relative; height: 100vh; height: 100dvh; display: flex; flex-direction: column;
+  align-items: center; padding: calc(var(--sat) + 22px) 22px 0;
   max-width: 600px; margin: 0 auto;
+}
+/* R43-4 / R43-5: THE STEP OWNS TWO BANDS, IT DOES NOT OVERLAY ONE ON THE OTHER.
+   The sticky footer below fixed R39-15 (the CTA under the fold) by floating an
+   OPAQUE 160px bar up to the scrollport edge, which is an overlay: at 320x568 it
+   painted over the bottom 159.8px of every step at every scroll offset. Measured
+   on the shipped tip: the nameplate on THIS ONE'S YOURS was 0% visible, a real
+   click at the reroll's coordinates left the name unchanged, and recovering the
+   plate took 144px of scroll. On THE PLAN a selected chip sat behind the footer
+   at all three viewports, 393x852 included.
+   Padding on the scroller cannot fix an overlay: reserved space at the END of
+   the document does nothing at scrollTop 0, which is where the defect lives.
+   So the content gets its OWN scrollport and the footer sits beside it, static,
+   as the second child of a viewport-height column. That is why neither defect
+   can come back: the button is a flex item of a box that is exactly one
+   viewport tall, so it is on screen at first paint by construction and does not
+   depend on the content fitting; and the content is clipped by a scrollport
+   that ends where the footer begins, so nothing can be underneath it. */
+.onb-scroll {
+  flex: 1; min-height: 0; width: 100%;
+  display: flex; flex-direction: column; align-items: center;
+  overflow-y: auto; overscroll-behavior: contain;
+  /* bleed to the screen edges: the parent's 22px gutter is re-applied inside so
+     scrolled content keeps its margin without the scrollport stopping short */
+  margin: 0 -22px; padding: 0 22px 10px;
 }
 .onb-in { animation: onbIn .26s ease-out; }
 @keyframes onbIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -7987,15 +8055,21 @@ body::before {
    height, so there is no leftover space to push into and the button just sits
    wherever the content stack ends: measured 22px under the fold at 375x667 and
    293px under it on the plan step, with no scroll cue either time.
-   sticky, not fixed: #screen is the scrolling ancestor (see the #app comment
-   above on why a position:fixed bottom bar detaches from iOS momentum scroll),
-   and a sticky element is laid out by the scroller itself so it can't detach.
-   Measured on a throwaway probe that a sticky bottom:0 footer inside a taller-
-   than-viewport flex column already sits flush with the scrollport's bottom
-   edge at scrollTop 0, so this fixes first paint, not just later scrolling.
+   The first fix for it was `position: sticky; bottom: 0`, and that overshot:
+   see R43-4 below. The footer is a static flex item of a viewport-height column
+   now, which pins it to the fold without overlaying anything.
    The negative margin + padding bleeds the backing colour to the screen edges
    (the parent's 22px gutter would otherwise show scrolled content beside it). */
-.onb-foot { width: 100%; margin-top: auto; position: sticky; bottom: 0; z-index: 2; margin-left: -22px; margin-right: -22px; padding: 14px 22px calc(var(--sab) + 16px); background: var(--bg); }
+/* R43-4: static, not sticky. See the .onb-scroll note above for why the sticky
+   form of this rule was an overlay and what replaced it. The footer keeps the
+   full-bleed backing (a hairline separates it from the scrolled content) and it
+   owns the bottom safe-area inset, which is why .onb's padding-bottom is 0. */
+/* align-self + width:auto, NOT width:100%: .onb is a centred flex column, and a
+   100% width is 100% of its CONTENT box, so the negative margins this rule has
+   carried since it was written moved nothing and the "full bleed" backing
+   measured 22 to 298 of a 320px screen. Stretching to the cross axis first is
+   what lets them reach the edges. */
+.onb-foot { width: auto; align-self: stretch; flex: none; z-index: 2; margin-left: -22px; margin-right: -22px; padding: 14px 22px calc(var(--sab) + 16px); background: var(--bg); border-top: 1px solid var(--line); }
 .onb-foot .btn { width: 100%; }
 .onb-quiet { display: block; width: 100%; text-align: center; font-size: 13px; font-weight: 700; color: var(--text-3); margin-top: 13px; line-height: 1.5; }
 .onb-quiet b { color: var(--coral); }
@@ -8023,6 +8097,33 @@ body::before {
 .onb-plan h1 { align-self: flex-start; text-align: left; font-size: 30px; }
 .onb-plan #pfHost { width: 100%; }
 .onb-plan .btn { width: 100%; margin-top: 4px; }
+
+/* SHORT PHONES GET A COMPACT FOOTER, NOT A SMALLER BUTTON. At 320x568 the step-3
+   footer measured 183.3px, a third of the screen, and all of it above the fold
+   now that it no longer overlaps. The button keeps its size and its 40px floor;
+   only the quiet secondary line tightens. */
+@media (max-height: 600px) {
+  .onb-foot { padding-top: 10px; padding-bottom: calc(var(--sab) + 10px); }
+  .onb-quiet { font-size: 12px; margin-top: 8px; line-height: 1.35; }
+  /* R43-4, THE OTHER HALF. Un-overlaying the footer stops the nameplate being
+     PAINTED OVER; it does not by itself put it on screen. Measured at 320x568
+     with the footer static: the step-2 scroller is 395px and its content 646px,
+     and the nameplate starts at 432px, so the screen titled THIS ONE'S YOURS
+     still opened with no name on it, one scroll away instead of one overlay
+     away. The overflow is 251px and the poster is 240 of it, so the poster is
+     where it comes from: the character shrinks on a 568px phone, the NAME does
+     not, because the name is what this step is for. Type stays on the design
+     scale (34px display, above the 30px THE PLAN already ships) and nothing
+     here is a tap target. The earns row is deliberately left to peek below the
+     fold: it is supporting copy, and a half-row is the scroll cue. */
+  .onb-dots { margin-bottom: 10px; }
+  .onb h1 { font-size: 34px; }
+  .onb-back ~ h1 { margin-top: 40px; }
+  .onb-poster { min-height: 140px; margin: 10px 0; }
+  .onb-nameplate { margin-top: 10px; }
+  .onb-earns { margin: 10px 0 10px; }
+  .onb-earn { padding: 8px 4px 6px; }
+}
 
 /* ---- Phase 4: FEEL. Exits for things that only knew how to enter. ---- */
 .sheet.closing { animation: sheetOut .2s ease-in forwards; }
