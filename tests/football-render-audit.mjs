@@ -915,19 +915,24 @@ try {
     await page.evaluate(() => document.querySelector('.fb-drop .t3-price')?.scrollIntoView({ block: 'center' }));
     await sleep(300);
     const m = await page.evaluate(() => {
-      const pill = document.querySelector('.fb-drop .t3-price'), card = pill && pill.closest('.t3-drop.fb-drop');
-      if (!pill || !card) return null;
-      const p = pill.getBoundingClientRect(), c = card.getBoundingClientRect();
-      return { text: pill.textContent.trim().replace(/\s+/g, ' '), w: +p.width.toFixed(1), h: +p.height.toFixed(1), over: +(p.right - c.right).toFixed(1), left: +(p.left - c.left).toFixed(1) };
+      /* measured against the poster's TEXT COLUMN (.tx), the box the pill is
+         laid out in. The card clips (overflow hidden) and pads 14px on the
+         right, so on origin/main at v493 the nowrap pill ran 23.0px past its
+         column at 393 and 40.1px at 375 while ending 2px inside the card's
+         border: a card-edge check reads that as healthy. */
+      const pill = document.querySelector('.fb-drop .t3-price'), tx = pill && pill.closest('.tx'), card = pill && pill.closest('.t3-drop.fb-drop');
+      if (!pill || !tx || !card) return null;
+      const p = pill.getBoundingClientRect(), t = tx.getBoundingClientRect(), c = card.getBoundingClientRect();
+      return { text: pill.textContent.trim().replace(/\s+/g, ' '), w: +p.width.toFixed(1), h: +p.height.toFixed(1), over: +(p.right - t.right).toFixed(1), left: +(p.left - t.left).toFixed(1), card: +(p.right - c.right).toFixed(1) };
     });
     if (w === 393 || w === 320) await shot(`08-price-pill-${w}`);
     return m;
   };
   const pills = { 393: await pillAt(393, 852), 375: await pillAt(375, 667), 320: await pillAt(320, 568) };
-  const badPills = Object.entries(pills).filter(([, m]) => !m || !(m.w > 0 && m.h > 0) || m.over > 0 || m.left < 0);
-  ok('PILL the Locker Room price pill stays inside its card at 393, 375 and 320 and still reads both prices',
-    badPills.length === 0 && Object.values(pills).every(m => /a piece/.test(m.text) && /the lot/.test(m.text)),
-    Object.entries(pills).map(([w, m]) => `${w}: ${m ? `${m.w}x${m.h}, overflow ${m.over}px, "${m.text}"` : 'NO PILL'}`).join(' | '));
+  const badPills = Object.entries(pills).filter(([, m]) => !m || !(m.w > 0 && m.h > 0) || m.over > 0.5 || m.left < -0.5 || m.card > 0);
+  ok('PILL the Locker Room price pill stays inside its text column and its card at 393, 375 and 320 and still reads both prices',
+    badPills.length === 0 && Object.values(pills).every(m => m && /a piece/.test(m.text) && /the lot/.test(m.text)),
+    Object.entries(pills).map(([w, m]) => `${w}: ${m ? `${m.w}x${m.h}, past its column ${m.over}px, past the card ${m.card}px, "${m.text}"` : 'NO PILL'}`).join(' | '));
   await setWidth(page, 393, 852);
 
 } finally {

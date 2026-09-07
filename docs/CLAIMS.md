@@ -51,9 +51,13 @@ CSS, the kin chips and the Dressing Room family tile's tier.
 
 4. PROOF: football-render-audit.mjs | REACH: In the Shop, the Locker Room
    poster's price pill ("4,200 a piece, 16,800 the lot") wraps onto two lines
-   inside its card. Measured before: it ran 7.0px past the card at 393, 24.1px
-   at 375 and 79.1px at 320, where it read "4,200 A PIECE, 16" and stopped.
-   After: 16px inside the card edge at all three widths, both prices readable.
+   inside its card. Measured against the text column it is laid out in, on
+   v493 before fixing: the 203.1px nowrap pill ran 23.0px past it at 393,
+   40.1px at 375 and 95.1px at 320 (the brief's 7.0 / 24.1 / 79.1 are the same
+   overrun taken 16px further out, at the card's padding edge; the card clips,
+   so at 320 it read "4,200 A PIECE, 16" and stopped). After: 0px past the
+   column and 16px inside the card border at all three widths, both prices
+   readable.
 
 5. PROOF: pet-ownership-audit.mjs | REACH: In the Stable, the chips under a
    pet with more than one copy are 44px tall (were 40). Arm one copy for
