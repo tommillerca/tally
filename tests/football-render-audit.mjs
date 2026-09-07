@@ -631,7 +631,7 @@ try {
   const A = rgb(FOOTBALL_TEAM_BY_ID[NAVY].a), B = rgb(FOOTBALL_TEAM_BY_ID[GOLD].a);
   const tintBad = tints.filter(t => t.err || !t.n || !t.navyMean
     || dist(t.navyMean, A) >= dist(t.navyMean, B) || dist(t.goldMean, B) >= dist(t.goldMean, A));
-  ok(`PET-TINT the kit takes the TEAM's colour on all three lizards: ${FOOTBALL_TEAM_BY_ID[NAVY].name} reads nearer its own navy, ${FOOTBALL_TEAM_BY_ID[GOLD].name} nearer its own yellow`,
+  ok(`PET-TINT the kit takes the TEAM's colour on all three lizards: ${FOOTBALL_TEAM_BY_ID[NAVY].name} reads nearer its own navy, ${FOOTBALL_TEAM_BY_ID[GOLD].name} nearer its own gold`,
     tints.length === 3 && tintBad.length === 0,
     tintBad.length
       ? tintBad.map(t => `${t.key}: ${t.err || `${t.n} px changed between the two teams` + (t.navyMean ? `, navy render mean ${t.navyMean.map(Math.round)} (dE ${dist(t.navyMean, A).toFixed(1)} to navy vs ${dist(t.navyMean, B).toFixed(1)} to yellow)` : '')}`).join('; ')
