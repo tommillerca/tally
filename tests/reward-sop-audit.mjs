@@ -295,7 +295,7 @@ const ACTIONS = [
      lane, not inside an exemption census. */
   /* sites 1 -> 2 on 2026-09-07 (lane 7, routine-race-audit): the cap is now claimed through
      claimCapped slots and the routine's own row is written with 0 XP, two paying calls. */
-  { id: 'js/wellness.js:markRoutine', sites: 2, undriven: 'ledger key routine-<id>-<date>, so a routine cannot pay twice. The ROUTINE_XP_CAP ceiling is read-then-decide across an await and two DIFFERENT routines ticked at once at CAP-1 both pay: a measured ceiling of 15 XP can pay 20. OPEN, and named here rather than dressed up' },
+  { id: 'js/wellness.js:markRoutine', sites: 2, undriven: 'ledger key routine-<id>-<date>, so a routine cannot pay twice. The ROUTINE_XP_CAP ceiling used to be read-then-decide across an await (two different routines finishing together paid 20 against 15, measured 2026-09-06); since lane 7 (2026-09-07) the cap is claimed through claimCapped ordinal slots rslot-<date>-<n>, and routine-race-audit.mjs races two routines and reads 15 total with both completions recorded' },
   /* WAS EXEMPT, on the sentence "a once-a-day cooldown plus an ingredient spend;
      nothing is granted without both". Sequentially true, and concurrency
      falsifies it: round 26 drove six overlapping calls and measured six
