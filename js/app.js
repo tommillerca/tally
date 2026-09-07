@@ -4410,7 +4410,6 @@ async function renderToday(el) {
        First child, so it starts at the scroll origin and can never paint into
        the strip a pull opens. */''}
   <div class="today-plate" aria-hidden="true"></div>
-  <div id="updBanner"></div>
   <!-- The scene is CORAL by default (the deck's hero colour), but an equipped
        backdrop covers it completely, and on a tab switch the card paints a frame
        or two before that image decodes: Tom, 2026-08-08, "im seeing the coral
@@ -4537,6 +4536,28 @@ async function renderToday(el) {
     <button class="hero-act" id="kitchenActBtn">${pixCur('kitchen', 24) || bhIcon('dish-broth', 23)}<span>Kitchen${(cook && cook.ready) || cropsRipe ? ' <i class="hero-badge">!</i>' : ''}</span></button>
     <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(24)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
   </div>
+
+  ${/* THE UPDATE BANNER SITS UNDER THE DOORS, AND THAT IS GEOMETRY RATHER THAN
+       TASTE. It was the second child of the screen, between .today-plate and
+       .hero-card, and EMPTY almost always: checkForUpdate only fills it when
+       version.json says the live build is ahead of this one. Tom, 2026-09-07,
+       from his own phone: "ive noticed this top sliver recently a couple times
+       sometimes it goes away i think after an update but looks glitchy".
+
+       The hero's bleed under the island is a negative margin-top of
+       `--sat + 14px` on .hero-scene that collapses out through .hero-card, and
+       it only lands the art at y=0 while nothing above it has height. Measured
+       at 393x852, --sat 59, with the banner mounted:
+         #updBanner   73 -> 152.9      .hero-scene  91.9  (73 + 79.9 + 12 - 73)
+       so the negative margin ate 73 of the banner's 79.9 instead of the
+       scroller's padding, the hero painted opaquely over the rest, and the 18.9
+       px left over was .today-plate's backdrop with the banner's amber top edge
+       clipped inside it: a black band between two correct greens. Anything with
+       height here does that; only its size changes.
+       So it moves below the four doors, where it is the first card of the feed
+       and the peek is what carries a player to it. tests/top-strip-audit.mjs
+       drives the stale state and grades the strip, at both insets. */''}
+  <div id="updBanner"></div>
 
   ${newsBannerHtml(newsUnseen, eq, dayCloseNews(allXp))}
 
@@ -23439,7 +23460,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v505'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v506'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
