@@ -19,6 +19,11 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v504
+1. A hotfix off v503: the 32 football colourways repainted to the palettes players recognise, approved by Tom on the rendered before and after sheet, 2026-09-07. Its dated section is further down, folded here.
+
+2. PROOF: football-kit-audit.mjs, football-render-audit.mjs, football-rail-audit.mjs | REACH: each team's two colours are now the published brand pair of the franchise it stands in for, measured as a CIE76 distance from that pair: the worst five before were 158.6, 148.2, 142.2, 136.5 and 127.4, and every team reads 0.0 after. Team names, ids and the tint pipeline are untouched. The PAIR row keeps every team's two colours a readable distance apart on a 24 px disc (minimum 17.59) and no two teams share a pair; the LEGIBLE row keeps each team's own two colours apart (minimum 44.46), which replaced a contrast rule the real league would fail (six navy shells, four black, and one aqua-on-orange pair at 1.16 to 1). Both were proven red on a tree with a duplicated and a near-identical pair.
+
 ## v503
 1. A hotfix off v502 from Tom's play of the Kennel: blurry pets, the entry nobody finds, the grid nobody can read, and a copy rail worth no scroll. Its dated section is further down, folded here.
 
@@ -464,6 +469,30 @@ Not stamped to a release: fix/gate-hygiene-c, off v493.
    a bounded time for real decode evidence, while a missing image still fails;
    test browsers launched through an explicit browser path are reaped if their
    owning audit is killed.
+## team colours read as the teams (2026-09-07)
+
+Not stamped to a release: art/football-team-colours, off v493, waiting on Tom's
+review of the before/after sheet. Tom, overnight: "go back through the football
+colours and try to make them closer to the actual nfl teams, some are very far
+off."
+
+1. PROOF: football-kit-audit.mjs | REACH: Shop, Locker Room poster, the strip of
+   32 discs, and the Wardrobe rail with any football piece worn: each team's two
+   colours are now the brand colours of the franchise it stands in for (helmet
+   shell first). Measured as CIE76 distance from each old pair to its
+   franchise's pair: the worst eight were 105 to 159 apart and all 32 are now 0.
+   The rows PAIR and LEGIBLE re-measure that no two teams share a pair (every
+   two pairs >= 12 apart, min 17.59) and that each team's two colours read as
+   two (>= 40 apart, min 44.46).
+
+2. PROOF: football-render-audit.mjs | REACH: the lizard's helmet and jersey, on
+   the Stable and on Today, take the new colours: rendered under Boneyard
+   Bruisers (navy) and Windrow Wasps (old gold), the pixels that differ between
+   the two renders sit nearer their own team's shell colour.
+
+3. PROOF: football-rail-audit.mjs | REACH: sliding the Wardrobe rail recolours
+   both Boneheads to the new pairs, the worn helmet holds one colour on arrival,
+   and nothing is worn until the bar says so.
 
 ## pit readout and exit (2026-09-06)
 
