@@ -16,6 +16,7 @@
  * belongs on this list; add to it rather than running something on the side.
  *
  *   node tests/release-gate.mjs [baseUrl]
+ *   node tests/release-gate.mjs --coverage-only (no server, lock or suites)
  *
  * Run it against localhost BEFORE pushing, and against the live URL AFTER, per
  * the standing ritual (localhost passing is not "a player can use it").
@@ -70,9 +71,7 @@ async function serveRepo() {
    triage list of 42 phantom failures. Flags are flags; the URL is the first
    argument that is not one. */
 const argUrl = process.argv.slice(2).find(a => !a.startsWith('--'));
-const own = argUrl ? null : await serveRepo();
-const base = argUrl || own.url;
-if (own) console.log(`serving this repo at ${base}\n`);
+const coverageOnly = process.argv.includes('--coverage-only');
 
 /* Node-only checks first: they are seconds, and there is no point burning four
    minutes of browser time on a build whose pure logic is already broken. */
@@ -563,6 +562,7 @@ function failLines(out) {
    the checks themselves. A new guard is covered whatever it is called. */
 const HELPERS = new Set([
   'release-gate.mjs',  // this file
+  'store-copy-scan.mjs', // shared reachability scanner for store-copy-lint and native submission preflight; no assertions of its own
   'godmode.js',        // the harness: boot, seed, serveTree
   'fight-sim.mjs',     // a sim library balance.mjs drives; no assertions of its own
   'badge-centre-lib.mjs', // the badge measurement badge-centre-audit.mjs drives; no assertions of its own
@@ -1219,7 +1219,12 @@ const FULL = onDisk.filter(f => DECLARED[f] && DECLARED[f][0] === 'full');
 const runAll = process.argv.includes('--all');
 const fastAudits = BROWSER.filter(f => onDisk.includes(f)).length;
 console.log(`coverage: ${onDisk.length} audits on disk, ${fastAudits} fast, ${FULL.length} full, ${onDisk.length - fastAudits - FULL.length} skipped`);
+if (coverageOnly) process.exit(0);
 if (runAll) BROWSER.push(...FULL);
+
+const own = argUrl ? null : await serveRepo();
+const base = argUrl || own.url;
+if (own) console.log(`serving this repo at ${base}\n`);
 
 /* READ THE GATE LOCK BEFORE RUNNING. NOT after, and not by assuming.
  *

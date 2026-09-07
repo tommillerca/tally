@@ -7,6 +7,8 @@
  * two copies disagreed (a comment stripper that silently stopped stripping a
  * third of the way through a file, so the word `fetch` in an English sentence
  * failed a check). One copy, two callers. */
+import esprima from 'esprima';
+
 export const FORBIDDEN = /testflight\.apple\.com|testflight|\bbeta\b/i;
 
 /* The invitation implementation stays in source for internal builds. Its two
@@ -25,24 +27,28 @@ export function scanReachable(source, label) {
   const reachable = source.slice(0, start)
     + '\n'.repeat(source.slice(start, end).split('\n').length - 1)
     + source.slice(end);
-  let inComment = false;
-  for (const [n, raw] of reachable.split('\n').entries()) {
-    let line = raw, code = '';
-    while (line) {
-      if (inComment) {
-        const close = line.indexOf('*/');
-        if (close < 0) { line = ''; continue; }
-        inComment = false;
-        line = line.slice(close + 2);
-      }
-      const block = line.indexOf('/*');
-      const slash = line.indexOf('//');
-      if (slash >= 0 && (block < 0 || slash < block)) { code += line.slice(0, slash); break; }
-      if (block < 0) { code += line; break; }
-      code += line.slice(0, block);
-      inComment = true;
-      line = line.slice(block + 2);
+  // Esprima is already locked and installed through Puppeteer's dependencies.
+  // Use its tokenizer (not its older grammar parser) to distinguish comments
+  // from strings, regex literals and nested template expressions. Blank only
+  // comment ranges, preserving offsets and line numbers. Never accept a partial
+  // token stream as a clean scan if the tokenizer cannot read future syntax.
+  let codeOnly;
+  try {
+    const tokens = esprima.tokenize(reachable, { comment: true, range: true });
+    let cursor = 0;
+    const parts = [];
+    for (const token of tokens) {
+      if (token.type !== 'LineComment' && token.type !== 'BlockComment') continue;
+      const [from, to] = token.range;
+      parts.push(reachable.slice(cursor, from), reachable.slice(from, to).replace(/[^\r\n]/g, ' '));
+      cursor = to;
     }
+    parts.push(reachable.slice(cursor));
+    codeOnly = parts.join('');
+  } catch (error) {
+    return [`cannot tokenize ${label}: ${error.message}`];
+  }
+  for (const [n, code] of codeOnly.split('\n').entries()) {
     const hit = code.match(FORBIDDEN);
     if (hit) failures.push(`reachable "${hit[0]}" at ${label}:${n + 1}`);
   }

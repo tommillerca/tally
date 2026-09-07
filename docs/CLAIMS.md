@@ -1,5 +1,180 @@
 # What each patch note claims, and what backs it
 
+## Lane I: store scanner and gate registration (2026-09-07)
+
+Advisory implementation and proof record for independent review. The frozen work
+order hash matched `a94e3dca36658e2f57ae9b51bad77b92b9e403d85a6aa166973bc003b8b0fb13`.
+Changed only `tests/store-copy-scan.mjs`, `tests/store-copy-lint.mjs`,
+`tests/release-gate.mjs`, `tests/submission-preflight-audit.mjs`, and this section.
+`native/submission-preflight.mjs` needed no edit: it already imports the shared scanner.
+
+1. PROOF: store-copy-lint.mjs, submission-preflight-audit.mjs | REACH: Both the repository app and the bundle submitted for archive now retain TestFlight URLs inside single quotes, double quotes and templates during comment removal. Esprima 4.0.1 is already installed and locked through the root Puppeteer dependency tree (degenerator and escodegen); its tokenizer processed the entire current app successfully. Acorn is listed only in the server lockfile and is not installed there. Chose Esprima's tokenizer, with comment ranges, instead of a handwritten lexer or its older grammar parser. Only real comment ranges are blanked, with newlines and offsets retained. Tokenization errors refuse the scan. Guards also cover block-like string text, escaped quotes, multiline and nested templates, comments within template expressions, regex literals, line numbers, missing island markers and malformed strings. This remains the existing literal-source scan with its explicitly blanked invitation island, not a general program reachability proof or runtime string evaluator.
+
+2. PROOF: submission-preflight-audit.mjs, release-gate.mjs | REACH: The shared scanner is registered in HELPERS with its two consumers and a reason, matching the existing library convention. A new --coverage-only mode exits after the actual coverage and targetability checks, before any server, gate lock or suite. The preflight audit runs this mode against a throwaway tests directory and proves that a genuinely unregistered runnable file is refused. No runnable audit was added and existing PURE registrations were retained.
+
+3. PROOF: store-copy-lint.mjs, submission-preflight-audit.mjs | REACH: Correction to the v510-train submission-build claims above, especially the assertion in "the submission build asserts itself" item 2 that no TestFlight or beta string was reachable: that confidence was unsupported. The original scanner discarded the part of a URL after https:, and the old plain-label fixture could not expose it. Item 3's centralization claim was accurate, but sharing the scanner did not establish its correctness. This defect predates extraction. The new controls substantiate the narrower behavior described here. Earlier sections are preserved under the work order's instruction not to edit other sections; this dated correction supersedes their scanner assurance.
+
+Measured red and green on a throwaway copy, with the original scanner bytes
+restored for red and the fixed scanner copied back for green. Both audit commands
+exited 1 with the old scanner and 0 after restoration. The five requested cases:
+
+```text
+FAIL scanner single URL: [] (want ["reachable \"testflight.apple.com\" at fixture.js:4"])
+FAIL scanner template URL: [] (want ["reachable \"testflight.apple.com\" at fixture.js:4"])
+FAIL scanner double URL: [] (want ["reachable \"testflight.apple.com\" at fixture.js:4"])
+PASS scanner genuine line comment: [] (want [])
+FAIL scanner comment-like string: [] (want ["reachable \"TestFlight\" at fixture.js:4"])
+```
+
+```text
+PASS scanner single URL: ["reachable \"testflight.apple.com\" at fixture.js:4"] (want ["reachable \"testflight.apple.com\" at fixture.js:4"])
+PASS scanner template URL: ["reachable \"testflight.apple.com\" at fixture.js:4"] (want ["reachable \"testflight.apple.com\" at fixture.js:4"])
+PASS scanner double URL: ["reachable \"testflight.apple.com\" at fixture.js:4"] (want ["reachable \"testflight.apple.com\" at fixture.js:4"])
+PASS scanner genuine line comment: [] (want [])
+PASS scanner comment-like string: ["reachable \"TestFlight\" at fixture.js:4"] (want ["reachable \"TestFlight\" at fixture.js:4"])
+```
+
+The genuine-comment fixture already passes the original scanner. Requiring all
+five cases to fail on it is impossible without misgrading correct behavior.
+Deviation: retain that case as a passing regression control in both versions.
+The exact `const s = "not // a comment";` is followed by a forbidden label on
+the same line, making unintended truncation observable through scanReachable.
+The real preflight process likewise accepts all three leaked URL fixtures and
+the string-truncation fixture with exit 0 on the old scanner (audit FAIL), then
+refuses each with exit 1 on the fixed scanner (audit PASS). The genuine comment
+is accepted with exit 0 in both versions.
+
+Removing only the helper registration on the throwaway copy, while retaining
+the socket-free mode, prints the following and exits 1. The new preflight audit
+also exits 1 with that registration reverted.
+
+```text
+FAIL  coverage: 1 declared audit file(s) belong to no running tier:
+        store-copy-scan.mjs
+        Put each runnable file in exactly one of PURE, BROWSER, or DECLARED full.
+```
+
+Restoring the helper and adding a real `unregistered-store-fixture.mjs` containing
+`process.exit(0);` instead prints the same refusal naming that file, exit 1.
+Removing the fixture restores exit 0. Direct coverage on this checkout prints:
+
+```text
+coverage: 300 audits on disk, 114 fast, 128 full, 58 skipped
+```
+
+The existing summary's "58 skipped" labels the PURE entries; they are separately
+enumerated and run below. No claim that those entries were intentionally skipped
+by the normal gate is made here.
+
+Agreed proof, run exactly:
+
+```sh
+node tests/store-copy-lint.mjs && node tests/submission-preflight-audit.mjs
+```
+
+Exit 0. Output includes `ok store copy: beta surfaces unreachable and store strings clean`,
+`PASS  COVERAGE registered helper  exit 0 (want 0)`,
+`PASS  COVERAGE unregistered runnable refused  exit 1 (want 1)`, and
+`submission preflight: refuses all three, passes the control`. The apparent
+coverage FAIL inside the negative control is expected; the outer audit passes.
+
+PURE enumeration evaluates the actual source from `const PURE =` through the
+last mutation before `const BROWSER =`, including every push and unshift.
+All 58 entries, in resulting order: 54 exit 0, two exit 1, two unrun.
+The all-PURE-green success criterion is therefore not met.
+
+| PURE file | Result |
+| --- | --- |
+| `version-align-lint.mjs` | exit 0 |
+| `no-debug-markers-lint.mjs` | exit 0 |
+| `store-copy-lint.mjs` | exit 0 |
+| `transmog-receipt-audit.mjs` | exit 0 |
+| `today-reads-lint.mjs` | exit 1 |
+| `kitchen-atomic-audit.mjs` | exit 0 |
+| `backup-encoder-audit.mjs` | exit 0 |
+| `backup-key-audit.mjs` | exit 0 |
+| `backup-version-audit.mjs` | exit 0 |
+| `backup-conflict-audit.mjs` | exit 0 |
+| `unit.test.js` | UNRUN: invokes serveTree; server proofs prohibited |
+| `log-xp-farm-audit.mjs` | exit 0 |
+| `drip-badge-audit.mjs` | exit 0 |
+| `xp-key-provenance-lint.mjs` | exit 0 |
+| `facegate-audit.mjs` | exit 0 |
+| `garden-appetite-guard.mjs` | exit 0 |
+| `pit.test.js` | exit 0 |
+| `quest-daymore-audit.mjs` | exit 0 |
+| `quest-pick-audit.mjs` | exit 0 |
+| `first-fight-audit.mjs` | exit 0 |
+| `stat-source-audit.mjs` | exit 0 |
+| `bastions-rep-sim.mjs` | exit 0 |
+| `analytics-tag-audit.mjs` | exit 0 |
+| `icon-inventory-audit.mjs` | exit 0 |
+| `version-stamp-audit.mjs` | exit 0 |
+| `boneyard-supply-audit.mjs` | exit 0 |
+| `loot-fallback-audit.mjs` | exit 0 |
+| `guard-hygiene-lint.mjs` | exit 0 |
+| `guard-provenance-lint.mjs` | exit 1 |
+| `feedback-status-lint.mjs` | exit 0 |
+| `rack-theme-lint.mjs` | exit 0 |
+| `rack-rotate-audit.mjs` | exit 0 |
+| `pet-accessory-lint.mjs` | exit 0 |
+| `pet-pool-audit.mjs` | exit 0 |
+| `manifest-exports-audit.mjs` | exit 0 |
+| `xp-curve-audit.mjs` | exit 0 |
+| `live-api-register-lint.mjs` | exit 0 |
+| `claim-evidence-lint.mjs` | exit 0 |
+| `thumb-freshness-lint.mjs` | exit 0 |
+| `render-sink-lint.mjs` | exit 0 |
+| `lapse-witness-audit.mjs` | exit 0 |
+| `spawn-claim-atomic-audit.mjs` | exit 0 |
+| `wardrobe-family-audit.mjs` | exit 0 |
+| `football-kit-audit.mjs` | exit 0 |
+| `restore-latch-audit.mjs` | exit 0 |
+| `first-pet-audit.mjs` | exit 0 |
+| `currency-revision-lint.mjs` | exit 0 |
+| `inv-tombstone-audit.mjs` | exit 0 |
+| `take-and-pay-audit.mjs` | exit 0 |
+| `submission-preflight-audit.mjs` | exit 0 |
+| `pet-state-audit.mjs` | exit 0 |
+| `pet-family-audit.mjs` | exit 0 |
+| `coins-merge-tie-audit.mjs` | exit 0 |
+| `routine-race-audit.mjs` | exit 0 |
+| `dayone-topup-audit.mjs` | exit 0 |
+| `dish-worth-audit.mjs` | exit 0 |
+| `serve-tree-identity-audit.mjs` | UNRUN: invokes serveTree; server proofs prohibited |
+| `pet-C-node-guard.mjs` | exit 0 |
+
+Both failing audits also exit 1 when all four edited test files are reverted to
+HEAD on the throwaway copy. Their implicated source and audits are outside this
+lane's ownership, so no guard or application code was changed to make them pass:
+
+- `today-reads-lint.mjs`: `FAIL GATE petInstances still carries the once-guard its exemption pins`, then `FAIL A1 ... {"health":1,"inv":5,"log":1,"xp":1}`. The exemption pins `return reclaimOwnedPets(list);`, while the current array branch returns `(await reclaimOwnedPets(list)).filter(selectablePetInstance);` before the migration read. Proposed owner change: update that exact GATED.petInstances pin to recognize the current awaited, filtered return before `const owned = await ownedCosmeticIds();`, retaining the array-branch boundary, then prove it red when the migration read becomes reachable on repeat calls. Do not simply raise the inventory-read ceiling.
+- `guard-provenance-lint.mjs`: `FAIL  RATCHET no NEW pinned expectation lacks dated provenance  1 new: dish-worth-audit.mjs:CONFIGS. Cite the source instruction and date in the comment above it.` Proposed owner change: cite the existing 2026-09-07 master handoff B5 instruction in the comment directly above CONFIGS in `tests/dish-worth-audit.mjs`, after confirming it governs both configurations. Do not weaken the provenance ratchet.
+
+Denied actions: no tool approval denial occurred. Blocked/unrun proofs: full
+browser/server gate, `unit.test.js` (its serveTree event-loop case starts a server)
+and `serve-tree-identity-audit.mjs` (starts two server trees), under the frozen
+work order's prohibition on browser/server proofs. No socket proof was attempted.
+On a permitted host, the identity audit is expected to print `PASS  WRONG-TREE`
+and exit 0; the unit suite's serveTree case should pass if the child exits within
+its 20-second limit. Neither outcome was observed here and the full gate is not
+claimed green. The two measured unrelated failures would still need resolution.
+
+Other deviations and constraints: this checkout contains its project CLAUDE.md,
+which was read, but no nested tally/CLAUDE.md. Paths were resolved here and no
+original checkout was edited. No commit, push, publication, version stamp,
+changelog edit, PR, App Store Connect action or Worker action was performed.
+The user's explicit no-commit/no-push instruction overrides the conflicting
+boilerplate in the work order.
+
+Proof artifacts are under `/private/tmp/petI-proof/`: original sources,
+`run-proof.py`, red and restored-green logs, `agreed-proof.log`,
+`green-coverage.log`, `pure.json`, `pure-results.json`, `run-pure.py`, and per-audit
+logs. Exit statuses are saved separately in `.exit` files from subprocess return
+codes, never inferred through a pipe. Baseline logs for both unrelated failures
+are prefixed `baseline-`. Temporary files are advisory evidence outside the
+checkout and are not part of a release artifact.
+
 ## Lane E: map audit guards (2026-09-07)
 
 Advisory implementation report for independent review. The frozen plan's SHA256
