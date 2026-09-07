@@ -405,3 +405,58 @@ re-premised FIT row stayed green on the OLD code on this Mac (last row bottom
 about 9px where the QA rig's Linux fallback font wrapped it; LINE (at 300
 wide, with a SETUP row proving the overflow is real) is the row that goes red
 for R39-6 here.
+
+## 11. v500 feedback: the Kennel explains itself (2026-09-07)
+
+Tom's four items after playing the Kennel that shipped in v500, verbatim:
+"Some pets in the kennel blurry photos" / "Kennel button placement not
+intuitive" / "How to use the kennel not clear at all" / "Scrolling through
+multiple pets in stable just shows their lvl not a little picture of them or
+something so not intuitive to want to go scroll that rail."
+Branch `hotfix/kennel-ux`, off v500.
+
+- **BLUR, measured before touching anything.** `openKennel` passed a hardcoded
+  `192` as `croppedPetImg`'s tier, but the crop scales each species' own ink to
+  fill its cell, so the `<img>` ends up about 2.8x the box it peeps through.
+  At 393x852 (62.6px cells) the device-pixel widths were C1 349.5, C5 336.9,
+  C3/C4 289.4, C2 274.9, C6 142.5, all against a 192px file: ratios 1.82, 1.76,
+  1.51, 1.51, 1.43, 0.74. Five of six species over the house 1.4x ceiling, 25 of
+  the 30 cells. At 320x568 the worst was C1 at 1.396, UNDER the ceiling, so a
+  one-viewport guard would have shipped this. Fix: `thumb: true`, the same
+  `bhTierFor(imgSize)` picker every other tiered surface uses, which lands
+  C1-C5 on 384 and Bumbleseal on 192 by their own crops. After: 0.91 worst at
+  393x852, 0.70 at 320x568. Cost: decoded image bytes on the screen 55.2 -> 67.9
+  MB on a full-collection save (ceiling 90; `tests/memory-census.mjs` does not
+  drive this screen, so it was measured directly). Guard: `kennel-audit.mjs`
+  ART, one row per viewport, red at 1.821 on the v500 code.
+- **DISCOVERY.** `#kennelBtn` was `btn ghost small` in `openStable`'s
+  `sheet-head`, measured 73.3x44 at (240, 48.5) -- the trailing corner, 8px from
+  Done, which is where this app puts DISMISS. It is a door in the Stable's BODY
+  now, directly under the Paddock's and built from the same `.pdk-door` classes,
+  because it answers the same kind of question and a second vocabulary would be
+  the cost of a second idea. It MOVED, not duplicated: one way in, same id.
+  Its left panel carries no scene (the Paddock's pitch is "a place", the
+  Kennel's is "a collection") but the five colourway swatches, filled for the
+  ones you own -- the same reading rule as the grid behind it, at no image cost.
+- **TEACHING**, all one-liners at the point of use, no tutorial screen and no
+  takeover (the idiom the Paddock's "Tap a pet to say hi" and Gwart's line
+  already use): the door's own `small` says what is inside and counts it; a
+  `.k-lead` sentence above the grid states the reading rule and names the one
+  control the screen has; the roster dots carry each colourway's own hue
+  (`morphSwatch`, the v2 recolour's absolute targets) rather than one flat
+  accent, which said "owned" and made the player read the caption to learn
+  which; and an unowned cell flattens to a silhouette on `--bg` so it reads as
+  a hole in the set rather than an underexposed pet. Guards: `kennel-audit.mjs`
+  DOOR and LEAD.
+- **THE STABLE COPY RAIL.** `kinChips` drew "Lv 1" and nothing else, which is
+  also the one thing that cannot tell two copies apart now that morphs exist.
+  Each chip carries a 26px portrait through `petPortraitHtml` (instance shiny
+  and morph, figure contract rule 1; `thumb: true`, which resolves 192 at that
+  size) inside the existing 44px tap floor, so the row height and the scroll
+  are unchanged. Guard: `pet-morph-audit.mjs` KIN, on the two-C5 fixture that
+  file already seeds, one base and one midnight -- a portrait keyed off the
+  species instead of the instance draws the same picture twice and fails by
+  name.
+
+Screenshots at 393x852 and 320x568, before and after on the same seed, in the
+lane's `scratchpad/kennelux/`.
