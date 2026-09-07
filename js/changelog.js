@@ -4,6 +4,15 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 510, date: '2026-09-07', title: 'Pets, told the truth about', items: [
+    'One pet from an older or newer build could take the whole Stable down with it: no pets, no Kennel, no Paddock, no equipping, no breeding, and no message saying why. A guard had been written for exactly this and was looking for the wrong shape of broken. Now an unrecognised pet is quietly set aside and everything else opens.',
+    'Talents belonged to a species instead of to the animal. A brand new pet of a kind you had already levelled walked into a fight carrying its older sibling\'s full talent tree. Each pet now keeps its own, as the Stable always said it did.',
+    'Equipping a different colour of the same pet changed the Stable and nothing else until you reloaded the app. Every screen now shows the one you actually picked.',
+    'The Paddock was working out levels with its own arithmetic and could show level 5 for a pet the Stable and the Pit both called level 10.',
+    'Pets in the Kennel are sharp on the big phones now, not just the small ones.',
+    'The day-one welcome kit tops up to 40 coins, so a first day clears the rack floor, and it survives a signup that gets rate limited.',
+    'The Pit says what a cooked dish is actually worth, measured rather than guessed, and two pet dishes that could not be measured before now can be.',
+  ] },
   { n: 509, date: '2026-09-07', title: 'The first hour keeps its promises', items: [
     'A message popping up could sit on top of the buttons you were about to press. In a fight on a smaller phone it covered six of your moves, including the one you were reaching for. Messages now sit clear of any panel\'s controls.',
     'A piece you have just won is marked with a dot until you have actually looked at it, on both the slot rail and the tile, so a crate reward does not vanish into a full wardrobe.',

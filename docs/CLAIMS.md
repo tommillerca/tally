@@ -407,6 +407,25 @@ the upload path and its guards.
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
 
+## v510
+1. The pet train: seven lanes off v509, closing round 45's two open debts and round 44's state and render defects. Its dated sections are further down, folded here.
+
+2. PROOF: pet-state-audit.mjs, unit.test.js | REACH: the Stable, on a save carrying one instance whose species this build does not know. `js/app.js` filtered instance rows on `x && x.sp` (truthy) rather than on the species existing, so a row with `sp: 'ZZ9'` walked through and threw in `bhAsset`: measured 0 children, 0 bytes, no `#kennelBtn`, no `#stableToPaddock`, 0 EQUIP buttons, against 5 children and 16,196 bytes on a normal save. That button is the only door, so the crash took the Kennel, Paddock, EQUIP, breeding and salvage with it, silently. The guard that failed was written FOR this crash (R39-31) and its comment describes it correctly; it filtered on the field being falsy while the case that occurs is truthy and unknown. Fixed at the state boundary with `isKnownPet`, not at the one render site, because unknown rows were also accepted by `addPetInstance`, returned by `petInstances`, selectable by `equippedPetIid` and included by `paddockRoster`. `bhAsset` degrades to a placeholder instead of throwing. Unknown persisted rows are preserved, not deleted.
+
+3. PROOF: pet-state-audit.mjs, pet-talent-ui-audit.mjs | REACH: own two copies of one species, level one to 10 and pick its tree, then fight with the other. `pettalents` was keyed by SPECIES while `petLevelBank` is keyed by instance, and `buildBattlePet` accepted every stored id without checking level or legal tree, so a level 1 duplicate fought with its level 10 sibling's full tree. The app's own help text ("each one keeps its own") described the intended model and the storage disagreed with it. Migrated to instance keys, with every read, write and battle construction routed through `legalPicks`.
+
+4. PROOF: pet-C-node-guard.mjs, pet-C-browser-audit.mjs | REACH: equip the other copy of a species from the Stable. `refreshPetMorphs` had five call sites and the EQUIP handler was not one of them, so the Stable card changed and Today's hero kept the copy you put away through three repaints a player can perform, until a full reload. Seven call sites now.
+
+5. PROOF: pet-C-node-guard.mjs | REACH: the Paddock, on a pet above 20,000 banked steps. It computed `1 + Math.floor(levelSteps / 20000)` instead of calling `petLevel`, so it printed level 5 for a pet the Stable and Pit both called level 10.
+
+6. PROOF: pet-C-browser-audit.mjs | REACH: the Kennel on a 3x phone. The tier picker read the CSS box only and never saw device pixel ratio, so cells measured 1.405 on a 16 Pro, 1.527 on a 15 Pro Max with 10 of 31 over the 1.4 ceiling, and 1.570 on a 16 Pro Max.
+
+7. PROOF: dayone-topup-audit.mjs | REACH: a first day. The welcome kit pays a one-time 40-coin top-up inside its own claim transaction, so a `/register` that answers 429 cannot strand it. Measured over 12 seeds: a complete first day moves from a median 264 to 304 coins against the 300 rack floor, and the audit prints the shortfall at the unluckiest seeds rather than hiding it.
+
+8. PROOF: dish-worth-audit.mjs | REACH: the Pit's dish line and the Kitchen's recipe list. `DISH_WORTH` states what a cooked dish is worth, re-measured each run rather than pinned as a string. Two pet dishes previously carried no claim because the sim could not fire a pet action; now that it can, they measure a real edge and their NOCLAIM rows failed upward exactly as designed, which is how this was found.
+
+9. PROOF: store-copy-lint.mjs, submission-preflight-audit.mjs | REACH: any store build. The shared reachability scanner stripped comments with a plain search for `//`, with no notion of a string literal, so a reachable `window.open('https://testflight.apple.com/join/...')` was truncated to `window.open('https:` before the forbidden-string check ran and reported nothing. The guard that exists to keep a TestFlight link away from an App Store reviewer could not see a TestFlight URL. Now tokenized; negative controls cover the URL in single quotes, double quotes and a template literal, a real comment that must still be stripped, and comment-like text inside a string that must not be. Also registered in the gate: it passed the file filter with a tier count of 0, so the coverage check exited 1 before a browser started and the full gate could not run at all.
+
 ## v509
 1. A hotfix off v508: three first-hour defects from the R41/R39 packs. Its dated section is further down, folded here.
 
