@@ -19,6 +19,15 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v502
+1. A hotfix off v501: the Locker Room polish and the Boneyard's frame cost (master handoff R40-21..27 and R41-18). Its dated section is further down, folded here.
+
+2. PROOF: boneyard-raf-audit.mjs, boneyard-audit.mjs | REACH: a stationary player whose fix jitters no longer drives the map: 1,843.7 requestAnimationFrame calls a second (21.65 a frame) becomes 1.8 a second, because a no-op reposition is skipped and the camera only eases when the fix moved at least 4 m. Walking still costs the library's own per-marker pass over 49 DOM markers (2,071 to about 1,114 to 1,750 a second); the audit sets no ceiling there and says why.
+
+3. PROOF: locker-polish-audit.mjs, football-kit-audit.mjs, precache-audit.mjs, sw-upgrade-audit.mjs | REACH: the colourway strip shows six 10 px discs and a plus-26 chip instead of 5.84 px dots at 393 and 3.56 at 320 (DISCS row red with those numbers); the buy pill reads the live balance so what you can afford updates the moment you spend (PILL row red: cant false, tap said null); the news hero serves the 384 tier, 157 KB on the wire against a 359 KB master (HERO row red at 350.9 KB); and the football art the shop and poster need is precached, 211 entries and 11,714 KB becoming 227 and 11,998 KB with the conditional carry still green (PRECACHE row red: 16 files asked for, 0 listed).
+
+4. PROOF: locker-polish-audit.mjs | REACH: Today's Add button can no longer cover a News row at any scroll position, because the scroller keeps a 13 px transparent border while its background still paints under it (FAB row red: the row was covered 58 by 7.9 px and elementFromPoint answered the button); and a garment whose master fails to load drops its tint spans and disables its buy instead of selling a smear of colour (NOART rows red: 2 spans still painting, buy enabled).
+
 ## v501
 1. A hotfix off v500: the Wanderer's stacking on the Boneyard map (Tom's live report) and the gate-hygiene work that makes every registered audit run (Codex). Their dated sections are further down, folded here.
 
