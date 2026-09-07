@@ -19,6 +19,25 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## the routine cap holds under a race (2026-09-07)
+
+Not stamped to a release: fix/wellness-xp-ceiling, no ticket-facing changelog
+line. markRoutine read the daily routine-XP cap off a ledger scan and decided
+the payout several awaits later, so two DIFFERENT routines finishing at once
+both read cap-1 and both minted the reward: a documented 15 XP ceiling
+(ROUTINE_XP 5 x ROUTINE_XP_CAP 3) paid 20 (measured 2026-09-06). The cap and
+the payout are now one atomic claim through awardCapped's shared-ordinal
+addIfAbsent (js/game.js), the same primitive every other repeatable daily
+reward already uses.
+
+1. PROOF: routine-race-audit.mjs, unit.test.js | REACH: marking two different
+   self-care routines done at the same moment, on the day only one XP-earning
+   slot is left, pays the XP to one of them and 0 to the other instead of
+   both; the day's total routine XP never exceeds 15 no matter how the taps
+   land, and both routines are still remembered as done today either way
+   (red before: +10 XP paid on the race, 20 XP total, 0 of 2 calls reporting
+   capped).
+
 ## pit readout and exit (2026-09-06)
 
 Not stamped to a release: hotfix/pit-ap-exit, off v487. Tom on live v487, two
