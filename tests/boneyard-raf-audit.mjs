@@ -41,9 +41,10 @@
  *            lessons_maplibre_marker_transform). The one running today,
  *            roamDrift, is on .den-fx, an inner child. This keeps it there.
  *
- * PROVE-RED, in a throwaway: put `m.setLngLat([lng, lat])` back in moveMarker
- * unconditionally -> STILL fails at ~9/s with MOVING and METER still green.
- * Drop the EASE_MIN_M gate as well and a jittering phone joins the storm.
+ * PROVE-RED, measured in a throwaway with both reverts applied (moveMarker
+ * calling setLngLat unconditionally, and the follow easing on every fix):
+ * STILL 1,843.7 rAF/s against a ceiling of 3, with SAMPLE (48 markers), METER
+ * (139.5/s), MOVING and ROOTS all still green.
  *
  * Run: node tests/boneyard-raf-audit.mjs [baseUrl]   (serves this checkout if
  * omitted). HEADLESS_MODE=shell; the map needs swiftshader, launched below.
@@ -57,7 +58,7 @@ const argUrl = process.argv.slice(2).find(a => !a.startsWith('--')) || process.e
 const srv = argUrl ? null : await serveTree(ROOT);
 const base = (argUrl || srv.url).replace(/\/?$/, '/');
 
-const STILL_CEIL = 3;     // rAF/s standing still. Measured 9.2 before the fix.
+const STILL_CEIL = 3;     // rAF/s standing still. 1,843.7 before the fix, 1.8 after.
 const METER_FLOOR = 30;   // what the same hook reads with one real loop injected
 const MOVING_FLOOR = 20;  // the control: walking must cost SOMETHING
 
