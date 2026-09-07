@@ -74,7 +74,6 @@
        first nextToast() call, in the same tick the first message landed, and a
        live region that does not exist before its content changes does not
        announce: the session's first toast was silent to a screen reader. -->
-  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <!-- THE MONEY LINE. Measured (r33 a11y): the toast was the app's only live
        region, and the coin balance repainting in place (a Pit payout landing
        behind an open sheet, __refreshWalletPill) announced nothing at all.
@@ -84,6 +83,18 @@
        that is created in the same tick as its message, announces to nobody. -->
   <div id="srLive" class="sr-only" role="status" aria-live="polite"></div>
 </div>
+<!-- OUTSIDE #app, AND THAT IS THE WHOLE POINT (R43-7, 2026-09-07).
+     #app is `position: relative; z-index: 1` (app.css), which is a stacking
+     context, so every z-index inside it is sorted against its SIBLINGS and then
+     the whole box is painted at 1. The toast lived in here, so raising it to 320
+     changed nothing: the daily wheel's veil, the gate intro, the graverise, the
+     wanderer and the drop veil are all appended to document.body, outside #app,
+     and won at any number the toast could name. Measured 36 of 36 samples with
+     the returning player's day-close line hit-testing as DIV.dw.
+     It is `position: fixed` and `pointer-events: none`, so it needs nothing from
+     #app: not its width (max-width 600px, and the pill centres on the viewport
+     either way), not its overflow, not its flow. Moved, not restyled. -->
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 <noscript><p style="padding:2rem;font-family:system-ui">Boneheadz Gym needs JavaScript enabled.</p></noscript>
 <script type="module" src="js/app.js"></script>
 <!-- THE DEAD SHELL, AND THE ONE THING THAT CAN SAVE IT.

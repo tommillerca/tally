@@ -645,7 +645,19 @@ svg { display: block; }
   position: fixed; bottom: calc(var(--sab) + 96px); left: 50%; transform: translateX(-50%);
   background: var(--surface-3); border: 1px solid var(--line-strong); color: var(--text);
   font-size: 15px; font-weight: 600; padding: 11px 18px; border-radius: 22px;
-  z-index: 80; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  /* ABOVE THE FULL-SCREEN VEILS (R43-7, 2026-09-07). At z-index 80 the toast sat
+     under every takeover this app raises: the daily wheel (.dw, 210, up at 3.7s
+     and it never times out), the gate intro and the mimic (200), the graverise
+     (210), the wanderer (220), the drop veil (300) and a takeover sheet (310).
+     Measured 3 of 3 returning boots with the one line telling a lapsed player
+     they were PAID for the day they walked away drawn underneath the wheel, and
+     the fault is not the wheel's: a message channel that is invisible whenever
+     anything is on top of it is broken for every caller, not just this one, so
+     the fix goes here rather than in the wheel's timing. 320 clears every veil
+     and stays under the splash (400), which is the one cover a message must not
+     jump. Safe BECAUSE of the rule below: pointer-events: none, so raising it
+     cannot take a tap from the wheel it now paints over. */
+  z-index: 320; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   /* IT STOPS EATING TAPS. Fixed, z-index 80, and until 2026-08-31 it was
      hit-testable, so for the 2.2 to 3.6 seconds a message is up
      document.elementFromPoint over the Bonehead, Stable and Kitchen doors on

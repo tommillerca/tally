@@ -4153,6 +4153,12 @@ async function renderToday(el) {
   // them; with Health connected the walk row would double-ask for data the
   // sync already has. null = hide the row entirely.
   const manualWalks = wellness && !S.settings.hkConnected ? await manualWalksToday(S.date) : null;
+  /* IS THIS PLAYER COMING BACK? One read, two consumers: the return card below
+     and the daily quest draw. maybeWelcomeBack() is the only writer of
+     'wbReturnDay' (it stamps the return date, so it expires with the day) and
+     #wbOk clears it, so this is the app's existing answer rather than a second
+     opinion about what a gap is. */
+  const returning = S.date === dateKey() && allLog.length > 0 && (await kvGet('wbReturnDay', null)) === S.date;
   const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled,
     /* R38-8: isOnline() only means "has an API and an account", so a
        zero-friend account was handed q-friend as one of two dailies. Gate on
@@ -4170,7 +4176,14 @@ async function renderToday(el) {
     kitchenReady: Object.values(await ingredients()).some(n => n > 0),
     // R39-3: per-install salt for the daily seed (dailyQuests folds this in),
     // so two accounts installing on the same date do not share a board.
-    createdAt: S.settings.createdAt };
+    createdAt: S.settings.createdAt,
+    /* R43-9: the day-one board's problem, arriving at the other end of the
+       lifecycle. A returning player's capabilities are all KNOWN, so nothing is
+       gated out and pick() draws three at random from the whole pool; measured
+       3 of 3 returning players whose entire board needed a walk, a fight or a
+       spawn, 0 claimable after three meals. dailyQuests guarantees the same
+       anchor here that it already guarantees on day one. */
+    returning };
   const healthRows = await db.all('health');
   // Surface an auto watch sleep read in the wellness card when the player hasn't
   // hand-logged tonight (so it reads "from your watch" instead of asking).
@@ -4254,7 +4267,7 @@ async function renderToday(el) {
      state this render already computed: a finished weekly quest waiting to
      claim, unopened crates. "Today's quests are new" only stands in when
      neither is live, so the card never pads itself. */
-  const wbShow = isToday && allLog.length > 0 && (await kvGet('wbReturnDay', null)) === S.date;
+  const wbShow = returning;   // one read, hoisted above qopts; see `returning`
   /* THE DAY GUARD'S ONE LINE OF VOICE. After a clock set-back or a westbound
      date-line hop, the high-water mark (js/db.js claimDay, rule 1) sits AHEAD
      of the device's today, so every daily gate quietly refuses: no wheel, no
@@ -4274,6 +4287,17 @@ async function renderToday(el) {
      own, so this and the quest-claim toast can never drift apart. Display only;
      it decides no award, and it clears itself on the next answer. */
   const unwitnessed = isToday && await dayIsUnwitnessed(S.date);
+  /* THE DAY CLOSE, CLAIMED ONLY IF THE LEDGER REALLY PAID IT. The card names it
+     as something that survived the gap, so it is read off the same rows
+     awardDayCloseIfDue writes (js/game.js: `dayclose-<date>` on budget,
+     `dayeffort-<date>` otherwise) for the last day this player logged before
+     today. allLog and allXp are already in hand, so this costs no extra reads. */
+  let wbClosePaid = false;
+  if (wbShow) {
+    let last = null;
+    for (const r of allLog) if (r.date < S.date && (!last || r.date > last)) last = r.date;
+    wbClosePaid = !!last && allXp.some(r => r.key === `dayclose-${last}` || r.key === `dayeffort-${last}`);
+  }
   let wbFacts = [];
   if (wbShow) {
     const wk = questTiers.find(tier => tier.period === 'week');
@@ -4372,6 +4396,8 @@ async function renderToday(el) {
     // is still on the day they installed.
     everLogged: allLog.length > 0,
     freshInstall: !!S.settings.createdAt && dateKey(new Date(S.settings.createdAt)) === S.date,
+    // R43-12: nor somebody back after a long gap; same signal as the return card.
+    returning,
   };
   await loadGwMemory(); // B13: seed the anti-repeat bag from the last reload before he speaks
   const gwLine = gwartLine(gwCtx);
@@ -4410,6 +4436,50 @@ async function renderToday(el) {
        First child, so it starts at the scroll origin and can never paint into
        the strip a pull opens. */''}
   <div class="today-plate" aria-hidden="true"></div>
+  ${/* ABOVE THE DAY, NOT INSIDE IT AND NOT BELOW IT (R43-8, 2026-09-07).
+       On 2026-09-05 this card was moved OUT of .dayflow, for a real reason: inside
+       the day it painted a panel in the flat day (today-container LEDGER) and made
+       the collapsed summary taller than a 568px screen (today-peek WHOLE). It was
+       parked BELOW the whole day container, and measured on three returning
+       players at three gap lengths it landed at 1220px on an 852px viewport, 368px
+       under the fold: the app's only greeting to somebody coming back, unread at
+       every gap, 3 of 3.
+       MEASURED, ON THIS TREE, AT 393x852, WITH THE FOLD AT 785.8: the hero card
+       alone runs 0 to 641, the four doors 653 to 718, the news pill 740 to 781
+       and the quests 791 to 845. NOTHING under the hero is above the fold on this
+       screen, so "move it up a bit" has no answer: below the day put the card at
+       1411, under the quests at 857, and directly under the doors at 740.2
+       against a ceiling of 741.8, which is a pass by 1.6px and a lie about being
+       readable. The only place the app's one greeting to a returning player is
+       genuinely on screen is above the hero, which is where the app already keeps
+       a one-off announcement: #updBanner is the line right above this one. It
+       costs the Bonehead the top of the screen for exactly one boot, on the boot
+       where a sentence matters more than the portrait, and #wbOk takes the card
+       away for good.
+       BOTH SIDES OF THE 2026-09-05 TRADE STILL HOLD, which is why this is not a
+       revert: the card is OUTSIDE section.dayblk, so the day is not a panel in a
+       panel and the collapsed summary still fits a 568px screen. Graded from both
+       sides in tests/returning-boot-audit.mjs (FOLD at 393x852, WHOLE at
+       320x568); either old position fails one of them. */''}
+  ${wbShow ? `
+  <div class="card wb-back" id="wbCard">
+    ${/* IT SAYS WHAT IS TRUE, WHICH USED TO BE THE OTHER FAILURE. The headline was
+         "Everything is where you left it." while the streak read 5 to 0 at every
+         gap and nothing else on Today mentions the streak at all (it lives as a
+         pill on Trends). The design note on maybeWelcomeBack is right that a day
+         count is an accusation; claiming everything survived when the one thing
+         that did not is invisible is the opposite error, and a player who opens
+         Trends finds it out for themselves. So the streak is named, in the same
+         voice: no number, no question, nothing to apologise for, and the reset is
+         a fresh start rather than a loss. The list beside it is the answer to
+         "then what did I lose", and every item on it is read off state this
+         render already has: the day close is claimed only when the ledger really
+         paid it. */''}
+    <b>The streak starts over. Nothing else does.</b>
+    <span>Your Bonehead, pets, coins, gear and claimed quests are exactly as you left them${wbClosePaid ? ', and the last day you logged was closed and paid' : ''}. ${wbFacts.join(' ')}</span>
+    <button class="btn small ghost" id="wbOk">Good to be back</button>
+  </div>` : ''}
+
   <!-- The scene is CORAL by default (the deck's hero colour), but an equipped
        backdrop covers it completely, and on a tab switch the card paints a frame
        or two before that image decodes: Tom, 2026-08-08, "im seeing the coral
@@ -4737,15 +4807,8 @@ async function renderToday(el) {
     <span>${esc(rebal.body)}</span>
     <button class="btn" id="habitGrantGo">${esc(rebal.button)}</button>
   </div>` : ''}
-  ${/* BELOW THE DAY, like the rebalance card under it (2026-09-05): inside .dayflow the
-       return card painted a panel inside the flat day and pushed the collapsed summary
-       past a 568px screen (today-container LEDGER, today-peek WHOLE on a lapsed seed). */''}
-  ${wbShow ? `
-  <div class="card wb-back" id="wbCard">
-    <b>Everything is where you left it.</b>
-    <span>${wbFacts.join(' ')}</span>
-    <button class="btn small ghost" id="wbOk">Good to be back</button>
-  </div>` : ''}
+  ${/* THE RETURN CARD MOVED UP (R43-7/8, 2026-09-07): see the emit above the day
+       container. Nothing takes its place here. */''}
 
   ${/* THE PROMO SLOT IS GONE. Tom, 2026-09-03: "today still has the step
        challenge winner and monster banner at the bottom these should be gone now
@@ -5587,7 +5650,7 @@ function gwartLine(ctx) {
    at the bottom. The general pool is the only one that is pure character. */
 function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
   steps = 0, dishReady = false, cropsRipe = 0, fightsReady = 0,
-  gearOwned = 0, gearWorn = 0, everLogged = true, freshInstall = false }) {
+  gearOwned = 0, gearWorn = 0, everLogged = true, freshInstall = false, returning = false }) {
   const hour = new Date().getHours();
   if (crates.length) return [
     'A crate by his feet, still shut. I gave him hands for this.',
@@ -5668,7 +5731,16 @@ function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
        still on the very day they installed) gets the welcome line no matter
        the hour. "Half the day gone" reads as a scold, and nobody has failed
        at anything yet on their first day, or before their first entry. */
+    /* R43-12: and not somebody who has just come back either. The install-day
+       and never-logged exemptions above (R39-28) both say the same thing -- do
+       not scold a player for a blank page they have not had a chance to fill --
+       and a 90-day gap is that case, not a different one. Measured 6 of 36
+       renders on a returning save and guaranteed within 8, so somebody back
+       after three months could be greeted with it. He gets his own line rather
+       than the morning one: "Morning" at 3pm is a second small untruth, and this
+       is the same welcome in the afternoon's voice. */
     (hour < 11 || freshInstall || !everLogged) ? 'Morning. The ledger is blank. It usually starts that way.'
+      : returning ? 'Blank page. Same as the first one. Start it again.'
       : 'Half the day gone and not a crumb on the page.',
     'Whatever you ate, write it. Accurate beats flattering.',
     'Feed the ledger and he does the rest. Fair deal.',
