@@ -12,6 +12,15 @@ the upload path and its guards.
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
 
+## v508
+1. A hotfix off v507: the App Store reviewer's small-screen pass from round 43, including a regression this project shipped in v489. Its dated section is further down, folded here.
+
+2. PROOF: onb-audit.mjs | REACH: onboarding, the screen titled THIS ONE'S YOURS, at 320x568. PR #395 fixed the primary button falling below the fold by making `.onb-foot` sticky with a full-bleed background. The cure overshot: the opaque footer measured 159.8px of a 568px viewport and the nameplate's visible fraction measured 0.000, so the screen that names your Bonehead showed no name, and a real click at the reroll button's coordinates hit `span` (the footer's own copy) and left the name unchanged. At 375x667 the nameplate measured 0.467 visible. The step is now a viewport-height column of two bands: content in its own scrollport, footer static beside it. It cannot regress in either direction by construction, which is the point: the button is a flex item of a box exactly one viewport tall, so it is on screen at first paint whether or not the content fits, and the content is clipped by a scrollport that ends where the footer begins, so nothing can sit under it. Padding on the scroller was rejected because reserved space at the end of a document does nothing at scrollTop 0, which is where the defect lived. Nameplate now 1.000 at all three viewports and the reroll click rerolls at all three. R39-15's own rows were asserted green on both trees in the same pass, so neither fix can be bought with the other.
+
+3. PROOF: onb-audit.mjs | REACH: onboarding, THE PLAN. The chips you had just selected sat behind the footer at every viewport, including 393x852 where the entire Goal row was behind the save button, measured as 1 of 4 rows covered with a clip fraction of 1.000 and the centre hitting `#onbSave`. Now 0 of 4 at all three. CHIPS-REACHABLE was green on both trees, so a chip past the form's own fold was never the defect.
+
+4. PROOF: fight-tray-audit.mjs, fight-press-audit.mjs | REACH: a fight at 320x568. The fourth move, Bone Guard, exposed 19.8px against a 40px tap floor, its centre hit `div#fightBody`, and a real press left the log reading "Round one. Your turn." Now 44.5px exposed and the press takes the turn, at all three viewports.
+
 ## v507
 1. A hotfix off v506: the boot a lapsed player gets, which round 43 found was the one boot nobody had ever graded. Its dated section is further down, folded here.
 
@@ -172,6 +181,81 @@ maybeWelcomeBack decides the return rather than a stamped flag):
 4. PROOF: unit.test.js, quest-pick-audit.mjs, quest-daymore-audit.mjs | REACH: a returning player's three daily quests always include one that logging a meal can finish. This is the rule v491 already applied to a day-one board, which fails for the opposite reason: on day one every capability is off, and on a return every capability is on, so nothing is filtered and the draw can be three quests that all need a walk, a fight or a spawn. 164 of 365 dates drew such a board before and none do after, swept over a year. Quest rewards, coin values, the ladder and every other gate state are untouched.
 
 5. PROOF: unit.test.js | REACH: Gwart does not greet somebody back from a long gap with "Half the day gone and not a crumb on the page." He has a line of his own for it. This is the same exemption v491 gave the install day and the never-logged player, extended to the case it missed.
+## small screens keep their controls (2026-09-07)
+
+Not stamped to a release: hotfix/small-screen-fold, off v504. QA round 43,
+R43-4, R43-5 and R43-6, the App Store reviewer pass on small screens.
+
+R43-4 and R43-5 are a regression I shipped. PR #395 (v489) fixed "the primary
+button sits below the fold on iPhone SE" by making `.onb-foot` sticky at the
+bottom of #screen with an opaque full-bleed backing. That is an overlay, and it
+cost the bottom band of every onboarding step at every scroll offset.
+
+MEASURED ON origin/main (v504, 6e55bbf), off the render at each viewport, with
+only the two audit files changed. Visible means the rect clipped by the viewport
+and by every scrollport above it, minus what the footer paints over.
+
+| | 320x568 | 375x667 | 393x852 |
+|---|---|---|---|
+| .onb-foot height | 159.8px of 568 | 140.3px of 667 | 140.3px of 852 |
+| nameplate visible, THIS ONE'S YOURS | **0.000** | **0.467** | 1.000 |
+| what its centre hits | span (footer copy) | div.onb-foot | span#onbName |
+| real click at the reroll's coordinates | **no change** | **no change** | rerolls |
+| selected chips behind the footer, THE PLAN | **1 of 4** | **1 of 4** | **1 of 4** |
+| "That's me" bottom vs fold | 443.5 / 568 | 562 / 667 | 747 / 852 |
+
+R43-6 is older. At 320x568 .fight-body is 465.5px and holds arena 283 + meta 52
++ tray + End Turn 58.8 + 10px pad, which leaves the tray 41.7px; its own 96px
+floor then overflowed the column, so the four base moves (145px of content in
+two 68.3px rows) were clipped at 547.5 with Bone Guard rendered 527.8 to 596.
+Its centre hit div#fightBody, only 19.8px of it was inside the tray, and a real
+click there left the log on "Round one. Your turn." Both larger viewports were
+fine.
+
+AFTER, same method, same three viewports:
+
+| | 320x568 | 375x667 | 393x852 |
+|---|---|---|---|
+| .onb-foot height | 119.7px | 141.3px | 141.3px |
+| nameplate visible | 1.000 | 1.000 | 1.000 |
+| real click at the reroll | rerolls | rerolls | rerolls |
+| selected chips behind the footer | 0 of 4 | 0 of 4 | 0 of 4 |
+| "That's me" bottom vs fold | 517.6 / 568 | 599 / 667 | 784 / 852 |
+| "Start tracking" bottom vs fold | 501.4 / 568 | 599 / 667 | 784 / 852 |
+| 4th move exposed in the tray | 44.5px | 54.8px | 54.8px |
+| 4th move clicked at its own centre | takes the turn | takes the turn | takes the turn |
+
+1. PROOF: onb-audit.mjs | REACH: on a 320px or 375px phone, the screen that
+   names your Bonehead shows the name. The onboarding step is a viewport-height
+   column of two bands now: the content scrolls in its own box and the footer
+   sits beside it, static, so the button is on screen at first paint by
+   construction and nothing can be underneath it. Under 600px of height the
+   poster gives up 100px so the nameplate clears the fold without scrolling, the
+   display type steps 40 to 34 (THE PLAN already ships 30) and the earns row is
+   left to peek as the scroll cue. NAMEPLATE-VISIBLE and REROLL-CLICK are red on
+   v504 at 320x568 and 375x667 with the numbers above; R39-15's own rows, which
+   is what the sticky footer bought, stay green on both trees, and they are
+   asserted in the same pass so nothing can fix one by giving up the other.
+
+2. PROOF: onb-audit.mjs | REACH: on THE PLAN, the chips you picked are readable
+   where they sit instead of under the Start tracking bar, at every viewport
+   including 393x852 where the whole Goal row was behind it. CHIPS-CLEAR is red
+   on v504 at all three (clip 1.000, covered 1.000, centre hitting #onbSkip or
+   #onbSave); CHIPS-REACHABLE stays green on both trees, because a chip scrolled
+   past the form's own fold was never the defect and grading the two the same
+   way is how a fixed tree would have excused the real one.
+
+3. PROOF: fight-tray-audit.mjs | REACH: on a 320x568 phone all four moves are
+   pressed where they sit, with no scrolling. Two full rows cost 105px the
+   screen does not have, so the meta and row margins give 26 and the arena gives
+   the rest, 283 to 220 at this breakpoint only: the one place the 2026-08-16
+   "pin the primary action, do not shrink the arena" call has to bend, and it is
+   flagged rather than buried. That buys a 120.8px tray, three moves exposed
+   68.3px each and the fourth 44.5px, over the 40px tap floor, with the tray
+   still scrolling for the last 23px and still drawing its fade. HIT and PRESS
+   are red on v504 at 320x568 (centre hits div#fightBody, 19.8px exposed, log
+   unchanged) and green at both larger viewports on both trees. Type sizes,
+   hints, button sizes and the fight's rules are untouched.
 
 ## the crate deals its cards smoothly (2026-09-07)
 

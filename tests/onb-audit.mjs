@@ -228,20 +228,150 @@ await p.browserContext().close();
    scrollport edge from first paint instead of the end of the content.
    PROVE-RED (run against origin/main before the CSS/markup change): both rows
    at both viewports failed with bottom > viewport, matching the numbers above. */
-for (const vp of [{ w: 375, h: 667 }, { w: 320, h: 568 }]) {
+/* ---------- R43-4 / R43-5: the footer must not EAT the step it sits under ----
+   The sticky footer that fixed R39-15 overshot. Measured on the shipped tip
+   (v493) at 320x568: .onb-foot is an opaque 159.8px of a 568px viewport, the
+   nameplate on THIS ONE'S YOURS is 0% visible, a real click at the reroll's
+   coordinates leaves the name unchanged, and 144px of scroll is needed to get
+   the plate out from under it. At 375x667 the plate is 46.7% visible. On THE
+   PLAN a selected chip is behind the footer at all three viewports, 393x852
+   included, where the whole Goal row is under #onbSave.
+
+   DIRECTION AND BOUND (anti-regression rule 11), because both failures here are
+   two-sided and a check that only watches one of them is worthless:
+     the CTA's bottom edge must be <= the viewport         (R39-15's direction)
+     the nameplate's VISIBLE fraction must be >= 0.9       (R43-4's direction)
+   The first is what the sticky footer bought and the second is what it cost, so
+   they are asserted in the same pass at the same viewport. Anything that fixes
+   one by giving up the other goes red here.
+
+   VISIBLE means visible to a person: the rect clipped by the viewport AND by
+   every scrollport above it, then minus whatever the footer covers. A rect that
+   is merely "in the DOM at these coordinates" is what let this ship.
+
+   PROVE-RED: run against origin/main (v504, 6e55bbf) with only this file
+   changed. Expected and observed there: NAMEPLATE-VISIBLE 0.000 at 320x568 and
+   0.467 at 375x667, REROLL-CLICK unchanged at both, CHIPS-CLEAR red at all
+   three. R39-15's own rows stay green on both trees, which is the point. */
+const boxProbe = () => {
+  /* the fraction of `el` a person can actually see, and what a click at its
+     centre would land on. Walks the scrollport chain so a clip by .onb-scroll
+     counts the same as a clip by the window. */
+  const clipped = el => {
+    let r = el.getBoundingClientRect();
+    let box = { top: Math.max(r.top, 0), bottom: Math.min(r.bottom, innerHeight), left: Math.max(r.left, 0), right: Math.min(r.right, innerWidth) };
+    for (let n = el.parentElement; n; n = n.parentElement) {
+      const c = getComputedStyle(n);
+      if (!/auto|scroll|hidden/.test(c.overflowY + c.overflowX)) continue;
+      const q = n.getBoundingClientRect();
+      box = { top: Math.max(box.top, q.top), bottom: Math.min(box.bottom, q.bottom), left: Math.max(box.left, q.left), right: Math.min(box.right, q.right) };
+    }
+    /* TWO NUMBERS, NOT ONE, and the difference is the whole point. `clip` is how
+       much survives the viewport and every scrollport above it; `covered` is how
+       much of that the footer paints over. A chip scrolled past the content's
+       own fold has clip 0 and is not a defect (CHIPS-REACHABLE scrolls to it). A
+       chip the footer sits on top of has clip 1 and covered 1 and IS the defect.
+       Collapsing them into one fraction grades those two identically, which on
+       the fixed tree silently excused the case this file exists to catch. */
+    const foot = document.querySelector('.onb-foot');
+    const whole = Math.max(1, r.width * r.height);
+    const area = Math.max(0, box.bottom - box.top) * Math.max(0, box.right - box.left);
+    let cov = 0;
+    if (foot) {
+      const f = foot.getBoundingClientRect();
+      const oh = Math.max(0, Math.min(box.bottom, f.bottom) - Math.max(box.top, f.top));
+      const ow = Math.max(0, Math.min(box.right, f.right) - Math.max(box.left, f.left));
+      cov = oh * ow;
+    }
+    return { clip: area / whole, covered: cov / whole };
+  };
+  const hit = el => {
+    const r = el.getBoundingClientRect();
+    const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { tag: e ? e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') : 'none', self: !!e && (e === el || el.contains(e)), inFoot: !!e && !!e.closest('.onb-foot') };
+  };
+  return { clipped, hit };
+};
+
+for (const vp of [{ w: 375, h: 667 }, { w: 320, h: 568 }, { w: 393, h: 852 }]) {
   const ctx = await browser.createBrowserContext();
   const pv = await ctx.newPage();
   await pv.setViewport({ width: vp.w, height: vp.h, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await pv.goto(base, { waitUntil: 'networkidle2' });
   await sleep(2000);
   await pv.evaluate(() => document.getElementById('onbGo')?.click());
-  await sleep(700);
+  await sleep(900);
   const meBottom = await pv.evaluate(() => document.getElementById('onbMe')?.getBoundingClientRect().bottom);
   ok(`R39-15 "That's me" is inside the fold at ${vp.w}x${vp.h}`, meBottom != null && meBottom <= vp.h, `bottom=${meBottom} viewport=${vp.h}`);
+
+  const plate = await pv.evaluate(probe => {
+    const { clipped, hit } = (new Function('return ' + probe))()();
+    const np = document.querySelector('.onb-nameplate');
+    const rr = document.getElementById('onbReroll');
+    const foot = document.querySelector('.onb-foot');
+    if (!np) return { found: false };
+    const c = clipped(np);
+    return { found: true, frac: +(c.clip - c.covered).toFixed(3), hit: hit(np), rerollHit: rr ? hit(rr) : null,
+      footH: foot ? +foot.getBoundingClientRect().height.toFixed(1) : null,
+      rrBox: rr ? (b => ({ x: b.left + b.width / 2, y: b.top + b.height / 2 }))(rr.getBoundingClientRect()) : null };
+  }, boxProbe.toString());
+  ok(`R43-4 NAMEPLATE-VISIBLE the name is on screen at ${vp.w}x${vp.h}`,
+    plate.found && plate.frac >= 0.9 && plate.hit.self,
+    `visibleFraction=${plate.frac} centreHits=${plate.hit?.tag} footer=${plate.footH}px of ${vp.h}`);
+
+  /* A REAL CLICK AT THE BUTTON'S COORDINATES, not element.click(): the whole
+     defect is that something else owns those pixels, and a programmatic click
+     ignores that and passes. Reroll up to 5 times, because two random draws can
+     legitimately collide (the happy-path run above uses the same allowance). */
+  const before = await pv.evaluate(() => document.getElementById('onbName')?.textContent);
+  let after = before;
+  for (let i = 0; i < 5 && after === before && plate.rrBox; i++) {
+    await pv.mouse.click(plate.rrBox.x, plate.rrBox.y);
+    await sleep(300);
+    after = await pv.evaluate(() => document.getElementById('onbName')?.textContent);
+  }
+  ok(`R43-4 REROLL-CLICK a click at the reroll's own coordinates rerolls at ${vp.w}x${vp.h}`,
+    !!plate.rrBox && after !== before && !plate.rerollHit.inFoot,
+    `${before} -> ${after} centreHits=${plate.rerollHit?.tag}`);
+
   await pv.evaluate(() => document.getElementById('onbMe')?.click());
-  await sleep(700);
+  await sleep(900);
   const saveBottom = await pv.evaluate(() => document.getElementById('onbSave')?.getBoundingClientRect().bottom);
   ok(`R39-15 "Start tracking" is inside the fold at ${vp.w}x${vp.h}`, saveBottom != null && saveBottom <= vp.h, `bottom=${saveBottom} viewport=${vp.h}`);
+
+  /* R43-5. The selected chips are the answer to the only question this step
+     asks, so a chip that is on screen must be readable and pressable. A chip
+     scrolled past the content's own fold is fine and is asserted separately:
+     bring it into view and it must answer its own hit test. An EMPTY chip list
+     is a failure, not a pass (anti-regression rule 3): the form ships with four
+     defaults selected. */
+  const chips = await pv.evaluate(probe => {
+    const { clipped, hit } = (new Function('return ' + probe))()();
+    const sel = [...document.querySelectorAll('#pfHost button')].filter(b => b.classList.contains('on'));
+    const foot = document.querySelector('.onb-foot').getBoundingClientRect();
+    return sel.map(c => {
+      const r = c.getBoundingClientRect();
+      const g = clipped(c);
+      const h = hit(c);
+      return { t: c.textContent.trim().slice(0, 16), clip: +g.clip.toFixed(3), covered: +g.covered.toFixed(3),
+        overlapsFoot: r.bottom > foot.top && r.top < foot.bottom, hit: h.tag, self: h.self, inFoot: h.inFoot };
+    });
+  }, boxProbe.toString());
+  const eaten = chips.filter(c => c.clip > 0.05 && c.covered > 0.1 * c.clip);
+  ok(`R43-5 CHIPS-CLEAR no selected chip is behind the footer at ${vp.w}x${vp.h}`,
+    chips.length >= 3 && eaten.length === 0,
+    `${chips.length} selected, eaten=${eaten.length} ${eaten.map(c => `${c.t} clip=${c.clip} covered=${c.covered} hits ${c.hit}`).join(', ')}`);
+
+  const reached = await pv.evaluate(probe => {
+    const { hit } = (new Function('return ' + probe))()();
+    const sel = [...document.querySelectorAll('#pfHost button')].filter(b => b.classList.contains('on'));
+    return sel.map(c => { c.scrollIntoView({ block: 'center' }); const h = hit(c); return { t: c.textContent.trim().slice(0, 16), tag: h.tag, self: h.self }; });
+  }, boxProbe.toString());
+  ok(`R43-5 CHIPS-REACHABLE every selected chip answers its own hit test once scrolled to at ${vp.w}x${vp.h}`,
+    reached.length >= 3 && reached.every(r => r.self),
+    reached.filter(r => !r.self).map(r => `${r.t} hits ${r.tag}`).join(', ') || `${reached.length}/${reached.length}`);
+
+  if (sh) await pv.screenshot({ path: path.join(sh, `onb-plan-${vp.w}x${vp.h}.png`) });
   await ctx.close();
 }
 
