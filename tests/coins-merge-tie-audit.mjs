@@ -33,11 +33,29 @@
  * fail the same way (both devices then genuinely tie on count alone).
  * Reverting any markInvTaken call fails its own REVIVE row.
  *
+ *
+ * 2026-09-06, Codex audit of v485 (lane 1 of the seven-lane plan): every DEBIT
+ * moved the balance without its revision (spendCoins, spendDust, buyRackItem's
+ * claimAndPay, collectSpawn's credit), and Bone Dust had no revision at all, so
+ * a same-revision blob from before the spend won on "higher balance" and
+ * refunded the purchase while the item stayed. js/db.js kvBumpRevisioned moves
+ * balance and revision in ONE transaction; buyRackItem and collectSpawn carry
+ * the revision inside their own claim transaction; importAll ranks 'bonedust'
+ * by 'dustRev' the way it ranks 'coins' by 'coinsRev'.
+ * PROVE-RED, captured on origin/main bce3a937 (v493) with these rows added:
+ *   FAIL COIN-DEBIT  merging the pre-purchase blob cannot silently refund spent coins  | got 100, expected 10
+ *   FAIL DUST-DEBIT  merging the pre-purchase blob cannot silently refund spent Bone Dust  | got 100, expected 10
+ *   FAIL DUST-EARN  merging the pre-earn blob cannot erase Bone Dust just melted for  | got 100, expected 160
+ *   FAIL RACK-COIN  a coin rack purchase moves coinsRev by the price inside its claim  | coins 5000->2600, coinsRev 5000->5000
+ *   FAIL RACK-DUST  a dust rack purchase moves dustRev by the price inside its claim  | dust 500->280, dustRev 500->500
+ *   FAIL SPAWN  collectSpawn's coin credit moves coinsRev by the same amount  | coins +12, coinsRev +0
+ *
  * Usage: node tests/coins-merge-tie-audit.mjs
  */
 import './mem-idb.mjs';
 const { kvGet, kvSet, db, importAll, useDbName } = await import('../js/db.js');
-const { coinsAdd, consumeConsumable, grantConsumable } = await import('../js/loot.js');
+const { coinsAdd, spendCoins, spendDust, boneDustAdd, buyRackItem, RACK_AURA, consumeConsumable, grantConsumable } = await import('../js/loot.js');
+const { collectSpawn } = await import('../js/hunt.js');
 
 let bad = 0;
 const ok = (label, pass, detail = '') => {
@@ -91,6 +109,57 @@ const bCoinsBefore = await kvGet('coins', 0);
 await importAll({ app: 'tally', version: 3, log: [], kv: [{ k: 'coins', v: aBlobCoins }, { k: 'coinsRev', v: aBlobRev }] }, { replace: false });
 ok('SUM-TIE  an exact sum tie still keeps the higher balance (the merge-side fallback, not just the improbability)',
   (await kvGet('coins', 0)) === Math.max(bCoinsBefore, aBlobCoins), `got ${await kvGet('coins', 0)}, expected max(${bCoinsBefore},${aBlobCoins})`);
+
+/* ---------------- DEBITS: stale backups must not refund a purchase (2026-09-06) ---------------- */
+useDbName('r39-coin-debit');
+await kvSet('coins', 100);
+await kvSet('coinsRev', 100);
+const beforeCoinSpend = { app: 'tally', version: 3, log: [], kv: [{ k: 'coins', v: 100 }, { k: 'coinsRev', v: 100 }] };
+ok('COIN-DEBIT SETUP  spendCoins takes 90 of the real 100-coin balance', (await spendCoins(90)) === 10, `coins=${await kvGet('coins', 0)}`);
+await importAll(beforeCoinSpend, { replace: false });
+ok('COIN-DEBIT  merging the pre-purchase blob cannot silently refund spent coins',
+  (await kvGet('coins', 0)) === 10, `got ${await kvGet('coins', 0)}, expected 10`);
+
+useDbName('r39-dust-debit');
+await kvSet('bonedust', 100);
+await kvSet('dustRev', 100);
+const beforeDustSpend = { app: 'tally', version: 3, log: [], kv: [{ k: 'bonedust', v: 100 }, { k: 'dustRev', v: 100 }] };
+ok('DUST-DEBIT SETUP  spendDust takes 90 of the real 100-dust balance', (await spendDust(90)) === 10, `dust=${await kvGet('bonedust', 0)}`);
+await importAll(beforeDustSpend, { replace: false });
+ok('DUST-DEBIT  merging the pre-purchase blob cannot silently refund spent Bone Dust',
+  (await kvGet('bonedust', 0)) === 10, `got ${await kvGet('bonedust', 0)}, expected 10`);
+
+/* the EARNING direction for dust: a blob from before the melt must not erase it */
+useDbName('r39-dust-earn');
+await kvSet('bonedust', 100);
+await kvSet('dustRev', 100);
+const beforeDustEarn = { app: 'tally', version: 3, log: [], kv: [{ k: 'bonedust', v: 100 }, { k: 'dustRev', v: 100 }] };
+ok('DUST-EARN SETUP  boneDustAdd credits 60', (await boneDustAdd(60)) === 160, `dust=${await kvGet('bonedust', 0)}`);
+await importAll(beforeDustEarn, { replace: false });
+ok('DUST-EARN  merging the pre-earn blob cannot erase Bone Dust just melted for',
+  (await kvGet('bonedust', 0)) === 160, `got ${await kvGet('bonedust', 0)}, expected 160`);
+
+/* ---------------- RACK + SPAWN: the revision rides inside the claim transaction, not only the helper ---------------- */
+useDbName('r39-rack-coin');
+await kvSet('coins', 5000); await kvSet('coinsRev', 5000);
+const rc = await buyRackItem(RACK_AURA.key, 'coins');
+ok('RACK-COIN SETUP  the aura sells for coins', !!(rc && rc.ok), JSON.stringify(rc));
+ok('RACK-COIN  a coin rack purchase moves coinsRev by the price inside its claim',
+  (await kvGet('coins', 0)) === 5000 - RACK_AURA.coin && (await kvGet('coinsRev', 0)) === 5000 + RACK_AURA.coin,
+  `coins 5000->${await kvGet('coins', 0)}, coinsRev 5000->${await kvGet('coinsRev', 0)}`);
+useDbName('r39-rack-dust');
+await kvSet('bonedust', 500); await kvSet('dustRev', 500);
+const rd = await buyRackItem(RACK_AURA.key, 'dust');
+ok('RACK-DUST SETUP  the aura sells for dust', !!(rd && rd.ok), JSON.stringify(rd));
+ok('RACK-DUST  a dust rack purchase moves dustRev by the price inside its claim',
+  (await kvGet('bonedust', 0)) === 500 - RACK_AURA.dust && (await kvGet('dustRev', 0)) === 500 + RACK_AURA.dust,
+  `dust 500->${await kvGet('bonedust', 0)}, dustRev 500->${await kvGet('dustRev', 0)}`);
+useDbName('r39-spawn');
+const sp = await collectSpawn({ id: 'r39-coins-1', type: 'coins' }, '2099-01-01');
+ok('SPAWN SETUP  the coin spawn paid', !!(sp && sp.coins > 0), JSON.stringify(sp));
+ok('SPAWN  collectSpawn\'s coin credit moves coinsRev by the same amount',
+  sp && (await kvGet('coins', 0)) === sp.coins && (await kvGet('coinsRev', 0)) === sp.coins,
+  `coins +${await kvGet('coins', 0)}, coinsRev +${await kvGet('coinsRev', 0)}`);
 
 /* ---------------- REVIVE: a spent consumable must not come back through a stale merge --- */
 useDbName('r38-13-revive');

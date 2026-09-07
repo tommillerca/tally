@@ -555,7 +555,12 @@ export async function claimQuest(periodKey, q, period = 'day') {
       coinsRev: cur => Math.max(0, (Number(cur) || 0) + Math.max(1, Math.abs(coins))),
       // v153: richer, more enticing rewards beyond coins — Bone Dust and
       // ingredients so the reward table isn't all coins.
-      ...(q.dust ? { bonedust: cur => Math.max(0, (Number(cur) || 0) + q.dust) } : {}),
+      ...(q.dust ? {
+        bonedust: cur => Math.max(0, (Number(cur) || 0) + q.dust),
+        // 2026-09-06: Bone Dust's merge ordering signal rides in the same claim
+        // transaction, the way coinsRev does above (js/db.js importAll ranks it)
+        dustRev: cur => (Number(cur) || 0) + Math.max(1, Math.abs(q.dust)),
+      } : {}),
       ...(q.ingredient ? { ingredients: inv => ({ ...(inv || {}), [q.ingredient]: ((inv && inv[q.ingredient]) || 0) + (q.ingredientN || 1) }) } : {}),
     },
     puts: [...(crate ? [{ store: 'inv', val: crate }] : []), ...(item ? [{ store: 'inv', val: item }] : [])],

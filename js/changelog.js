@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 494, date: '2026-09-07', title: 'Two phones, one wallet', items: [
+    'Coins and Bone Dust now carry their own change counter, written in the same step as the balance, on every path that moves them: earning, spending on the rack, a spawn pick-up, a quest payout. When two phones meet, the newer wallet wins and spent coins or dust can no longer come back from an older save.',
+    'Using up a potion, a battle charm, a streak freeze or a salvaged pet is recorded in the same step as the removal, and the record never expires, so an old backup can no longer bring a spent item back to life.',
+  ] },
   { n: 493, date: '2026-09-06', title: 'Your welcome coins are yours even when signup stalls', items: [
     'If the Crew servers refuse a brand-new signup for a moment (a busy shared wifi can do it), you no longer walk into Today with an empty wallet and no word about it. The 50 welcome coins land locally first, signup retries once, and if it still fails a line says so and the coins stay yours.',
   ] },
