@@ -1673,7 +1673,7 @@ async function boot() {
      Kitchen" with no instruction at all: new players got the pouch-catches-up
      copy's ingredient count but never its "cook it" line. Same instruction,
      said once, on the message every new player actually receives. */
-  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen: exactly one Bone Broth. Cook it.`, 4200), init && init.xp > 0 ? 4200 : 900);
+  if (kit) setTimeout(() => toast(`Welcome kit: ${kit.coins} coins, 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen: exactly one Bone Broth. Cook it.`, 4200), init && init.xp > 0 ? 4200 : 900);
   // the pouch reaches installs that predate it; see backfillStarterSeedsIfNeeded
   const pouch = kit ? null : await backfillStarterSeedsIfNeeded();
   if (pouch) setTimeout(() => toast(`${pouch.ingredients} starter ingredients in your Kitchen: exactly one Bone Broth. Cook it.`, 4200), init && init.xp > 0 ? 4200 : 1400);
@@ -15479,7 +15479,7 @@ async function saveInitialSettings(np) {
   await kvSet('newsSeen', NEWS.map(n => n.id));
   const kit = await initLootIfNeeded();
   // R38-21: same instruction as boot()'s copy of this toast, see the comment there.
-  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen: exactly one Bone Broth. Cook it.`, 4200), 1200);
+  if (kit) setTimeout(() => toast(`Welcome kit: ${kit.coins} coins, 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen: exactly one Bone Broth. Cook it.`, 4200), 1200);
   // The cloud account is created HERE, not at first boot: bootSync no longer
   // registers brand-new installs (that minted one abandoned level-1 "player"
   // per bounced install). Finishing onboarding is the opt-in moment.

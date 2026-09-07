@@ -272,6 +272,14 @@ PURE.unshift('no-debug-markers-lint.mjs');
    ledger scan, then decided several awaits later, off that stale count. */
 PURE.push('routine-race-audit.mjs');
 PURE.unshift('version-align-lint.mjs');
+/* dayone-topup-audit is PURE for the same reason spawn-claim-atomic-audit is:
+   mem-idb under the real js/db.js, js/game.js and js/loot.js, no browser, ~2s.
+   It owns the day-one coin floor (master handoff B4, 2026-09-07): the welcome
+   kit's one-time 40-coin grant is paid exactly once and survives a /register
+   that answers 429, and a PERFECT first day driven through the shipped payout
+   functions over twelve seeds clears the 300 rack floor at the median (304 with
+   the grant, 264 without). Proved red by deleting the grant: 6 rows, exit 1. */
+PURE.push('dayone-topup-audit.mjs');
 const BROWSER = [
   /* the raw-sink fix's STATE half. render-sink-lint pins the source, and this
      repo has watched shape assertions stay green over broken state, so this one
