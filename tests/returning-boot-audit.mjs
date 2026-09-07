@@ -286,6 +286,32 @@ for (const cfg of CONFIGS) {
   }
 }
 
+/* ---------------- OK: the greeting is a card a player can put away ---------
+   THE ONE CONTROL ON THIS SCREEN, DRIVEN FOR REAL. Every row above measures a
+   boot; none of them touches anything, and a card that cannot be dismissed is a
+   greeting that becomes furniture. #wbOk is the button ("Good to be back"), it
+   clears kv 'wbReturnDay', and this presses it the way a thumb does rather than
+   calling the handler. Rule 5: UI changes are verified by OPERATING controls. */
+await page.setViewport({ width: CONFIGS[0].w, height: CONFIGS[0].h, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+await settle(page, 400);
+const okBtn = await page.$('#wbOk');
+ok('OK 393x852 the greeting carries its own dismiss button', !!okBtn, okBtn ? '#wbOk present' : 'no #wbOk to press');
+if (okBtn) {
+  await page.click('#wbOk');
+  await sleep(900);
+  const stillThere = await page.evaluate(() => !!document.getElementById('wbCard'));
+  ok('OK 393x852 pressing it takes the card away', !stillThere, stillThere ? '#wbCard is still on Today after a real tap' : 'gone');
+  /* AND IT STAYS AWAY ACROSS A RELOAD, which is the part a repaint cannot fake:
+     the handler writes kv 'wbReturnDay' = null, so a card that came back here
+     would mean the tap only hid it. */
+  await page.reload({ waitUntil: 'networkidle2' });
+  await sleep(3000);
+  await page.evaluate(() => document.querySelector('.dw')?.remove());
+  await settle(page, 400);
+  const back = await page.evaluate(() => !!document.getElementById('wbCard'));
+  ok('OK 393x852 and it does not come back on the next boot', !back, back ? '#wbCard rendered again after a reload' : 'still gone');
+}
+
 ok('CLEAN no JS errors on the returning boot', errs.length === 0, errs.join(' | ') || 'none');
 
 console.log(`\nshots: ${SHOTS}`);
