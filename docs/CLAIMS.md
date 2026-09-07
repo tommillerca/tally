@@ -19,6 +19,11 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v500
+1. A hotfix off v499 from Tom's live report that opening a crate is slow and glitchy between cards.
+
+2. PROOF: crate-reveal-audit.mjs | REACH: the card-to-card move renders without dropping frames. Measured on a real three-card Bone Crate driven through the Backpack's own OPEN button: the full-screen burst shader redrew every frame for the reveal's whole life and held the takeover at a 33.3 ms median frame (16.7 ms with it hidden, measured back to back in one process), so the flick played at half rate on every build from v481 to v499, not as a regression. The burst now holds its last composited frame during the flick and resumes once the next card has risen, and the finished crate subtree is dropped on the first advance: dropped frames per move fall from 8 to 16 down to 1 to 5, frames rendered rise from about 22 to 33 to 60. FLICK rows red on v499 (over20 14 and 13, worst 92 ms), green on the fix (45/45); the R37-5 early-tap rows, the R39 recovery rows, BULK, CLAIM and TAP all stay green. The bound is a dropped-frame count, not a per-frame ceiling, because a 34 ms ceiling is red on v481 itself; worst and worstAt print every run so the one residual first-flick hitch stays visible.
+
 ## v499
 1. A hotfix off v498 carrying two lanes: the prorated bundle with its pet-kit warning (Tom's rulings, 2026-09-06) and the Boneyard's outmatched line. Their dated sections are further down, folded here.
 

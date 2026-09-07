@@ -4,6 +4,9 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 500, date: '2026-09-07', title: 'The crate deals its cards smoothly', items: [
+    'Flicking from one card to the next in a multi-card crate was running at half frame rate. The light show behind the cards holds its last frame while a card moves and picks up again once the next one has landed, so the flick is smooth and the glow never blinks.',
+  ] },
   { n: 499, date: '2026-09-07', title: 'The bundle is honest, and the Boneyard says the odds', items: [
     'The full kit bundle keeps its discount on whatever you are missing instead of quietly charging full price after your first piece. And a kit that includes lizard gear says so before you buy: if you have no lizard yet, the pieces wait in the Stable until one hatches.',
     'The Glutton and a Spire tower now tell you when you are outmatched at your level, and the Spire always says that fighting for it spends today\'s attempt whether you win or lose.',
