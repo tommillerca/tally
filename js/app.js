@@ -25819,7 +25819,7 @@ async function seedDemo() {
       hrv: demoHrv[i],
     });
   }
-  await kvSet('coins', 340);
+  await coinsAdd(340);   // fresh demo db, so this IS 340; goes through the revisioned primitive like every other balance write
   // The demo weapon is a LEGENDARY (Onyx Dagger) rather than the common flail,
   // so the rack's aura tile can be checked against a weapon that actually
   // carries a rarity halo to replace. Demo seed only; ?demo never touches a

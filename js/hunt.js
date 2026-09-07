@@ -219,7 +219,10 @@ export async function collectSpawn(spawn, date = dateKey()) {
   const coins = def.coins ? Math.round(def.coins * await foodCoinMult()) : 0;
   const crate = def.crate ? (def.crate === 'egg' ? await eggRow('boneyard') : crateRow(def.crate, 'boneyard')) : null;
   const pay = { kv: {}, puts: crate ? [{ store: 'inv', val: crate }] : [] };
-  if (coins) pay.kv.coins = cur => Math.max(0, (Number(cur) || 0) + coins);   // kvBump's clamp
+  if (coins) {
+    pay.kv.coins = cur => Math.max(0, (Number(cur) || 0) + coins);   // kvBump's clamp
+    pay.kv.coinsRev = cur => (Number(cur) || 0) + coins;   // merge ordering, same transaction (2026-09-06, see js/db.js kvBumpRevisioned)
+  }
   if (ing.n) pay.kv.ingredients = inv => ({ ...(inv || {}), [ing.id]: ((inv && inv[ing.id]) || 0) + ing.n });
   const xp = def.xp || 15;
   const claim = await awardOnce(spawnKey(date, spawn), 'spawn', xp, `Boneyard: ${def.label}`, date, null, pay);
