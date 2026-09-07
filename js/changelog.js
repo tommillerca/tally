@@ -4,6 +4,9 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 501, date: '2026-09-07', title: 'The Wanderer walks in front', items: [
+    'Map pins were painting over the Wanderer, so the thing hunting you sat behind a coin icon. He walks in front of every pin now, and your own marker still sits on top of him, because that one is how you collect.',
+  ] },
   { n: 500, date: '2026-09-07', title: 'The crate deals its cards smoothly', items: [
     'Flicking from one card to the next in a multi-card crate was running at half frame rate. The light show behind the cards holds its last frame while a card moves and picks up again once the next one has landed, so the flick is smooth and the glow never blinks.',
   ] },

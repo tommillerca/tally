@@ -19,6 +19,11 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v501
+1. A hotfix off v500: the Wanderer's stacking on the Boneyard map (Tom's live report) and the gate-hygiene work that makes every registered audit run (Codex). Their dated sections are further down, folded here.
+
+2. PROOF: wanderer-patrol-live-audit.mjs | REACH: the Wanderer paints in front of every other map pin, and the player's own marker still paints in front of him because collecting depends on it. Measured in real pixels at a forced overlap (two synthetic markers dropped on his own point, sampled with him visible and hidden): before, both reads returned the marker's colour and his coat contributed nothing; the STACK-LIVE row is red on that (visible and hidden both rgba(0,0,255,255)) and green after, with the marker group at 1, the Wanderer at 2 and the player at 3 as class rules MapLibre cannot overwrite on a reposition.
+
 ## v500
 1. A hotfix off v499 from Tom's live report that opening a crate is slow and glitchy between cards.
 
@@ -71,6 +76,36 @@ frame. Back to back in one process, two passes agreeing, median frame 33.3ms
 with it mounted and 16.7ms with it hidden.
 
 1. PROOF: crate-reveal-audit.mjs | REACH: Open a Bone Crate from your Backpack and flick through its three cards: each card leaves and the next one arrives at full frame rate instead of half. Measured over the 520ms of the move, dropped frames 8-16 before and 1-5 after, frames rendered 18-27 before and 47-59 after. Nothing about what a crate pays, the reveal's copy, the tap guards (R37-5) or the Open all recovery (R39) changes.
+
+## the Wanderer walks in front (2026-09-07)
+
+Not stamped to a release: hotfix/wanderer-z, off v500. Tom, live: "Boneyard:
+icons on map on top of wanderer should be behind him."
+
+MEASURED BEFORE FIXING, on the real Boneyard: `.map-wanderer-mark { z-index: 0 }`
+against `.map-you, .map-spawn, .map-den-mark, .map-mini-mark, .map-spire,
+.map-glutton-mark { z-index: 1 }` (js/wanderer.js, dated 2026-08-23), so every
+other marker painted over him. A forced, deterministic overlap (two synthetic
+markers dropped at his own lat/lng) sampled the real render at that pixel: with
+him hidden the pixel read the synthetic colour exactly; with him visible it
+read the same synthetic colour, proving nothing of his own art survived the
+overlap.
+
+FIXED by reordering the same rule: `.map-wanderer-mark` now carries z-index 2,
+the marker group (spawns, dens, POIs, spires, coin piles) carries z-index 1, and
+`.map-you` alone carries z-index 3. The player's own marker is the one
+exception, kept on top of him: its 75 m collect ring is functional, not
+decorative, and burying it was the reason he was pushed to the back in the
+first place (js/wanderer.js note, 2026-08-23). No change to his cone, his patrol,
+or any marker's size.
+
+PROVEN RED on a throwaway `cp -R` with the old rule restored: PINS-SURVIVE and
+STACK-LIVE both failed, exit 1 --
+`FAIL  STACK-LIVE his art wins the overlap in real pixels, not just in z-index,
+against 2 other marker kinds  | at device pixel (196,344): visible
+rgba(0,0,255,255), hidden rgba(0,0,255,255)`. Fixed: 19/19, exit 0.
+
+1. PROOF: wanderer-patrol-live-audit.mjs, marker-anchor-audit.mjs | REACH: on the Boneyard map, the Wanderer's coat now paints over every spawn, den, POI, spire and coin-pile marker he overlaps; your own marker and its collect ring still paint over him. Measured on the real render at the forced overlap point: with him visible the pixel is his own colour (not the marker's), and with him hidden it becomes the marker's colour, so the fix is proven in pixels, not only in the stacking rule.
 
 ## kennel round 39 (2026-09-06)
 
@@ -312,6 +347,24 @@ reward already uses.
    land, and both routines are still remembered as done today either way
    (red before: +10 XP paid on the race, 20 XP total, 0 of 2 calls reporting
    capped).
+
+## the gate runs what it registers (2026-09-06)
+
+Not stamped to a release: fix/gate-hygiene-c, off v493.
+
+1. PROOF: release-gate.mjs | REACH: Every runnable guard belongs to exactly one
+   tier that executes it. A declared guard missing from every running tier, a
+   duplicate, or a never-run tier stops the gate before browser work begins.
+
+2. PROOF: recovery-audit.mjs, log-write-failure-audit.mjs | REACH: The recovery
+   suite reaches a dropped backup download after registration, and the log-write
+   suite always runs its normal, failed-log and failed-XP cases.
+
+3. PROOF: pet-wardrobe-audit.mjs, crew-fan-audit.mjs,
+   reveal-mannequin-audit.mjs, harness-leak-audit.mjs | REACH: Image checks wait
+   a bounded time for real decode evidence, while a missing image still fails;
+   test browsers launched through an explicit browser path are reaped if their
+   owning audit is killed.
 
 ## pit readout and exit (2026-09-06)
 

@@ -1,4 +1,6 @@
-/* Every catalogue row must point at a file that EXISTS, DECODES and is 640px.
+/* Every catalogue row must point at a file that EXISTS, DECODES and uses its
+   authored canvas size: wardrobe art is 640px; pets and their accessories are
+   2048px as of the 2026-09-05 pet-art source drop.
    A row with no file renders an empty box on a paperdoll, and nothing else in
    the app notices. Run: node tests/newart-audit.mjs [base] [ids,csv|all] */
 import { boot, serveTree } from './godmode.js';
@@ -31,11 +33,12 @@ const rows = await page.evaluate(async which => {
   return out;
 }, arg === 'all' ? 'all' : arg.split(','));
 const missing = rows.filter(r => !r.ok);
-const odd = rows.filter(r => r.ok && r.w !== 640);
+const source2048 = new Set(['C6', 'CE1', 'CB1', 'CB2', 'CG1', 'CM1']);
+const odd = rows.filter(r => r.ok && r.w !== (source2048.has(r.id) ? 2048 : 640));
 const nameless = rows.filter(r => /#\d+$/.test(r.name || ''));
 console.log(`checked ${rows.length} catalogue rows`);
 console.log(`  missing/undecodable : ${missing.length}${missing.length ? ' -> ' + missing.map(r => r.id).join(', ') : ''}`);
-console.log(`  not 640px           : ${odd.length}${odd.length ? ' -> ' + odd.map(r => r.id + '@' + r.w).join(', ') : ''}`);
+console.log(`  wrong canvas size   : ${odd.length}${odd.length ? ' -> ' + odd.map(r => r.id + '@' + r.w).join(', ') : ''}`);
 console.log(`  still placeholder-named: ${nameless.length}`);
 /* EVERY COSMETIC HAS A REAL NAME, and no two in a slot share one. 258 rows
    carried a generated placeholder ("Tidy Backdrop #1") until 2026-08-09; the
@@ -82,7 +85,10 @@ const dupes = await page.evaluate(async () => {
     // a coarse fingerprint is enough to flag candidates; exact bytes get checked by hand
     const d = cx.getImageData(0, 0, 64, 64).data;
     let h = 0; for (let i = 0; i < d.length; i += 17) h = (h * 31 + d[i]) >>> 0;
-    const key = it.slot + ':' + h;
+    /* Football kits intentionally reuse one neutral bitmap and receive their
+       team colour at render time. They are not duplicate authored cosmetics.
+       Proven against the 2026-09-05 football catalogue merge. */
+    const key = it.id.startsWith('fb-') ? `${it.slot}:${it.id}:${h}` : `${it.slot}:${h}`;
     if (seen.has(key)) out.push([seen.get(key), it.id]); else seen.set(key, it.id);
   }
   return out;
@@ -125,7 +131,7 @@ if (dupes.length) {
 await browser.close();
 if (srvHandle) srvHandle.close();
 if (missing.length || odd.length) { console.log('FAIL'); process.exitCode = 1; }
-else console.log('all catalogue art present, decoded and 640px');
+else console.log('all catalogue art present, decoded and correctly sized');
 /* HONOUR EVERY FAILURE. This was `process.exit(0)`, which discards process.exitCode
    outright (`node -e 'process.exitCode=1; process.exit(0)'` exits 0), so placeholder
    names, duplicate names, duplicate art and a broken app.css all reported green.
