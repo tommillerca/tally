@@ -253,6 +253,14 @@ if (own) console.log(`serving this repo at ${base}\n`);
 const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-atomic-audit.mjs', 'backup-encoder-audit.mjs', 'backup-key-audit.mjs', 'backup-version-audit.mjs', 'backup-conflict-audit.mjs', 'unit.test.js', 'log-xp-farm-audit.mjs', 'drip-badge-audit.mjs', 'xp-key-provenance-lint.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'stat-source-audit.mjs', 'bastions-rep-sim.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'rack-rotate-audit.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs', 'render-sink-lint.mjs', 'lapse-witness-audit.mjs', 'spawn-claim-atomic-audit.mjs', 'wardrobe-family-audit.mjs', 'football-kit-audit.mjs', 'restore-latch-audit.mjs', 'first-pet-audit.mjs'];
 PURE.unshift('store-copy-lint.mjs');
 PURE.unshift('no-debug-markers-lint.mjs');
+/* routine-race-audit is PURE for the same reason spawn-claim-atomic-audit is:
+   mem-idb under the real js/db.js, js/game.js and js/wellness.js, under a
+   second. It races two DIFFERENT routines finishing concurrently at the
+   daily XP cap minus one (mem-idb serialises the overlapping transactions,
+   so each call gets a genuine turn), the exact shape that paid 20 XP against
+   a documented 15 XP ceiling (measured 2026-09-06): the cap was read via a
+   ledger scan, then decided several awaits later, off that stale count. */
+PURE.push('routine-race-audit.mjs');
 const BROWSER = [
   /* the raw-sink fix's STATE half. render-sink-lint pins the source, and this
      repo has watched shape assertions stay green over broken state, so this one
