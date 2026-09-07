@@ -4,6 +4,12 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 507, date: '2026-09-07', title: 'Coming back is a welcome', items: [
+    'If you have been away, the app now says so properly, at the top of Today where you will actually see it, instead of 368px below the fold where nobody ever read it. It no longer claims everything is where you left it while your streak reads zero: it says the streak starts over and nothing else does, and it names what survived, including the last day you logged, which was closed and paid.',
+    'The line telling you that you were paid for the day you walked away was being printed underneath the daily wheel, so nobody read it on the one boot where it matters. It sits above the wheel now.',
+    'A returning player\'s quest board was drawing three quests that a meal could not finish, so there was nothing to do on the day you came back. It now always offers something you can complete by logging food, the same rule day one already had.',
+    'Gwart will no longer greet somebody returning after three months by telling them half the day is gone and there is not a crumb on the page.',
+  ] },
   { n: 506, date: '2026-09-07', title: 'One colour at the top of the screen', items: [
     'A dark strip with the edge of a card poking out of it could appear near the top of Today, between two bands of the right colour. It only ever showed up while your phone was running an older build than the live one, which is why it seemed to fix itself after an update: the banner telling you the update was ready sat in the one spot where the artwork behind it reaches up under the status bar, and the two were fighting over the same space. The banner now sits with the rest of your cards, where you will actually read it.',
   ] },
