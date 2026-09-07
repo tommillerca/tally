@@ -7976,6 +7976,8 @@ test('R41-16 __refreshLevelChip exists and fires on both fight-settle outcomes, 
   assert.ok(winSite, 'the win branch does not refresh the level chip after badges are evaluated (R41-16)');
   const lossSite = openFight.match(/coins = foeCfg\.mode === 'spar'[\s\S]*?window\.__refreshWalletPill\?\.\(\);\n\s*window\.__refreshLevelChip\?\.\(\);/);
   assert.ok(lossSite, 'the loss branch does not refresh the level chip beside the wallet pill (R41-16)');
+});
+
 // ---- master handoff B16: "can this player plausibly win this foe" ----
 // PROVE-RED (pre-fix, before pitMod.isOutmatched existed): every case below
 // throws "pitMod.isOutmatched is not a function".
