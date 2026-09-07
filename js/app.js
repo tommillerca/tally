@@ -10010,7 +10010,7 @@ function footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundl
           return `<div class="drop-item fb ${owned ? 'owned' : ''}">
             ${art}
             <b>${esc(g.label)}</b>
-            <small class="fb-kitline">All ${FOOTBALL_TEAMS.length} colourways</small>
+            <small class="fb-kitline">${g.pets ? 'For the lizard · ' : ''}All ${FOOTBALL_TEAMS.length} colourways</small>
             ${teamStripHtml()}
             ${owned
               ? `<button class="drop-buy" disabled>In your Wardrobe</button>`
@@ -10033,7 +10033,7 @@ function footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundl
           }).join('')}</div>
           ${teamStripHtml()}
           <b>Every piece, every team</b>
-          <small class="fb-kitline">${sold.map(g => esc(g.label)).join(' · ')} · all ${FOOTBALL_TEAMS.length} colourways</small>
+          <small class="fb-kitline">${sold.map(g => esc(g.label)).join(' · ')} · all ${FOOTBALL_TEAMS.length} colourways · for the lizard: ${sold.filter(g => g.pets).map(g => esc(g.label)).join(' & ')}</small>
           ${(() => {
             const bundleSellable = footballBundleSellable();
             const canBuyBundle = bundleSellable && Number.isFinite(quote.cost) && coinBal >= quote.cost;
@@ -10559,9 +10559,16 @@ async function renderShop(el) {
         return;
       }
       levelSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
+      /* WARN BEFORE BUYING (Tom, 2026-09-06): a pet garment with no lizard yet
+         to wear it is not withheld or refunded -- it is granted exactly as
+         normal and simply waits in the Wardrobe -- but the player is told
+         that up front rather than finding out silently. buyFootballItem and
+         buyFootballBundle set r.petsPending; see their comments in js/loot.js. */
       toast(`${r.label} is yours. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left.`
         + (r.granted ? ` ${r.granted} pieces${Number.isFinite(r.save) ? `, ${r.save.toLocaleString()} saved` : ''}.` : '')
-        + ' Equip it in your Wardrobe.', 3200);
+        + ' Equip it in your Wardrobe.'
+        + (r.petsPending ? ' The pet pieces wait in the Stable until a lizard hatches.' : ''),
+        r.petsPending ? 4200 : 3200);
       rerender();
     });
   }));

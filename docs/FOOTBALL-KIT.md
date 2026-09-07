@@ -334,8 +334,8 @@ per team.** Tom: "per garment only with a bundle of everything for a slightly
 cheaper but expensive price." Five per-garment tiles, plus one bundle tile that
 grants every sold garment in every team in one purchase (256 ids for 5 tiles: the
 helmet still drags its three visors). `FOOTBALL_BUNDLE_PRICE_PLACEHOLDER` is
-**16,800** against **21,000** for the five tiles (7.1). The maths, the tile, the
-buy path and the "you save N" line are wired:
+**16,800** against **21,000** for the five tiles (7.1), the price of a player who
+owns NONE of the five garments. The maths for that flat quote:
 
 ```
 full  = FOOTBALL_KIT_PRICE_PLACEHOLDER x 5        4,200 x 5 = 21,000
@@ -344,9 +344,43 @@ save  = full - FOOTBALL_BUNDLE_PRICE_PLACEHOLDER  21,000 - 16,800 = 4,200
 
 `footballBundleSellable` refuses a live bundle with no number AND one priced at
 or above `full`, because a non-positive saving would print a lie on a price tag.
-Partial ownership pays the full bundle price and is granted the rest; owning all
-of it is refused outright. Guarded by BUNDLE, BUNDLE-MATH, BUNDLE-PRICE,
-BUNDLE-PRICE-CONTROL and BUNDLE-BUYPATH.
+Owning all five is refused outright. Guarded by BUNDLE, BUNDLE-MATH,
+BUNDLE-PRICE, BUNDLE-PRICE-CONTROL and BUNDLE-BUYPATH.
+
+**Partial ownership: two rulings, dated, the first now superseded.**
+
+*Tom, 2026-09-05, after Impeccable's football-kit critique:* a player who owns
+3 of the 5 garments (12,600 spent) must not then pay the flat 16,800 for the
+other two (worth 8,400) -- that overcharge was the bug. First fix:
+`footballBundleQuote` charged `min(bundle, piece x missing)`, which stopped the
+overcharge but tied the FLAT five-garment price the instant 4 of 5 were
+missing (`4,200 x 4 == 16,800`, one garment short of the whole kit for the
+whole-kit price). **SUPERSEDED 2026-09-06.**
+
+*Tom, 2026-09-06: "prorate the discount."* The bundle keeps its 20% saving on
+WHATEVER is missing, not just on the full five, rounded to the nearest 100
+coins so the tile always prints a round number:
+
+| garments missing | full price (piece x missing) | x 0.8 | quoted (rounded to nearest 100) |
+|---|---|---|---|
+| 5 (nothing owned) | 21,000 | 16,800 | **16,800** (exact) |
+| 4 | 16,800 | 13,440 | **13,400** |
+| 3 | 12,600 | 10,080 | **10,100** |
+| 2 | 8,400 | 6,720 | **6,700** |
+| 1 | 4,200 | 3,360 | **3,400** |
+| 0 (owns everything) | -- | -- | not for sale: the tile says so |
+
+`footballBundleQuote(ownedGarmentCount)` in `data/football-teams.js` is the
+whole of the arithmetic; `js/loot.js buyFootballBundle` quotes it at the top of
+the purchase and re-quotes it against what the purchase actually delivered (the
+overcharge guard from the 2026-09-05 fix, unchanged) to refund any gap opened by
+a concurrent single-garment buy. The "you save N" line on the tile is always
+`quote.save` against `quote.full` (the missing pieces' own sum, not the flat
+21,000), so it states the real saving against buying those pieces singly and
+never disappears while anything is missing; with nothing missing the tile
+reads "The whole kit is yours" instead of a price. Guarded by BUNDLE-QUOTE
+(pure, all six owned counts 0-5) and the unit tests `football BUNDLE-QUOTE` /
+`football BUNDLE-CONCURRENCY`.
 
 **7.3 `VISOR_EYES_POLICY`: DECIDED 2026-09-04, it is `'clip'`.** Tom: "hide the
 eyes on any eye cosmetics that dont fit in the bound of the helmet OR if it is
@@ -503,6 +537,31 @@ nobody can call is a buy path nobody has tested.
 
 **`buyFootballBundle`'s first argument is now ignored.** There is one bundle, not
 32. The parameter is kept only so `js/app.js` keeps working until section 8 lands.
+
+**7.9 Warn before buying the pet pieces. RULED 2026-09-06.** Tom: the two
+lizard garments (and the bundle, which always includes both) say "for the
+lizard" plainly on their tiles, and if the player owns no lizard yet (C4
+Beardie or CX Founder's Lizard -- `FOOTBALL_PETS` in `data/football-teams.js`)
+the confirm step says the pieces wait in the Stable until one hatches.
+**Nothing is withheld or refunded**: the garment is granted exactly as normal
+(all 32 teams, same as any other purchase) and simply has nowhere to be worn
+yet.
+
+`js/loot.js`'s `ownsFootballPet()` checks `petInstances()` for any species in
+`FOOTBALL_PETS`; `buyFootballItem` sets `petsPending` true when the tile
+bought is a pet garment and no lizard is owned, `buyFootballBundle` sets it
+whenever no lizard is owned (the bundle always includes both pet garments).
+`js/app.js`'s confirm toast appends "The pet pieces wait in the Stable until a
+lizard hatches." when `r.petsPending` is set. The two pet tiles' `<small>` and
+the bundle tile's `<small>` say "For the lizard" plainly regardless of
+ownership, so the warning is not the first time a player learns the pieces
+are for a lizard at all.
+
+Guarded PURE by `tests/football-kit-audit.mjs` rows PET-WARN (a fresh save is
+warned buying either pet tile or the bundle, never a non-pet tile) and
+PET-WARN-CONTROL (a save that already owns a lizard is never warned). The
+browser half -- the real toast on the real screen -- is
+`tests/football-render-audit.mjs` row PET-WARN.
 
 ## 8. The colourway rail (the Wardrobe)
 
