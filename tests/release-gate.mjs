@@ -260,6 +260,7 @@ const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-ato
      shape the merge audit never drove. */
   'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs'];
 PURE.unshift('store-copy-lint.mjs');
+PURE.push('coins-merge-tie-audit.mjs');   // R38-13 + lane 1: stale-blob merges keep the higher balance and cannot refund spent coins or dust; node-only
 PURE.unshift('no-debug-markers-lint.mjs');
 const BROWSER = [
   /* the raw-sink fix's STATE half. render-sink-lint pins the source, and this
@@ -559,6 +560,7 @@ const DECLARED = {
   'backup-lifecycle-audit.mjs': ['full', 'after a meal is logged, a visibilitychange to hidden (and pagehide) fires a PUT /backup against a mock Worker; a grown save bypasses the 600 s throttle past a 20 s floor (R38-2: a whole session never reached the cloud). Red with the onAppHide wiring reverted: 0 PUT calls.'],
   'sheet-doubletap-audit.mjs': ['full', 'a real double tap (60 ms) on a sheet trigger leaves the sheet open because the backdrop ignores clicks within 300 ms of openSheet, and a backdrop tap at 400 ms still closes it (R39-12). Red with the backdrop guard reverted.'],
   'pit-exit-motion-audit.mjs': ['full', 'closing the fight sheet via the real Done rewrites #pitBody exactly once (a redundant setTimeout renderPit landed on the tail of the 200 ms slide), plus rAF frame timing bounded against a same-run Stable close. Red before: 2 writes.'],
+  'coins-merge-tie-audit.mjs': ['fast', 'node-only: merging a stale pre-spend blob cannot refund spent coins or Bone Dust, an equal revision keeps the higher balance, rack and spawn payouts advance their revision (R38-13, lane 1). Red before: COIN-DEBIT got 100 expected 10.'],
   'version-align-lint.mjs': ['fast', 'web versions (app.js APP_BUILD, sw.js VERSION, version.json) are consistent, and each native shell (iOS, Android) is marked with which web build it last wrapped via WRAPPED_WEB_BUILD comment. Node-only, sub-second. Pins version alignment so release notes and support can correlate tickets with the web version each native shell bundled.'],
   'garden-sim.mjs': ['skip', 'a balance MODEL, not a guard: 30 days x 60 seeded runs of the garden against the kitchen. It reports numbers for a decision and asserts nothing about the app. tests/garden-appetite-guard.mjs is the guard that pins the outcome.'],
   'hollow-backdrop-audit.mjs': ['full', 'renders all three time bands and hit-tests an 800-point grid to prove the backdrop takes no taps. Slow by construction.'],
