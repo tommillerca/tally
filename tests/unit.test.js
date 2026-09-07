@@ -7362,6 +7362,54 @@ test("R39-31 the Stable's wardrobe heading escapes the species name at both site
   assert.ok(escaped === 2 && raw === 0, `both wardrobe headings must go through esc(): ${escaped} escaped, ${raw} raw`);
 });
 
+// ---- master handoff B16: "can this player plausibly win this foe" ----
+// PROVE-RED (pre-fix, before pitMod.isOutmatched existed): every case below
+// throws "pitMod.isOutmatched is not a function".
+test('B16 isOutmatched: a fresh level 2 is outmatched by the Glutton', () => {
+  const stats = { power: 20, marrow: 20, wind: 20, reflex: 20, hype: 20 };
+  const foe = { stats: pitMod.scaleStats(stats, 1.3), talents: ['heavyhands', 'marrowlust', 'bonebreaker'], aiLevel: 3 };
+  assert.equal(pitMod.isOutmatched({ stats, talents: [] }, foe, { seeds: 60 }), true);
+});
+test('B16 isOutmatched: a build with real progress is not outmatched by the Glutton', () => {
+  const stats = { power: 55, marrow: 55, wind: 55, reflex: 55, hype: 55 };
+  const talents = ['callcrows', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'flock', 'flock', 'flock', 'carrion', 'roost', 'roost', 'frenzy', 'frenzy', 'murder'];
+  const foe = { stats: pitMod.scaleStats(stats, 1.3), talents: ['heavyhands', 'marrowlust', 'bonebreaker'], aiLevel: 3 };
+  assert.equal(pitMod.isOutmatched({ stats, talents }, foe, { seeds: 60 }), false);
+});
+test('B16 isOutmatched: a fresh level 2 is outmatched by a specced rival\'s Spire', () => {
+  // the matchup openSpireSheet actually builds for a rival tower: their real
+  // stats/talents, aiLevel always 3 (js/app.js openSpireSheet, the rival branch)
+  const stats = { power: 20, marrow: 20, wind: 20, reflex: 20, hype: 20 };
+  const rivalStats = { power: 55, marrow: 55, wind: 55, reflex: 55, hype: 55 };
+  const rivalTalents = ['heavyhands', 'followthrough', 'followthrough', 'followthrough', 'bonebreaker', 'concussive', 'rage', 'titan', 'ironjaw', 'ironjaw', 'ironjaw'];
+  const foe = { stats: rivalStats, talents: rivalTalents, aiLevel: 3 };
+  assert.equal(pitMod.isOutmatched({ stats, talents: [] }, foe, { seeds: 60 }), true);
+});
+test('B16 isOutmatched: a build with real progress is not outmatched by an unclaimed Spire\'s NPC warden', () => {
+  // the matchup openSpireSheet builds for an NPC-held tower (spires.js wardenFor):
+  // scaled off the player's own stats, aiLevel 2 below character level 12.
+  // Worst-roll tower in wardenFor's 0.90-1.25 range, on purpose.
+  const stats = { power: 55, marrow: 55, wind: 55, reflex: 55, hype: 55 };
+  const talents = ['callcrows', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'flock', 'flock', 'flock', 'carrion', 'roost', 'roost', 'frenzy', 'frenzy', 'murder'];
+  const foe = { stats: pitMod.scaleStats(stats, 1.25), talents: [], aiLevel: 2 };
+  assert.equal(pitMod.isOutmatched({ stats, talents }, foe, { seeds: 60 }), false);
+});
+
+// ---- master handoff B16: the sheets actually show it ----
+// PROVE-RED (pre-fix source): neither string exists in app.js at all.
+test('B16 the Glutton sheet renders the outmatched line conditionally', () => {
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(/openGluttonSheet[\s\S]{0,2000}outmatched \? '<p class="note glutton-outmatched">You are outmatched at this level\.<\/p>'/.test(src),
+    'openGluttonSheet must render the plain outmatched line when isOutmatched fires');
+});
+test('B16 the Spire sheet renders the outmatched line and always states the daily cost', () => {
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(/openSpireSheet[\s\S]{0,4500}outmatched \? '<p class="note spire-outmatched">You are outmatched at this level\.<\/p>'/.test(src),
+    'openSpireSheet must render the plain outmatched line when isOutmatched fires');
+  assert.ok(/dailyAttemptNote = `Win or lose, fighting for/.test(src),
+    'openSpireSheet must always state that fighting a tower you do not hold spends today\'s attempt, win or lose');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
