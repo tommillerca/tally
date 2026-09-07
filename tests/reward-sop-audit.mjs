@@ -293,7 +293,9 @@ const ACTIONS = [
      for quests. Not fixed here: the fix is a taken slot rather than a counted
      one, which is a change to how wellness stores its day and belongs with that
      lane, not inside an exemption census. */
-  { id: 'js/wellness.js:markRoutine', sites: 1, undriven: 'ledger key routine-<id>-<date>, so a routine cannot pay twice. The ROUTINE_XP_CAP ceiling is read-then-decide across an await and two DIFFERENT routines ticked at once at CAP-1 both pay: a measured ceiling of 15 XP can pay 20. OPEN, and named here rather than dressed up' },
+  /* sites 1 -> 2 on 2026-09-07 (lane 7, routine-race-audit): the cap is now claimed through
+     claimCapped slots and the routine's own row is written with 0 XP, two paying calls. */
+  { id: 'js/wellness.js:markRoutine', sites: 2, undriven: 'ledger key routine-<id>-<date>, so a routine cannot pay twice. The ROUTINE_XP_CAP ceiling is read-then-decide across an await and two DIFFERENT routines ticked at once at CAP-1 both pay: a measured ceiling of 15 XP can pay 20. OPEN, and named here rather than dressed up' },
   /* WAS EXEMPT, on the sentence "a once-a-day cooldown plus an ingredient spend;
      nothing is granted without both". Sequentially true, and concurrency
      falsifies it: round 26 drove six overlapping calls and measured six
@@ -504,6 +506,10 @@ const ACTIONS = [
      last pot fills between the two. This hands back what THIS call took, by
      recipe, and it is the only thing that can reach it. */
   { id: 'js/cooking.js:refundIngredients', sites: 1, undriven: 'a REFUND of the ingredients this call just spent, when the pot or the queue turned out to have no room; it can only ever return r.needs and only after payIngredients returned true, so it hands back exactly what was taken and nothing else' },
+  /* 2026-09-07: two paying sites that shipped unregistered (this row was red on main
+     from v493 to v497). Neither is a control a player presses. */
+  { id: 'js/app.js:seedDemo', sites: 1, undriven: 'the ?demo seed wallet (coinsAdd(340), v494 routed it through the revisioned helper); dev/demo only, never reachable in a store build, and seeded once per fresh demo profile.' },
+  { id: 'js/social.js:goOnline', sites: 1, undriven: 'the social-welcome payload (50 coins, 10 XP) granted locally before registration (v493, R37-24), through awardOnce on the ledger key social-welcome; the server grant dedupes against the same key, so a second pay is impossible by construction and the register 429 unit rows prove exactly-once.' },
   { id: 'js/app.js:openSurveySheet', sites: 1, undriven: "one-time, gated on kv 'surveyDone' read before the grant. Re-audited 2026-09-04: read-then-grant, so it is not a claim, but the submit button is disabled SYNCHRONOUSLY before the first await, so a second tap in the same tab cannot reach it. Two tabs could each grant a CX copy; that is the whole exposure and it is written down rather than assumed away" },
 ];
 
