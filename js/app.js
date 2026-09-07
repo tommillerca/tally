@@ -24026,6 +24026,18 @@ async function openFight(pitWrap, fighter, foeCfg) {
   // dismissible by tapping ANYWHERE: a modal in the middle of a fight is a trap
   body.addEventListener('pointerdown', e => { if (!e.target.closest?.('#factions')) hideMoveTip(); });
 
+  /* R41-8 (QA round 41): Haymaker shows the biggest number on its chip, so a
+     new player reaches for it every turn without ever discovering the
+     press-and-hold detail above that explains the accuracy/AP tradeoff making
+     it the worse play most turns. Same one-time-toast shape as the map's own
+     long-press discovery hint (js/app.js, startMap: kvGet('mapLpHint', ...)),
+     so a single gesture keeps a single way of being taught. */
+  kvGet('fightLpHint', false).then(seen => {
+    if (seen) return;
+    kvSet('fightLpHint', true);
+    setTimeout(() => toast('Tip: press and hold a move to see what it actually does.', 4600), 1400);
+  });
+
   function positionFighters() {
     // the Glutton's stage is much wider than a normal fighter, so give both
     // sides more room to keep a real gap instead of crowding the middle.
