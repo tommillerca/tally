@@ -14777,6 +14777,15 @@ async function renderSettings(el) {
     <div class="card-title">ABOUT</div>
     <div class="settings-row"><div class="lab"><b>Join the community</b><span>Bone Boiz on Discord: where feedback lands and future features get decided</span></div><a class="btn small" id="communityBtn" href="${DISCORD_URL}" target="_blank" rel="noopener" style="text-decoration:none">Join</a></div>
     <div class="settings-row"><div class="lab"><b>Send feedback</b><span>Tell the developer what you think</span></div><button class="btn small ghost" id="feedbackBtn">Write</button></div>
+    <!-- PERMANENT AND UNGATED (R43-1, App Store 5.1.1(i)). privacy.html shipped and
+         answered 200 for months, and the only two links to it were inside the survey
+         sheet, whose Settings row is gated on !surveyDone: fill the survey and the
+         app has no privacy link at all. A DOM sweep of all six routes matched
+         privacy|terms|legal|eula ZERO times. This row is never conditional, needs no
+         account, and privacy.html is in sw.js's PRECACHE and in build-www.sh's copy
+         list so the relative href resolves offline AND inside the native shell,
+         which is the build App Review actually opens. -->
+    <div class="settings-row"><div class="lab"><b>Privacy policy</b><span>What stays on this phone, what gets sent, and what nobody else can read</span></div><a class="btn small ghost" id="privacyBtn" href="privacy.html" target="_blank" rel="noopener" style="text-decoration:none">Read</a></div>
     ${surveyDone ? '' : `<div class="settings-row"><div class="lab"><b>Day One survey 💜</b><span>Share your thoughts, keep the exclusive Day One Lizard</span></div><button class="btn small" id="surveyBtn" style="background:#b96cf0;color:#1a0f26">Claim</button></div>`}
     <div class="settings-row"><div class="lab"><b>What's New</b><span>See what changed in recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</button></div>
     <div class="settings-row"><div class="lab"><b>App version</b><span id="buildLine">Build ${APP_BUILD}${shellV} · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>
@@ -21446,7 +21455,15 @@ async function renderBoneyard(el) {
       <div id="mapBody">
         <div id="mapIntro" style="padding:16px 16px 0">
           <p class="note" style="margin-bottom:6px">The Boneyard is your real neighborhood, skinned for skeletons. Fresh spawns appear around you every day: walk within ${COLLECT_RADIUS_M} m of one and collect it.</p>
-          <p class="note" style="margin-bottom:14px">Your location is used on this phone only, never stored, never uploaded. Spawns are computed on-device; the map itself loads over the network.</p>
+          <!-- SAYS WHAT THE APP ACTUALLY SENDS (R43-2). This read "used on this phone
+               only, never stored, never uploaded" while js/spires.js quantizes the
+               fix to a 0.02-degree grid cell (~2.2 km, see js/spires.js) and the map boot
+               sends GET /spires?ids=sp-2464--6156. The iOS purpose string was
+               corrected in v498 (docs/PERMISSION-STRINGS.md), so this was the last
+               place contradicting the wire. Wording tracks the plist string and
+               privacy.html's "Location and the map" section; the behaviour is
+               unchanged. -->
+          <p class="note" style="margin-bottom:14px">Spawns and dens are worked out on this phone from your position, and your exact coordinates never leave it. Spires are shared with other players, so the app asks the server about the map cell you are in, about 2.2 km across, and claiming one tells the server which tower it was. The map itself loads over the network.</p>
           <button class="btn" id="mapStart">Open the map</button>
           <!-- WAS A HAND-ROLLED COPY OF THE KEY, and it had drifted: four rows
                against the key's nine, no Herb patch, no mini-boss, no dens, and
@@ -23422,7 +23439,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v504'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v505'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

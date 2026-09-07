@@ -6,7 +6,10 @@ SRC="$(cd .. && pwd)"
 DST="$(pwd)/www"
 rm -rf "$DST"
 mkdir -p "$DST"
-cp "$SRC/index.html" "$SRC/app.css" "$SRC/manifest.webmanifest" "$DST/"
+# privacy.html ships too: Settings' ABOUT row links it with a RELATIVE href and
+# the native shell serves only what lands in www, so leaving it out 404s the one
+# link App Store guideline 5.1.1(i) requires (R43-1).
+cp "$SRC/index.html" "$SRC/app.css" "$SRC/manifest.webmanifest" "$SRC/privacy.html" "$DST/"
 cp -R "$SRC/js" "$SRC/data" "$SRC/vendor" "$SRC/icons" "$SRC/assets" "$DST/"
 if [ "${STORE_BUILD:-0}" = "1" ]; then
   sed -i '' 's/const STORE_BUILD = false;/const STORE_BUILD = true;/' "$DST/js/app.js"
