@@ -746,6 +746,127 @@ await setWidth(page, 393, 852);  // restore, for the sections below
   await p2.close();
 }
 
+/* ---- FLICK: THE CARD-TO-CARD MOVE GETS THE WHOLE FRAME BUDGET ------------
+   Tom, 2026-09-07, on v498: "opening crates right now is super slow and
+   glitchy between the items after one in the crate."
+
+   MEASURED FIRST, on four builds (v481 before the tap guards, v487 after Open
+   all and the payoff, v495 after the Open all recovery, v498), driving a real
+   three-card Bone Crate through the Backpack's own OPEN button, two runs each.
+   THERE IS NO REGRESSION: the wall-clock gap from the tap to the next card
+   being interactive is 331 to 340ms on every one of them (it is fling's own
+   `at(330, advance)`), and the per-card cost is identical too, 2 layouts, ~32
+   style recalcs, 1.9ms of script, ZERO canvas work (a crate deals `wear`
+   cards, whose art is <img> layers already warmed by openPackReveal, so
+   drawTrimmedArt never runs between cards) and no long task at all.
+
+   What IS wrong, and is wrong in v481 as well: the reveal renders at HALF RATE
+   the whole time it is open, because #packBurst is a full-screen WebGL
+   fragment shader drawing every frame. Back to back in one process, two passes
+   agreeing: median frame 33.3ms with the burst mounted, 16.7ms with it hidden.
+   The flick is the one moment that budget shows, so 340ms of fling plus a
+   420ms rise played at 30fps, which is the "glitchy" he is describing.
+
+   THE ROW. Over the 520ms of the move (fling .34s + crNext .42s) the reveal
+   must render without dropping frames. The bound is a COUNT OF DROPPED FRAMES,
+   from the measurement above rather than from taste:
+     unfixed (8 runs x 2 transitions): 8 to 16 gaps over 20ms per move
+     fixed   (5 runs x 2 transitions): 1 to 5
+   so 6 is the line.
+
+   NOT "no gap over 34ms", which is what this row was first written as. Measured
+   on v481, the build named as the healthy reference, the 1->2 move carries one
+   34ms-plus gap of its own (worst 58 and 75 across two runs), and so does the
+   fixed tree (worst 42, reproducibly, at ~406ms into the move, on a Mac at load
+   average 13 rendering through swiftshader). A ceiling this tree cannot meet is
+   a red gate on healthy code, not a guard. The residual single hitch is left
+   MEASURED AND VISIBLE instead: `worst` and `worstAt` print on every run, so if
+   it grows, the detail line says so.
+
+   PROVE-RED, this file on origin/main v498 (d50820bc), burst never paused:
+     FAIL  FLICK 1->2 the card-to-card move renders without dropping frames  {"over20":14,"over34":2,"worst":92,"frames":18,"worstAt":490}
+     FAIL  FLICK 2->3 the card-to-card move renders without dropping frames  {"over20":13,"over34":0,"worst":25,"frames":25,"worstAt":70}
+   (18 and 25 frames in 520ms is 34 and 48fps; the fixed tree renders 47 and 59.)
+ */
+{
+  await page.evaluate(async () => {
+    for (let i = 0; i < 6; i++) {
+      if (!document.querySelector('.pack-reveal')) break;
+      const b = document.querySelector('.pack-reveal .sheet-close');
+      if (b) b.click(); else history.back();
+      await new Promise(r => setTimeout(r, 400));
+    }
+    const db = await import('/js/db.js');
+    for (const row of await db.db.all('inv')) if (row.kind === 'crate') await db.db.del('inv', row.id);
+    // golden is `rolls: 3` in loot.js: a real hand, not a single card
+    await db.db.put('inv', { id: 'flick-bone', kind: 'crate', crate: 'golden', source: 'flick-audit', ts: Date.now() });
+    location.hash = '#/bonehead';
+  });
+  await sleep(1600);
+  await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="crates"]')?.click());
+  await sleep(1200);
+  await page.evaluate(() => {
+    window.__crateForce = 1;
+    const M = window.__flick = { raf: [], long: [], counts: [] };
+    const tick = t => { M.raf.push(t); requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+    try {
+      new PerformanceObserver(l => { for (const e of l.getEntries()) M.long.push({ t: e.startTime, d: e.duration }); })
+        .observe({ type: 'longtask', buffered: true });
+    } catch { /* no longtask on this engine; the rAF rows still hold */ }
+    /* MutationObserver, not a poll: renderCard deletes and re-sets
+       dataset.landed inside one microtask turn, which a poll cannot see. */
+    new MutationObserver(() => {
+      const c = document.querySelector('#packCount')?.textContent || '';
+      if (c && M.counts[M.counts.length - 1] !== c) M.counts.push(c);
+    }).observe(document.documentElement, { subtree: true, childList: true, characterData: true });
+    document.querySelector('[data-open]')?.click();
+  });
+  /* the real control: wait for the card to be up, then tap it, exactly as the
+     TAP row above proves a player does (pointerdown/pointerup, no click) */
+  const moves = [];
+  for (let card = 0; card < 2; card++) {
+    for (let w = 0; w < 60 && !(await page.evaluate(() => !!document.querySelector('.pack-reveal')?.dataset.landed)); w++) await sleep(100);
+    await sleep(400);
+    const t0 = await page.evaluate(() => {
+      const tilt = document.querySelector('.pack-tilt');
+      if (!tilt) return null;
+      const b = tilt.getBoundingClientRect();
+      const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+      const t = performance.now();
+      tilt.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 31, clientX: cx, clientY: cy, bubbles: true }));
+      tilt.dispatchEvent(new PointerEvent('pointerup', { pointerId: 31, clientX: cx, clientY: cy, bubbles: true }));
+      return t;
+    });
+    moves.push(t0);
+    await sleep(900);
+  }
+  const flick = await page.evaluate(() => window.__flick);
+  const gaps = flick.raf.slice(1).map((t, i) => ({ t, d: t - flick.raf[i] }));
+  /* CONTROL FIRST: a reveal that never advanced would render nothing, drop
+     nothing, and pass the two rows below by doing no work at all. */
+  ok('FLICK CONTROL the real OPEN button dealt three cards and both taps advanced',
+    flick.counts.join(',') === '1 of 3,2 of 3,3 of 3' && moves.every(Boolean),
+    `counts=${JSON.stringify(flick.counts)} taps=${moves.filter(Boolean).length}`);
+  moves.forEach((t0, n) => {
+    if (t0 == null) { ok(`FLICK ${n + 1}->${n + 2} the card-to-card move renders without dropping frames`, false, 'no card to tap'); return; }
+    const w = gaps.filter(g => g.t >= t0 && g.t <= t0 + 520);
+    const m = { over20: w.filter(g => g.d > 20).length, over34: w.filter(g => g.d > 34).length,
+      worst: Math.round(Math.max(0, ...w.map(g => g.d))), frames: w.length,
+      // where the worst one landed, in ms after the tap: a hitch at 0 is the
+      // class swap, one at ~330 is the deck rebuild, one at ~480 the resume
+      worstAt: w.length ? Math.round(w.reduce((a, b) => (b.d > a.d ? b : a)).t - t0) : null };
+    ok(`FLICK ${n + 1}->${n + 2} the card-to-card move renders without dropping frames`,
+      w.length > 0 && m.over20 <= 6, JSON.stringify(m));
+  });
+  /* WINDOWED. `buffered: true` hands back every long task this page has ever
+     run, including the 44 rows above; counting those would grade the audit's
+     own setup rather than the open. */
+  const inMoves = flick.long.filter(l => moves.some(t0 => t0 != null && l.t + l.d >= t0 && l.t <= t0 + 520));
+  const worstTask = Math.round(Math.max(0, ...inMoves.map(l => l.d)));
+  ok('FLICK no long task over 200ms during either card move', worstTask <= 200, `worst longtask ${worstTask}ms of ${inMoves.length}`);
+}
+
 await browser.close();
 if (srv) srv.kill();
 const failed = results.filter(r => !r.pass).length;

@@ -18752,6 +18752,12 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       const c = cards[i], tier = RAR_ORDER.indexOf(c.rarity);
       const b = BURST[c.rarity] || BURST.common;
       const first = i === 0 && opening;
+      /* THE CRATE IS FINISHED THE MOMENT THE FIRST CARD IS TAPPED AWAY. Its
+         nine frames, its drop-shadowed lid and the bloom span sit under the
+         deck for the rest of the reveal, still composited on every frame, for
+         a picture that has already sunk to nothing. Dropping the subtree on
+         the first advance is the cheapest thing the flick can be given. */
+      if (!first && opening) { $('.pack-crate', wrap)?.remove(); $('.pack-bloom', wrap)?.remove(); }
       // .opening runs the crate beats; .browsing collapses every delay to one
       // beat. r-<rarity> carries --rar / --rar-rgb to the dots, bloom and haze.
       /* KEEP pix-crate. This line reassigns className wholesale on every card, so
@@ -18824,7 +18830,12 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         // Art first, THEN the entrance. The card used to fly in with an empty art
         // panel and fill itself a moment later, which robbed the payoff. Capped so
         // a slow asset delays the reveal rather than blocking it forever.
-        Promise.race([hydratePackArt(deck), new Promise(r => setTimeout(r, 700))]).then(() => { go(); landed(tier); });
+        Promise.race([hydratePackArt(deck), new Promise(r => setTimeout(r, 700))]).then(() => {
+          go(); landed(tier);
+          // past crNext's own .42s rise (+ --b-card .04s), so the light comes
+          // back only once the card has finished arriving
+          at(480, () => burst?.resume());
+        });
       }
 
       let sx = 0, dx = 0, pid = null, flung = false;
@@ -18840,6 +18851,12 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       const fling = dir => {
         if (flung) return;
         flung = true;
+        /* GIVE THE FRAME TO THE CARD. The burst is a full-screen fragment
+           shader and it holds the whole takeover at a 33.3ms median frame
+           (measured, two passes: 16.7ms with it hidden). The flick is the one
+           moment that budget is visible, so the light holds its last frame
+           while the card moves and picks up again once the next one is up. */
+        burst?.pause();
         /* THE LAST CARD LEAVES LIKE THE OTHERS. Tom, 2026-08-08: "the swiping and
            closing of the crate when it's finished feels buggy."
            It was: every card but the final one flew off the screen, and the last
@@ -23277,7 +23294,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v499'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v500'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

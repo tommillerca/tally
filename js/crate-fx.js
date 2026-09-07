@@ -182,7 +182,7 @@ export function mountCrateBurst(host, { color = '#ffc961', amp = 0.5, haze = 0.0
   };
 
   const state = { col: rgb(color), amp, haze, delay, aspect: 1 };
-  let t0 = performance.now(), raf = 0, dead = false;
+  let t0 = performance.now(), raf = 0, dead = false, pausedAt = 0;
 
   const resize = () => {
     const w = host.clientWidth || 1, h = host.clientHeight || 1;
@@ -244,7 +244,24 @@ export function mountCrateBurst(host, { color = '#ffc961', amp = 0.5, haze = 0.0
       if (a != null) state.amp = a;
       if (h != null) state.haze = h;
     },
-    restart(d = 0) { state.delay = d; t0 = performance.now(); },
+    restart(d = 0) { state.delay = d; t0 = performance.now(); pausedAt = 0; },  // an explicit re-zero outranks a pending pause offset
+    /* HAND THE FRAME BACK WHILE A CARD IS MOVING.
+       Measured on the reveal, back to back in one process, two passes agreeing:
+       with this canvas drawing every frame the whole takeover runs at a median
+       33.3ms frame (30fps); with it hidden, 16.7ms (60fps). It is a full-screen
+       fragment shader over soft gradients and it costs that whether or not
+       anything else on screen is animating -- so the card-to-card flick, which
+       is 340ms of fling plus a 420ms rise, plays at half rate. That is Tom's
+       "glitchy between the items".
+       Paused it stops REDRAWING; the last frame stays composited, so the light
+       does not blink, and t0 is advanced by the paused span on resume so the
+       ray field carries on from where it stopped rather than jumping. */
+    pause() { if (!raf) return; cancelAnimationFrame(raf); raf = 0; pausedAt = performance.now(); },
+    resume() {
+      if (dead || raf) return;
+      if (pausedAt) { t0 += performance.now() - pausedAt; pausedAt = 0; }
+      raf = requestAnimationFrame(draw);
+    },
     destroy() {
       if (dead) return;
       dead = true;
