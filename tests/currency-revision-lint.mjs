@@ -29,13 +29,21 @@
  *   SAMPLE the scan found at least the sites it was written against. An empty
  *          scan is a failure, not a pass.
  *
- * PROVE-RED (each mutation on a cp of this tree, one at a time):
- *   delete `coinsRev:` from js/quests.js claimQuest's pay map ->
- *     FAIL MAP  every coins/bonedust pay-map fn has its revision fn in the same object literal  js/quests.js:552 `coins` without `coinsRev`
+ * PROVE-RED, run 2026-09-07 on a throwaway worktree. First on origin/main
+ * bce3a937 (v493) with this file copied in, which is the shipped state:
+ *   FAIL  RAW  no raw kvSet/kvUpdate/kvBump/db.put of a literal 'coins' or 'bonedust' row  js/app.js:25822 kvSet('coins'; js/loot.js:910 kvBump('coins'; js/loot.js:1013 kvBump('bonedust'
+ *   FAIL  MAP  every coins/bonedust pay-map fn has its revision fn in the same object literal  js/loot.js:586 `bonedust` without `dustRev`; js/loot.js:586 `coins` without `coinsRev`; js/quests.js:558 `bonedust` without `dustRev`
+ *   FAIL  ASSIGN  every `.kv.coins =` / `.kv.bonedust =` has its revision assigned within 6 lines  js/hunt.js:222
+ *   FAIL  PRIM  coinsAdd, boneDustAdd and spendBalance route through kvBumpRevisioned  coinsAdd, boneDustAdd, spendBalance
+ * Then one mutation at a time on the fixed tree (2b2d5061), so each check is
+ * shown to catch its own site alone:
+ *   delete `dustRev:` from js/quests.js claimQuest's pay map ->
+ *     FAIL  MAP  every coins/bonedust pay-map fn has its revision fn in the same object literal  js/quests.js:559 `bonedust` without `dustRev`
  *   swap js/loot.js coinsAdd back to `kvBump('coins', n)` ->
- *     FAIL RAW  no raw kvSet/kvUpdate/kvBump/db.put of a literal 'coins' or 'bonedust' row  js/loot.js:912 kvBump('coins'
+ *     FAIL  RAW  no raw kvSet/kvUpdate/kvBump/db.put of a literal 'coins' or 'bonedust' row  js/loot.js:915 kvBump('coins'
+ *     FAIL  PRIM  coinsAdd, boneDustAdd and spendBalance route through kvBumpRevisioned  coinsAdd
  *   delete js/hunt.js's `pay.kv.coinsRev =` line ->
- *     FAIL ASSIGN  every `.kv.coins =` / `.kv.bonedust =` has its revision assigned within 6 lines  js/hunt.js:223
+ *     FAIL  ASSIGN  every `.kv.coins =` / `.kv.bonedust =` has its revision assigned within 6 lines  js/hunt.js:223
  *
  * Usage: node tests/currency-revision-lint.mjs
  */
