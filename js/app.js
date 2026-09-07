@@ -561,7 +561,10 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = und
      tiers' own alpha boxes agree with the masters' to within 0.0046 of the
      square (9.3 art px at 2048, under one thumbnail pixel), measured across all
      six pet-era files. */
-  const tier = thumb === true ? bhTierFor(imgSize) : thumb;
+  // bhTierFor assumes DPR 2. Convert to its input units so 3x screens
+  // request enough source pixels too; explicit tiers retain their contract.
+  const dpr = window.devicePixelRatio || 2;
+  const tier = thumb === true ? bhTierFor(imgSize * dpr / 2) : thumb;
   /* No trailing semicolon: this string is also the <img>'s whole style attribute,
      and one spare `;` on every pet layer is a diff on 66KB of shipped Shop markup
      that buys nothing. The tint spans below add their own separator. */
@@ -654,11 +657,8 @@ const snapShinyPetId = pet => (pet && pet.shiny && pet.id !== 'CX' ? pet.id : nu
 async function ownPetMorph(eq) {
   const sp = eq && eq.C;
   if (!sp || sp === 'CX') return 'base';               // CX exempt (section 0.7)
-  /* R39-13 (2026-09-06): re-read before answering. The Stable's EQUIP button
-     swaps the equipped copy without touching this cache, and Today's hero
-     repaints off it on the way back, so a stale cache here painted the OTHER
-     copy's colour while the Pit (which reads the equipped instance directly)
-     painted the right one. One extra kv read per hero paint. */
+  /* Re-read for async consumers. The Stable's EQUIP handler also refreshes
+     before repainting, because synchronous consumers cannot await this path. */
   await refreshPetMorphs();
   return (S.petMorphs && S.petMorphs[sp]) || 'base';
 }
@@ -20669,6 +20669,8 @@ async function openStable(opts = {}) {
     }));
     $$('[data-eq]', body).forEach(btn => btn.addEventListener('click', async () => {
       await setEquippedPet(btn.dataset.eq);
+      // Today's hero reads this cache synchronously on return from the Stable.
+      await refreshPetMorphs();
       /* Tom, 2026-08-08: "when you equip your pet should close the talents tab and
          go back to showing your pet big with his stats." Equipping is a decision
          that ENDS the errand you opened the panel for, so the screen should return

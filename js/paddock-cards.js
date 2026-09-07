@@ -17,6 +17,7 @@
  */
 import { BH_ITEMS, bhAsset, PET_CROP, petWornLayers, petWornTints, bhThumb, bhTierFor, THUMB_FALLBACK } from '../data/boneheadz.js';
 import { bhIcon } from './icons-pack.js';
+import { petLevel } from './pets.js';
 
 export const PET_SPECIES = BH_ITEMS.filter(i => i.slot === 'C');
 const SPECIES_BY_ID = Object.fromEntries(PET_SPECIES.map(p => [p.id, p]));
@@ -53,7 +54,7 @@ export function cardModel(row) {
     rarity: sp.rarity,
     rarityColor: PDK_RARITY[sp.rarity] || PDK_RARITY.common,
     shiny: !!row.shiny,
-    level: Math.max(1, 1 + Math.floor((row.levelSteps | 0) / 20000)),
+    level: petLevel(row.levelSteps),
     bond: Math.max(0, Math.min(5, row.bond | 0)),
     maxed: (row.bond | 0) >= 5,
     flavor: row.flavor || '',
