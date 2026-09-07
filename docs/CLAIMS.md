@@ -12,6 +12,17 @@ the upload path and its guards.
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
 
+## v507
+1. A hotfix off v506: the boot a lapsed player gets, which round 43 found was the one boot nobody had ever graded. Its dated section is further down, folded here.
+
+2. PROOF: returning-boot-audit.mjs | REACH: come back after a gap. The day-close line telling a returning player they were paid for the day they walked away measured 0.0% of its own box painted with its own surface, mean rgb(10,12,10), on 3 of 3 boots: the daily wheel's veil covered it. The cause was NOT the z-index the ticket named. `#toast` lived inside `#app`, which is `position: relative; z-index: 1`, a stacking context, so no number inside it could ever beat a veil appended to `document.body`; raising it to 320 alone still measured 0.0%, and moving it alone was also red. Both halves were proven red separately. It now measures 83.8% against a 25% floor. Graded on PIXELS rather than a hit test on purpose: `.toast` is `pointer-events: none` by design, so an elementFromPoint row could never pass and would have looked like a working guard.
+
+3. PROOF: returning-boot-audit.mjs | REACH: Today, on a returning save. The welcome-back card measured 1411px against a 785.8px fold, so the app's only greeting to somebody coming back was unread at every gap length, 3 of 3. Moved above the hero, because the layout was measured rather than nudged: hero 0 to 641, doors 653 to 718, news pill 740 to 781, quests 791 to 845, and NOTHING that renders under the hero is above the fold at 393x852. It stays outside `section.dayblk`, so the 2026-09-05 trade that moved it out still holds: `.dayblk` at 320x568 measures 398.1px against a 501.8px screen, unchanged. The copy no longer claims everything survived while the streak reads zero; the day-close clause only renders when the ledger really paid, read off rows the render already holds.
+
+4. PROOF: unit.test.js | REACH: a returning player's daily board. 164 of 365 dates drew three dailies with nothing a meal could finish, which is the day-one under-filled board arriving at the other end of the lifecycle; now 0 of 365, by reusing the day-one anchor rule rather than adding a second one.
+
+5. PROOF: unit.test.js | REACH: Today's Gwart plaque, on a save with a long gap. His empty-ledger scold, "Half the day gone and not a crumb on the page", was in the bag for a returning player at 6 of 36 renders and guaranteed within 8, so somebody coming back after three months could be greeted with a scold. It is now withheld on a return, the same way v491 withheld it on the install day, and the row also asserts the remaining pool is still a pool rather than one line, because an emptied pool would pass the first assertion and break the plaque.
+
 ## v506
 1. A hotfix off v505 from Tom's own photograph of the live app on his phone: a dark strip with a card edge in it near the top of Today. Its dated section is further down, folded here.
 
@@ -127,6 +138,40 @@ both into ONE cache named VERSION, all-or-nothing on install, and serves the
 shell cache-first out of that single cache, so the two cannot disagree).
 
 1. PROOF: top-strip-audit.mjs | REACH: on the Bonehead tab the colour behind the status bar and the Dynamic Island runs unbroken into the hero art, including while you are on an old build with the "Update available" banner showing. That banner moved from above the hero to under the four doors, where it is the first card of the feed. Proven red on the pre-fix tree at both insets: hero top 91.9 against a ceiling of 0.5, and 144 of 408 (--sat 0) and 40 of 644 (--sat 59) page-background pixels in the strip above the currency chips.
+## coming back is a welcome (2026-09-07)
+
+Not stamped to a release: hotfix/returning-player, off v504. Round 43 played
+three five-day players end to end through the shipped UI and brought each one
+back after 10, 30 and 90 days. The DATA was perfect at every gap: zero rows lost,
+zero duplicated, the pet, the coins, the XP, the crates and every quest claim
+intact, and the day close they had earned on the day they walked away paid, crate
+and all. Nothing here is a data fix. What was wrong was the screen they came back
+to, and every fault was the same fault: the app had something true and kind to
+say and no way for the player to read it.
+
+MEASURED BEFORE FIXING, on origin/main, at 393x852 on a 90-day-gap save driven
+through a real boot (kv `lastOpenDay` backdated and the page reloaded, so
+maybeWelcomeBack decides the return rather than a stamped flag):
+
+- the day-close line was drawn under the daily wheel's veil in 36 of 36 samples.
+  0.0% of the toast's own box was painted with its own surface; mean rgb(10, 12,
+  10), which is the veil's near-black.
+- `#wbCard` sat at 1411px against a 785.8px fold (1220px on round 43's own
+  saves, which carry no news pill). Nothing that renders under the hero is above
+  the fold on that screen: the hero card alone is 0 to 641, the doors 653 to 718,
+  the news pill 740 to 781, the quests 791 to 845.
+- 164 of 365 dates drew a returning player a daily board with nothing on it that
+  logging a meal could finish.
+
+1. PROOF: returning-boot-audit.mjs | REACH: open the app after two or more days away and the line telling you the last day you logged was closed and paid is readable on top of the daily wheel instead of behind it. Measured on the same boot: 0.0% of the toast's box was its own colour before, 83.8% after, floor 25%. The toast moved out of `#app`, which is `z-index: 1` and therefore a stacking context, so no number inside it could ever beat a veil appended to the body; it is `pointer-events: none` either way, so it still cannot take a tap from the wheel it now paints over. Every full-screen takeover this app raises is covered, not just the wheel.
+
+2. PROOF: returning-boot-audit.mjs, today-peek-audit.mjs, today-container-audit.mjs | REACH: the card that greets you when you come back is the first thing on Today instead of 368px below the fold: measured top 1411 before and 14 after at 393x852, with the screen asserted at the top in the same read. It stays OUTSIDE the day container, so the collapsed day summary still fits a 568px screen (398.1px against 501.8px); putting the card back inside the day, its position before 2026-09-05, reds that row at 539.1px. The card is still one tap to dismiss and still never comes back.
+
+3. PROOF: returning-boot-audit.mjs | REACH: the card no longer says "Everything is where you left it." while your streak reads 0. It says the streak starts over and nothing else does, then names what is still there: your Bonehead, pets, coins, gear and claimed quests, and the last day you logged if the ledger really paid its close. No day count, nothing invented, and the streak is not mentioned anywhere else on Today.
+
+4. PROOF: unit.test.js, quest-pick-audit.mjs, quest-daymore-audit.mjs | REACH: a returning player's three daily quests always include one that logging a meal can finish. This is the rule v491 already applied to a day-one board, which fails for the opposite reason: on day one every capability is off, and on a return every capability is on, so nothing is filtered and the draw can be three quests that all need a walk, a fight or a spawn. 164 of 365 dates drew such a board before and none do after, swept over a year. Quest rewards, coin values, the ladder and every other gate state are untouched.
+
+5. PROOF: unit.test.js | REACH: Gwart does not greet somebody back from a long gap with "Half the day gone and not a crumb on the page." He has a line of his own for it. This is the same exemption v491 gave the install day and the never-logged player, extended to the case it missed.
 
 ## the crate deals its cards smoothly (2026-09-07)
 
