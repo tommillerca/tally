@@ -19786,10 +19786,10 @@ async function openStable(opts = {}) {
        slot rather than race it inside the same Promise.all. */
     const eqIid0 = await equippedPetIid();
     const [instsAll, bank, st, eqOwn, nicks, ownedCos] = await Promise.all([petInstances(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds()]);
-    /* R39-31: an instance row with no species cannot be drawn (bhAsset threw a
-       TypeError and the whole Stable came up empty). Skip it here and say so once. */
-    const insts = instsAll.filter(x => x && x.sp);
-    if (insts.length !== instsAll.length && !stableGhostWarned) { stableGhostWarned = true; console.warn('Stable: skipped instance row(s) with no sp', instsAll.filter(x => !x || !x.sp)); }
+    /* R44-1: use the same known-species boundary as every state reader. */
+    const { isKnownPet } = await import('./pets.js');
+    const insts = instsAll.filter(x => x && isKnownPet(x.sp));
+    if (insts.length !== instsAll.length && !stableGhostWarned) { stableGhostWarned = true; console.warn('Stable: skipped unsupported pet row(s)', instsAll.filter(x => !x || !isKnownPet(x.sp))); }
     /* OUT WITH YOU means the C slot holds her. A petEquipped that the worn outfit
        does not agree with is a pet the Stable must still offer EQUIP for, or the
        player has no control anywhere that can put her on Today (R39-1). */
@@ -23526,7 +23526,7 @@ async function buildFighter(pre = {}) {
   if (petInst) {
     const steps = await petStepsForIid(petInst.iid);
     const pl = petLevel(steps);
-    const picks = await petPicks(petInst.sp);
+    const picks = await petPicks(petInst.iid);
     battlePet = buildBattlePet(petInst.sp, pl, picks, { shiny: !!petInst.shiny, lineage: petInst.lineage || 0 });
     petMeta = { id: petInst.sp, iid: petInst.iid, level: pl, picks, steps, lineage: petInst.lineage || 0, shiny: !!petInst.shiny, morph: isMorph(petInst.morph) ? petInst.morph : 'base' };
   }
