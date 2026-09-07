@@ -271,6 +271,7 @@ PURE.unshift('no-debug-markers-lint.mjs');
    a documented 15 XP ceiling (measured 2026-09-06): the cap was read via a
    ledger scan, then decided several awaits later, off that stale count. */
 PURE.push('routine-race-audit.mjs');
+PURE.unshift('version-align-lint.mjs');
 const BROWSER = [
   /* the raw-sink fix's STATE half. render-sink-lint pins the source, and this
      repo has watched shape assertions stay green over broken state, so this one
@@ -430,6 +431,24 @@ const BROWSER = [
   'outmatched-audit.mjs',      // master handoff B16: the Glutton and Spire sheets read the odds off the real fight engine (js/pit.js isOutmatched), not a hardcoded HP figure. Drives openGluttonSheet and openSpireSheet directly via their webdriver hooks with a fresh level-2 build (no trainalloc, no talents) and with a build carrying real stat + talent progress, and reads the rendered sheet copy in both states for both foes. Also pins the Spire sheet always states the daily-attempt cost regardless of the odds. No map, no tiles: a handful of sheet opens, ~10s
 ];
 
+/* R40 C2, 2026-09-06: these files contained real assertions but sat in the
+   never-run skip tier. They now run as browser guards. The non-guard probes,
+   captures and manual launchers from that tier are named in HELPERS below. */
+BROWSER.push(
+  'badges-audit.mjs',
+  'small-fixes-audit.mjs',
+  'v279-audit.mjs',
+  'newart-audit.mjs',
+  'siege-client-audit.mjs',
+  'levelpaid-repro.mjs',
+  'fx-audit.js',
+);
+
+/* Retired 2026-09-07 after source reachability and mutation proofs:
+   tests/retired/garden-audit.mjs, garden-reach-audit.mjs and garden-doors.mjs
+   are replaced by garden-closed-audit.mjs; out-there-audit.mjs and
+   spire-explainer-audit.mjs are replaced by hype-banner-audit.mjs. */
+
 function run(file, args) {
   return new Promise(res => {
     const t0 = Date.now();
@@ -522,6 +541,16 @@ const HELPERS = new Set([
   'fight-sim.mjs',     // a sim library balance.mjs drives; no assertions of its own
   'badge-centre-lib.mjs', // the badge measurement badge-centre-audit.mjs drives; no assertions of its own
   'mem-idb.mjs',       // shared in-memory IndexedDB for PURE audits; installs a global, asserts nothing (gate7 coverage red, 2026-09-04)
+  'garden-sim.mjs',    // balance instrument, prints a model and asserts no release property
+  'arena-static-probe.mjs', // measurement probe, fight-layout-audit owns the assertion
+  'today-d2-shots.mjs', // screenshot capture only
+  'wanderer-patrol-sim.mjs', // balance instrument; its one control protects the model, not the app
+  'gauntlet-sim.mjs',  // balance instrument, prints win rates
+  'device-open.mjs',   // manual simulator launcher that intentionally stays open
+  'levelpaid-trace.mjs', // diagnostic trace, not a release assertion
+  'balance-audit.js',  // balance report, no pass/fail verdict
+  'ui-audit.js',       // console helper installed into a live page, not a node suite
+  'reap-orphans.mjs',  // gate housekeeping invoked with --kill, not a product guard
 ]);
 const onDisk = (await readdir(here))
   .filter(f => /\.(mjs|js)$/.test(f) && !HELPERS.has(f))
@@ -839,15 +868,9 @@ const DECLARED = {
   'faq-audit.mjs': ['full', 'the FAQ copy still matches what the engine does.'],
   'feel-audit.mjs': ['full', 'toast queue, exits, dialogs, haptics.'],
   'figure-audit.mjs': ['full', 'THE FIGURE CONTRACT, 32 checks. Mandatory per tally/CLAUDE.md before any figure work.'],
-  /* THE FOUR GARDEN-DOOR SUITES BELOW ARE RETIRED, NOT BROKEN. 2026-08-18: the
-     Hollow and the Bone Garden left the player's path, so every one of them opens
-     a door that is deliberately gone and would report a fix as a defect. They are
-     'skip' rather than deleted because the feature is PARKED, not removed: the
-     modules, the art and the data all survive, and reviving it means reviving
-     these. tests/garden-closed-audit.mjs is the guard that replaces them, and it
-     asserts the OPPOSITE: that no door is open. suite-rot-audit.mjs is expected to
-     start naming these files; that is the signal working, not a failure. */
-  'garden-audit.mjs': ['skip', 'drives #doorGrow, which was removed with the garden on 2026-08-18. Kept for the revival, replaced by garden-closed-audit.mjs.'],
+  /* The retired Garden walkthroughs moved to tests/retired/ on 2026-09-07.
+     garden-closed-audit.mjs guards the current opposite claim and was proven
+     red by staging #doorGrow back into the rendered Kitchen. */
   /* 'hollow-audit.mjs' and 'garden-intro-audit.mjs' were DELETED on 2026-08-27,
      with the feature they guarded rather than left to drive a path that no longer
      exists. Same treatment spire-intro-audit and teaser-fire-audit got.
@@ -868,7 +891,6 @@ const DECLARED = {
      The garden CODE is still in the tree (openHollow, maybeShowGardenPopup,
      js/hollow-art.js, js/hollow-beds.js, js/hollow-scene.js), flagged to Tom as
      dead weight rather than deleted here. */
-  'garden-reach-audit.mjs': ['skip', 'its whole subject is REACH into the garden: the Today banner, the GROW door and the seed pouch, all removed 2026-08-18. Its one surviving row (the food-log boundary line) is not worth a boot on its own; if it ever matters again it moves to a diary suite.'],
   'glyph-audit.mjs': ['full', 'no dingbats standing in for icons.'],
   'kitchen-queue-audit.mjs': ['full', 'the cook queue fired from the real Cook button (a SECOND cook really starts with one pot in one visit, and the queued one takes the pot on its own with the dish time untouched), plus the starter-pouch backfill including its second-run no-op (rewarded-actions SOP). Its compost-ordering section came out on 2026-08-18 with the compost button; the pouch half now reads the larder rather than the seed pouch, because the pouch pays ingredients. Self-serves this checkout when given no URL.'],
   'hide-glow-audit.mjs': ['full', 'hidden garments keep their stats; the glow toggle stays cosmetic.'],
@@ -883,7 +905,6 @@ const DECLARED = {
   'flaky-network-audit.mjs': ['full', "offline-boot proves the app BOOTS with no network; this drives what happens when you press things, in the three states that are not 'on': GONE, HANGING (accepted and never answered, which no catch in this app could ever reach) and FLAP (the server acts, the answer is lost). Grades what reached the store AND what the player was told, with an online CONTROL twin on every offline row and every gift row gated on the sheet having opened, so an empty sample set cannot read green. Proven red at ddbb079 with only this file copied into a throwaway tree: 11/31 there against 31/31 here, and the 20 red rows are the findings, not a broken harness (its OFFLINE-FIRST rows and every online CONTROL twin are green in BOTH trees). 32/32 and 191s measured on the final file, green on three consecutive runs. Self-serving, and it stops its own server and clears the browser HTTP cache, so 'full' rather than fast."],
   'onb-audit.mjs': ['full', 'onboarding on a virgin IndexedDB, the only suite that sees the launch funnel.'],
   'profile-units-audit.mjs': ['full', "the plan form's sharp edges, from the 100-persona onboarding census (2026-09-02). onb-audit drives the funnel but never touches the unit segment, so none of this was visible to it. The one that outranks the rest is a data-correctness bug: re-tapping the ALREADY-LIT unit button converted a weight that was already correct, because switchUnits() converts by the NEW unit alone with no memory of the unit the field is in. Select kg, type 80, tap 'kg / cm' again to confirm the choice, and the field reads 36.3 and Save stores a plan for a 36 kg body (1,920 kcal / 80 g protein) with nothing on screen saying anything moved. A guard that tested ONE switch passed throughout that bug's life, so DOUBLE-TAP drives the SECOND tap and compares the saved body against a single-tap run of the same input, with a CONTROL row proving an honest switch still converts (without it, a unit segment broken to do nothing would read green). Also HEIGHT-FOLLOWS (165 cm survives a switch instead of becoming the 5'10 render default), CHIPS-TRUTH (the lit Activity and Goal chips are what Save stores, which is also the drift guard between profileFormHtml's defaults and bindProfileForm's), REROLL-RESUMES (the name on screen at quit is the name you come back to) and STEP-TOP (every step opens at its own top, at 390/375/320: step 2 opened at scrollTop 233 with its back arrow at y=-203 on the SE 1). Masks navigator.webdriver so the REAL first run plays rather than CALM_BOOT, and MASK is a hard row. Proven red on a cp -R of 6bf08cc: 6/13, with MASK, both CONTROL/SETUP rows and NO-page-errors green there. Self-serving, 7 virgin boots, ~90s."],
-  'out-there-audit.mjs': ['skip', 'its whole subject is the "Out there today" card, which came off Today on 2026-08-21 when Tom asked for every banner except the step winner to go and one hype banner to replace them. outThereHtml and its four row builders are intact and unreachable in js/app.js (revival is one call plus the heldSpires read), so this file is kept as the record of what the card had to do. the hype banner that replaced it came off Today on 2026-09-03 in its turn and was rebuilt as the hero slot inside the news pill, so nothing stands in its place ON TODAY at all; tests/hype-banner-audit.mjs follows the banner into the pill.'],
   'pit-refresh-audit.mjs': ['full', 'the Pit re-renders when a fight ends: beaten remote den stops offering FIGHT without a reopen. Also ONE-TAP (2026-09-01): with two charges in hand, a double tap on a rung opens ONE arena and spends ONE charge, with a single-tap control so a dead button cannot pass.'],
   'paddock-scene-audit.mjs': ['full', 'the Paddock end-to-end: real chip tap, decoded herd, band rule in the live DOM, motion as rendered pixels.'],
   /* FOUND UNDECLARED ON ext/today-hype-banner AT 1784d1e4, 2026-08-21, and it is
@@ -905,7 +926,6 @@ const DECLARED = {
   'scout-audit.mjs': ['full', "the world follows where you look and stays the same size. All six rows need a reachable vector tile host and the suite reports UNPROVEN with exit 97 without one. Measured 2026-08-17: three red, and both greens vacuous. 'BOUNDED: scouting does not grow the marker count' passed on `0 -> 0 markers`, which is tally/CLAUDE.md rule 11 in one line, a ceiling satisfied by an empty set; 'ANCHORED: a den you only looked at is not enterable' passed because there was no map, not because the distance rule held. window.__map is assigned before the map's error handler runs, so its presence proved nothing either."],
   'spawn-quiet-audit.mjs': ['full', "the quiet Boneyard collect: bones, coins and herbs must never regain the full-screen reveal, and crate + rare must keep it. Four STATIC rows grade everywhere and pin the write-cost arithmetic to its sources (openSheet is the only emitter of feat_open/feat_time; the D1 events table carries 3 indexes, so one sheet is 2 events is 8 row-writes of the 100k/day free tier). The driven half walks onto a real spawn of each of the five types on a real map, so it needs a reachable vector tile host and declares itself UNPROVEN with exit 97 without one rather than passing on an empty sample. Counts analytics by serving a one-line patched js/analytics.js over request interception, because the real queue refuses to record under ?demo; the two ceremony collects are the control that proves the zero on the quiet path is a measurement."],
   'speech-audit.mjs': ['full', 'sweeps every salt of the chatter pools.'],
-  'spire-explainer-audit.mjs': ['skip', 'it opens the spire explainer through details.spire-banner on Today, and that row went with the "Out there today" card on 2026-08-21. The explainer copy it grades is still built by spireBannerHtml, which nothing calls; when the spires get a surface again this file is the check that comes back with it.'],
   'spire-phase3-audit.mjs': ['full', 'a refused spire claim must not leave the client owning a tower.'],
   't1-audit.mjs': ['full', 'Tier 1 daily loop, 33 checks through the real add-food flow. Section 7 (the Boneyard, 11 rows) needs a reachable vector tile host and declares itself UNPROVEN with exit 97 where there is not one, rather than letting two `count(...) === 0` rows pass on a map with nothing on it. Sections 1 to 6 need no map and still grade there.'],
   't2-audit.mjs': ['full', 'Tier 2 payoff moments, each provoked.'],
@@ -963,7 +983,6 @@ const DECLARED = {
   'grid-min-width-audit.mjs': ['full', "no control lands outside a 320x568 viewport, and no equal-track grid spills its cells out of its own box: app.css had 22 `repeat(N, 1fr)` rules and zero minmax(0, 1fr), and a 1fr track's automatic minimum is min-content, so a long label widened the track past the equal share (.badge-grid reached x=347 in a 320 viewport). Carries its own canary, which plants an over-wide control and requires the detector to name it, because the first version of the exclusion rule excused every control on every screen. Three full walks of every route and hub tab at 320, 360 and 375: about 100s, and only tests/batch-audit.mjs otherwise ever sets a 320 viewport."],
   'erase-completeness-audit.mjs': ['full', "Settings > Erase all data clears EVERY store js/db.js defines, and erase-then-start-over pays one welcome kit rather than one per cycle. The erase carried its own six-name literal that was missing 'inv', so the wardrobe survived a dialog promising it was gone and the kit was re-paid on every cycle, unbounded. Two virgin non-demo onboardings and a reload, so it is onb-audit-shaped and not FAST-shaped; ?demo is useless for it because boot re-seeds the demo DB on the reload the erase performs."],
   'db-quota-finding.mjs': ['full', 'C4 IndexedDB quota behaviour: measures real per-year growth (QA round 25 M23 measured 3.6MB year one, 6.7MB by year two; the ~2.4MB figure was 50% low), extrapolates to device-realistic quotas (Chrome allocates ~60% of free disk; a 500MB-free budget phone hits quota in well under 4 years). Attempts to force a real failure via CDP Storage.overrideQuotaForOrigin, records honest outcome. Not a fail-if-red audit; the finding IS the deliverable.'],
-  'garden-doors.mjs':     ['skip', 'asserts the Kitchen opens on COOK and GROW. It opens on the Kitchen now (2026-08-18); garden-closed-audit.mjs asserts the doors are gone.'],
   'hero-flash.mjs':       ['full', 'no coral frame behind an equipped backdrop, sampled as pixels. Needs HEADLESS_MODE=shell: page.screenshot never returns under headless new on macOS.'],
   'race-you.mjs':         ['full', 'your own lane in the step race. Red on main for a date reason tracked separately; declared rather than hidden.'],
   'spire-gate.mjs':       ['full', "the spire day-gate, which is a rewarded action and has been exploited twice. The old 'RED under both headless modes' note was wrong about the cause: measured 2026-08-17, the reds were an unreachable vector tile host (https://tiles.openfreemap.org, net::ERR_CERT_AUTHORITY_INVALID from a sandboxed container), not the headless mode and not the GPU, and one row PASSED on `sheets 0 -> 0` because there was no map to open a sheet on. It now measures that property and reports its ten map rows as UNPROVEN with exit 97 where the host is unreachable, so a machine that cannot host it says so by name instead of producing a mixture of reds and vacuous greens. Green with 10 assertions on a connected machine."],
@@ -1048,17 +1067,57 @@ const DECLARED = {
   'sheet-action-reachable-audit.mjs': ['full', "a primary action must be tappable in the WORST content state, hit-tested with elementFromPoint at the button's centre rather than by rectangle, because a clipped button still measures 132x44 at a fine position. DELIBERATELY RED as of today: gwart/REG-PLAN-2026-08-15.md item 2B parks it outside FAST until 1B and 1C land, at which point it goes green or what remains gets written down. Declared 'full' and not 'skip' precisely so that deadline is visible on every gate:all instead of being retired into silence, which is the same reasoning as suite-rot-audit above. 2026-08-18: it now exits 0. Its only remaining failures were the three garden-buybed rows, and that action left the player's path with the Bone Garden, so the row came out. The 1B/1C deadline in REG-PLAN still stands on its own; this entry no longer proves it."],
 };
 
+/* R40 C2, 2026-09-06: an explicit fast-list entry and a DECLARED full entry
+   made the same file run twice under --all. Keep the useful reasons above, but
+   make their metadata agree with the tier that actually owns them. */
+for (const f of [
+  'version-stamp-audit.mjs', 'gwart-guide-audit.mjs', 'kitchen-welcome-audit.mjs',
+  'pit-kitchen-hint-audit.mjs', 'kitchen-day-one-strand-audit.mjs',
+  'backup-lifecycle-audit.mjs', 'sheet-doubletap-audit.mjs',
+  'pit-exit-motion-audit.mjs', 'crew-slime-leak-audit.mjs',
+  'boneyard-icon-audit.mjs', 'pet-hold-audit.mjs', 'badge-centre-audit.mjs',
+]) {
+  if (DECLARED[f]) DECLARED[f][0] = 'fast';
+}
+
+const UNSKIPPED_GUARDS = {
+  'badges-audit.mjs': 'the earned Warden badge wall renders its real badges and labels',
+  'small-fixes-audit.mjs': 'the quest face token, locked scroll region and cooked-dish card remain reachable and rendered',
+  'v279-audit.mjs': 'the nine player-facing v279 regressions remain closed through their real controls and renders',
+  'newart-audit.mjs': 'every catalogue asset exists, decodes and follows its authored canvas-size contract',
+  'siege-client-audit.mjs': 'stubbed siege sync remains idempotent and preserves the claimed-spire client state',
+  'levelpaid-repro.mjs': 'the deterministic interrupted-backfill reproduction cannot mint an extra level payout',
+  'fx-audit.js': 'real fight controls still produce decoded combat animation pixels',
+};
+for (const [f, reason] of Object.entries(UNSKIPPED_GUARDS)) DECLARED[f] = ['fast', reason];
+
 /* COVERAGE, BEFORE A SINGLE BROWSER STARTS. An undeclared audit is a one-second
    failure here or a four-minute one at the end, and the four-minute version is the
    one people stop running. */
 /* PURE counts as a tier too. It always did; the old net just never saw a PURE
    file, because neither is named "-audit". */
-const undeclared = onDisk.filter(f => !BROWSER.includes(f) && !PURE.includes(f) && !(DECLARED[f] && DECLARED[f][1]));
-if (undeclared.length) {
-  console.log(`FAIL  coverage: ${undeclared.length} audit file(s) belong to no tier:`);
-  for (const f of undeclared) console.log(`        ${f}`);
-  console.log("        Add each to BROWSER (fast), or to DECLARED as ['full', reason] or ['skip', reason].");
-  console.log('        An audit that exists but never runs radiates false confidence.');
+const tierCount = f => PURE.filter(x => x === f).length
+  + BROWSER.filter(x => x === f).length
+  + (DECLARED[f]?.[0] === 'full' ? 1 : 0);
+const missingTier = onDisk.filter(f => tierCount(f) === 0);
+const duplicateTier = onDisk.filter(f => tierCount(f) > 1);
+const invalidDeclaredTier = Object.entries(DECLARED)
+  .filter(([f, row]) => onDisk.includes(f) && !['fast', 'full'].includes(row?.[0]))
+  .map(([f]) => f);
+if (missingTier.length || duplicateTier.length || invalidDeclaredTier.length) {
+  if (missingTier.length) {
+    console.log(`FAIL  coverage: ${missingTier.length} declared audit file(s) belong to no running tier:`);
+    for (const f of missingTier) console.log(`        ${f}`);
+  }
+  if (duplicateTier.length) {
+    console.log(`FAIL  coverage: ${duplicateTier.length} audit file(s) belong to more than one running tier:`);
+    for (const f of duplicateTier) console.log(`        ${f}`);
+  }
+  if (invalidDeclaredTier.length) {
+    console.log(`FAIL  coverage: ${invalidDeclaredTier.length} audit file(s) declare a tier that never runs:`);
+    for (const f of invalidDeclaredTier) console.log(`        ${f}`);
+  }
+  console.log('        Put each runnable file in exactly one of PURE, BROWSER, or DECLARED full.');
   process.exit(1);
 }
 

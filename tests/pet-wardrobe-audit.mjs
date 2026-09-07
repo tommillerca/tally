@@ -121,7 +121,7 @@
 import { readFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { boot, seed, sleep, settle, setWidth, serveTree, fightRung } from './godmode.js';
+import { boot, seed, sleep, settle, setWidth, serveTree, fightRung, waitForImageDecode } from './godmode.js';
 import { PET_SHOP, PET_SLOTS, BH_BY_ID, PET_CROP } from '../data/boneheadz.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -233,14 +233,17 @@ const { browser, page } = await boot(base);
    paint order here (every layer is position:absolute inside one .petcrop), so
    the LAST entry is the one on top. Decoded and visible are asserted per layer,
    never inferred from the box. */
-const stackAt = (page, sel) => page.evaluate(s => {
+const stackAt = async (page, sel) => {
+  await waitForImageDecode(page, `${sel} img`);
+  return page.evaluate(s => {
   const el = document.querySelector(s);
   if (!el) return null;
   return [...el.querySelectorAll('img')].map(i => {
     const r = i.getBoundingClientRect();
     return { src: i.getAttribute('src'), nw: i.naturalWidth, w: Math.round(r.width), h: Math.round(r.height) };
   });
-}, sel);
+  }, sel);
+};
 const idsOf = st => (st || []).slice(1).map(l => (l.src.match(/([A-Z]+\d+)\.png$/) || [])[1]).filter(Boolean);
 const allDrawn = st => (st || []).length > 0 && st.every(l => l.nw > 0 && l.w > 0 && l.h > 0);
 
