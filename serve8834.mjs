@@ -1,4 +1,0 @@
-import { serveTree } from './tests/godmode.js';
-const srv = await serveTree(process.cwd(), { forcePort: 8834 });
-console.log('SERVING ' + srv.url);
-process.stdin.resume();
