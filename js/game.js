@@ -1129,6 +1129,10 @@ async function runInitBackfill(targets, onProgress) {
    test-and-set retireGardenIfNeeded/retireMerchantIfNeeded already use below:
    the check and the write are one IndexedDB request, so exactly one caller
    gets true and the loser returns null before touching a single grant. */
+/* The size of the day-one grant. 40, so a perfect first day clears the 300 rack
+   floor with room for the seed-to-seed spread of the crates rather than by one
+   coin: see tests/dayone-topup-audit.mjs SIM for the measured wallet. */
+export const DAYONE_TOPUP = 40;
 export async function initLootIfNeeded() {
   if (!(await db.addIfAbsent('kv', { k: 'loot-init', v: true }))) return null;
   await grantCrate('golden', 'welcome');
@@ -1174,8 +1178,34 @@ export async function initLootIfNeeded() {
      8,000-step default; anything in between would be a number no other egg in
      the game has ever carried. */
   await grantEgg('welcome', 0);
+  /* DAY-ONE TOP-UP (Tom's ruling, 2026-09-07; master handoff B4 / R39-27).
+     QA drove two PERFECT first days and finished on 298 and 307 coins against a
+     cheapest rack item of 300, so the best possible first day either just
+     missed the shelf or just cleared it on a coin flip. The ruling is a fixed
+     one-time grant, not a change to the price ladder, the crate coin ranges,
+     the quest rewards or the spar cap: all four of those are standing rulings
+     and none of them moves here.
+     Rewarded-actions SOP. THE TRANSITION is the same one the whole kit rides
+     on: "this save has never been handed a welcome kit" becomes "it has". THE
+     AUTHORITY is the ledger, asked and answered inside awardOnce's own
+     addIfAbsent, and the coins ride in the SAME transaction as the row
+     (db.claimAndPay), so a death between the two cannot spend the claim and pay
+     nothing. One key, no date and no random id in it, so a second boot, a
+     second tab and a restore all pay nothing.
+     WHY HERE AND NOT ON THE CREW PATH: js/social.js already pays a local
+     social-welcome so a 429 from /register cannot strand a fresh player at
+     zero, but that grant is still ABOUT going online. This one is not: the kit
+     is paid from saveInitialSettings and from boot(), neither of which needs a
+     network, so a player who never opts in, or whose signup fails, has it
+     anyway. tests/dayone-topup-audit.mjs REG429 pins exactly that.
+     0 XP on purpose: this is a coin floor, and XP is a level curve nobody asked
+     to move. */
+  await awardOnce('dayone-topup', 'welcome', 0, `Day-one coins: +${DAYONE_TOPUP}`, undefined, null, { kv: {
+    coins: cur => (Number(cur) || 0) + DAYONE_TOPUP,
+    coinsRev: cur => (Number(cur) || 0) + DAYONE_TOPUP,
+  } });
   // the claim (and the flag) already landed at the top of this function
-  return { crates: 2, draught: true, ingredients: 3, egg: true };
+  return { crates: 2, draught: true, ingredients: 3, egg: true, coins: DAYONE_TOPUP };
 }
 
 /* THE STARTER POUCH, BACKFILLED TO INSTALLS THAT ALREADY EXIST.

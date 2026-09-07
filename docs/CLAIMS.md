@@ -146,6 +146,47 @@ the upload path and its guards.
 
 8. PROOF: take-and-pay-audit.mjs | REACH: openCrate, hatchEgg, disenchantGear, both salvage paths and the legacy-egg conversion spend their input and write their payout in one transaction, so killing every IndexedDB transaction after the take leaves the player with the item or the full payout, never neither (six CRASH rows red on the pre-fix order: crate consumed with 0 coins and no rows, egg gone with no pet, gear gone with no dust).
 
+## day one clears the floor, and the Pit says what a dish is worth (2026-09-07)
+
+Not stamped to a release: hotfix/dayone-topup-cooking, off v503. Two rulings
+from Tom, master handoff B4/R39-27 and B5.
+
+1. PROOF: dayone-topup-audit.mjs, reward-sop-audit.mjs, kitchen-welcome-audit.mjs
+| REACH: every brand-new save gets 40 coins in the welcome kit, once. QA drove
+two perfect first days and finished on 298 and 307 coins against a cheapest rack
+item of 300, so the best possible first day either just missed the shelf or just
+cleared it on a coin flip. Driven here through the shipped payout functions
+(the welcome kit, three logged meals, onHealthSync, every crate opened, the
+on-budget day close at the day-two boot) over twelve seeds, a perfect first day
+goes from a median 264 coins to 304, and a light walker's from 68 to 108. The
+unluckiest of the twelve seeds still lands at 294, six short, and the file says
+so on every run rather than quietly choosing a bigger number: 40 is Tom's
+figure. The price ladder, the crate coin ranges, the quest rewards and the spar
+cap are untouched. The grant is one ledger key paid inside its own transaction,
+so a second boot, a second tab and a restore pay nothing (ONCE row red without
+it: moved=0, rows=0), and it lives in the kit rather than on the Crew path so a
+signup that answers 429 cannot strand it (REG429 row red without it: coins=50).
+The welcome-kit toast names the coins, read off the real onboarding.
+
+2. PROOF: dish-worth-audit.mjs, pit-kitchen-hint-audit.mjs | REACH: the Pit's
+line about your live dish, and the Kitchen's own recipe list, now say what the
+dish is worth in plain words. Copy only: serving a dish still pays its 8 XP and
+no recipe was re-costed. Measured in tests/fight-sim.mjs against a mirror (a foe
+at 100% of your own stats), 2,000 seeds per arm, in two configurations because
+they disagree by about 3x: with a level-5 Hound the baseline is already an 84.7%
+win so everything saturates near +15pp, and with no pet it is 37.4% and the same
+dishes spread +18 to +60pp. As the share of even fights you lose: no dish
+15.3%/62.7%, Bone Broth 1.5%/25.0%, Hearty Hash 2.0%/11.9%, Necromancer's Feast
+0.2%/2.3%, Marrow Stew 8.5%/44.6%. So the first three say they more than halve
+the fights you lose, which is true in BOTH columns, and the Stew says the
+smaller thing (29 to 44%). No percentage is printed anywhere: the two columns
+disagree on size and one of them pretending to be the answer would be the
+over-precise figure the ruling forbids. The two PET dishes carry no claim at
+all, because the sim's player never takes a pet action, so their measured 0.0pp
+is the harness declining to answer rather than a finding. The audit re-measures
+every claim on each gate run instead of pinning the string; proved red three
+ways (a weak dish given the strong sentence, an unmeasurable dish given any
+sentence, a claim deleted): 3, 6 and 1 rows, exit 1 each.
 ## an audit cannot grade the wrong worktree (2026-09-07)
 PROOF: serve-tree-identity-audit.mjs
 

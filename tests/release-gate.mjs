@@ -274,6 +274,23 @@ PURE.unshift('no-debug-markers-lint.mjs');
    ledger scan, then decided several awaits later, off that stale count. */
 PURE.push('routine-race-audit.mjs');
 PURE.unshift('version-align-lint.mjs');
+/* dayone-topup-audit is PURE for the same reason spawn-claim-atomic-audit is:
+   mem-idb under the real js/db.js, js/game.js and js/loot.js, no browser, ~2s.
+   It owns the day-one coin floor (master handoff B4, 2026-09-07): the welcome
+   kit's one-time 40-coin grant is paid exactly once and survives a /register
+   that answers 429, and a PERFECT first day driven through the shipped payout
+   functions over twelve seeds clears the 300 rack floor at the median (304 with
+   the grant, 264 without). Proved red by deleting the grant: 6 rows, exit 1. */
+PURE.push('dayone-topup-audit.mjs');
+/* dish-worth-audit is PURE for the same reason xp-curve-audit is: it imports
+   js/pit.js through tests/fight-sim.mjs, no browser and no database, ~3s. It
+   owns the Pit's "what is this dish worth" copy (master handoff B5,
+   2026-09-07): DISH_WORTH is a sentence about a measured number, so this
+   RE-MEASURES it against a mirror in two configurations rather than pinning the
+   string, and a dish nobody claimed or registered unclaimed fails COVERAGE.
+   Proved red three ways (a weak dish given the strong sentence, an unmeasurable
+   dish given any sentence, a claim deleted), exits 1 each. */
+PURE.push('dish-worth-audit.mjs');
 PURE.push('serve-tree-identity-audit.mjs'); // serveTree refuses a fixed port that answers from another checkout; node-only
 const BROWSER = [
   /* the raw-sink fix's STATE half. render-sink-lint pins the source, and this
