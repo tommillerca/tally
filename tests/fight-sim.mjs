@@ -20,8 +20,8 @@
  */
 import { pathToFileURL } from 'node:url';
 import {
-  makeFighter, createFight, actionsFor, applyAction, endTurn, aiTakeTurn,
-  scaleStats, expectedDamage, ACTIONS, TURN_CAP,
+  makeFighter, createFight, endTurn, aiTakeTurn,
+  scaleStats, TURN_CAP, smartPlayerTurn,
 } from '../js/pit.js';
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? Number(process.argv[i + 1]) : d; };
@@ -29,39 +29,11 @@ const SEEDS = arg('--seeds', 160);
 
 /* A player policy good enough to expose a broken build: set up, then hit as hard
    as the current state allows. A weak policy would hide exactly the combos we
-   are hunting, so buffs/summons that gate the big multipliers get priority. */
-const SETUP_FIRST = ['rage', 'totem', 'raisedead', 'callcrows', 'ward'];
-function playerTurn(fight) {
-  let guard = 0;
-  while (!fight.over && fight.active === 'p' && fight.ap > 0 && guard++ < 8) {
-    const legal = actionsFor(fight).filter(x => x.enabled);
-    if (!legal.length) break;
-    const has = id => legal.find(x => x.id === id);
-    let pick = null;
-    // stay alive first: a dead build measures nothing
-    if (fight.p.hp < fight.p.d.maxHp * 0.3 && (has('mend') || has('guard'))) pick = has('mend') ? 'mend' : 'guard';
-    // The flock thins as it feeds (v288), so Call the Murder is a move you come
-    // BACK to, not a one-off. Re-summon when the flock has actually thinned;
-    // without the threshold the greedy policy re-casts every single turn and the
-    // build measures as far worse than a person would ever play it.
-    if (!pick && has('callcrows') && (fight.p.flock || 0) < 3) pick = 'callcrows';
-    if (!pick) for (const id of SETUP_FIRST) if (id !== 'callcrows' && has(id)) { pick = id; break; }
-    if (!pick && has('signature')) pick = 'signature';
-    if (!pick) {
-      // otherwise the best damage per AP available right now
-      // .base, NOT .dmg: ACTIONS has no `dmg` field, so the original filter
-      // matched nothing and every build silently spammed the first legal move,
-      // which is exactly why the first sim run showed every talent set at 1.00x.
-      const dmg = legal
-        .filter(a => ACTIONS[a.id] && ACTIONS[a.id].base)
-        .map(a => ({ id: a.id, v: expectedDamage(a.id, fight.p, fight.f, fight.f) / Math.max(1, a.ap) }))
-        .sort((x, y) => y.v - x.v);
-      pick = dmg.length ? dmg[0].id : legal[0].id;
-    }
-    applyAction(fight, pick);
-  }
-  if (!fight.over) endTurn(fight);
-}
+   are hunting, so buffs/summons that gate the big multipliers get priority.
+   Moved to js/pit.js as smartPlayerTurn (master handoff B16, 2026-09-07) so the
+   Glutton/Spire "can you plausibly win" sheets calibrate against the exact same
+   simulated player this file already trusted for balance work. */
+const playerTurn = smartPlayerTurn;
 
 /* METRIC 1: DAMAGE PER TURN against a dummy.
  *

@@ -19,6 +19,18 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v500
+1. A hotfix off v499 from Tom's live report that opening a crate is slow and glitchy between cards.
+
+2. PROOF: crate-reveal-audit.mjs | REACH: the card-to-card move renders without dropping frames. Measured on a real three-card Bone Crate driven through the Backpack's own OPEN button: the full-screen burst shader redrew every frame for the reveal's whole life and held the takeover at a 33.3 ms median frame (16.7 ms with it hidden, measured back to back in one process), so the flick played at half rate on every build from v481 to v499, not as a regression. The burst now holds its last composited frame during the flick and resumes once the next card has risen, and the finished crate subtree is dropped on the first advance: dropped frames per move fall from 8 to 16 down to 1 to 5, frames rendered rise from about 22 to 33 to 60. FLICK rows red on v499 (over20 14 and 13, worst 92 ms), green on the fix (45/45); the R37-5 early-tap rows, the R39 recovery rows, BULK, CLAIM and TAP all stay green. The bound is a dropped-frame count, not a per-frame ceiling, because a 34 ms ceiling is red on v481 itself; worst and worstAt print every run so the one residual first-flick hitch stays visible.
+
+## v499
+1. A hotfix off v498 carrying two lanes: the prorated bundle with its pet-kit warning (Tom's rulings, 2026-09-06) and the Boneyard's outmatched line. Their dated sections are further down, folded here.
+
+2. PROOF: football-kit-audit.mjs, football-render-audit.mjs, unit.test.js | REACH: footballBundleQuote keeps the 20 percent saving on the missing pieces (5 missing 16,800; 4 missing 13,400; 1 missing 3,400, rounded to the nearest 100) so buying a piece first no longer costs 21,000 for the set, and the save line always states the real saving (BUNDLE-QUOTE rows red on the superseded formula, which quoted 16,800 for four missing). A purchase that includes lizard gear on a save with no lizard says the pet pieces wait in the Stable until one hatches, and a save that owns one sees no such line (PET-WARN rows red with petsPending forced false, PET-WARN-CONTROL green throughout).
+
+3. PROOF: outmatched-audit.mjs, unit.test.js | REACH: one helper answers whether the player can plausibly win a foe, calibrated on the fight sim (below a 5 percent simulated win rate reads as outmatched; measured 0 percent for a flat level-2 build against the Glutton and against a rival's specced Spire tower, 8 to 52 percent against an eased NPC warden, which is why the line does not fire there). The Glutton and Spire sheets show one plain line when it fires and nothing when it does not, and the Spire sheet always states that fighting for a tower you do not hold spends today's attempt (rows red before: the helper did not exist and the Spire sheet had no such copy).
+
 ## v498
 1. The integration train (integ/day5) off v497: Kennel phase A, palettes, the approved v2 recolour art and the Kennel UI; crew activity; the Wardrobe paint virtualization; the truthful iOS permission strings (not a player-visible change, documented in docs/PERMISSION-STRINGS.md). Each row below folds the dated sections further down.
 
@@ -34,6 +46,31 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 7. PROOF: unit.test.js | REACH: the Pit's board says when the day's twelve paid sparring slots are spent and the victory card drops its coin pill instead of printing +0; Gwart's greeting keeps a persisted anti-repeat bag so consecutive days differ; the daily spin fires on a first-day session and is queued after a level-up sheet instead of skipped; Today's level chip repaints on fight settle the way the wallet pill already did (each row red before the fix, quoted in the dated "the day tells the truth" section).
 
 8. PROOF: take-and-pay-audit.mjs | REACH: openCrate, hatchEgg, disenchantGear, both salvage paths and the legacy-egg conversion spend their input and write their payout in one transaction, so killing every IndexedDB transaction after the take leaves the player with the item or the full payout, never neither (six CRASH rows red on the pre-fix order: crate consumed with 0 coins and no rows, egg gone with no pet, gear gone with no dust).
+
+## the crate deals its cards smoothly (2026-09-07)
+
+Not stamped to a release: hotfix/crate-reveal-jank, off v498. Tom, on v498:
+"opening crates right now is super slow and glitchy between the items after one
+in the crate."
+
+MEASURED BEFORE FIXING, on v481 (before the tap guards), v487 (Open all and the
+payoff), v495 (the Open all recovery) and v498 (atomic take-and-pay), driving a
+real three-card Bone Crate through the Backpack's own OPEN button, two runs
+each. There is NO regression to attribute: the tap-to-next-card-interactive gap
+is 331 to 340ms on all four (it is fling's own `at(330, advance)`), and the
+per-card cost is identical too, 2 layouts, ~32 style recalcs, 1.9ms of script,
+ZERO canvas work and no long task. Every suspect in the brief measured dead: the
+card art is already warmed by openPackReveal and a crate deals `wear` cards, so
+drawTrimmedArt never runs between cards; the payoff toast fires once, after the
+whole reveal, not per card; `dataset.landed` is set in the same microtask turn
+the deck is rebuilt in.
+
+The cause is present in v481 too: the reveal renders at half rate for its whole
+life because #packBurst is a full-screen WebGL fragment shader drawing every
+frame. Back to back in one process, two passes agreeing, median frame 33.3ms
+with it mounted and 16.7ms with it hidden.
+
+1. PROOF: crate-reveal-audit.mjs | REACH: Open a Bone Crate from your Backpack and flick through its three cards: each card leaves and the next one arrives at full frame rate instead of half. Measured over the 520ms of the move, dropped frames 8-16 before and 1-5 after, frames rendered 18-27 before and 47-59 after. Nothing about what a crate pays, the reveal's copy, the tap guards (R37-5) or the Open all recovery (R39) changes.
 
 ## kennel round 39 (2026-09-06)
 
@@ -68,6 +105,77 @@ Not stamped to a release: fix/atomic-take-and-pay, off v492. Lane 2 of the
    with its ownership row and level seed, and the dust with its revision are all
    on disk. The legacy egg-crate sweep on the Crates tab converts a crate to an
    egg in the same one save.
+## the bundle prorates, the pet kit says who it fits (2026-09-07)
+
+Not stamped to a release: hotfix/bundle-prorate-petkit, off v497. Two rulings
+from Tom, both dated 2026-09-06. Owned by this lane: `footballBundleQuote` in
+data/football-teams.js, the Locker Room buy flow in js/app.js and js/loot.js.
+
+1. PROOF: football-kit-audit.mjs | REACH: In the Shop's Kit room, the full-kit
+   tile's price is your 20% saving applied to whatever you are still missing,
+   not a flat 16,800 the moment you own anything. Missing 5 (nothing owned):
+   16,800. Missing 4: 13,400. Missing 3: 10,100. Missing 2: 6,700. Missing 1:
+   3,400 (each rounded to the nearest 100 coin; the exact 20%-off numbers are
+   16,800 / 13,440 / 10,080 / 6,720 / 3,360). Own everything and the tile reads
+   "The whole kit is yours" instead of a price. Before this fix, owning 1 of 5
+   garments quoted the full 16,800 for the other 4 -- the flat five-garment
+   price for one garment short of the whole kit -- because the superseded
+   2026-09-05 fix (charge only for the missing pieces, capped at the flat
+   bundle price) ties the flat price the moment 4 of 5 are missing.
+
+2. PROOF: football-kit-audit.mjs, football-render-audit.mjs | REACH: The two
+   lizard cosmetic tiles and the full-kit tile all say "For the lizard" on
+   their own line, whether or not you have one yet. If you own no lizard (no
+   C4 Beardie, no CX Founder's Lizard) when you buy a lizard piece or the
+   bundle, the confirm toast adds "The pet pieces wait in the Stable until a
+   lizard hatches." Nothing is withheld or refunded: the garment is granted
+   in all 32 team colours exactly as normal, it just has nowhere to be worn
+   yet. Own a lizard already and the same purchase confirms with no such
+   line. Measured on a fresh account: buying a pet tile with no lizard reads
+   "Lizard Jersey · 32 colourways is yours. ... The pet pieces wait in the
+   Stable until a lizard hatches."; the same account's bundle buy reads "The
+   full kit · 32 colourways is yours. ... The pet pieces wait in the Stable
+   until a lizard hatches."; a control account already owning a lizard reads
+   "Lizard Helmet · 32 colourways is yours. ..." with no such line.
+## the Boneyard states the odds (2026-09-07)
+
+Not stamped to a release: hotfix/boneyard-odds, off v497. Master handoff B16,
+"Explainers state the odds", no balance change, re-measured on this tree
+before fixing. Owned by this lane: the Glutton and Spire explainer sheets
+(openGluttonSheet, openSpireSheet in js/app.js) and the shared isOutmatched
+helper (js/pit.js).
+
+1. PROOF: unit.test.js | REACH: Open the Glutton, or a Spire you don't hold,
+   badly outmatched and the sheet says "You are outmatched at this level."
+   above the fight button, nothing more. isOutmatched (js/pit.js) runs the
+   real fight engine against your current stats, talents and pet and the
+   exact foe config the fight itself is about to use; it fires for a fresh
+   level 2 against the Glutton (0% measured win rate) and against a rival's
+   specced Spire tower (0%), and stops firing once real training points and
+   talent picks sit behind a build. Measured curve recorded in the comment
+   above OUTMATCHED_WIN_RATE: a plain unclaimed Spire's NPC warden never
+   actually crosses the 5% line at any tower roll (8-52% across its full
+   0.90-1.25 mult range, three player policies tried), because it gets an
+   easier AI below character level 12 (spires.js wardenFor) — only a rival's
+   specced tower does. The line is measured per fight, not hardcoded to
+   either foe's name or HP figure.
+
+2. PROOF: outmatched-audit.mjs | REACH: Same claim, read off a real rendered
+   page in both states (a fresh level-2 build: no training points, no
+   talents; and a build with real stat + talent progress) for both sheets.
+
+3. PROOF: unit.test.js | REACH: Any Spire sheet for a tower you don't hold
+   now says, in its own terms list, that fighting for it spends your one
+   shot at it today whatever the outcome, not only for a rival's tower: this
+   sheet only ever opens on that path, and settle() already spends
+   spireKey() on any result (win, loss or draw) there.
+
+4. PROOF: NONE, no dedicated audit (same untested shape as the map's own
+   long-press discovery hint, `mapLpHint`, which has none either) | REACH:
+   R41-8 (Haymaker carries the biggest number and is the worst play): a
+   one-time toast, "Tip: press and hold a move to see what it actually
+   does.", now points a new player at the existing 750ms press-and-hold
+   detail popup the first time any Pit-style fight opens, shown once, ever.
 
 ## the Stable rail tells the truth (2026-09-06)
 

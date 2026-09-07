@@ -935,6 +935,105 @@ try {
     Object.entries(pills).map(([w, m]) => `${w}: ${m ? `${m.w}x${m.h}, past its column ${m.over}px, past the card ${m.card}px, "${m.text}"` : 'NO PILL'}`).join(' | '));
   await setWidth(page, 393, 852);
 
+  /* -------------------------------------------------------- PET-WARN ---- */
+  /* WARN BEFORE BUYING (Tom, 2026-09-06): a pet garment (or the bundle, which
+     always includes both) is granted exactly as normal to a save with no
+     lizard yet -- nothing is withheld or refunded -- but the confirm toast
+     says the pieces wait in the Stable until one hatches. The PURE half (the
+     petsPending flag, both ways, over mem-idb) is
+     tests/football-kit-audit.mjs PET-WARN / PET-WARN-CONTROL; this is the
+     one row in this file that reads a TOAST rather than a screenshot,
+     because the claim is copy the player sees, not a rendered frame.
+     Two teams THIS FILE HAS NOT TOUCHED ANYWHERE ABOVE (not NAVY, not GOLD),
+     so both purchases below are genuinely unowned regardless of what ran
+     earlier. This section runs LAST on purpose: the bundle purchase grants
+     every remaining garment in every team, which would invalidate every
+     ownership assumption a row above it depends on. */
+  const WARN_A = FOOTBALL_TEAMS[10].id, WARN_B = FOOTBALL_TEAMS[11].id;
+  await page.evaluate(() => {
+    window.__toastLog = [];
+    const el = document.getElementById('toast');
+    if (!el) return;
+    new MutationObserver(records => {
+      for (const r of records) {
+        if (r.type !== 'attributes' || r.attributeName !== 'hidden') continue;
+        if (r.oldValue === null) continue;            // just became hidden
+        const t = (el.textContent || '').trim();
+        if (t) window.__toastLog.push(t);
+      }
+    }).observe(el, { attributes: true, attributeFilter: ['hidden'], attributeOldValue: true });
+  });
+  /* Scoped to entries at or after `since` (a log length snapshot taken right
+     before the action), never the whole cumulative log: a slow-to-land toast
+     from an EARLIER purchase matching the same pattern must not be read as
+     THIS purchase's confirm. Polls to a deadline rather than a fixed sleep,
+     same reason tests/redeem-audit.mjs does: toast timing varies with how
+     many rows a purchase grants (32 ids for one garment, more for the
+     bundle), and a constant chosen between two real durations is a coin
+     toss either way. */
+  const logLen = () => page.evaluate(() => (window.__toastLog || []).length);
+  const toastSince = async (since, re, deadline = 15000) => {
+    const t0 = Date.now();
+    while (Date.now() - t0 < deadline) {
+      const hit = await page.evaluate((s, r) => (window.__toastLog || []).slice(s).find(t => new RegExp(r, 'i').test(t)) || null, since, re.source);
+      if (hit) return hit;
+      await sleep(250);
+    }
+    return null;
+  };
+
+  await page.evaluate(() => { location.hash = '#/shop'; });
+  await sleep(1200);
+  await page.click('#fbSect summary').catch(() => {});
+  await sleep(500);
+
+  /* Arm-then-buy, same dance js/app.js's wireDropBuyButtons runs: one tap
+     arms ("Tap again to buy"), a second inside 2600ms spends. */
+  const buyTile = async (team, key) => {
+    await page.select('#fbTeam', team);
+    await sleep(400);
+    const sel = `[data-buyfb="fb-${team}-${key}"]`;
+    await page.waitForSelector(sel, { timeout: 8000 });
+    await page.click(sel);
+    await sleep(150);
+    await page.click(sel);
+  };
+  const buyBundle = async () => {
+    const sel = '[data-buyfbkit="all"]';
+    await page.waitForSelector(sel, { timeout: 8000 });
+    await page.click(sel);
+    await sleep(150);
+    await page.click(sel);
+  };
+
+  /* CONTROL FIRST, while the three lizard instances seeded at SAMPLE (C4, its
+     shiny, CX) are still owned: buying an unowned pet tile must NOT warn. */
+  let since = await logLen();
+  await buyTile(WARN_A, 'pet-helmet');
+  const controlToast = await toastSince(since, /is yours/);
+  const controlWarned = await toastSince(since, /wait.*Stable|Stable.*hatch/, 2000);
+  ok('PET-WARN-CONTROL a save that already owns a lizard buys a pet tile with no "wait in the Stable" line, so the row below can fail',
+    !!controlToast && !controlWarned,
+    `toast: ${JSON.stringify(controlToast)}`);
+
+  /* FRESH: clear every pet instance so ownsFootballPet() is false, then buy a
+     DIFFERENT still-unowned pet tile and the bundle (which always includes
+     both pet garments). Nothing about the garment purchase itself changes --
+     REPEAT/REPEAT-BUNDLE-style refusal is graded at the PURE layer -- only
+     the confirm copy is under test here. */
+  await page.evaluate(async () => { const { kvSet } = await import('/js/db.js'); await kvSet('petInst', []); });
+  since = await logLen();
+  await buyTile(WARN_B, 'pet-jersey');
+  const freshTileToast = await toastSince(since, /wait.*Stable|Stable.*hatch/);
+  ok('PET-WARN a fresh save with no lizard is warned buying a pet tile: the confirm toast says the pieces wait in the Stable',
+    !!freshTileToast, `toast: ${JSON.stringify(freshTileToast)}`);
+
+  since = await logLen();
+  await buyBundle();
+  const freshBundleToast = await toastSince(since, /wait.*Stable|Stable.*hatch/);
+  ok('PET-WARN the same fresh save is warned buying the bundle too, which always includes both pet garments',
+    !!freshBundleToast && /full kit/i.test(freshBundleToast), `toast: ${JSON.stringify(freshBundleToast)}`);
+
 } finally {
   await browser.close().catch(() => {});
   if (srv) srv.close();
