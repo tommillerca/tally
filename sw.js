@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v495';
+const VERSION = 'tally-v496';
 const PRECACHE = [
   './',
   './index.html',
@@ -316,8 +316,8 @@ const STAMP = './version.json';
 const PRECACHED = new Set(PRECACHE.map(u => new URL(u, self.location.href).href));
 
 /* THE PREVIOUS GENERATION: the newest OTHER cache that holds a whole build.
-   Read at install (to reuse its identical entries) and at activate (to keep it,
-   see below). READY is the test, not the name: a half-filled cache from an
+   Read at install (to reuse its identical entries) and at activate (to name the
+   build the pages already open came from, see below). READY is the test, not the name: a half-filled cache from an
    install that died is named like a build and is not one. */
 const byBuild = (a, b) => (+(b.match(/\d+/) || [0])[0]) - (+(a.match(/\d+/) || [0])[0]);
 async function prevGen() {
@@ -366,8 +366,8 @@ self.addEventListener('install', e => {
        takes over. The old page gets controllerchange and reloads itself (or, with
        a sheet open, on closing it), which every build since v387 does.
        What it reintroduces is the mixed-build window (R38-17): the old page keeps
-       running while this worker answers its fetches. activate below keeps the
-       previous generation's cache for exactly that page, so a lazy import it
+       running while this worker answers its fetches. activate below keeps that
+       page's generation for exactly as long as it is open, so a lazy import it
        makes during the window is never a 404. A module that exists in both
        builds is answered from THIS build (newest first), which is the pre-v427
        shape and is closed by the reload the swap itself triggers. */
@@ -375,16 +375,54 @@ self.addEventListener('install', e => {
   })());
 });
 
+/* WHICH GENERATION EACH OPEN PAGE CAME FROM (2026-09-06, three generations).
+   One record per client id, body = the cache name that served it, in a cache
+   of its own so the build caches stay exactly one whole build plus READY.
+   Written at activate, not in the fetch handler: every client alive when a
+   worker activates and not yet recorded was served by the worker in charge
+   just before it, which is prevGen() at that instant, and every client that
+   appears later was served by THIS worker and gets labelled by the next one.
+   A record is only ever read at the next activate, so nothing here sits in
+   front of a request. */
+const CLIENTS = 'tally-clients';
+const CLIENT = './__client__/';
+
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
-    /* KEEP ONE PREVIOUS GENERATION (R38-17). The old build's page is still
-       running when this fires (skipWaiting above), and its lazy imports go
-       through this worker: with its cache gone, a module the new build renamed
-       or dropped is a 404 into a live document. One generation back is kept
-       for it; everything older, and every half-filled install, goes. */
-    const keep = await prevGen();
+    /* KEEP EVERY GENERATION AN OPEN PAGE CAME FROM (R38-17, widened
+       2026-09-06). The old build's page is still running when this fires
+       (skipWaiting above), and its lazy imports go through this worker: with
+       its cache gone, a module the new build renamed or dropped is a 404 into
+       a live document. R38-17 kept "the newest previous generation", which is
+       the previous RELEASE and not necessarily that page's build: a page held
+       on A by an open sheet outlives B's activate (A kept) and then C's (B
+       kept, A DELETED under it), measured by tests/sw-upgrade-audit.mjs THREE
+       GENERATIONS as a 404 for the A page's own module. So the sweep asks the
+       clients instead: a generation stays while a client served from it is
+       alive, and everything else (old generations nobody runs, and every
+       half-filled install) goes.
+       THE BOUND: this build plus at most TWO older generations, newest first.
+       A page from a third-oldest build loses its cache and its next lazy import
+       of a module later builds dropped can 404; that page has already had its
+       controllerchange and reloads onto this build the moment its sheet
+       closes, and three whole builds is as much disk as this app will hold
+       for a window that narrow. A kept generation lingers until the NEXT
+       activate even after its page reloads (the sweep only runs here), which
+       is the same cost R38-17 already paid for one generation. */
+    const live = (await self.clients.matchAll({ includeUncontrolled: true, type: 'all' })).map(c => c.id);
+    const book = await caches.open(CLIENTS);
+    const prev = await prevGen();
+    const used = new Set();
+    for (const id of live) {
+      const r = await book.match(CLIENT + id);
+      let g = r ? await r.text() : null;
+      if (!g && prev) { g = prev; await book.put(CLIENT + id, new Response(g, { headers: { 'Content-Type': 'text/plain' } })); }
+      if (g && g !== VERSION) used.add(g);
+    }
+    for (const r of await book.keys()) if (!live.includes(r.url.slice(r.url.lastIndexOf('/') + 1))) await book.delete(r);
+    const keep = new Set([VERSION, CLIENTS, ...[...used].sort(byBuild).slice(0, 2)]);
     const keys = await caches.keys();
-    await Promise.all(keys.filter(k => k !== VERSION && k !== keep).map(k => caches.delete(k)));
+    await Promise.all(keys.filter(k => !keep.has(k)).map(k => caches.delete(k)));
     /* claim(): only reaches clients no worker controls (a first-ever install, or
        a page that loaded while nothing was registered). Clients
        the OLD worker controlled are moved to this one by the activation itself,
@@ -431,7 +469,7 @@ const fromCaches = async key => (await caches.match(key, { cacheName: VERSION })
  * any cache, and is excluded from the shell branch by name. When it names a
  * build other than the one this worker IS, the worker asks the browser for a
  * new sw.js, which is the full re-download: a new worker, a new install, a new
- * complete cache, and everything older than the previous generation deleted on
+ * complete cache, and every generation no open page came from deleted on
  * activate.
  *
  * It is deliberately not sw.js itself. sw.js is ~12KB and the point of the
@@ -480,9 +518,10 @@ function checkStamp() {
  *     one whole build;
  *   - only urls in PRECACHED are eligible, so a runtime-cached stray from some
  *     other build cannot be served as if it belonged to this one;
- *   - activate keeps ONE previous generation (for the old page still running
- *     through the swap, R38-17) and deletes everything older, and every lookup
- *     outside the scoped hit above reads this build's cache first (fromCaches);
+ *   - activate keeps every generation an OPEN page was served from (for the
+ *     old page still running through the swap, R38-17, at most two of them)
+ *     and deletes everything else, and every lookup outside the scoped hit
+ *     above reads this build's cache first (fromCaches);
  *   - and nothing is stuck, because checkStamp() above always reaches the
  *     network.
  * The trade that IS accepted: the visit a release lands on is served the old

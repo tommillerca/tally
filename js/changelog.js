@@ -4,6 +4,9 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 496, date: '2026-09-07', title: 'Three builds deep, nothing goes missing', items: [
+    'An update now remembers which build each open screen came from and keeps that build\'s files until the screen reloads, even if two updates land in a row. Before, a second update could sweep away files a still-open screen needed.',
+  ] },
   { n: 495, date: '2026-09-07', title: 'Open all recovers, cancel is one step, the routine cap holds', items: [
     'If one crate in an Open all fails partway, the ones already opened are still revealed, the rest stay in your Backpack, and the button comes back.',
     'Cancelling a pot returns its ingredients in the same step it empties the pot, so a bad moment can no longer leave you with an empty pot and no ingredients.',
