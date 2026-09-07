@@ -123,8 +123,10 @@ function transform(rel, buf) {
       "await db.put('inv', { ...row, id: newId() });\n  await collectLook(g.artId);");
   }
   if (rel === 'js/loot.js' && PROVE === 'melt') {
-    s = swap(s, "if (!await db.take('inv', row.id)) return { ok: false, reason: 'not-owned' };",
-      "await db.del('inv', row.id);");
+    /* 2026-09-06: the take carries the dust now (takeAndPay); the old shape it
+       puts back is del-then-pay, which is the double-melt this row measures. */
+    s = swap(s, "if (!await takeAndPay('inv', row.id, { kv: bumpPay('bonedust', 'dustRev', dust) })) return { ok: false, reason: 'not-owned' };",
+      "await db.del('inv', row.id);\n  await boneDustAdd(dust);");
   }
   if (rel === 'js/social.js' && PROVE === 'ledger') {
     s = swap(s, "  const claim = await awardOnce(key, type || 'social', p.xp || 0, p.note || 'From the Crew');\n  if (!claim.claimed) return false;",

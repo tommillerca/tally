@@ -258,7 +258,8 @@ const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-ato
      from forgetting its revision; the tombstone audit is the only row that
      consumes 501 items and merges the pre-consumption blob, which is the one
      shape the merge audit never drove. */
-  'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs'];
+  'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs',
+  'take-and-pay-audit.mjs'];   // 2026-09-06 lane 2: the take and its whole payout are one transaction; node-only, ~1s
 PURE.unshift('store-copy-lint.mjs');
 PURE.push('coins-merge-tie-audit.mjs');   // R38-13: coinsRev bumps by magnitude, importAll keeps the higher balance on a tie, taken receipts; node-only (shipped unregistered in v485)
 PURE.unshift('no-debug-markers-lint.mjs');

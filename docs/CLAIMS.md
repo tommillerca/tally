@@ -44,6 +44,27 @@ R39-6, 8, 9, 10, 11, 13, 14, 21, 23, 30, 32, re-measured on this tree before fix
 6. PROOF: kennel-audit.mjs | REACH: Open the Kennel on a 320 wide phone owning every colourway of every pet: all six rows fit above the fold, the caption ends in an ellipsis instead of wrapping, and each column header sits over its column.
 7. PROOF: pet-morph-audit.mjs | REACH: Open the Backpack with an incubating Ember egg: the shell reads orange, not blue. Frost reads blue, Toxic green, Midnight purple.
 8. PROOF: hero-share-audit.mjs | REACH: Equip Bumbleseal from the Stable, visit it again and come back to Today: she still stands at her own size (169px box at 390x844) and the Bonehead still steps aside (-27px), because equipping through the Stable writes both the equipped-instance record and the outfit slot. The audit used to seed with the bare outfit slot, which v490's R39-1 heal reverts on the next Stable paint: red on origin/main since 49fc6878 (green at its parent, measured 2026-09-07), not a train regression. Re-premised onto addPetInstance + setEquippedPet, the writer every player path uses.
+## take and pay is one step (2026-09-06)
+
+Not stamped to a release: fix/atomic-take-and-pay, off v492. Lane 2 of the
+2026-09-06 economy audit.
+
+1. PROOF: take-and-pay-audit.mjs (six CRASH rows, each proved red on origin/main
+   bce3a937 with the same file: crate, egg, gear, salvageInstance, salvagePet,
+   legacy egg-crate) | REACH: Opening a crate, hatching an egg, melting a piece of
+   gear or destroying a pet can no longer take the thing away and then fail to
+   pay you for it. Each of those used to spend the input first and hand over the
+   reward a moment later in separate saves, so an app killed between the two left
+   you with neither. The spend and the whole payout are one save now: a kill at
+   any point leaves either the unopened crate, the unhatched egg, the piece, the
+   pet, or the complete reward with the input gone. Nothing pending, nothing to
+   resume. Measured by killing every save after the take: on the old order a Bone
+   Crate vanished with no coins and no items, a walked egg vanished with no pet, a
+   rare piece melted for 0 dust; on the new order the full hand, the pet instance
+   with its ownership row and level seed, and the dust with its revision are all
+   on disk. The legacy egg-crate sweep on the Crates tab converts a crate to an
+   egg in the same one save.
+
 ## the Stable rail tells the truth (2026-09-06)
 
 Not stamped to a release: hotfix/stable-rail-truth, off v493. HANDOFFMASTER20260906.md

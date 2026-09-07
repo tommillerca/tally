@@ -143,12 +143,16 @@ const ACTIONS = [
     authority: 'the ledger key questsall-<date>' },
 
   // ---- inventory rows: the row IS the right to one payout ---------------
-  { id: 'js/loot.js:openCrate', sites: 5, drive: 'crate',
+  /* sites went 5 to 1 on 2026-09-06 (take-and-pay-audit): the four grants and the
+     coinsAdd that followed the take are staged rows and kv updaters inside ONE
+     takeAndPay now, so a process death can no longer spend the crate and pay a
+     partial hand or none. Same reason claimQuest went 2 to 1 above. */
+  { id: 'js/loot.js:openCrate', sites: 1, drive: 'crate',
     transition: 'an unopened crate row goes from held to spent',
-    authority: 'db.take on the inv row: handing it over and deleting it is one transaction' },
+    authority: 'takeAndPay on the inv row: the take and the whole hand are one transaction' },
   { id: 'js/loot.js:hatchEgg', sites: 1, drive: 'egg',
     transition: 'a ready egg row goes from held to hatched',
-    authority: 'db.take on the inv row' },
+    authority: 'takeAndPay on the inv row, the pet instance minted inside it (2026-09-06)' },
   { id: 'js/loot.js:redeemCode', sites: 2, drive: 'redeem',
     transition: 'a code goes from unredeemed to redeemed ON THIS DEVICE',
     authority: "db.addIfAbsent of the kv row redeemed:<code>, with the legacy 'redeemed' list still read first" },
@@ -364,7 +368,7 @@ const ACTIONS = [
      a state transition to earn; what they have is a bounded give-back. */
   { id: 'js/loot.js:rerollRack', sites: 1, undriven: "the one site is a coinsAdd refunding a caller that paid for a reroll and then lost the rack kvUpdate on `used !== st.rr`. That claim was always atomic, so two rerolls could never double-charge each other; the reorder closes a reroll landing beside an ordinary BUY, each on its own stale read (measured on origin/main 2faa73b6: a 3,000-coin wallet paid a 500 reroll AND a 3,000 piece). It also covers the stale-PRICE case for free, since a caller quoting a cheap rung's price after somebody else advanced the counter is refused and refunded rather than underpaying. Graded by CROSS-REROLL in tests/purchase-firewall.mjs, alongside the REROLL-LADDER / REROLL-FLOOR / REROLL-WEEKLY rows that own the curve" },
   { id: 'js/loot.js:applyTransmog', sites: 1, undriven: "the one site is a boneDustAdd refunding a caller whose look was banked by a concurrent tap. markPaid IS this function's receipt (a banked look is free to wear forever after) and it now reports whether IT added the key, so applyTransmog is the buyDropItem shape with the paid-look ledger playing grantCosmetic's part. Not a payout: bounded by the spendDust directly above it. Before the reorder both halves were broken, measured on 2faa73b6: two concurrent applies of one 12-dust look took 24 and applied one, and the read-then-debit overdrew against any other dust spend. Graded by CROSS-TRANSMOG in tests/purchase-firewall.mjs, with the WEAR-FREE rows owning the free-to-wear half" },
-  { id: 'js/loot.js:disenchantGear', sites: 1, undriven: 'melts a piece the player owns, and the input is an INV ROW taken with db.take, so the take is what decides the payout and a second run finds nothing. Re-audited 2026-09-04 (round 28 G1): this one holds, and it is the only one of the three that did' },
+  { id: 'js/loot.js:disenchantGear', sites: 1, undriven: 'melts a piece the player owns, and the input is an INV ROW taken with takeAndPay (db.take until 2026-09-06, when the dust moved inside the same transaction), so the take is what decides the payout and a second run finds nothing. Re-audited 2026-09-04 (round 28 G1): this one holds, and it is the only one of the three that did' },
   /* THE EXEMPTION READ "as disenchantGear, on a pet instance" AND IT WAS NOT.
      disenchantGear takes an inv row with db.take, one transaction; these two
      read kv 'petInst', dropped a copy from the array and wrote the whole list
@@ -376,10 +380,10 @@ const ACTIONS = [
      inside the transaction when it is already gone), and both are DRIVEN. */
   { id: 'js/loot.js:salvagePet', sites: 1, drive: 'salvagePet',
     transition: 'one copy of a species goes from held to melted',
-    authority: "kvUpdate on 'petInst': removeWorstInstance runs inside the transaction and returns undefined when there is no copy to take, so exactly one caller is paid" },
+    authority: "payAtomic on kv 'petInst' (2026-09-06; a lone kvUpdate before): removeWorstInstance runs inside the transaction and throws `refused` when there is no copy to take, so exactly one caller is paid, and the dust rides in the same transaction" },
   { id: 'js/loot.js:salvageInstance', sites: 1, drive: 'salvageInstance',
     transition: 'one NAMED pet instance goes from held to destroyed',
-    authority: "kvUpdate on 'petInst': the iid is looked for and dropped in one transaction" },
+    authority: "payAtomic on kv 'petInst' (2026-09-06; a lone kvUpdate before): the iid is looked for and dropped in one transaction, with the dust and the last-copy teardown inside it" },
   /* Re-graded v441. It was registered here as "gated on kv 'freeze-refunded' AND
      on the rows it pays for", and BOTH halves of that were false under
      concurrency: the flag was a kvGet/kvSet pair with the payout between them,
@@ -397,7 +401,7 @@ const ACTIONS = [
      was never revisited. It takes the row now, and it is DRIVEN. */
   { id: 'js/loot.js:migrateLegacyEggs', sites: 1, drive: 'legacyEgg',
     transition: 'a legacy egg-crate row goes from unconverted to converted',
-    authority: 'db.take on the inv row: the row is handed over and deleted in one transaction, and only the caller that found it grants' },
+    authority: 'takeAndPay on the inv row (2026-09-06; db.take before): the row is handed over, deleted and the egg granted in one transaction, and only the caller that found it grants' },
   /* runInitBackfill, not initGameIfNeeded: the backfill body was extracted into
      its own function when the replay was chunked and checkpointed, and
      initGameIfNeeded is now the one-at-a-time wrapper around it and holds no
@@ -508,7 +512,13 @@ const ACTIONS = [
  * ======================================================================== */
 const PAY = ['award', 'awardOnce', 'awardCapped', 'coinsAdd', 'boneDustAdd', 'grantCrate', 'grantGear',
   'grantCosmetic', 'grantConsumable', 'grantEgg', 'grantPet', 'grantIngredient', 'grantSeed',
-  'grantPotion', 'addPetInstance'];
+  'grantPotion', 'addPetInstance',
+  /* 2026-09-06 (take-and-pay-audit): the two primitives that carry a payout INSIDE
+     the transaction that spends its input. openCrate, hatchEgg, disenchantGear,
+     salvagePet, salvageInstance, migrateLegacyEggs and addPetInstance pay through
+     one of these now and through nothing else, so without them here every one of
+     those actions would read as having zero paying sites. */
+  'takeAndPay', 'payAtomic'];
 
 /* Strip prose FIRST and keep every newline while doing it. An earlier guard in
    this project passed because the word it looked for was sitting in a COMMENT
