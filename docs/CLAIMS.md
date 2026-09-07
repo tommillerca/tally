@@ -1,5 +1,173 @@
 # What each patch note claims, and what backs it
 
+## Lane H: Today reads and guard integrity (2026-09-07)
+
+Advisory report for independent provider review. The supplied frozen plan SHA256
+matched `37e11f9c6bbd7d4ddee7933b348f1a99d744213ce0b28ae3266973226309d2ac`.
+All source paths resolved inside this checkout. Its root `CLAUDE.md` was read;
+`tally/CLAUDE.md` does not exist here. No original checkout was edited.
+
+Files changed:
+
+- `tests/today-reads-lint.mjs`: re-point the petInstances return-pattern pin at
+  the filtered instance list. Also require the SHA256 of its entire
+  comment-stripped function body so newly inserted code cannot silently inherit
+  the exemption. Add Node execution of buildFighter's actual pet assembly with
+  production loot/pets/db exports, observing cold inventory reads, earned picks,
+  zero warm store scans and unchanged battle output over two warm calls. The
+  optional root argument also selects the runtime modules from that root.
+- `tests/pet-state-audit.mjs`: add a CONTROL row that checks the actual seeded
+  instance list and earned level, reads an existing legal choice, writes its
+  legal alternative, checks the persisted iid bank, reads it back, and checks
+  the sibling retains its own choices. An empty or wrong-instance answer fails.
+- `tests/dish-worth-audit.mjs`: date the CONFIGS provenance 2026-09-07, citing
+  Tom's master handoff B5 and frozen Lane H RED 3. The recorded roughly
+  threefold disagreement between with-pet and no-pet measurements explains both
+  configurations and why dish copy states no percentage. No measurement changed.
+- `docs/CLAIMS.md`: this dated section only.
+
+1. PROOF: today-reads-lint.mjs | REACH: The static whole-Today count changes from `{"health":1,"inv":5,"log":1,"xp":1}` to `{"health":1,"inv":1,"log":1,"xp":1}`. All existing once-guard exemptions remain. A new scan inserted before the pinned suffix fails both GATE and the runtime warm-scan row. This is Node and source evidence, not a measurement of browser frame time or battery usage.
+2. PROOF: pet-state-audit.mjs, guard-hygiene-lint.mjs | REACH: The new selected-instance control passes. The state audit reports `pet-state: 12 passed, 0 failed`; hygiene reports `49 of 281 carry no CONTROL/PREMISE/SETUP/REACH/SAMPLE row. ratchet holding` and `guard-hygiene: clean`. The ceiling remains 49.
+3. PROOF: dish-worth-audit.mjs, guard-provenance-lint.mjs | REACH: The two unchanged measurement arms pass all dish rows. Provenance reports `60 known, 0 new` and `guard-provenance: clean`. No threshold or inventory allowance was increased.
+
+Agreed proof command, exit 0:
+
+```sh
+node tests/today-reads-lint.mjs && node tests/guard-hygiene-lint.mjs && node tests/guard-provenance-lint.mjs
+```
+
+Key output:
+
+```text
+ok   A1 the WHOLE Today draw (renderToday and everything it calls in the tick) scans log, xp, health and inv exactly once each  {"health":1,"inv":1,"log":1,"xp":1}
+ok   CONTROL cold pet assembly reads inventory and retains earned talents  {"inv":1}
+ok   C1 warm battle pet assembly scans no stores (tick 1)  {}
+ok   C1 warm battle pet assembly scans no stores (tick 2)  {}
+all green
+ok    CONTROL the number of audits with NO positive control does not rise above 49  49 of 281 carry no CONTROL/PREMISE/SETUP/REACH/SAMPLE row. ratchet holding
+guard-hygiene: clean
+ok    RATCHET no NEW pinned expectation lacks dated provenance  60 known, 0 new
+guard-provenance: clean
+```
+
+Red/green evidence, using throwaway source copies under `/private/tmp/pet-h-proof/throwaway`:
+
+- Restore the original Today audit: `FAIL GATE petInstances still carries the once-guard its exemption pins` and `FAIL A1 ... {"health":1,"inv":5,"log":1,"xp":1}`, exit 1. Restore the fixed audit: `all green`, exit 0.
+- Restore the original state audit with no control: `FAIL CONTROL the number of audits with NO positive control does not rise above 49`, `50 of 281`, exit 1. Restore the added control: `49 of 281`, `guard-hygiene: clean`, exit 0.
+- Restore the original CONFIGS comment: `FAIL RATCHET no NEW pinned expectation lacks dated provenance`, `1 new: dish-worth-audit.mjs:CONFIGS`, exit 1. Restore the dated comment: `60 known, 0 new`, `guard-provenance: clean`, exit 0.
+- Insert `await db.all('inv')` at the start of petInstances while preserving the return suffix: `FAIL GATE petInstances`, `FAIL A1 ... {"health":1,"inv":9,"log":1,"xp":1}`, and `FAIL C1 warm battle pet assembly scans no stores (tick 1) {"inv":3}` (also tick 2), exit 1. Restore production bytes: `C1 ... {}`, `all green`, exit 0. Also repeated by pointing the checkout's audit at the mutated throwaway root, proving the runtime half measures that root.
+- Make petPicks return an empty array: `FAIL CONTROL earned talent round-trip reaches the selected instance bank: Expected values to be strictly deep-equal`, exit 1. Restore production bytes: `PASS CONTROL earned talent round-trip reaches the selected instance bank`, `pet-state: 12 passed, 0 failed`, exit 0.
+- Remove picks from the real battle assembly: `FAIL CONTROL cold pet assembly reads inventory and retains earned talents {"inv":1}`, exit 1. Restore assembly: the same CONTROL is green, exit 0. This prevents the zero-scan row from passing on an empty pet result.
+
+PURE enumeration follows the actual initializer plus every PURE.push/PURE.unshift
+in `tests/release-gate.mjs`, evaluated in their source order without executing
+its server runner. There are 58 files: 56 passed, two require prohibited server
+proofs. No new audit was created, so no release registration changed.
+
+| # | PURE file | Result |
+| --- | --- | --- |
+| 1 | `version-align-lint.mjs` | Exit 0 |
+| 2 | `no-debug-markers-lint.mjs` | Exit 0 |
+| 3 | `store-copy-lint.mjs` | Exit 0 |
+| 4 | `transmog-receipt-audit.mjs` | Exit 0 |
+| 5 | `today-reads-lint.mjs` | Exit 0 |
+| 6 | `kitchen-atomic-audit.mjs` | Exit 0 |
+| 7 | `backup-encoder-audit.mjs` | Exit 0 |
+| 8 | `backup-key-audit.mjs` | Exit 0 |
+| 9 | `backup-version-audit.mjs` | Exit 0 |
+| 10 | `backup-conflict-audit.mjs` | Exit 0 |
+| 11 | `unit.test.js` | BLOCKED: server proof |
+| 12 | `log-xp-farm-audit.mjs` | Exit 0 |
+| 13 | `drip-badge-audit.mjs` | Exit 0 |
+| 14 | `xp-key-provenance-lint.mjs` | Exit 0 |
+| 15 | `facegate-audit.mjs` | Exit 0 |
+| 16 | `garden-appetite-guard.mjs` | Exit 0 |
+| 17 | `pit.test.js` | Exit 0 |
+| 18 | `quest-daymore-audit.mjs` | Exit 0 |
+| 19 | `quest-pick-audit.mjs` | Exit 0 |
+| 20 | `first-fight-audit.mjs` | Exit 0 |
+| 21 | `stat-source-audit.mjs` | Exit 0 |
+| 22 | `bastions-rep-sim.mjs` | Exit 0 |
+| 23 | `analytics-tag-audit.mjs` | Exit 0 |
+| 24 | `icon-inventory-audit.mjs` | Exit 0 |
+| 25 | `version-stamp-audit.mjs` | Exit 0 |
+| 26 | `boneyard-supply-audit.mjs` | Exit 0 |
+| 27 | `loot-fallback-audit.mjs` | Exit 0 |
+| 28 | `guard-hygiene-lint.mjs` | Exit 0 |
+| 29 | `guard-provenance-lint.mjs` | Exit 0 |
+| 30 | `feedback-status-lint.mjs` | Exit 0 |
+| 31 | `rack-theme-lint.mjs` | Exit 0 |
+| 32 | `rack-rotate-audit.mjs` | Exit 0 |
+| 33 | `pet-accessory-lint.mjs` | Exit 0 |
+| 34 | `pet-pool-audit.mjs` | Exit 0 |
+| 35 | `manifest-exports-audit.mjs` | Exit 0 |
+| 36 | `xp-curve-audit.mjs` | Exit 0 |
+| 37 | `live-api-register-lint.mjs` | Exit 0 |
+| 38 | `claim-evidence-lint.mjs` | Exit 0 |
+| 39 | `thumb-freshness-lint.mjs` | Exit 0 |
+| 40 | `render-sink-lint.mjs` | Exit 0 |
+| 41 | `lapse-witness-audit.mjs` | Exit 0 |
+| 42 | `spawn-claim-atomic-audit.mjs` | Exit 0 |
+| 43 | `wardrobe-family-audit.mjs` | Exit 0 |
+| 44 | `football-kit-audit.mjs` | Exit 0 |
+| 45 | `restore-latch-audit.mjs` | Exit 0 |
+| 46 | `first-pet-audit.mjs` | Exit 0 |
+| 47 | `currency-revision-lint.mjs` | Exit 0 |
+| 48 | `inv-tombstone-audit.mjs` | Exit 0 |
+| 49 | `take-and-pay-audit.mjs` | Exit 0 |
+| 50 | `submission-preflight-audit.mjs` | Exit 0 |
+| 51 | `pet-state-audit.mjs` | Exit 0 |
+| 52 | `pet-family-audit.mjs` | Exit 0 |
+| 53 | `coins-merge-tie-audit.mjs` | Exit 0 |
+| 54 | `routine-race-audit.mjs` | Exit 0 |
+| 55 | `dayone-topup-audit.mjs` | Exit 0 |
+| 56 | `dish-worth-audit.mjs` | Exit 0 |
+| 57 | `serve-tree-identity-audit.mjs` | BLOCKED: server proof |
+| 58 | `pet-C-node-guard.mjs` | Exit 0 |
+
+Blocked actions and deviations:
+
+- RED 1's claimed production regression is not reproduced in this checkout.
+  Before changing anything, the real equipped-instance/steps/picks path read
+  `{"inv":1}` during cold reclaim and `{}` when warm, returning the same level-10
+  instance with all five earned choices. Source inspection confirms that
+  ownedCosmeticIds in petInstances remains behind the non-array migration
+  branch. The changed filtered return broke the old pin, so the static walker
+  counted that cold-only migration at four call occurrences. Proposed deviation,
+  disclosed during implementation: repair and strengthen the audit, retain the
+  production implementation. No js file changed and no runtime speedup is claimed.
+- The requirement for all 58 PURE files and an unmodified unit run to exit 0 is
+  incompatible with the frozen prohibition on server proofs. The PURE entry
+  serve-tree-identity-audit.mjs opens two local servers. unit.test.js has an
+  unconditional server-launch case at line 3376. Neither server proof was run.
+  For partial unit evidence, `node --import /tmp/pet-h-proof/block-server.mjs tests/unit.test.js`
+  runs the unchanged unit file with a temporary subprocess interceptor that
+  throws before its serveTree child can start. Output: `FAIL serveTree does not
+  hold the event loop open after the script ends`, followed by `BLOCKED by frozen
+  Lane H: local server proofs are prohibited`, and `362 passed, 1 failed`, exit 1.
+  This is not an unmodified unit green and does not satisfy the full-unit success
+  criterion. The other 362 cases pass; no assertion was skipped or weakened.
+- Browser, server, App Store Connect and Worker proofs were not run. Reviewer
+  follow-up in an authorized environment: run the unmodified unit command and
+  serve-tree-identity-audit. Expected healthy output is `363 passed, 0 failed`
+  for units and `PASS WRONG-TREE` for server identity, both exit 0; these are
+  expectations only. No tool or automatic approval rejection occurred. The
+  unit diagnostic's one denied action was our explicit policy interceptor.
+- The lane-specific ownership grant (everything in this worktree, no siblings)
+  applies over the copied generic sibling-lane paragraph. The user's explicit
+  no-commit/no-push instruction applies over the plan's contradictory closing
+  sentence. No commit, push, publication, PR, version stamp, changelog edit,
+  native/ASC-SUBMISSION.md edit or integ/day5 edit was attempted.
+
+Reproduction artifacts: `/private/tmp/pet-h-proof/` contains before logs, the
+source-derived `pure-files.json`, per-file output and exit files, ordered
+`pure-results.json`, `run-pure.py`, `mutations.py`, root-argument mutation proof,
+unit restriction helper and log, and the final agreed command output and exit.
+Each subprocess exit was captured directly and saved, never read through a pipe.
+The throwaway production mutations were restored after each check. Temporary
+harnesses are diagnostic artifacts, not release audits. `git diff --check` and
+the claim-evidence lint pass.
+
 ## Lane E: map audit guards (2026-09-07)
 
 Advisory implementation report for independent review. The frozen plan's SHA256

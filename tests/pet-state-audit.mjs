@@ -34,6 +34,19 @@ async function test(name, fn) {
   catch (e) { failed++; console.error(`FAIL ${name}: ${e.message}`); }
 }
 
+// Lane H, 2026-09-07: prove these reads and writes reach the seeded instance
+// and the persisted iid bank. Empty answers or a sibling/species lookup fail.
+await test('CONTROL earned talent round-trip reaches the selected instance bank', async () => {
+  assert.deepEqual(await loot.petInstances(), copies);
+  const iid = copies[3].iid, alternative = tree[0].opts[1].id;
+  assert.equal(pets.petLevel(await loot.petStepsForIid(iid)), levels[3]);
+  assert.deepEqual(await loot.petPicks(iid), [full[0]]);
+  assert.deepEqual(await loot.setPetPick(iid, alternative, [alternative]), [alternative]);
+  assert.deepEqual((await kvGet('pettalents'))[iid], [alternative]);
+  assert.deepEqual(await loot.petPicks(iid), [alternative]);
+  assert.deepEqual(await loot.petPicks(copies[0].iid), full);
+});
+
 await test('MIGRATION five copies keep only their own earned tiers and archive legacy choices', async () => {
   for (let i = 0; i < copies.length; i++) {
     assert.deepEqual(await loot.petPicks(copies[i].iid), full.slice(0, Math.floor(levels[i] / 2)), `copy ${i} level ${levels[i]}`);

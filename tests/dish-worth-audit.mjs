@@ -78,8 +78,11 @@ const newcombe = (k1, n1, k2, n2) => {
     (p1 - p2) + Math.sqrt((u1 - p1) ** 2 + (p2 - l2) ** 2)];
 };
 
-/* Both configurations remain load-bearing. Pet claims are conditional on the
-   trained hound; the no-pet arm checks that they do not invent a body benefit. */
+/* 2026-09-07, Tom's dish-copy instruction (master handoff B5), reiterated in
+   frozen Lane H RED 3: measure both a level-5 hound and no pet against a mirror.
+   The with-pet and no-pet arms disagree by roughly a factor of three, which is
+   exactly why the dish copy states no percentage. Both configurations stay:
+   pet claims require the trained hound, with no invented benefit without it. */
 const CONFIGS = [{ tag: 'hound', pet: hound }, { tag: 'no pet', pet: null }];
 const COMBAT = RECIPES.filter(r => r.buff && r.buff.kind === 'combat');
 
