@@ -447,7 +447,9 @@ try {
     return { H: q('#chContent .bh-stage.lg .fb-tint[data-fbslot="H"]'), T: q('#chContent .bh-stage.lg .fb-tint[data-fbslot="T"]') };
   });
   ok('RAIL-SCOPE the helmet rail repaints the HELMET only: the jersey on the same doll still wears the team it was equipped in',
-    scope.T.length === 2 && scope.T.every(c => c === '' || c.includes('20, 33, 61') || c.includes('242, 193, 78')) && scope.H.length === 2,
+    /* The worn jersey's own pair, read from the data: this row pinned the 2026-09-04
+       hexes as literals and went red for a colour change it was never about. */
+    scope.T.length === 2 && scope.T.every(c => c === '' || c.includes(rgb(FOOTBALL_TEAM_BY_ID[NAVY].a).join(', ')) || c.includes(rgb(FOOTBALL_TEAM_BY_ID[NAVY].b).join(', '))) && scope.H.length === 2,
     `helmet spans ${JSON.stringify(scope.H)}; jersey spans ${JSON.stringify(scope.T)}`);
 
   /* ------------------------------------------------------------------ 4 -- */
