@@ -343,6 +343,24 @@ reward already uses.
    (red before: +10 XP paid on the race, 20 XP total, 0 of 2 calls reporting
    capped).
 
+## the gate runs what it registers (2026-09-06)
+
+Not stamped to a release: fix/gate-hygiene-c, off v493.
+
+1. PROOF: release-gate.mjs | REACH: Every runnable guard belongs to exactly one
+   tier that executes it. A declared guard missing from every running tier, a
+   duplicate, or a never-run tier stops the gate before browser work begins.
+
+2. PROOF: recovery-audit.mjs, log-write-failure-audit.mjs | REACH: The recovery
+   suite reaches a dropped backup download after registration, and the log-write
+   suite always runs its normal, failed-log and failed-XP cases.
+
+3. PROOF: pet-wardrobe-audit.mjs, crew-fan-audit.mjs,
+   reveal-mannequin-audit.mjs, harness-leak-audit.mjs | REACH: Image checks wait
+   a bounded time for real decode evidence, while a missing image still fails;
+   test browsers launched through an explicit browser path are reaped if their
+   owning audit is killed.
+
 ## pit readout and exit (2026-09-06)
 
 Not stamped to a release: hotfix/pit-ap-exit, off v487. Tom on live v487, two

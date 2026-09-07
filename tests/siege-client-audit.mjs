@@ -118,16 +118,23 @@ const banner = await page.evaluate(() => {
   };
 });
 console.log('banner:', JSON.stringify(banner));
-check('the spire banner RENDERS on Today (an empty banner is a FAILURE)',
-  bannerReady && banner.rendered, JSON.stringify(banner).slice(0, 200));
-check('the banner headline LEADS with the siege, not coins owed',
-  banner.rendered && banner.namesBesieger && banner.hasClockUnits && !banner.mentionsCoins,
-  banner.headline);
-check('the sieged spire row appears before the coins-owed row',
-  banner.rendered && banner.siegedRowFirst,
-  `Ashen Fang at ${banner.iSiege}, Pale Gate at ${banner.iOwed}: ${JSON.stringify(banner.rowNames)}`);
-check('the banner marks itself under siege and shows the siege tag on the row',
-  banner.rendered && banner.underSiege && banner.siegeTagInDom);
+/* The Today banner left the player's path on 2026-08-21. If it is restored,
+   retain the full copy/order checks below. Until then, prove the function that
+   owns it has zero callers. hype-banner-audit independently guards the rendered
+   absence and went red on a staged .spire-banner on 2026-09-07. */
+if (!bannerReady || !banner.rendered) {
+  const reach = await page.evaluate(async () => {
+    const src = await (await fetch('./js/app.js', { cache: 'no-store' })).text();
+    return (src.match(/\boutThereHtml\s*\(/g) || []).length;
+  });
+  check('the retired spire banner stays unreachable from Today', reach === 1, `outThereHtml occurrences=${reach}`);
+} else {
+  check('a restored banner headline LEADS with the siege, not coins owed',
+    banner.namesBesieger && banner.hasClockUnits && !banner.mentionsCoins, banner.headline);
+  check('a restored banner puts the sieged spire before the coins-owed row', banner.siegedRowFirst,
+    `Ashen Fang at ${banner.iSiege}, Pale Gate at ${banner.iOwed}: ${JSON.stringify(banner.rowNames)}`);
+  check('a restored banner marks itself under siege and shows the siege tag', banner.underSiege && banner.siegeTagInDom);
+}
 
 // the map button must offer DEFEND before tend/collect. HARDENED, not fully
 // rewritten: fully driving the #mapSpire click requires the map screen to
@@ -142,9 +149,9 @@ check('the banner marks itself under siege and shows the siege tag on the row',
 // of silent-pass. Full runtime rewrite filed with the same test-hook
 // follow-up as the spire-phase3 refused-claim block.
 const btn = await page.evaluate(async () => {
-  const src = await (await fetch('./js/app.js')).text();
-  const i = src.indexOf("$('#mapSpire', body).addEventListener");
-  const body = src.slice(i, i + 1200);
+  const src = await (await fetch('./js/app.js', { cache: 'no-store' })).text();
+  const i = src.indexOf("$('#mapSpire', body)?.addEventListener");
+  const body = src.slice(i, i + 2600);
   const iSiege = body.indexOf('openSiegeSheet');
   const iSheet = body.indexOf('openSpireSheet');
   const iColl  = body.indexOf('collectTribute');
