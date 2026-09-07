@@ -1,5 +1,13 @@
 # What each patch note claims, and what backs it
 
+## Lane D: pet family contract (2026-09-07)
+
+1. PROOF: pet-family-audit.mjs | REACH: A family registered without actions or an ability implementation is refused by name at the battle seams. The original source silently supplied Hound's Bite and Imp's petdebuff to the dummy family; both guards were run red on a throwaway copy, then green on this checkout. The shared isKnownPet and legalPicks helpers reject unknown species and retain only unlocked, in-family choices, first pick per tier and original order. Each pick rule also failed independently when its predicate was removed from a throwaway copy. Consumer integration belongs to lanes A and C.
+
+2. PROOF: pet-family-audit.mjs | REACH: Existing combat output stays unchanged. Before editing pets.js, captured SHA256 fingerprints of 13,552 complete serialized battle-pet builds and 54,208 ability results across all seven species, all three families, levels 1 through 10, every legal pick combination including empty tiers, four shiny/lineage configurations and four fighter contexts. All fingerprints match after the refactor. Separate stat and effect mutations fail this comparison. PET_FAMILIES now supplies each manual special's cooldown of 2, and real engine actions set and exhaust that same timer. The unused auto-companion cooldown field on serialized Warden pets remains 3 solely to preserve the frozen output contract; it is documented as deprecated.
+
+3. PROOF: pet-family-audit.mjs | REACH: Talent unlocks derive from family trees, including an injected Warden-only tier. unlockedTiers(level, petId) supplies the applicable species' schedule. The no-species overload retains an aggregate schedule for compatibility. Full family-specific celebrations still require the app.js owner to pass inst.sp in checkPetLevelUp, and openPetsHelp must describe each distinct family schedule instead of assuming the first tree applies to every pet. Neither app.js change is claimed here. C6 still has no Signature entry, capstone panel or species-specific level-10 effect; its design and economy impact remain Tom's decision.
+
 ## the submission build asserts itself (2026-09-07)
 
 Not stamped to a release: no shipped file changed, so no version bump. This is
