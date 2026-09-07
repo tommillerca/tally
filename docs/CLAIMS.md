@@ -19,6 +19,36 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## open all recovers, cancel is one step (2026-09-06)
+
+Not stamped to a release: fix/openall-kitchen-atomic, off v493. HANDOFFr3920260906.md
+Lane 5 (open-all recovery) and Lane 6 (Kitchen cancel atomicity), both re-measured
+on this tree before fixing.
+
+1. PROOF: crate-reveal-audit.mjs | REACH: the Backpack's "Open all" control on a
+   row of Common Crates used to be able to spend several crates, hit a bad row
+   partway through, and lose the whole batch: nothing already opened was shown,
+   the crates the loop never reached still sat spent-looking in inventory, and
+   the button never came back. Poisoning the third of five crates mid-loop
+   reproduced it (0 cards shown, the button staying disabled forever). Now a
+   mid-loop failure still reveals whatever was actually taken, leaves every
+   untouched crate exactly where it was, and the control comes back the same
+   way a clean run leaves it.
+
+2. PROOF: kitchen-atomic-audit.mjs | REACH: cancelling a pot in the Kitchen
+   refunds its ingredients and empties the pot in one step. A crash between the
+   two used to be possible (the pot cleared with nothing refunded, or the
+   reverse), because they ran as two separate saves; forcing that exact
+   mid-cancel failure now leaves the pot and the ingredients both exactly where
+   they were before you tapped Cancel, never half-done. kitchen-day-one-strand-audit.mjs
+   (the recovery from the day-one mis-tap this shares its Cancel path with)
+   stays green.
+
+CORRECTION to "## v483" item 4 below: it called the pot-and-refund cancel "one
+atomic step" on the day it shipped. It was not; that was two separate saves with
+a real gap between them, exactly the failure item 2 above fixes. Corrected rather
+than left standing, because this file is read to check whether a note is true NOW.
+
 ## pit readout and exit (2026-09-06)
 
 Not stamped to a release: hotfix/pit-ap-exit, off v487. Tom on live v487, two
@@ -266,7 +296,7 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 
 3. PROOF: pit-kitchen-hint-audit.mjs | REACH: the Pit carries one line naming the active dish buff, or pointing at the Kitchen when ingredients or a dish are owned, and nothing when there is nothing to cook (BUFF and NUDGE rows red with the line removed, QUIET grades the absence).
 
-4. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a cooking pot can be cancelled and refunds its ingredients in one atomic step, and the day-one Kitchen says which recipe the starter kit is for before the first tap (TIP and CANCEL rows red when reverted separately; the strand itself reproduced first: marrow 1, salt 0, 0 of 13 buttons).
+4. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a cooking pot can be cancelled and refunds its ingredients, and the day-one Kitchen says which recipe the starter kit is for before the first tap (TIP and CANCEL rows red when reverted separately; the strand itself reproduced first: marrow 1, salt 0, 0 of 13 buttons). (This called the cancel "one atomic step" when it shipped. It was not: the pot was cleared and the ingredients refunded as two separate saves, with a real gap a crash could land in. See "## open all recovers, cancel is one step (2026-09-06)" above for the actual fix. Corrected rather than left standing, because this file is read to check whether a note is true NOW.)
 ## health card today (2026-09-06)
 
 1. PROOF: health-intake-audit.mjs | REACH: Open Today before connecting Apple

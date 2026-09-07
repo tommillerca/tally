@@ -17229,12 +17229,26 @@ async function renderCharacter(wrap, tab, opts = {}) {
       b.disabled = true;
       const held = crates.filter(c => c.crate === b.dataset.openAll);
       const opened = [];
-      for (const crate of held) opened.push(await openCrate(crate.id));
-      await openCrateReveal({
-        crate: b.dataset.openAll,
-        results: opened.flatMap(r => r.results || []),
-        coins: opened.reduce((sum, r) => sum + (r.coins || 0), 0),
-      });
+      /* R39-x: a crate that threw mid-loop (a bad row, a write failure) used to
+         throw the whole handler, so nothing already opened was ever revealed,
+         the unopened crates were never re-attempted, and the disabled button
+         never came back. Each open is still spent one at a time (sequential,
+         never concurrent: two crates opening at once is the same race the
+         reveal-audit BULK row already pins), but a failure partway now still
+         shows whatever was actually taken instead of losing it silently, and
+         the crates the loop never reached stay untouched in inventory. The
+         re-render below rebuilds this tab from the real db, so it re-enables
+         the control (or removes it) on its own; nothing to reset by hand. */
+      try {
+        for (const crate of held) opened.push(await openCrate(crate.id));
+      } catch { /* reveal what actually landed below; the rest stays unopened */ }
+      if (opened.length) {
+        await openCrateReveal({
+          crate: b.dataset.openAll,
+          results: opened.flatMap(r => r.results || []),
+          coins: opened.reduce((sum, r) => sum + (r.coins || 0), 0),
+        });
+      }
       renderCharacter(wrap, 'crates');
     }));
     $('#useBoost', content)?.addEventListener('click', async () => {
