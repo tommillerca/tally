@@ -844,46 +844,6 @@ data/football-teams.js, the Locker Room buy flow in js/app.js and js/loot.js.
    full kit · 32 colourways is yours. ... The pet pieces wait in the Stable
    until a lizard hatches."; a control account already owning a lizard reads
    "Lizard Helmet · 32 colourways is yours. ..." with no such line.
-## the Boneyard states the odds (2026-09-07)
-
-Not stamped to a release: hotfix/boneyard-odds, off v497. Master handoff B16,
-"Explainers state the odds", no balance change, re-measured on this tree
-before fixing. Owned by this lane: the Glutton and Spire explainer sheets
-(openGluttonSheet, openSpireSheet in js/app.js) and the shared isOutmatched
-helper (js/pit.js).
-
-1. PROOF: unit.test.js | REACH: Open the Glutton, or a Spire you don't hold,
-   badly outmatched and the sheet says "You are outmatched at this level."
-   above the fight button, nothing more. isOutmatched (js/pit.js) runs the
-   real fight engine against your current stats, talents and pet and the
-   exact foe config the fight itself is about to use; it fires for a fresh
-   level 2 against the Glutton (0% measured win rate) and against a rival's
-   specced Spire tower (0%), and stops firing once real training points and
-   talent picks sit behind a build. Measured curve recorded in the comment
-   above OUTMATCHED_WIN_RATE: a plain unclaimed Spire's NPC warden never
-   actually crosses the 5% line at any tower roll (8-52% across its full
-   0.90-1.25 mult range, three player policies tried), because it gets an
-   easier AI below character level 12 (spires.js wardenFor) — only a rival's
-   specced tower does. The line is measured per fight, not hardcoded to
-   either foe's name or HP figure.
-
-2. PROOF: outmatched-audit.mjs | REACH: Same claim, read off a real rendered
-   page in both states (a fresh level-2 build: no training points, no
-   talents; and a build with real stat + talent progress) for both sheets.
-
-3. PROOF: unit.test.js | REACH: Any Spire sheet for a tower you don't hold
-   now says, in its own terms list, that fighting for it spends your one
-   shot at it today whatever the outcome, not only for a rival's tower: this
-   sheet only ever opens on that path, and settle() already spends
-   spireKey() on any result (win, loss or draw) there.
-
-4. PROOF: NONE, no dedicated audit (same untested shape as the map's own
-   long-press discovery hint, `mapLpHint`, which has none either) | REACH:
-   R41-8 (Haymaker carries the biggest number and is the worst play): a
-   one-time toast, "Tip: press and hold a move to see what it actually
-   does.", now points a new player at the existing 750ms press-and-hold
-   detail popup the first time any Pit-style fight opens, shown once, ever.
-
 ## the Stable rail tells the truth (2026-09-06)
 
 Not stamped to a release: hotfix/stable-rail-truth, off v493. HANDOFFMASTER20260906.md

@@ -90,8 +90,7 @@
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { boot, seed, openPit, sleep, settle, serveTree, dismissOverlays,
-  unproven, unprovenReport, exitFor } from './godmode.js';
+import { boot, seed, openPit, sleep, settle, serveTree, dismissOverlays } from './godmode.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 let fails = 0;
@@ -356,8 +355,16 @@ try {
     requestAnimationFrame(() => d.remove());
   });
   await sleep(700);
-  /* Missing ground frames must not drop the rest of this audit. Pixel rows
-     name their missing samples below; DOM, money, arena and blink rows run. */
+  if (!frames.length) {
+    console.log('UNPROVEN: the screencast delivered zero frames for the ground shot (still screen, no damage events); the reveal pacing rows cannot be graded on this run');
+    await cdp.send('Page.stopScreencast').catch(() => {});
+    await browser.close(); srv?.stop?.();
+    /* A REAL DEFECT OUTRANKS AN UNPROVEN ROW, which is godmode exitFor()'s own
+       rule. This exited 97 unconditionally, so a red already printed by the roll
+       or the money section above would have left the gate as "could not run"
+       rather than "the Mimic is broken". */
+    process.exit(fails ? 1 : 97);
+  }
   const groundFrame = frames[frames.length - 1];
 
   const rev = await startReveal();
@@ -402,7 +409,7 @@ try {
 
   /* Decoded AFTER the fact: the sampler must not be doing arithmetic while the
      thing it is sampling is on screen. */
-  const ground = groundFrame ? await lum(groundFrame.data, GROUND) : null;
+  const ground = await lum(groundFrame.data, GROUND);
   const trace = [];
   for (const f of frames) {
     if (f.t < tRev) continue;
@@ -412,14 +419,9 @@ try {
   console.log(`      reveal luminance trace (${trace.length} frames, whole frame / the screen behind):`);
   for (const s of trace) console.log(`        ${String(s.ms).padStart(5)}ms  full ${String(s.full).padStart(6)}   behind ${String(s.mean).padStart(6)} (std ${s.std})`);
 
-  if (!ground || trace.length < 20) {
-    unproven('CONTROL the reveal was graded against a real, lit screen (an empty trace or a black ground would make every row below vacuous)',
-      `SCREENCAST: ground=${ground ? 'captured' : 'MISSING'}, reveal=${trace.length} frames (floor 20); ${trace.length === 0 ? 'ZERO-FRAME REVEAL' : 'insufficient capture'}. This does not establish whether the app or compositor failed`);
-  } else {
-    ok('CONTROL the reveal was graded against a real, lit screen (an empty trace or a black ground would make every row below vacuous)',
-      ground.mean > 20 && ground.std > 12 && !!dom && !dom.error,
-      `${trace.length} frames sampled over ${trace[trace.length - 1].ms}ms, ground mean ${ground.mean} std ${ground.std}`);
-  }
+  ok('CONTROL the reveal was graded against a real, lit screen (an empty trace or a black ground would make every row below vacuous)',
+    trace.length >= 20 && ground.mean > 20 && ground.std > 12 && !dom?.error,
+    `${trace.length} frames sampled over ${trace.length ? trace[trace.length - 1].ms : 0}ms, ground mean ${ground.mean} std ${ground.std}`);
 
   ok('REVEAL one line, through the app\'s one typing path, and no second typer',
     dom && dom.boxes === 1 && /mimic-enc-box/.test(dom.cls) && rev.line.length > 10
@@ -448,14 +450,10 @@ try {
      with 0.0% of the ground surviving. Anti-regression rule 11 is exactly this.
      A blackout measures std 0.00 in this band (measured, on that mutation) and
      the scrim measures 1.73, so the floor sits between two real numbers. */
-  if (!ground || scrim.length < 5) {
-    unproven('SMALLER a scrim, not a blackout: the screen behind is suppressed but not deleted',
-      `SCREENCAST: ground=${ground ? 'captured' : 'MISSING'}, scrim=${scrim.length} frames (floor 5)`);
-  } else {
-    ok('SMALLER a scrim, not a blackout: the screen behind is suppressed but not deleted',
-      worst.std / ground.std < 0.15 && worst.mean < ground.mean * 0.35 && worst.std > 0.5,
-      `behind the scrim: mean ${worst.mean} std ${worst.std} against ${ground.mean}/${ground.std} lit (${(worst.std / ground.std * 100).toFixed(1)}% of the ground's contrast survives; 0% would be a blackout)`);
-  }
+  ok('SMALLER a scrim, not a blackout: the screen behind is suppressed but not deleted',
+    scrim.length >= 5 && worst.std / ground.std < 0.15 && worst.mean < ground.mean * 0.35
+      && worst.std > 0.5,
+    `behind the scrim: mean ${worst.mean} std ${worst.std} against ${ground.mean}/${ground.std} lit (${(worst.std / ground.std * 100).toFixed(1)}% of the ground's contrast survives; 0% would be a blackout)`);
 
   /* NO STROBE. The Wanderer alternates a near-white wash with near-black on 60ms
      beats; this may not. The measurable difference is DIRECTION: a strobe has to
@@ -466,14 +464,9 @@ try {
     const d = trace[i].full - trace[i - 1].full;
     if (d > jump.d) jump = { d, i };
   }
-  if (trace.length < 20 && jump.d < 12) {
-    unproven('SMALLER no strobe: once the scrim lands the sequence only ever darkens',
-      `SCREENCAST: ${trace.length} reveal frames (floor 20); no observed brightening cannot prove absence on an insufficient trace`);
-  } else {
-    ok('SMALLER no strobe: once the scrim lands the sequence only ever darkens',
-      jump.d < 12,
-      `biggest brightening between consecutive frames ${jump.d.toFixed(1)} luma (frame ${jump.i} of ${trace.length})`);
-  }
+  ok('SMALLER no strobe: once the scrim lands the sequence only ever darkens',
+    jump.d < 12,
+    `biggest brightening between consecutive frames ${jump.d.toFixed(1)} luma (frame ${jump.i} of ${trace.length})`);
 
   /* THE LENGTH, both sides derived rather than typed in: his from the constants
      js/wanderer.js exports, this one MEASURED off the real clock. */
@@ -495,18 +488,10 @@ try {
   /* THE HANDOVER, the row the Wanderer's COVER row exists for. The overlay must
      still be up and the screen must still be covered at the moment the caller
      gets control, because that is when it builds the arena underneath. */
-  /* A missing or dismissed overlay is a measured defect even without pixels.
-     Otherwise a missing handover frame is UNPROVEN, never a dummy black frame.
-     A trace that ends before resolution has not sampled the handover either. */
-  const coverDom = atResolve.overlay && atResolve.dismissable && atResolve.opacity > 0.9;
-  if (coverDom && (!ground || !coverShot || atResolve.ms == null || coverShot.ms < atResolve.ms)) {
-    unproven('COVER the reveal is still up and the screen still hidden when it hands over',
-      `SCREENCAST: ground=${ground ? 'captured' : 'MISSING'}, handover=${atResolve.ms}ms, last frame=${coverShot?.ms ?? 'MISSING'}ms`);
-  } else {
-    ok('COVER the reveal is still up and the screen still hidden when it hands over',
-      coverDom && !!ground && !!coverShot && coverShot.full < 12 && coverShot.std < ground.std * 0.1,
-      `overlay=${atResolve.overlay} dismiss=${atResolve.dismissable} cover frame ${coverShot?.full ?? 'MISSING'} mean, ${coverShot?.std ?? 'MISSING'} std behind`);
-  }
+  ok('COVER the reveal is still up and the screen still hidden when it hands over',
+    atResolve.overlay && atResolve.dismissable && atResolve.opacity > 0.9
+      && coverShot.full < 12 && coverShot.std < ground.std * 0.1,
+    `overlay=${atResolve.overlay} dismiss=${atResolve.dismissable} cover frame ${coverShot.full} mean, ${coverShot.std} std behind`);
 
   /* AND THE CALLER MUST USE IT. The rows above prove the overlay hands over
      covered; only app.js can throw that away, by dismissing before it builds the
@@ -578,7 +563,7 @@ try {
   await settle(page, 400);
   ok('REDUCED the handover still covers under reduced motion, and never as a fast repeat',
     !rmCover.error && rmShot.full < 12 && !(rmCover.iter === 'infinite' && rmCover.secs < 0.1),
-    rmCover.error || `screen ${rmShot.full} mean luma behind a ${ground?.mean ?? 'UNPROVEN'} lit one, cover animation ${rmCover.dur} x ${rmCover.iter}`);
+    rmCover.error || `screen ${rmShot.full} mean luma behind a ${ground.mean} lit one, cover animation ${rmCover.dur} x ${rmCover.iter}`);
   await meter.close().catch(() => {});
 
   /* --------------------------------------- 5. THE ARENA, reached by playing */
@@ -787,7 +772,5 @@ try {
   await browser.close();
   if (srv) await srv.close();
 }
-unprovenReport('mimic-audit.mjs', null);
-const exit = exitFor(fails);
-console.log(fails ? '\nMIMIC AUDIT FAILED' : (exit ? '\nMIMIC AUDIT UNPROVEN' : '\nMIMIC AUDIT VERIFIED'));
-process.exit(exit);
+console.log(fails ? '\nMIMIC AUDIT FAILED' : '\nMIMIC AUDIT VERIFIED');
+process.exit(fails);

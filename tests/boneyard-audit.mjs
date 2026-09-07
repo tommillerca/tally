@@ -1287,26 +1287,38 @@ if (slowMapDrewNothing) {
     slow.stragglers.length > 0,
     `${slow.stragglers.length} stragglers tracked, against ${slowSeen} markers the map actually drew`);
 }
-/* HELD-BACK: the slow fixture can reveal with zero placed markers because it
-   holds the first tiles until that reveal. Zero is a valid count, not evidence
-   of visibility. Keep the placed-versus-visible comparison for any pre-reveal
-   population, AND require a nonempty, timely post-reveal population. This grades
-   withholding on the path the fixture actually exercises, without making 0 >= 0
-   sufficient. The 250ms bound is the existing straggler contract below.
-   Node-only fixtures exercise this row with withheld pre-reveal markers, a
-   never-visible straggler and the old 1200ms hold. Browser mutation proof remains
-   required: remove holdArrival's !interacted branch on a throwaway tree. */
-if (slowMapDrewNothing) {
-  unproven('ARRIVAL-SLOW the reveal and tile release SHOWED the markers placed (nothing withheld to fade in afterwards)',
-    `${slowSeen} MapLibre-owned marker(s) drawn this lap (floor ${BEAT_MIN_SAMPLE}); no population to grade`);
+/* HELD-BACK, the same check as the fast row and for the same reason (see the
+   MAJORITY retirement note above, 2026-08-22). Deliberately NOT paired with the
+   fast row's placement-completeness twin: this scenario throttles the network on
+   purpose, so placement here is network-bound and `revealDom vs finalDom` would
+   be grading the throttle rather than the code. Withholding is still fully
+   testable on a slow line, because it compares what was shown against what was
+   placed AT THAT MOMENT, whenever that moment happens to be. */
+/* GATED ON THE SAME MEASURED FACT, and the scoping fix above is why it now
+   needs to be. Until 2026-09-02 this row read the map key: `revealDom > 0` was
+   satisfied by nine phantom swatches whatever the map did, so it passed 10 >= 10
+   on a dead map and on a healthy one alike. With the counter honest, a map that
+   drew nothing gives 0 >= 0 with a zero floor, i.e. a RED on a hosting fact, so
+   the same discriminator that governs the row above governs this one. */
+if (slowMapDrewNothing || !(slow.revealDom > 0)) {
+  unproven('ARRIVAL-SLOW the reveal SHOWED every marker it already had (nothing placed was withheld to fade in afterwards)',
+    `${slowSeen} MapLibre-owned marker(s) drawn this lap (floor ${BEAT_MIN_SAMPLE}) and ${slow.revealDom ?? 'null'} of them placed when the reveal fired, so there is no reveal-time population to compare against. ZERO IS THE EXPECTED READING HERE and not a defect: this scenario HOLDS the first tiles until the reveal on purpose, precisely so the markers arrive after it, which is what the straggler rows above grade. Until the counter was scoped on 2026-09-02 this floor was met by the nine map-key swatches and the case never showed`);
 } else {
-  ok('ARRIVAL-SLOW the reveal and tile release SHOWED the markers placed (nothing withheld to fade in afterwards)',
-    slow.reveal != null && Number.isInteger(slow.revealDom) && slow.revealDom >= 0
-      && slow.revealDecoys === 0 && slow.revealSettled != null && slow.revealSettled >= slow.revealDom
-      && (slow.revealDom !== 0 || slow.revealCount === 0)
-      && slow.stragglers.length > 0
-      && slow.stragglers.every(s => s.visibleAt != null && s.latency != null && s.latency <= STRAGGLER_LATENCY_MS),
-    `${slow.revealSettled ?? 'null'} visible once the fade settled, against ${slow.revealDom ?? 'null'} already placed at reveal (zero is expected with held tiles), ${slow.revealDecoys ?? 'null'} map-key decoy(s); ${slow.stragglers.length} post-reveal marker(s), all must become visible within ${STRAGGLER_LATENCY_MS}ms of DOM add; late/hidden=${JSON.stringify(slow.stragglers.filter(s => s.visibleAt == null || s.latency == null || s.latency > STRAGGLER_LATENCY_MS).slice(0, 3))}`);
+  /* The decoy clause guards THIS row's own counter, rather than earning a
+     separate row that would only ever fail alongside it, which is the
+     protection the fast lap gets from its own decoy row.
+     PROVE-RED (confirmed 2026-09-02 on a `cp -R` throwaway): revert the scoping
+     above to a bare querySelectorAll and this goes RED naming `9 map-key
+     decoy(s) admitted at reveal and that must be 0`, against 63 counted. The
+     cap was raised in the same copy for one reason only, to guarantee this lap
+     drew a population at all; it touches nothing this row reads.
+     WORTH KNOWING BEFORE YOU TRY IT: on a contended box this lap draws NOTHING
+     about half the time, and the run then reports UNPROVEN and proves neither
+     way. That is the gate above doing its job, not the injection failing. Read
+     `BEATS-SLOW the map drew a sample` first and re-run until it is green. */
+  ok('ARRIVAL-SLOW the reveal SHOWED every marker it already had (nothing placed was withheld to fade in afterwards)',
+    slow.revealDecoys === 0 && slow.revealDom > 0 && slow.revealSettled != null && slow.revealSettled >= slow.revealDom,
+    `${slow.revealSettled ?? 'null'} visible once the fade settled, against ${slow.revealDom ?? 'null'} already placed at reveal (reveal-instant reading ${slow.revealCount}, mid-fade), ${slow.revealDecoys ?? 'null'} map-key decoy(s) admitted at reveal and that must be 0`);
 }
 /* THE CONTRACT: each straggler fades in within 250ms of being added. Bounded
    by the CSS opacity transition (220ms), NOT by tile latency. A marker added
