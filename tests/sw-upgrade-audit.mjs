@@ -400,7 +400,7 @@ const APP_ANCHORS = {
 const SW_ANCHORS = {
   gate:     '    if ((nav || PRECACHED.has(req.url)) && await shellReady()) {',
   scoped:   "      const hit = await caches.match(nav ? './index.html' : req.url, { cacheName: VERSION });",
-  sweep:    '    await Promise.all(keys.filter(k => k !== VERSION && k !== keep).map(k => caches.delete(k)));',
+  sweep:    '    await Promise.all(keys.filter(k => !keep.has(k)).map(k => caches.delete(k)));',   // 2026-09-06: keep is a Set since the three-generations fix
   throttle: '  if (Date.now() - stampAt < 60000) return;',
   skip:     '    await self.skipWaiting();',
   etag:     "      const etag = have && have.headers.get('ETag');",

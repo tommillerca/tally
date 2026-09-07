@@ -183,6 +183,16 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 ## register 429 wallet (2026-09-06)
 
 1. PROOF: unit.test.js | REACH: a fresh install receives the complete social-welcome grant locally before registration. Two consecutive 429 responses retry once, leave exactly 50 welcome coins and 10 XP under the server's existing receipt key, and surface one named failure toast. A later registration cannot pay the grant twice.
+## three generations, no orphaned page (2026-09-06)
+
+Not stamped to a release: fix/sw-three-generations, off main at v493. Lane 4 of
+the Codex read-only audit (finding "prevGen() retains the numerically newest
+READY cache, not the cache of the page still running").
+
+1. PROOF: sw-upgrade-audit.mjs | REACH: a player who keeps a sheet open on build A while build B and then build C install and take charge underneath still gets A's own modules when the old page lazily imports one (THREE GENERATIONS row, red before: the A page's import of the module only its build carries answered 404 with caches tally-v493, tally-v494; green after: 200, caches tally-v471, tally-v494). The worker keeps every generation an open page came from, at most two behind the current build, and sweeps the rest; the generation nobody is running (B here) goes.
+
+2. PROOF: sw-upgrade-audit.mjs, offline-boot-audit.mjs, dead-shell-audit.mjs | REACH: nothing else about the swap moved: the new worker still takes over the moment its whole build is cached (R38-1), the page it takes over from keeps its own generation (R38-17), identical entries are still reused across the install (R38-18), and a cold offline boot and the dead-shell recovery still work with the extra tally-clients bookkeeping cache present.
+
 ## v493
 1. A hotfix off v492, Codex's round-37 lane (R37-24). Its rows are its dated section further down, folded here.
 
