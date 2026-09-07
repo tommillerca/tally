@@ -8026,6 +8026,77 @@ test('B16 the Spire sheet renders the outmatched line and always states the dail
     'openSpireSheet must always state that fighting a tower you do not hold spends today\'s attempt, win or lose');
 });
 
+/* ---------- coming back is a welcome (2026-09-07, round 43) ---------- */
+
+test('R43-9 a returning player draws 3 reachable dailies and at least one is completable by logging a meal', () => {
+  /* THE OTHER END OF THE R39-3 BUG. Day one under-filled the board because every
+     gate was OFF. A returning player is the opposite shape and lands in the same
+     place: every capability is KNOWN (they played for five days, so the Pit, the
+     Kitchen, hunt, Health and friends are all open) but their recent activity is
+     empty, so the three quests the seed happens to draw can all be things that
+     need a walk, a fight or a spawn. Round 43 measured 3 of 3 returning players
+     with 0 claimable after three meals.
+
+     PROVE-RED, 2026-09-07, on the pre-fix dailyQuests (the anchor guarantee
+     scoped to `dayOne` alone), swept over 365 dates with the gate state below:
+       AssertionError: 2026-01-02: nothing on a returning player's board can be
+       finished by logging a meal, got q-pit1,q-cook,q-pit3
+     164 of the 365 dates drew a board with nothing a meal could finish. */
+  const BACK = { hkConnected: true, huntEnabled: true, socialOn: true, pitTried: true, kitchenReady: true, returning: true };
+  /* WHAT "LOGGING A MEAL" CAN ACTUALLY FINISH, read off DAILY_POOL rather than
+     hardcoded, so a pool edit cannot quietly empty this set: a daily whose whole
+     target is entries on the page. q-protein is deliberately NOT here (hitting a
+     macro target is a different ask), and neither is q-scan (it needs a barcode). */
+  const MEAL_DONE = new Set(['q-first', 'q-log5', 'q-3meals', 'q-new-food']);
+  assert.ok([...MEAL_DONE].every(id => DAILY_POOL.some(q => q.id === id)),
+    'the meal-completable set names a quest that is no longer in DAILY_POOL');
+  let swept = 0;
+  for (let i = 0; i < 365; i++) {
+    const date = new Date(Date.UTC(2026, 0, 1) + i * 86400000).toISOString().slice(0, 10);
+    const b = dailyQuests(date, BACK);
+    const ids = b.map(q => q.id).join(',');
+    assert.equal(b.length, 3, `${date}: a returning board must draw all 3 dailies, got ${ids}`);
+    assert.ok(b.every(q => !q.need || BACK[{ hk: 'hkConnected', hunt: 'huntEnabled', social: 'socialOn', pit: 'pitTried', kitchen: 'kitchenReady' }[q.need]]),
+      `${date}: every slot must be reachable for this player's gates, got ${ids}`);
+    assert.ok(b.some(q => MEAL_DONE.has(q.id)),
+      `${date}: nothing on a returning player's board can be finished by logging a meal, got ${ids}`);
+    swept++;
+  }
+  assert.equal(swept, 365, 'an empty sweep is a failure, not a pass');
+  // and the rest of the lifecycle is untouched: an ordinary mid-week player is not a returning one
+  const ordinary = { hkConnected: true, huntEnabled: true, socialOn: true, pitTried: true, kitchenReady: true };
+  assert.deepEqual(dailyQuests('2026-09-07', ordinary).map(q => q.id),
+    dailyQuests('2026-09-07', ordinary).map(q => q.id), 'the ordinary board must still be a pure function of the seed');
+  // an id already shown today survives the flag clearing when the card is dismissed
+  const back = dailyQuests('2026-09-07', BACK).map(q => q.id);
+  const after = dailyQuests('2026-09-07', { ...ordinary, stickyIds: back }).map(q => q.id);
+  assert.deepEqual(after.filter(id => back.includes(id)), back,
+    `dismissing the return card must not swap a quest already on screen; before=${back} after=${after}`);
+});
+
+test('R43-12 Gwart does not scold a player returning after a long gap for an empty ledger', () => {
+  /* PROVE-RED on the pre-fix pool: the scold is chosen on the clock alone once
+     `everLogged` is true, so a 90-day-gap save opened at 15:00 gets "Half the day
+     gone and not a crumb on the page" -- measured 6 of 36 renders and guaranteed
+     within 8. v491 exempted the install day and the never-logged player; a player
+     coming back after three months is the same case and was not covered. */
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('function gwartPool('), b = app.indexOf('\n/* GWART ON THE PET');
+  assert.ok(a > 0 && b > a, 'gwartPool is not in js/app.js');
+  class FakeDate extends Date {
+    constructor(...args) { if (args.length) super(...args); else super('2026-09-07T15:00:00'); }
+  }
+  const gwartPool = new Function('Date', `${app.slice(a, b)}; return gwartPool;`)(FakeDate);
+  const SCOLD = 'Half the day gone and not a crumb on the page.';
+  const base = { entries: [], tot: {}, targets: {}, crates: [], streak: 0, level: 1, isToday: true };
+  assert.ok(gwartPool(base).includes(SCOLD), 'setup: an ordinary empty ledger at 15:00 must still be able to scold');
+  assert.ok(!gwartPool({ ...base, returning: true }).includes(SCOLD),
+    'a 90-day-gap save must never be scolded at 15:00');
+  // and he still says SOMETHING: an empty pool would pass the row above and break the plaque
+  assert.ok(gwartPool({ ...base, returning: true }).length >= 6,
+    'the empty-ledger pool must still be a pool, not one line');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
