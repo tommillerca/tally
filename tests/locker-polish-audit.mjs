@@ -174,7 +174,16 @@ try {
     return { src: img.getAttribute('src'), nat: img.naturalWidth, css: +r.width.toFixed(1), full: img.dataset.full || null };
   });
   setup('SAMPLE the news hero is the Locker Room poster', !!hero, hero ? `${hero.src} at ${hero.css}px` : 'no poster in .nb-hero-figs');
-  const heroBytes = [...wire.entries()].filter(([u]) => /football\/poster|football\/poster/.test(u));
+  /* BYTES AS THE PAGE TOOK THEM. Resource Timing first, the response header
+     second: a plate answered by the service worker's cache arrives with no
+     content-length at all, and a row that fails because a header is missing is
+     not a row about bytes. encodedBodySize is the body the page decoded either
+     way, and it is 0 only when nothing was fetched, which this row treats as
+     ungraded rather than as a pass. */
+  const perf = await page.evaluate(() => performance.getEntriesByType('resource')
+    .filter(e => /football\/poster\.png$/.test(e.name))
+    .map(e => [e.name.replace(location.origin + '/', ''), e.encodedBodySize || e.transferSize || 0]));
+  const heroBytes = perf.filter(([, b]) => b > 0).length ? perf : [...wire.entries()];
   const worstBytes = heroBytes.length ? Math.max(...heroBytes.map(([, b]) => b)) : 0;
   ok(`HERO the hero plate on the wire is under ${(HERO_CEIL / 1024) | 0} KB (the 640 master is 359 KB for a ${hero.css}px box)`,
     worstBytes > 0 && worstBytes <= HERO_CEIL,
@@ -188,7 +197,18 @@ try {
   await seed(page, { coins: 400000 });
   await openShop();
   const kitClosed = await page.evaluate(() => document.querySelector('#fbSect')?.open === false);
-  await seed(page, { coins: 0 });          // the wallet moves while the room is shut
+  /* SCROLLED DOWN, AND NO RELOAD. Two things have to be true for this to grade
+     the closure rather than a fresh render: seed()'s default page reload would
+     re-run renderShop with the new balance (which is the harness re-rendering,
+     not the app), and bgRefresh re-renders in place whenever the screen is
+     within 48px of the top. A player reading the shelf is scrolled down; that
+     is the state where the stale closure survives, and the row below asserts
+     the scroll really was preserved so it cannot pass on a re-render. */
+  await page.evaluate(() => { document.querySelector('#screen').scrollTop = 220; });
+  await sleep(300);
+  await seed(page, { coins: 0, reload: false });   // the wallet moves while the room is shut
+  await sleep(1200);
+  const held = await page.evaluate(() => document.querySelector('#screen').scrollTop);
   await openKit();
   const pill = await page.evaluate(async () => {
     const b = document.querySelector('.drop-item.fb .drop-buy:not([disabled])');
@@ -198,8 +218,9 @@ try {
     await new Promise(r => setTimeout(r, 900));
     return { cant, label: b.textContent.trim().slice(0, 24), toast: document.querySelector('.toast')?.textContent || null };
   });
-  setup('SAMPLE the kit room was SHUT when the shop rendered, so its body is built by the toggle',
-    kitClosed && !pill.err, `#fbSect closed at render: ${kitClosed}${pill.err ? `; ${pill.err}` : ''}`);
+  setup('SAMPLE the kit room was SHUT when the shop rendered and the shop was NOT re-rendered after the wallet moved',
+    kitClosed && held > 48 && !pill.err,
+    `#fbSect closed at render: ${kitClosed}, scroll held at ${held} (a re-render resets it to 0)${pill.err ? `; ${pill.err}` : ''}`);
   ok('PILL a pill built after the wallet emptied knows it: it reads `cant` and its tap quotes the LIVE balance, not the render-time one',
     pill.cant === true && /You have 0\./.test(pill.toast || ''),
     `cant=${pill.cant}, tap said ${JSON.stringify(pill.toast)} (stale reads "You have 400,000.", or arms to buy)`);

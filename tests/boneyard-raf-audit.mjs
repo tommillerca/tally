@@ -2,7 +2,11 @@
  *
  * QA round 41, R41-18: "walking the Boneyard costs 556 rAF/s and about 90% of a
  * core, against 9 for an idle map". Measured here, on the real map, with the
- * scheduler hooked: 2,071 rAF/s walking and 9.2 standing still.
+ * scheduler hooked: 2,071 rAF/s walking and 9.2 standing PERFECTLY still.
+ * STANDING STILL WAS THE WORSE HALF, and only a jittering fix shows it. A phone
+ * that never moves still reports a position a metre or two away every 1.2s, and
+ * on the pre-fix tree that cost 1,843.7 rAF/s -- 21.65 per frame, the same
+ * storm as walking, for a picture that does not change. 1.8/s after.
  *
  * WHERE THEY COME FROM, traced rather than guessed (the stack of every
  * requestAnimationFrame was captured and grouped, see the run log):
@@ -23,8 +27,7 @@
  *            reads zero because it is not installed is the failure mode this
  *            whole file is exposed to, so the zero has to be earned.
  *   STILL    a phone delivering a jittering fix from one spot schedules almost
- *            nothing: < 3 rAF/s. Broken reads ~9/s and, on a phone whose GPS
- *            wanders more than this harness's, the full storm.
+ *            nothing: < 3 rAF/s. Broken reads 1,843.7/s on this same harness.
  *   MOVING   the control: the same sweep while the player genuinely walks DOES
  *            schedule work, so STILL cannot pass on a dead map, a stopped
  *            animation clock or a teardown. It is a floor, not a ceiling: the
@@ -159,7 +162,7 @@ try {
 
   ok(`METER the hook reads an injected per-frame loop (>= ${METER_FLOOR}/s), so the numbers below are measurements`,
     meter.rate >= METER_FLOOR, `${meter.rate.toFixed(1)}/s`);
-  ok(`STILL a jittering fix from one spot costs < ${STILL_CEIL} rAF/s (9.2/s before)`,
+  ok(`STILL a jittering fix from one spot costs < ${STILL_CEIL} rAF/s (1,843.7/s before, 21.65 per frame)`,
     still.rate < STILL_CEIL, `${still.rate.toFixed(1)}/s, ${still.perFrame.toFixed(2)} per frame`);
   ok(`MOVING the control: genuinely walking still schedules work (>= ${MOVING_FLOOR}/s), so STILL is not a dead map`,
     moving.rate >= MOVING_FLOOR, `${moving.rate.toFixed(1)}/s, ${moving.perFrame.toFixed(2)} per frame`);
