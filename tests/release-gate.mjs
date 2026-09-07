@@ -16,6 +16,7 @@
  * belongs on this list; add to it rather than running something on the side.
  *
  *   node tests/release-gate.mjs [baseUrl]
+ *   node tests/release-gate.mjs --coverage-only (no server, lock or suites)
  *
  * Run it against localhost BEFORE pushing, and against the live URL AFTER, per
  * the standing ritual (localhost passing is not "a player can use it").
@@ -70,9 +71,7 @@ async function serveRepo() {
    triage list of 42 phantom failures. Flags are flags; the URL is the first
    argument that is not one. */
 const argUrl = process.argv.slice(2).find(a => !a.startsWith('--'));
-const own = argUrl ? null : await serveRepo();
-const base = argUrl || own.url;
-if (own) console.log(`serving this repo at ${base}\n`);
+const coverageOnly = process.argv.includes('--coverage-only');
 
 /* Node-only checks first: they are seconds, and there is no point burning four
    minutes of browser time on a build whose pure logic is already broken. */
@@ -262,6 +261,7 @@ const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-ato
   'take-and-pay-audit.mjs'];   // 2026-09-06 lane 2: the take and its whole payout are one transaction; node-only, ~1s
 PURE.unshift('store-copy-lint.mjs');
 PURE.push('submission-preflight-audit.mjs');   // 2026-09-07: drives native/submission-preflight.mjs for real and proves it refuses all three (a bundle without STORE_BUILD=1, a synced config that still has a server URL, a reachable TestFlight string) with a healthy control; node-only, <1s
+PURE.push('pet-state-audit.mjs'); // Lane A: real pet exports, migration, unsupported rows, instance talent clicks and the input to battle construction; Node-only.
 PURE.push('pet-family-audit.mjs'); // Lane D: refuses incomplete family kits, validates species/picks and tree unlocks, checks cooldown agreement and exhaustive frozen combat outputs; Node-only.
 PURE.push('coins-merge-tie-audit.mjs');   // R38-13: coinsRev bumps by magnitude, importAll keeps the higher balance on a tie, taken receipts; node-only (shipped unregistered in v485)
 PURE.unshift('no-debug-markers-lint.mjs');
@@ -274,8 +274,28 @@ PURE.unshift('no-debug-markers-lint.mjs');
    ledger scan, then decided several awaits later, off that stale count. */
 PURE.push('routine-race-audit.mjs');
 PURE.unshift('version-align-lint.mjs');
+/* dayone-topup-audit is PURE for the same reason spawn-claim-atomic-audit is:
+   mem-idb under the real js/db.js, js/game.js and js/loot.js, no browser, ~2s.
+   It owns the day-one coin floor (master handoff B4, 2026-09-07): the welcome
+   kit's one-time 40-coin grant is paid exactly once and survives a /register
+   that answers 429, and a PERFECT first day driven through the shipped payout
+   functions over twelve seeds clears the 300 rack floor at the median (304 with
+   the grant, 264 without). Proved red by deleting the grant: 6 rows, exit 1. */
+PURE.push('dayone-topup-audit.mjs');
+/* dish-worth-audit is PURE for the same reason xp-curve-audit is: it imports
+   js/pit.js through tests/fight-sim.mjs, no browser and no database, ~3s. It
+   owns the Pit's "what is this dish worth" copy (master handoff B5,
+   2026-09-07): DISH_WORTH is a sentence about a measured number, so this
+   RE-MEASURES it against a mirror in two configurations rather than pinning the
+   string, and a dish nobody claimed or registered unclaimed fails COVERAGE.
+   Proved red three ways (a weak dish given the strong sentence, an unmeasurable
+   dish given any sentence, a claim deleted), exits 1 each. */
+PURE.push('dish-worth-audit.mjs');
 PURE.push('serve-tree-identity-audit.mjs'); // serveTree refuses a fixed port that answers from another checkout; node-only
+PURE.push('pet-C-node-guard.mjs'); // Lane C: level thresholds/cap, production EQUIP cache, DPR replay/harness, known-species roster.
 const BROWSER = [
+  'pet-C-browser-audit.mjs', // Lane C: real EQUIP return paths and nine surfaces, 31 decoded Kennel images at DPR 2/3 on five phone sizes. Browser proof pending reviewer.
+
   /* the raw-sink fix's STATE half. render-sink-lint pins the source, and this
      repo has watched shape assertions stay green over broken state, so this one
      feeds a real `<img src=x onerror=...>` through the real window.__packReveal
@@ -542,6 +562,7 @@ function failLines(out) {
    the checks themselves. A new guard is covered whatever it is called. */
 const HELPERS = new Set([
   'release-gate.mjs',  // this file
+  'store-copy-scan.mjs', // shared reachability scanner for store-copy-lint and native submission preflight; no assertions of its own
   'godmode.js',        // the harness: boot, seed, serveTree
   'fight-sim.mjs',     // a sim library balance.mjs drives; no assertions of its own
   'badge-centre-lib.mjs', // the badge measurement badge-centre-audit.mjs drives; no assertions of its own
@@ -587,6 +608,7 @@ const onDisk = (await readdir(here))
  * 1, in the gate itself. The complement cannot be computed AND have teeth. One line
  * per file is the price, and it puts each omission on the record as a decision. */
 const DECLARED = {
+  'pet-talent-ui-audit.mjs': ['full', 'Lane A: operates Stable talent controls, rejects stale levels, reopens saved choices and checks the duplicate in a real fight.'],
   'boot-backfill-audit.mjs': ['full', "the first-v385-boot backfill is checkpointed, resumable and behind the paint: PAINT (#screen has content while the retroactive replay is still unfinished), RESUME (twice interrupted by a real page reload, the save still reaches the exact ledger and XP total of an uninterrupted run) and WORK (a resumed boot re-reads at most 75% of the xp store a cold one does). Seeds a 365-day diary and drives four throttled boots with reloads, several minutes, far too slow for the fast tier."],
   'xp-total-audit.mjs': ['full', "the XP running total: SHAPE (full scans of the xp store do not grow with row count across a burst of awards) plus TRUTH (the cached total equals a from-scratch recount after every award), at 900 / 5400 / 10950 rows. Seeds ~17k rows across three browser passes, about 40s, too slow for the fast tier."],
   /* FOUND UNDECLARED ON PRISTINE origin/main AT 405b5df, 2026-08-18, by replaying
@@ -1197,7 +1219,12 @@ const FULL = onDisk.filter(f => DECLARED[f] && DECLARED[f][0] === 'full');
 const runAll = process.argv.includes('--all');
 const fastAudits = BROWSER.filter(f => onDisk.includes(f)).length;
 console.log(`coverage: ${onDisk.length} audits on disk, ${fastAudits} fast, ${FULL.length} full, ${onDisk.length - fastAudits - FULL.length} skipped`);
+if (coverageOnly) process.exit(0);
 if (runAll) BROWSER.push(...FULL);
+
+const own = argUrl ? null : await serveRepo();
+const base = argUrl || own.url;
+if (own) console.log(`serving this repo at ${base}\n`);
 
 /* READ THE GATE LOCK BEFORE RUNNING. NOT after, and not by assuming.
  *

@@ -676,6 +676,43 @@ export function foodBuffLabel(b, now = Date.now()) {
   return `${bits.join(' · ')} · ${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left`;
 }
 
+/* WHAT A DISH IS WORTH, IN PLAIN WORDS. Tom's ruling, 2026-09-07 (master
+ * handoff B5, copy only: serving a dish still pays its 8 XP and nothing about a
+ * recipe changed).
+ *
+ * v483 put one line in the Pit naming the active dish. It said what the buff
+ * DOES ("+25% dmg, 4 fights left") and never what that is worth, which is the
+ * question a player actually has in front of a fight.
+ *
+ * Measured against a mirror, 2000 seeds per arm, no talents, with a level-5
+ * Hound and with no pet. smartPlayerTurn now takes one smartPetTurn before
+ * endTurn, matching the app's body -> pet -> end-turn sequence.
+ *
+ * The hound baseline wins 1941/2000, the no-pet baseline 747/2000. Broth,
+ * Hash and Feast more than halve losses in both. Stew wins 1976/2000 and
+ * 1108/2000: a real edge, still below each big dish. Compare those dishes
+ * directly: the weakest big dish (Hash) beats Stew by an interval of
+ * [0.25, 1.41]pp with the hound; without a pet, Broth is the closest at
+ * [16.74, 22.51]pp. Overlapping dish-vs-baseline intervals do not answer
+ * that comparison because both include uncertainty about the same baseline.
+ *
+ * Skewer wins 1975/2000 and Kibble 1972/2000 with the hound, both clear of
+ * baseline; neither changes the no-pet result. Their sentences explicitly
+ * name the trained hound, the configuration that supports the claim. No
+ * percentage belongs in the copy: the size depends on the configuration.
+ *
+ * tests/dish-worth-audit.mjs re-measures this on every gate run and fails if a
+ * dish's claim stops being true, so a re-cost cannot leave the copy lying. */
+export const DISH_WORTH = {
+  'bone-broth':  'Measured: against an even fight it more than halves the fights you lose.',
+  'hearty-hash': 'Measured: against an even fight it more than halves the fights you lose.',
+  'necro-feast': 'Measured: against an even fight it more than halves the fights you lose.',
+  'marrow-stew': 'Measured: it cuts the fights you lose against an even foe, less than the big dishes do.',
+  'hunters-skewer': 'Measured: with a trained hound at your side, more special attacks help you lose fewer fights against an even foe.',
+  'bonemeal-kibble': 'Measured: with a trained hound at your side, a tougher, harder-hitting pet helps you lose fewer fights against an even foe.',
+};
+export const dishWorth = recipeId => DISH_WORTH[recipeId] || '';
+
 export function fmtCookTime(ms) {
   const m = Math.ceil(ms / 60000);
   if (m < 60) return `${m}m`;

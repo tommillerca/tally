@@ -1,5 +1,392 @@
 # What each patch note claims, and what backs it
 
+## Lane H: Today reads and guard integrity (2026-09-07)
+
+Advisory report for independent provider review. The supplied frozen plan SHA256
+matched `37e11f9c6bbd7d4ddee7933b348f1a99d744213ce0b28ae3266973226309d2ac`.
+All source paths resolved inside this checkout. Its root `CLAUDE.md` was read;
+`tally/CLAUDE.md` does not exist here. No original checkout was edited.
+
+Files changed:
+
+- `tests/today-reads-lint.mjs`: re-point the petInstances return-pattern pin at
+  the filtered instance list. Also require the SHA256 of its entire
+  comment-stripped function body so newly inserted code cannot silently inherit
+  the exemption. Add Node execution of buildFighter's actual pet assembly with
+  production loot/pets/db exports, observing cold inventory reads, earned picks,
+  zero warm store scans and unchanged battle output over two warm calls. The
+  optional root argument also selects the runtime modules from that root.
+- `tests/pet-state-audit.mjs`: add a CONTROL row that checks the actual seeded
+  instance list and earned level, reads an existing legal choice, writes its
+  legal alternative, checks the persisted iid bank, reads it back, and checks
+  the sibling retains its own choices. An empty or wrong-instance answer fails.
+- `tests/dish-worth-audit.mjs`: date the CONFIGS provenance 2026-09-07, citing
+  Tom's master handoff B5 and frozen Lane H RED 3. The recorded roughly
+  threefold disagreement between with-pet and no-pet measurements explains both
+  configurations and why dish copy states no percentage. No measurement changed.
+- `docs/CLAIMS.md`: this dated section only.
+
+1. PROOF: today-reads-lint.mjs | REACH: The static whole-Today count changes from `{"health":1,"inv":5,"log":1,"xp":1}` to `{"health":1,"inv":1,"log":1,"xp":1}`. All existing once-guard exemptions remain. A new scan inserted before the pinned suffix fails both GATE and the runtime warm-scan row. This is Node and source evidence, not a measurement of browser frame time or battery usage.
+2. PROOF: pet-state-audit.mjs, guard-hygiene-lint.mjs | REACH: The new selected-instance control passes. The state audit reports `pet-state: 12 passed, 0 failed`; hygiene reports `49 of 281 carry no CONTROL/PREMISE/SETUP/REACH/SAMPLE row. ratchet holding` and `guard-hygiene: clean`. The ceiling remains 49.
+3. PROOF: dish-worth-audit.mjs, guard-provenance-lint.mjs | REACH: The two unchanged measurement arms pass all dish rows. Provenance reports `60 known, 0 new` and `guard-provenance: clean`. No threshold or inventory allowance was increased.
+
+Agreed proof command, exit 0:
+
+```sh
+node tests/today-reads-lint.mjs && node tests/guard-hygiene-lint.mjs && node tests/guard-provenance-lint.mjs
+```
+
+Key output:
+
+```text
+ok   A1 the WHOLE Today draw (renderToday and everything it calls in the tick) scans log, xp, health and inv exactly once each  {"health":1,"inv":1,"log":1,"xp":1}
+ok   CONTROL cold pet assembly reads inventory and retains earned talents  {"inv":1}
+ok   C1 warm battle pet assembly scans no stores (tick 1)  {}
+ok   C1 warm battle pet assembly scans no stores (tick 2)  {}
+all green
+ok    CONTROL the number of audits with NO positive control does not rise above 49  49 of 281 carry no CONTROL/PREMISE/SETUP/REACH/SAMPLE row. ratchet holding
+guard-hygiene: clean
+ok    RATCHET no NEW pinned expectation lacks dated provenance  60 known, 0 new
+guard-provenance: clean
+```
+
+Red/green evidence, using throwaway source copies under `/private/tmp/pet-h-proof/throwaway`:
+
+- Restore the original Today audit: `FAIL GATE petInstances still carries the once-guard its exemption pins` and `FAIL A1 ... {"health":1,"inv":5,"log":1,"xp":1}`, exit 1. Restore the fixed audit: `all green`, exit 0.
+- Restore the original state audit with no control: `FAIL CONTROL the number of audits with NO positive control does not rise above 49`, `50 of 281`, exit 1. Restore the added control: `49 of 281`, `guard-hygiene: clean`, exit 0.
+- Restore the original CONFIGS comment: `FAIL RATCHET no NEW pinned expectation lacks dated provenance`, `1 new: dish-worth-audit.mjs:CONFIGS`, exit 1. Restore the dated comment: `60 known, 0 new`, `guard-provenance: clean`, exit 0.
+- Insert `await db.all('inv')` at the start of petInstances while preserving the return suffix: `FAIL GATE petInstances`, `FAIL A1 ... {"health":1,"inv":9,"log":1,"xp":1}`, and `FAIL C1 warm battle pet assembly scans no stores (tick 1) {"inv":3}` (also tick 2), exit 1. Restore production bytes: `C1 ... {}`, `all green`, exit 0. Also repeated by pointing the checkout's audit at the mutated throwaway root, proving the runtime half measures that root.
+- Make petPicks return an empty array: `FAIL CONTROL earned talent round-trip reaches the selected instance bank: Expected values to be strictly deep-equal`, exit 1. Restore production bytes: `PASS CONTROL earned talent round-trip reaches the selected instance bank`, `pet-state: 12 passed, 0 failed`, exit 0.
+- Remove picks from the real battle assembly: `FAIL CONTROL cold pet assembly reads inventory and retains earned talents {"inv":1}`, exit 1. Restore assembly: the same CONTROL is green, exit 0. This prevents the zero-scan row from passing on an empty pet result.
+
+PURE enumeration follows the actual initializer plus every PURE.push/PURE.unshift
+in `tests/release-gate.mjs`, evaluated in their source order without executing
+its server runner. There are 58 files: 56 passed, two require prohibited server
+proofs. No new audit was created, so no release registration changed.
+
+| # | PURE file | Result |
+| --- | --- | --- |
+| 1 | `version-align-lint.mjs` | Exit 0 |
+| 2 | `no-debug-markers-lint.mjs` | Exit 0 |
+| 3 | `store-copy-lint.mjs` | Exit 0 |
+| 4 | `transmog-receipt-audit.mjs` | Exit 0 |
+| 5 | `today-reads-lint.mjs` | Exit 0 |
+| 6 | `kitchen-atomic-audit.mjs` | Exit 0 |
+| 7 | `backup-encoder-audit.mjs` | Exit 0 |
+| 8 | `backup-key-audit.mjs` | Exit 0 |
+| 9 | `backup-version-audit.mjs` | Exit 0 |
+| 10 | `backup-conflict-audit.mjs` | Exit 0 |
+| 11 | `unit.test.js` | BLOCKED: server proof |
+| 12 | `log-xp-farm-audit.mjs` | Exit 0 |
+| 13 | `drip-badge-audit.mjs` | Exit 0 |
+| 14 | `xp-key-provenance-lint.mjs` | Exit 0 |
+| 15 | `facegate-audit.mjs` | Exit 0 |
+| 16 | `garden-appetite-guard.mjs` | Exit 0 |
+| 17 | `pit.test.js` | Exit 0 |
+| 18 | `quest-daymore-audit.mjs` | Exit 0 |
+| 19 | `quest-pick-audit.mjs` | Exit 0 |
+| 20 | `first-fight-audit.mjs` | Exit 0 |
+| 21 | `stat-source-audit.mjs` | Exit 0 |
+| 22 | `bastions-rep-sim.mjs` | Exit 0 |
+| 23 | `analytics-tag-audit.mjs` | Exit 0 |
+| 24 | `icon-inventory-audit.mjs` | Exit 0 |
+| 25 | `version-stamp-audit.mjs` | Exit 0 |
+| 26 | `boneyard-supply-audit.mjs` | Exit 0 |
+| 27 | `loot-fallback-audit.mjs` | Exit 0 |
+| 28 | `guard-hygiene-lint.mjs` | Exit 0 |
+| 29 | `guard-provenance-lint.mjs` | Exit 0 |
+| 30 | `feedback-status-lint.mjs` | Exit 0 |
+| 31 | `rack-theme-lint.mjs` | Exit 0 |
+| 32 | `rack-rotate-audit.mjs` | Exit 0 |
+| 33 | `pet-accessory-lint.mjs` | Exit 0 |
+| 34 | `pet-pool-audit.mjs` | Exit 0 |
+| 35 | `manifest-exports-audit.mjs` | Exit 0 |
+| 36 | `xp-curve-audit.mjs` | Exit 0 |
+| 37 | `live-api-register-lint.mjs` | Exit 0 |
+| 38 | `claim-evidence-lint.mjs` | Exit 0 |
+| 39 | `thumb-freshness-lint.mjs` | Exit 0 |
+| 40 | `render-sink-lint.mjs` | Exit 0 |
+| 41 | `lapse-witness-audit.mjs` | Exit 0 |
+| 42 | `spawn-claim-atomic-audit.mjs` | Exit 0 |
+| 43 | `wardrobe-family-audit.mjs` | Exit 0 |
+| 44 | `football-kit-audit.mjs` | Exit 0 |
+| 45 | `restore-latch-audit.mjs` | Exit 0 |
+| 46 | `first-pet-audit.mjs` | Exit 0 |
+| 47 | `currency-revision-lint.mjs` | Exit 0 |
+| 48 | `inv-tombstone-audit.mjs` | Exit 0 |
+| 49 | `take-and-pay-audit.mjs` | Exit 0 |
+| 50 | `submission-preflight-audit.mjs` | Exit 0 |
+| 51 | `pet-state-audit.mjs` | Exit 0 |
+| 52 | `pet-family-audit.mjs` | Exit 0 |
+| 53 | `coins-merge-tie-audit.mjs` | Exit 0 |
+| 54 | `routine-race-audit.mjs` | Exit 0 |
+| 55 | `dayone-topup-audit.mjs` | Exit 0 |
+| 56 | `dish-worth-audit.mjs` | Exit 0 |
+| 57 | `serve-tree-identity-audit.mjs` | BLOCKED: server proof |
+| 58 | `pet-C-node-guard.mjs` | Exit 0 |
+
+Blocked actions and deviations:
+
+- RED 1's claimed production regression is not reproduced in this checkout.
+  Before changing anything, the real equipped-instance/steps/picks path read
+  `{"inv":1}` during cold reclaim and `{}` when warm, returning the same level-10
+  instance with all five earned choices. Source inspection confirms that
+  ownedCosmeticIds in petInstances remains behind the non-array migration
+  branch. The changed filtered return broke the old pin, so the static walker
+  counted that cold-only migration at four call occurrences. Proposed deviation,
+  disclosed during implementation: repair and strengthen the audit, retain the
+  production implementation. No js file changed and no runtime speedup is claimed.
+- The requirement for all 58 PURE files and an unmodified unit run to exit 0 is
+  incompatible with the frozen prohibition on server proofs. The PURE entry
+  serve-tree-identity-audit.mjs opens two local servers. unit.test.js has an
+  unconditional server-launch case at line 3376. Neither server proof was run.
+  For partial unit evidence, `node --import /tmp/pet-h-proof/block-server.mjs tests/unit.test.js`
+  runs the unchanged unit file with a temporary subprocess interceptor that
+  throws before its serveTree child can start. Output: `FAIL serveTree does not
+  hold the event loop open after the script ends`, followed by `BLOCKED by frozen
+  Lane H: local server proofs are prohibited`, and `362 passed, 1 failed`, exit 1.
+  This is not an unmodified unit green and does not satisfy the full-unit success
+  criterion. The other 362 cases pass; no assertion was skipped or weakened.
+- Browser, server, App Store Connect and Worker proofs were not run. Reviewer
+  follow-up in an authorized environment: run the unmodified unit command and
+  serve-tree-identity-audit. Expected healthy output is `363 passed, 0 failed`
+  for units and `PASS WRONG-TREE` for server identity, both exit 0; these are
+  expectations only. No tool or automatic approval rejection occurred. The
+  unit diagnostic's one denied action was our explicit policy interceptor.
+- The lane-specific ownership grant (everything in this worktree, no siblings)
+  applies over the copied generic sibling-lane paragraph. The user's explicit
+  no-commit/no-push instruction applies over the plan's contradictory closing
+  sentence. No commit, push, publication, PR, version stamp, changelog edit,
+  native/ASC-SUBMISSION.md edit or integ/day5 edit was attempted.
+
+Reproduction artifacts: `/private/tmp/pet-h-proof/` contains before logs, the
+source-derived `pure-files.json`, per-file output and exit files, ordered
+`pure-results.json`, `run-pure.py`, `mutations.py`, root-argument mutation proof,
+unit restriction helper and log, and the final agreed command output and exit.
+Each subprocess exit was captured directly and saved, never read through a pipe.
+The throwaway production mutations were restored after each check. Temporary
+harnesses are diagnostic artifacts, not release audits. `git diff --check` and
+the claim-evidence lint pass.
+## Lane I: store scanner and gate registration (2026-09-07)
+
+Advisory implementation and proof record for independent review. The frozen work
+order hash matched `a94e3dca36658e2f57ae9b51bad77b92b9e403d85a6aa166973bc003b8b0fb13`.
+Changed only `tests/store-copy-scan.mjs`, `tests/store-copy-lint.mjs`,
+`tests/release-gate.mjs`, `tests/submission-preflight-audit.mjs`, and this section.
+`native/submission-preflight.mjs` needed no edit: it already imports the shared scanner.
+
+1. PROOF: store-copy-lint.mjs, submission-preflight-audit.mjs | REACH: Both the repository app and the bundle submitted for archive now retain TestFlight URLs inside single quotes, double quotes and templates during comment removal. Esprima 4.0.1 is already installed and locked through the root Puppeteer dependency tree (degenerator and escodegen); its tokenizer processed the entire current app successfully. Acorn is listed only in the server lockfile and is not installed there. Chose Esprima's tokenizer, with comment ranges, instead of a handwritten lexer or its older grammar parser. Only real comment ranges are blanked, with newlines and offsets retained. Tokenization errors refuse the scan. Guards also cover block-like string text, escaped quotes, multiline and nested templates, comments within template expressions, regex literals, line numbers, missing island markers and malformed strings. This remains the existing literal-source scan with its explicitly blanked invitation island, not a general program reachability proof or runtime string evaluator.
+
+2. PROOF: submission-preflight-audit.mjs, release-gate.mjs | REACH: The shared scanner is registered in HELPERS with its two consumers and a reason, matching the existing library convention. A new --coverage-only mode exits after the actual coverage and targetability checks, before any server, gate lock or suite. The preflight audit runs this mode against a throwaway tests directory and proves that a genuinely unregistered runnable file is refused. No runnable audit was added and existing PURE registrations were retained.
+
+3. PROOF: store-copy-lint.mjs, submission-preflight-audit.mjs | REACH: Correction to the v510-train submission-build claims above, especially the assertion in "the submission build asserts itself" item 2 that no TestFlight or beta string was reachable: that confidence was unsupported. The original scanner discarded the part of a URL after https:, and the old plain-label fixture could not expose it. Item 3's centralization claim was accurate, but sharing the scanner did not establish its correctness. This defect predates extraction. The new controls substantiate the narrower behavior described here. Earlier sections are preserved under the work order's instruction not to edit other sections; this dated correction supersedes their scanner assurance.
+
+Measured red and green on a throwaway copy, with the original scanner bytes
+restored for red and the fixed scanner copied back for green. Both audit commands
+exited 1 with the old scanner and 0 after restoration. The five requested cases:
+
+```text
+FAIL scanner single URL: [] (want ["reachable \"testflight.apple.com\" at fixture.js:4"])
+FAIL scanner template URL: [] (want ["reachable \"testflight.apple.com\" at fixture.js:4"])
+FAIL scanner double URL: [] (want ["reachable \"testflight.apple.com\" at fixture.js:4"])
+PASS scanner genuine line comment: [] (want [])
+FAIL scanner comment-like string: [] (want ["reachable \"TestFlight\" at fixture.js:4"])
+```
+
+```text
+PASS scanner single URL: ["reachable \"testflight.apple.com\" at fixture.js:4"] (want ["reachable \"testflight.apple.com\" at fixture.js:4"])
+PASS scanner template URL: ["reachable \"testflight.apple.com\" at fixture.js:4"] (want ["reachable \"testflight.apple.com\" at fixture.js:4"])
+PASS scanner double URL: ["reachable \"testflight.apple.com\" at fixture.js:4"] (want ["reachable \"testflight.apple.com\" at fixture.js:4"])
+PASS scanner genuine line comment: [] (want [])
+PASS scanner comment-like string: ["reachable \"TestFlight\" at fixture.js:4"] (want ["reachable \"TestFlight\" at fixture.js:4"])
+```
+
+The genuine-comment fixture already passes the original scanner. Requiring all
+five cases to fail on it is impossible without misgrading correct behavior.
+Deviation: retain that case as a passing regression control in both versions.
+The exact `const s = "not // a comment";` is followed by a forbidden label on
+the same line, making unintended truncation observable through scanReachable.
+The real preflight process likewise accepts all three leaked URL fixtures and
+the string-truncation fixture with exit 0 on the old scanner (audit FAIL), then
+refuses each with exit 1 on the fixed scanner (audit PASS). The genuine comment
+is accepted with exit 0 in both versions.
+
+Removing only the helper registration on the throwaway copy, while retaining
+the socket-free mode, prints the following and exits 1. The new preflight audit
+also exits 1 with that registration reverted.
+
+```text
+FAIL  coverage: 1 declared audit file(s) belong to no running tier:
+        store-copy-scan.mjs
+        Put each runnable file in exactly one of PURE, BROWSER, or DECLARED full.
+```
+
+Restoring the helper and adding a real `unregistered-store-fixture.mjs` containing
+`process.exit(0);` instead prints the same refusal naming that file, exit 1.
+Removing the fixture restores exit 0. Direct coverage on this checkout prints:
+
+```text
+coverage: 300 audits on disk, 114 fast, 128 full, 58 skipped
+```
+
+The existing summary's "58 skipped" labels the PURE entries; they are separately
+enumerated and run below. No claim that those entries were intentionally skipped
+by the normal gate is made here.
+
+Agreed proof, run exactly:
+
+```sh
+node tests/store-copy-lint.mjs && node tests/submission-preflight-audit.mjs
+```
+
+Exit 0. Output includes `ok store copy: beta surfaces unreachable and store strings clean`,
+`PASS  COVERAGE registered helper  exit 0 (want 0)`,
+`PASS  COVERAGE unregistered runnable refused  exit 1 (want 1)`, and
+`submission preflight: refuses all three, passes the control`. The apparent
+coverage FAIL inside the negative control is expected; the outer audit passes.
+
+PURE enumeration evaluates the actual source from `const PURE =` through the
+last mutation before `const BROWSER =`, including every push and unshift.
+All 58 entries, in resulting order: 54 exit 0, two exit 1, two unrun.
+The all-PURE-green success criterion is therefore not met.
+
+| PURE file | Result |
+| --- | --- |
+| `version-align-lint.mjs` | exit 0 |
+| `no-debug-markers-lint.mjs` | exit 0 |
+| `store-copy-lint.mjs` | exit 0 |
+| `transmog-receipt-audit.mjs` | exit 0 |
+| `today-reads-lint.mjs` | exit 1 |
+| `kitchen-atomic-audit.mjs` | exit 0 |
+| `backup-encoder-audit.mjs` | exit 0 |
+| `backup-key-audit.mjs` | exit 0 |
+| `backup-version-audit.mjs` | exit 0 |
+| `backup-conflict-audit.mjs` | exit 0 |
+| `unit.test.js` | UNRUN: invokes serveTree; server proofs prohibited |
+| `log-xp-farm-audit.mjs` | exit 0 |
+| `drip-badge-audit.mjs` | exit 0 |
+| `xp-key-provenance-lint.mjs` | exit 0 |
+| `facegate-audit.mjs` | exit 0 |
+| `garden-appetite-guard.mjs` | exit 0 |
+| `pit.test.js` | exit 0 |
+| `quest-daymore-audit.mjs` | exit 0 |
+| `quest-pick-audit.mjs` | exit 0 |
+| `first-fight-audit.mjs` | exit 0 |
+| `stat-source-audit.mjs` | exit 0 |
+| `bastions-rep-sim.mjs` | exit 0 |
+| `analytics-tag-audit.mjs` | exit 0 |
+| `icon-inventory-audit.mjs` | exit 0 |
+| `version-stamp-audit.mjs` | exit 0 |
+| `boneyard-supply-audit.mjs` | exit 0 |
+| `loot-fallback-audit.mjs` | exit 0 |
+| `guard-hygiene-lint.mjs` | exit 0 |
+| `guard-provenance-lint.mjs` | exit 1 |
+| `feedback-status-lint.mjs` | exit 0 |
+| `rack-theme-lint.mjs` | exit 0 |
+| `rack-rotate-audit.mjs` | exit 0 |
+| `pet-accessory-lint.mjs` | exit 0 |
+| `pet-pool-audit.mjs` | exit 0 |
+| `manifest-exports-audit.mjs` | exit 0 |
+| `xp-curve-audit.mjs` | exit 0 |
+| `live-api-register-lint.mjs` | exit 0 |
+| `claim-evidence-lint.mjs` | exit 0 |
+| `thumb-freshness-lint.mjs` | exit 0 |
+| `render-sink-lint.mjs` | exit 0 |
+| `lapse-witness-audit.mjs` | exit 0 |
+| `spawn-claim-atomic-audit.mjs` | exit 0 |
+| `wardrobe-family-audit.mjs` | exit 0 |
+| `football-kit-audit.mjs` | exit 0 |
+| `restore-latch-audit.mjs` | exit 0 |
+| `first-pet-audit.mjs` | exit 0 |
+| `currency-revision-lint.mjs` | exit 0 |
+| `inv-tombstone-audit.mjs` | exit 0 |
+| `take-and-pay-audit.mjs` | exit 0 |
+| `submission-preflight-audit.mjs` | exit 0 |
+| `pet-state-audit.mjs` | exit 0 |
+| `pet-family-audit.mjs` | exit 0 |
+| `coins-merge-tie-audit.mjs` | exit 0 |
+| `routine-race-audit.mjs` | exit 0 |
+| `dayone-topup-audit.mjs` | exit 0 |
+| `dish-worth-audit.mjs` | exit 0 |
+| `serve-tree-identity-audit.mjs` | UNRUN: invokes serveTree; server proofs prohibited |
+| `pet-C-node-guard.mjs` | exit 0 |
+
+Both failing audits also exit 1 when all four edited test files are reverted to
+HEAD on the throwaway copy. Their implicated source and audits are outside this
+lane's ownership, so no guard or application code was changed to make them pass:
+
+- `today-reads-lint.mjs`: `FAIL GATE petInstances still carries the once-guard its exemption pins`, then `FAIL A1 ... {"health":1,"inv":5,"log":1,"xp":1}`. The exemption pins `return reclaimOwnedPets(list);`, while the current array branch returns `(await reclaimOwnedPets(list)).filter(selectablePetInstance);` before the migration read. Proposed owner change: update that exact GATED.petInstances pin to recognize the current awaited, filtered return before `const owned = await ownedCosmeticIds();`, retaining the array-branch boundary, then prove it red when the migration read becomes reachable on repeat calls. Do not simply raise the inventory-read ceiling.
+- `guard-provenance-lint.mjs`: `FAIL  RATCHET no NEW pinned expectation lacks dated provenance  1 new: dish-worth-audit.mjs:CONFIGS. Cite the source instruction and date in the comment above it.` Proposed owner change: cite the existing 2026-09-07 master handoff B5 instruction in the comment directly above CONFIGS in `tests/dish-worth-audit.mjs`, after confirming it governs both configurations. Do not weaken the provenance ratchet.
+
+Denied actions: no tool approval denial occurred. Blocked/unrun proofs: full
+browser/server gate, `unit.test.js` (its serveTree event-loop case starts a server)
+and `serve-tree-identity-audit.mjs` (starts two server trees), under the frozen
+work order's prohibition on browser/server proofs. No socket proof was attempted.
+On a permitted host, the identity audit is expected to print `PASS  WRONG-TREE`
+and exit 0; the unit suite's serveTree case should pass if the child exits within
+its 20-second limit. Neither outcome was observed here and the full gate is not
+claimed green. The two measured unrelated failures would still need resolution.
+
+Other deviations and constraints: this checkout contains its project CLAUDE.md,
+which was read, but no nested tally/CLAUDE.md. Paths were resolved here and no
+original checkout was edited. No commit, push, publication, version stamp,
+changelog edit, PR, App Store Connect action or Worker action was performed.
+The user's explicit no-commit/no-push instruction overrides the conflicting
+boilerplate in the work order.
+
+Proof artifacts are under `/private/tmp/petI-proof/`: original sources,
+`run-proof.py`, red and restored-green logs, `agreed-proof.log`,
+`green-coverage.log`, `pure.json`, `pure-results.json`, `run-pure.py`, and per-audit
+logs. Exit statuses are saved separately in `.exit` files from subprocess return
+codes, never inferred through a pipe. Baseline logs for both unrelated failures
+are prefixed `baseline-`. Temporary files are advisory evidence outside the
+checkout and are not part of a release artifact.
+
+## Lane E: map audit guards (2026-09-07)
+
+Advisory implementation report for independent review. The frozen plan's SHA256
+matched `31d4d9bcf63b8a372a32aa5606efedc3a7255e8edab2659755ad21d4bc4e033c`.
+Only `tests/boneyard-audit.mjs`, `tests/mimic-audit.mjs`,
+`tests/wanderer-patrol-live-audit.mjs` and this section changed. No application
+source, release registration, version, commit, push or publication changed.
+
+1. PROOF: boneyard-audit.mjs | REACH: R43-14. The slow fixture deliberately holds tiles past reveal, so zero markers at that instant is a valid count. The renamed ARRIVAL-SLOW withholding row still requires any markers already placed to be visible after the existing settle window. It now also requires a nonempty post-reveal sample whose every marker becomes visible within the existing 250ms latency bound. A zero reveal population alone cannot pass. Missing reveal measurements, admitted map-key decoys, empty straggler samples, hidden markers and late markers fail. A map that never drew a population remains UNPROVEN. No tolerance changed.
+
+2. PROOF: mimic-audit.mjs | REACH: R43-15. Both absent ground frames and an empty reveal trace now reach named grading outcomes without a property-access crash or early process exit. All 37 original named rows remain. Missing pixel evidence is UNPROVEN in CONTROL, scrim, no-strobe and COVER, while independent checks continue. A measured missing overlay or observed strobe remains FAIL even when capture is sparse. COVER additionally refuses a trace that ended before handover. The final banner uses the shared exit policy: a measured failure takes exit 1, otherwise any UNPROVEN row takes 97, and only a fully graded pass takes 0. Existing brightness and sample thresholds are retained; the no-strobe row now requires the existing CONTROL floor of 20 frames before claiming absence of a strobe.
+
+3. PROOF: wanderer-patrol-live-audit.mjs | REACH: R43-16 remains uncalibrated. Comments now distinguish callback density from animated growth and correct the stale statement that the pan floor is 20: executable floors remain 40 pan and 12 zoom. A frozen cone can receive arbitrarily many callbacks, so frame count alone cannot distinguish working animation from a frozen one. The existing TRACKS-LIVE row additionally requires at least eight distinct widths, growth and no fallback or backwards step. Six total samples cannot satisfy that row, contrary to the work order's statement that all dependent rows passed. The exact per-run logs need review. No numeric replacement is justified by the evidence available here.
+
+Node-only evidence, not browser proof:
+
+- The temporary runner evaluates the actual arrival and reveal grading blocks with synthetic recorder outputs, including decoded-luminance fixtures. Restoring the original audit bytes on the throwaway copy makes the same checks red. R43-14: `AssertionError [ERR_ASSERTION]: held tiles, healthy release: expected PASS`, actual `UNPROVEN`, exit 1. Fixed: `PASS E1 held tiles, healthy release`, exit 0. The fixed row also prints `FAIL E1 pre-reveal markers withheld`, `FAIL E1 old 1200ms hold`, and `FAIL E1 never-visible marker` for those defect fixtures.
+- R43-15 reverted: `FAIL E2 zero reveal frames: TypeError: Cannot read properties of undefined (reading 'full')`, exit 1. Fixed: `UNPROVEN E2 zero reveal frames` for all four pixel rows, followed by `PASS E2 zero reveal frames: all 9 rows emitted through downstream HANDOVER`. Healthy pixels print `PASS E2 healthy trace: all 9 rows emitted through downstream HANDOVER`. Blackout, a 230-luma strobe, exposed map pixels and a removed overlay each still grade FAIL. The runner also checks zero ground frames, one-frame traces, a trace ending before handover and final status precedence. It does not claim the remaining live arena/skip/blink checks were executed.
+- The patrol runner verifies its three executable grading rows are byte-identical to the original. Healthy fixtures pass; frozen and snapped zoom fixtures fail TRACKS-LIVE, and the old 200px fallback fails both STEADY-LIVE and TRACKS-LIVE. Fixtures with 10 or 9 zoom samples fail CONTROL only; six also fails TRACKS-LIVE. These fixture results are not measurements of this rasteriser.
+- Reproduction artifacts are in `/private/tmp/petE-guard-proof/`: original audit copies, `check.mjs`, `patrol-check.mjs`, `red-e1.log`, `red-e2.log`, `green.log`, `patrol.log`, and separately saved `.exit` files. From this checkout, run `node /private/tmp/petE-guard-proof/check.mjs tests` and `node /private/tmp/petE-guard-proof/patrol-check.mjs`. The final runs both exited 0. The throwaway-original runs use the artifact directory instead of `tests`, with an extra `mimic` argument to isolate E2. Those both exited 1 as intended.
+- Agreed proof: `node -e "process.exit(0)"`. Output: empty stdout and stderr. Exit: 0, saved separately in `agreed-proof.exit`. This command establishes no browser behavior. Syntax checks for all three audit files and `git diff --check` passed.
+
+Blocked work and deviations:
+
+- Browser, server and live tile-host proofs were not attempted because the work order forbids them and the sandbox cannot bind sockets. No action was denied by a tool. Restoring actual application defects and capturing browser red/green remains for the reviewer. Local evidence reproduces the audit bugs and tests their grading logic, not the application's rendered behavior.
+- R43-16 uses the work order's permitted experiment fallback. Proposed reviewer experiment: retain timestamped widths and camera centre/zoom during the existing 5600ms pan and 2100ms zoom windows on this same software renderer and tile host. Run repeated clean and throttled laps, then separate throwaway mutations freezing the cone, snapping the zoom and restoring the v423 200px fallback. Confirm pan coverage includes the world tick. Two different widths exclude a constant but not a snap; establish intermediate growth and temporal coverage that reject all three mutations before choosing a replacement floor. No lower number is proposed as proven.
+- Expected browser output, conditional on the supplied state: Boneyard's renamed ARRIVAL-SLOW row prints PASS for an empty reveal followed by timely, nonempty arrivals, FAIL for withheld/late markers, and UNPRV for an undrawn map. Mimic's zero-frame path names `ZERO-FRAME REVEAL`, prints four UNPRV rows when its DOM checks pass, continues the other rows, and ends `MIMIC AUDIT UNPROVEN` with exit 97 unless another defect requires exit 1. A complete healthy capture can end VERIFIED. Wanderer's low-frame CONTROL still prints FAIL at 10, 6 or 9 zoom samples and exits 1; at six, TRACKS-LIVE must also fail. No full-suite green is claimed.
+- Source paths were resolved inside this checkout. Its root `CLAUDE.md` is the app-level contract and was read; `tally/CLAUDE.md` is absent. No original checkout was edited. Temporary Node diagnostics are not new release audits; all three edited audits already belong to the full release tier. The user's explicit no-commit/no-push instruction overrides the contradictory closing line in the frozen plan.
+## Lane C: pet rendering, round two (2026-09-07)
+
+1. PROOF: pet-C-node-guard.mjs | REACH: The Paddock card retains the shared petLevel formula at all 30 threshold-adjacent samples and two above-cap samples, including its rendered LV label. The production EQUIP listener refreshes the morph cache before rendering or scheduling the profile push. Automatic cropped-pet tiers retain the round-one DPR correction. Five isolated throwaway reversions failed, then all five Node rows passed on the restored source. DPR geometry values are replays of QA measurements, not fresh browser measurements.
+
+2. PROOF: pet-C-node-guard.mjs | REACH: setWidth accepts a fourth deviceScaleFactor argument. Omission still means 2, height still defaults to 932, and both mobile flags remain true. The Paddock roster uses the shared isKnownPet predicate to exclude unrenderable species while keeping CX, instance morphs and banked steps. Both behaviors have independently failing mutation guards.
+
+3. PROOF: pet-C-browser-audit.mjs | REACH: PENDING REVIEWER EXECUTION. The guard drives the real Stable copy selector and EQUIP button, checks six named hero return paths without reload, and asserts decoded nonempty art on splash, hero, Stable, own field, friend's field, Pit, Crew fan/profile hero, level-up sheet and Boneyard marker. It checks 31 Kennel images at DPR 2 and 3 across five phone sizes with a 1.4 ceiling. Browser/server execution was prohibited in this lane. Splash checks persistence at boot; foreign surfaces use an exported snapshot against a viewer wearing the opposite morph. The card slider's known base-art mismatch (C4) remains reported and unbuilt.
+## Lane A: instance talent state, round two (2026-09-07)
+
+1. PROOF: pet-state-audit.mjs | REACH: Stable talent reads and clicks use the selected instance id. The real legalPicks export checks the instance's current earned level before a click writes; buildFighter filters again at the level passed to buildBattlePet. Node guards execute the production click bodies and battle assembly with the real pets, loot and db modules over the existing in-memory IndexedDB harness. All 11 rows pass. Restored historical source and isolated guard removals fail on throwaway copies. The dormant wardrobe talent handler is also converted and covered at the handler level; petPanelHtml currently has no call sites.
+
+2. PROOF: pet-state-audit.mjs | REACH: Existing migration archives legacy choices and preserves only legal choices per existing instance. Unknown species remain in storage but are excluded from selection. New duplicates do not inherit unearned talents. These state implementations already existed in round one and now execute against lane D's real exports without temporary pet-helper fixtures.
+
+No single copy is chosen to keep everything. Each of the five existing copies keeps the old species choices that its own level allows. For example, with copies at levels 10, 6, 4, 2 and 1, they keep five, three, two, one and zero choices respectively; five equally trained copies all keep the same legal choices. The next time the player opens the Stable, each copy shows its own saved choices and its unearned tiers are locked. Some players silently lose an active choice they previously made: choices above a copy's level disappear without a migration notice. The original choices remain archived, but they are not automatically restored when that copy levels up. Newly hatched copies start with no choices. This preserves the round-one migration ruling; whether that silent loss needs a notice or a different policy is for Tom to rule on.
+
+3. PROOF: pet-talent-ui-audit.mjs | REACH: Browser rows operate Stable save, reopen, stale-level refusal, a locked duplicate and a real fight. These rows are written and registered but UNRUN here because browser/server proofs are prohibited in this sandbox. Expected output: five PASS rows and pet-talent-ui: 5 passed, 0 failed. This is not a claim of browser verification.
+
 ## Lane D: pet family contract (2026-09-07)
 
 1. PROOF: pet-family-audit.mjs | REACH: A family registered without actions or an ability implementation is refused by name at the battle seams. The original source silently supplied Hound's Bite and Imp's petdebuff to the dummy family; both guards were run red on a throwaway copy, then green on this checkout. The shared isKnownPet and legalPicks helpers reject unknown species and retain only unlocked, in-family choices, first pick per tier and original order. Each pick rule also failed independently when its predicate was removed from a throwaway copy. Consumer integration belongs to lanes A and C.
@@ -19,6 +406,25 @@ the upload path and its guards.
 
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
+
+## v510
+1. The pet train: seven lanes off v509, closing round 45's two open debts and round 44's state and render defects. Its dated sections are further down, folded here.
+
+   Not player-visible, so it carries no changelog item: PROOF: store-copy-lint.mjs, submission-preflight-audit.mjs | REACH: any store build. The shared reachability scanner stripped comments with a plain search for `//`, with no notion of a string literal, so a reachable `window.open('https://testflight.apple.com/join/...')` was truncated to `window.open('https:` before the forbidden-string check ran and reported nothing. The guard that exists to keep a TestFlight link away from an App Store reviewer could not see a TestFlight URL. Now tokenized; negative controls cover the URL in single quotes, double quotes and a template literal, a real comment that must still be stripped, and comment-like text inside a string that must not be. Also registered in the gate: it passed the file filter with a tier count of 0, so the coverage check exited 1 before a browser started and the full gate could not run at all.
+
+2. PROOF: pet-state-audit.mjs, unit.test.js | REACH: the Stable, on a save carrying one instance whose species this build does not know. `js/app.js` filtered instance rows on `x && x.sp` (truthy) rather than on the species existing, so a row with `sp: 'ZZ9'` walked through and threw in `bhAsset`: measured 0 children, 0 bytes, no `#kennelBtn`, no `#stableToPaddock`, 0 EQUIP buttons, against 5 children and 16,196 bytes on a normal save. That button is the only door, so the crash took the Kennel, Paddock, EQUIP, breeding and salvage with it, silently. The guard that failed was written FOR this crash (R39-31) and its comment describes it correctly; it filtered on the field being falsy while the case that occurs is truthy and unknown. Fixed at the state boundary with `isKnownPet`, not at the one render site, because unknown rows were also accepted by `addPetInstance`, returned by `petInstances`, selectable by `equippedPetIid` and included by `paddockRoster`. `bhAsset` degrades to a placeholder instead of throwing. Unknown persisted rows are preserved, not deleted.
+
+3. PROOF: pet-state-audit.mjs, pet-talent-ui-audit.mjs | REACH: own two copies of one species, level one to 10 and pick its tree, then fight with the other. `pettalents` was keyed by SPECIES while `petLevelBank` is keyed by instance, and `buildBattlePet` accepted every stored id without checking level or legal tree, so a level 1 duplicate fought with its level 10 sibling's full tree. The app's own help text ("each one keeps its own") described the intended model and the storage disagreed with it. Migrated to instance keys, with every read, write and battle construction routed through `legalPicks`.
+
+4. PROOF: pet-C-node-guard.mjs, pet-C-browser-audit.mjs | REACH: equip the other copy of a species from the Stable. `refreshPetMorphs` had five call sites and the EQUIP handler was not one of them, so the Stable card changed and Today's hero kept the copy you put away through three repaints a player can perform, until a full reload. Seven call sites now.
+
+5. PROOF: pet-C-node-guard.mjs | REACH: the Paddock, on a pet above 20,000 banked steps. It computed `1 + Math.floor(levelSteps / 20000)` instead of calling `petLevel`, so it printed level 5 for a pet the Stable and Pit both called level 10.
+
+6. PROOF: pet-C-browser-audit.mjs | REACH: the Kennel on a 3x phone. The tier picker read the CSS box only and never saw device pixel ratio, so cells measured 1.405 on a 16 Pro, 1.527 on a 15 Pro Max with 10 of 31 over the 1.4 ceiling, and 1.570 on a 16 Pro Max.
+
+7. PROOF: dayone-topup-audit.mjs | REACH: a first day. The welcome kit pays a one-time 40-coin top-up inside its own claim transaction, so a `/register` that answers 429 cannot strand it. Measured over 12 seeds: a complete first day moves from a median 264 to 304 coins against the 300 rack floor, and the audit prints the shortfall at the unluckiest seeds rather than hiding it.
+
+8. PROOF: dish-worth-audit.mjs | REACH: the Pit's dish line and the Kitchen's recipe list. `DISH_WORTH` states what a cooked dish is worth, re-measured each run rather than pinned as a string. Two pet dishes previously carried no claim because the sim could not fire a pet action; now that it can, they measure a real edge and their NOCLAIM rows failed upward exactly as designed, which is how this was found.
 
 ## v509
 1. A hotfix off v508: three first-hour defects from the R41/R39 packs. Its dated section is further down, folded here.
@@ -117,6 +523,47 @@ the upload path and its guards.
 
 8. PROOF: take-and-pay-audit.mjs | REACH: openCrate, hatchEgg, disenchantGear, both salvage paths and the legacy-egg conversion spend their input and write their payout in one transaction, so killing every IndexedDB transaction after the take leaves the player with the item or the full payout, never neither (six CRASH rows red on the pre-fix order: crate consumed with 0 coins and no rows, egg gone with no pet, gear gone with no dust).
 
+## day one clears the floor, and the Pit says what a dish is worth (2026-09-07)
+
+Not stamped to a release: hotfix/dayone-topup-cooking, off v503. Two rulings
+from Tom, master handoff B4/R39-27 and B5.
+
+1. PROOF: dayone-topup-audit.mjs, reward-sop-audit.mjs, kitchen-welcome-audit.mjs
+| REACH: every brand-new save gets 40 coins in the welcome kit, once. QA drove
+two perfect first days and finished on 298 and 307 coins against a cheapest rack
+item of 300, so the best possible first day either just missed the shelf or just
+cleared it on a coin flip. Driven here through the shipped payout functions
+(the welcome kit, three logged meals, onHealthSync, every crate opened, the
+on-budget day close at the day-two boot) over twelve seeds, a perfect first day
+goes from a median 264 coins to 304, and a light walker's from 68 to 108. The
+unluckiest of the twelve seeds still lands at 294, six short, and the file says
+so on every run rather than quietly choosing a bigger number: 40 is Tom's
+figure. The price ladder, the crate coin ranges, the quest rewards and the spar
+cap are untouched. The grant is one ledger key paid inside its own transaction,
+so a second boot, a second tab and a restore pay nothing (ONCE row red without
+it: moved=0, rows=0), and it lives in the kit rather than on the Crew path so a
+signup that answers 429 cannot strand it (REG429 row red without it: coins=50).
+The welcome-kit toast names the coins, read off the real onboarding.
+
+2. PROOF: dish-worth-audit.mjs, pit-kitchen-hint-audit.mjs | REACH: the Pit's
+line about your live dish, and the Kitchen's own recipe list, now say what the
+dish is worth in plain words. Copy only: serving a dish still pays its 8 XP and
+no recipe was re-costed. Measured in tests/fight-sim.mjs against a mirror (a foe
+at 100% of your own stats), 2,000 seeds per arm, in two configurations because
+they disagree by about 3x: with a level-5 Hound the baseline is already an 84.7%
+win so everything saturates near +15pp, and with no pet it is 37.4% and the same
+dishes spread +18 to +60pp. As the share of even fights you lose: no dish
+15.3%/62.7%, Bone Broth 1.5%/25.0%, Hearty Hash 2.0%/11.9%, Necromancer's Feast
+0.2%/2.3%, Marrow Stew 8.5%/44.6%. So the first three say they more than halve
+the fights you lose, which is true in BOTH columns, and the Stew says the
+smaller thing (29 to 44%). No percentage is printed anywhere: the two columns
+disagree on size and one of them pretending to be the answer would be the
+over-precise figure the ruling forbids. The two PET dishes carry no claim at
+all, because the sim's player never takes a pet action, so their measured 0.0pp
+is the harness declining to answer rather than a finding. The audit re-measures
+every claim on each gate run instead of pinning the string; proved red three
+ways (a weak dish given the strong sentence, an unmeasurable dish given any
+sentence, a claim deleted): 3, 6 and 1 rows, exit 1 each.
 ## an audit cannot grade the wrong worktree (2026-09-07)
 PROOF: serve-tree-identity-audit.mjs
 
@@ -416,46 +863,6 @@ data/football-teams.js, the Locker Room buy flow in js/app.js and js/loot.js.
    full kit · 32 colourways is yours. ... The pet pieces wait in the Stable
    until a lizard hatches."; a control account already owning a lizard reads
    "Lizard Helmet · 32 colourways is yours. ..." with no such line.
-## the Boneyard states the odds (2026-09-07)
-
-Not stamped to a release: hotfix/boneyard-odds, off v497. Master handoff B16,
-"Explainers state the odds", no balance change, re-measured on this tree
-before fixing. Owned by this lane: the Glutton and Spire explainer sheets
-(openGluttonSheet, openSpireSheet in js/app.js) and the shared isOutmatched
-helper (js/pit.js).
-
-1. PROOF: unit.test.js | REACH: Open the Glutton, or a Spire you don't hold,
-   badly outmatched and the sheet says "You are outmatched at this level."
-   above the fight button, nothing more. isOutmatched (js/pit.js) runs the
-   real fight engine against your current stats, talents and pet and the
-   exact foe config the fight itself is about to use; it fires for a fresh
-   level 2 against the Glutton (0% measured win rate) and against a rival's
-   specced Spire tower (0%), and stops firing once real training points and
-   talent picks sit behind a build. Measured curve recorded in the comment
-   above OUTMATCHED_WIN_RATE: a plain unclaimed Spire's NPC warden never
-   actually crosses the 5% line at any tower roll (8-52% across its full
-   0.90-1.25 mult range, three player policies tried), because it gets an
-   easier AI below character level 12 (spires.js wardenFor) — only a rival's
-   specced tower does. The line is measured per fight, not hardcoded to
-   either foe's name or HP figure.
-
-2. PROOF: outmatched-audit.mjs | REACH: Same claim, read off a real rendered
-   page in both states (a fresh level-2 build: no training points, no
-   talents; and a build with real stat + talent progress) for both sheets.
-
-3. PROOF: unit.test.js | REACH: Any Spire sheet for a tower you don't hold
-   now says, in its own terms list, that fighting for it spends your one
-   shot at it today whatever the outcome, not only for a rival's tower: this
-   sheet only ever opens on that path, and settle() already spends
-   spireKey() on any result (win, loss or draw) there.
-
-4. PROOF: NONE, no dedicated audit (same untested shape as the map's own
-   long-press discovery hint, `mapLpHint`, which has none either) | REACH:
-   R41-8 (Haymaker carries the biggest number and is the worst play): a
-   one-time toast, "Tip: press and hold a move to see what it actually
-   does.", now points a new player at the existing 750ms press-and-hold
-   detail popup the first time any Pit-style fight opens, shown once, ever.
-
 ## the Stable rail tells the truth (2026-09-06)
 
 Not stamped to a release: hotfix/stable-rail-truth, off v493. HANDOFFMASTER20260906.md

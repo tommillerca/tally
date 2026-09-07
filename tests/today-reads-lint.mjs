@@ -70,7 +70,9 @@
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import './mem-idb.mjs';
 
 const ROOT = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -156,8 +158,17 @@ const GATED = {
   reclaimOwnedPets: { pin: /if \(_petsReclaimed\) return list;/, why: 'once per session (module flag), then a no-op' },
   petLevelBank: { pin: /if \(bank && ver >= 2\) return bank;/, why: 'once per install (kv migration), then the cached bank' },
   // its own ownedCosmeticIds read sits AFTER the `Array.isArray(list)` branch returns: the first-run migration only
-  petInstances: { pin: /return reclaimOwnedPets\(list\);\s*\}\s*const owned = await ownedCosmeticIds\(\);/, why: 'once per install (petInst migration), then the kv list' },
+  // Lane H, 2026-09-07: filtering selectable instances moved the return shape.
+  // Pin the entire comment-stripped body too: a new read before this suffix
+  // must not inherit the exemption. Part C executes the real battle pet path.
+  petInstances: { pin: /return \(await reclaimOwnedPets\(list\)\)\.filter\(selectablePetInstance\);\s*\}\s*const owned = await ownedCosmeticIds\(\);/,
+    sha256: '34893e1d84b1c3fa351146b26ee81bf1ee50ff301bf07ed0b0051fce4e68f4d2', why: 'once per install (petInst migration), then the kv list' },
 };
+function gateHolds(name) {
+  const g = GATED[name], fn = FNS.get(name);
+  return !!g && !!fn && g.pin.test(fn.body)
+    && (!g.sha256 || createHash('sha256').update(fn.body).digest('hex') === g.sha256);
+}
 const visiting = new Set();
 const drawReads = new Map();   // name -> {store: n}
 function readsOf(name, via) {
@@ -165,7 +176,7 @@ function readsOf(name, via) {
   if (visiting.has(name) || !FNS.has(name)) return {};
   visiting.add(name);
   const fn = FNS.get(name);
-  if (GATED[name] && GATED[name].pin.test(fn.body)) { trace.push(`(gated) ${name}: ${GATED[name].why}`); visiting.delete(name); drawReads.set(name, {}); return {}; }
+  if (gateHolds(name)) { trace.push(`(gated) ${name}: ${GATED[name].why}`); visiting.delete(name); drawReads.set(name, {}); return {}; }
   const body = drawBody(name, fn.body);
   const n = reads(body);
   for (const st of Object.keys(n)) trace.push(`${st} x${n[st]}  in ${name} (${fn.file}:${fn.line}) via ${[...visiting].join(' > ')}`);
@@ -195,7 +206,7 @@ if (process.env.VERBOSE) { for (const t of trace) console.log('read    ', t); fo
 
 ok('SAMPLE the closure from renderToday walked a real call graph', drawReads.size >= 40 && Object.keys(draw).length >= 3,
   `${drawReads.size} functions, ${trace.length} reading sites, ${stripped.length} listener/fallback strips`);
-for (const [name, g] of Object.entries(GATED)) ok(`GATE ${name} still carries the once-guard its exemption pins (${g.why})`, !!FNS.get(name) && g.pin.test(FNS.get(name).body), String(g.pin));
+for (const [name, g] of Object.entries(GATED)) ok(`GATE ${name} still carries the once-guard its exemption pins (${g.why})`, gateHolds(name), String(g.pin));
 ok('A1 the WHOLE Today draw (renderToday and everything it calls in the tick) scans log, xp, health and inv exactly once each',
   same(draw, { log: 1, xp: 1, health: 1, inv: 1 }), JSON.stringify(sorted(draw)) + (process.env.VERBOSE ? '' : '  (VERBOSE=1 lists every reading site)'));
 const tr = reads(today.body), fr = reads(fighter.body);
@@ -257,6 +268,54 @@ for (let i = 0; i < 20; i++) {
   t0 = performance.now(); (await db.all('log')).filter(r => r.date === TODAY); tS.push(performance.now() - t0);
 }
 console.log(`info mem-idb, ${DAYS * PER} rows, median of 20: byIndex ${med(tI).toFixed(2)} ms, full scan + filter ${med(tS).toFixed(2)} ms`);
+
+/* ---------- PART C: execute buildFighter's real pet assembly ----------
+ * Lane H, 2026-09-07. The frozen order reports five inv scans per tick, but
+ * the unmodified runtime has one cold reclaim scan and ZERO warm pet scans.
+ * The old pin counted the migration four times. Keep an executable check
+ * alongside the source pin so exemption repairs cannot hide repeated reads.
+ * This is a Node storage proof, not a browser timing measurement. */
+const fromRoot = file => pathToFileURL(path.join(ROOT, 'js', file)).href;
+const loot = await import(fromRoot('loot.js'));
+const pets = await import(fromRoot('pets.js'));
+const { db: petDb, kvSet, useDbName: usePetDbName } = await import(fromRoot('db.js'));
+const petStart = fighter.body.indexOf('let battlePet = null, petMeta = null;');
+const petEnd = fighter.body.indexOf('return { stats,', petStart);
+ok('CONTROL runtime pet assembly is extracted from buildFighter', petStart >= 0 && petEnd > petStart);
+if (petStart >= 0 && petEnd > petStart) {
+  const deps = { ...loot, ...pets };
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  const assemble = new AsyncFunction(...Object.keys(deps),
+    fighter.body.slice(petStart, petEnd) + 'return { battlePet, petMeta };').bind(null, ...Object.values(deps));
+  usePetDbName('today-reads-pet-runtime');
+  const iid = 'today-veteran', choices = pets.PET_TREES.imp.map(t => t.opts[0].id);
+  await petDb.put('inv', { id: 'cos-C1', kind: 'cos', itemId: 'C1' });
+  for (const [key, value] of Object.entries({
+    petInst: [{ iid, sp: 'C1', lineage: 0, shiny: false }],
+    petLvlV: 2, petLvlSteps: { [iid]: pets.PET_LEVEL_STEPS[9] },
+    petEquipped: iid, equipped: { C: 'C1' }, pettalents: { C1: choices },
+  })) await kvSet(key, value);
+  const originalAll = petDb.all;
+  let scans = {};
+  petDb.all = async function (store) {
+    scans[store] = (scans[store] || 0) + 1;
+    return originalAll.call(this, store);
+  };
+  try {
+    const cold = await assemble(); // finish the real reclaim and talent migrations
+    ok('CONTROL cold pet assembly reads inventory and retains earned talents',
+      scans.inv === 1 && cold.petMeta?.iid === iid && cold.petMeta.level === 10
+      && isDeepStrictEqual([...(cold.battlePet?.picks || [])], choices), JSON.stringify(scans));
+    for (let tick = 1; tick <= 2; tick++) {
+      scans = {};
+      const warm = await assemble();
+      ok(`C1 warm battle pet assembly scans no stores (tick ${tick})`,
+        Object.keys(scans).length === 0, JSON.stringify(scans));
+      ok(`C2 warm battle pet remains identical to the migrated pet (tick ${tick})`,
+        isDeepStrictEqual(warm, cold));
+    }
+  } finally { petDb.all = originalAll; }
+}
 
 console.log(fails ? `\n${fails} failed` : '\nall green');
 process.exit(fails ? 1 : 0);

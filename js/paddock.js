@@ -16,6 +16,7 @@
 // that against the real wire, this render site included.
 
 import { petInstances, petBonds, petLevelBank, petNicks, petWear, BOND_MAX, eggProgress, lifetimeStepsSum, inventory } from './loot.js';
+import { isKnownPet } from './pets.js';
 
 /* Nicknames, Bangers-register. Order matters: hashes index into it, so
    APPEND-ONLY once shipped (an insert re-names every pet in the world). */
@@ -98,7 +99,7 @@ export function motionFor(sp) {
 export async function paddockRoster() {
   const [insts, bonds, bank, nicks, wear] = await Promise.all([petInstances(), petBonds(), petLevelBank(), petNicks(), petWear()]);
   const names = assignNames(insts.map(x => x.iid));
-  return insts.map(x => ({
+  return insts.filter(x => isKnownPet(x.sp)).map(x => ({
     iid: x.iid,
     sp: x.sp,
     shiny: !!x.shiny,
