@@ -262,6 +262,14 @@ const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-ato
 PURE.unshift('store-copy-lint.mjs');
 PURE.push('coins-merge-tie-audit.mjs');   // R38-13 + lane 1: stale-blob merges keep the higher balance and cannot refund spent coins or dust; node-only
 PURE.unshift('no-debug-markers-lint.mjs');
+/* routine-race-audit is PURE for the same reason spawn-claim-atomic-audit is:
+   mem-idb under the real js/db.js, js/game.js and js/wellness.js, under a
+   second. It races two DIFFERENT routines finishing concurrently at the
+   daily XP cap minus one (mem-idb serialises the overlapping transactions,
+   so each call gets a genuine turn), the exact shape that paid 20 XP against
+   a documented 15 XP ceiling (measured 2026-09-06): the cap was read via a
+   ledger scan, then decided several awaits later, off that stale count. */
+PURE.push('routine-race-audit.mjs');
 const BROWSER = [
   /* the raw-sink fix's STATE half. render-sink-lint pins the source, and this
      repo has watched shape assertions stay green over broken state, so this one

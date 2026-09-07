@@ -17229,12 +17229,26 @@ async function renderCharacter(wrap, tab, opts = {}) {
       b.disabled = true;
       const held = crates.filter(c => c.crate === b.dataset.openAll);
       const opened = [];
-      for (const crate of held) opened.push(await openCrate(crate.id));
-      await openCrateReveal({
-        crate: b.dataset.openAll,
-        results: opened.flatMap(r => r.results || []),
-        coins: opened.reduce((sum, r) => sum + (r.coins || 0), 0),
-      });
+      /* R39-x: a crate that threw mid-loop (a bad row, a write failure) used to
+         throw the whole handler, so nothing already opened was ever revealed,
+         the unopened crates were never re-attempted, and the disabled button
+         never came back. Each open is still spent one at a time (sequential,
+         never concurrent: two crates opening at once is the same race the
+         reveal-audit BULK row already pins), but a failure partway now still
+         shows whatever was actually taken instead of losing it silently, and
+         the crates the loop never reached stay untouched in inventory. The
+         re-render below rebuilds this tab from the real db, so it re-enables
+         the control (or removes it) on its own; nothing to reset by hand. */
+      try {
+        for (const crate of held) opened.push(await openCrate(crate.id));
+      } catch { /* reveal what actually landed below; the rest stays unopened */ }
+      if (opened.length) {
+        await openCrateReveal({
+          crate: b.dataset.openAll,
+          results: opened.flatMap(r => r.results || []),
+          coins: opened.reduce((sum, r) => sum + (r.coins || 0), 0),
+        });
+      }
       renderCharacter(wrap, 'crates');
     }));
     $('#useBoost', content)?.addEventListener('click', async () => {
@@ -22743,7 +22757,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v494'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v495'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
