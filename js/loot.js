@@ -4,7 +4,7 @@
 
 import { db, kvGet, kvSet, kvBumpRevisioned, kvUpdate, newId } from './db.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneheadz.js';
-import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SOLD, footballItemId, footballGrantIds, footballBundleIds, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
+import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SOLD, FOOTBALL_PETS, footballItemId, footballGrantIds, footballBundleIds, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
 
@@ -81,7 +81,20 @@ export const DROP = {
 
    `stocked` is a parameter for the same reason footballBundleSellable's are: the
    shop is shut until Tom flips FOOTBALL_KIT_LIVE, and a buy path nobody can call
-   is a buy path nobody has tested. Production callers pass nothing. */
+   is a buy path nobody has tested. Production callers pass nothing.
+
+   `petsPending` (Tom, 2026-09-06, "warn before buying"): a pet garment
+   (pet-helmet, pet-jersey) worn is drawn on a lizard, and a player with no
+   lizard yet (see FOOTBALL_PETS) has nothing to put it on. Nothing is
+   withheld or refunded -- the garment is granted exactly as normal and simply
+   waits, owned, in the Wardrobe until a lizard hatches -- but the confirm
+   toast says so rather than the player finding out silently. */
+// Does this save own a lizard at all (C4 Beardie or CX Founder's Lizard,
+// FOOTBALL_PETS)? Called by both buy paths below to decide whether the pet
+// garments they hand over have anything to be worn on yet. Defined here
+// (petInstances is a hoisted function declaration further down this module)
+// rather than duplicated in each buy path.
+const ownsFootballPet = async () => (await petInstances()).some(x => FOOTBALL_PETS.includes(x.sp));
 export async function buyFootballItem(itemId, stocked = footballPieceSellable()) {
   const ids = footballGrantIds(itemId);
   const cost = FOOTBALL_KIT_PRICE_PLACEHOLDER;
@@ -97,7 +110,8 @@ export async function buyFootballItem(itemId, stocked = footballPieceSellable())
     return { ok: false, reason: 'owned' };
   }
   for (const id of ids) if (id !== itemId) await grantCosmetic(id, 'football');
-  return { ok: true, label: `${garment.label} · ${FOOTBALL_TEAMS.length} colourways`, granted: ids.length, cost, coins: left };
+  const petsPending = !!garment.pets && !await ownsFootballPet();
+  return { ok: true, label: `${garment.label} · ${FOOTBALL_TEAMS.length} colourways`, granted: ids.length, cost, coins: left, petsPending };
 }
 
 /* THE BUNDLE. Tom, 2026-09-04: "per garment only with a bundle of everything for
@@ -107,12 +121,16 @@ export async function buyFootballItem(itemId, stocked = footballPieceSellable())
    the player tapped and is IGNORED, kept only so js/app.js keeps working until
    its shelf patch lands (docs/FOOTBALL-KIT.md).
    Same receipt-decides shape as above. PRICED FOR WHAT IS MISSING (Tom,
-   2026-09-05, Impeccable's football-kit critique): a player who owns 3 of 5
-   garments used to pay the full 16,800 for the other two, worth 8,400.
-   footballBundleQuote charges min(bundle, piece x missing garments) instead;
+   2026-09-05, Impeccable's football-kit critique, PRORATED 2026-09-06): a
+   player who owns 3 of 5 garments pays 20% off the two remaining garments'
+   sum, never the flat 16,800. footballBundleQuote does the arithmetic;
    footballOwnedGarmentCount counts a garment as owned the moment any one of
    its 32 team ids is, matching how footballGrantIds hands them over. Owning
-   ALL of it is refused outright. */
+   ALL of it is refused outright.
+   `petsPending`: the bundle always includes both pet garments, so the same
+   "nothing to wear it on yet" warning buyFootballItem carries applies here
+   unconditionally on a save with no lizard, regardless of which garments
+   this particular purchase actually delivered. */
 export async function buyFootballBundle(_teamId, stocked = footballBundleSellable()) {
   const ids = footballBundleIds();
   if (!ids.length || !stocked) return { ok: false, reason: 'not-stocked' };
@@ -147,7 +165,8 @@ export async function buyFootballBundle(_teamId, stocked = footballBundleSellabl
   const fair = footballBundleQuote(FOOTBALL_SOLD.length - landedGarments).cost;
   const refund = cost - fair;
   const finalCoins = refund > 0 ? await coinsAdd(refund) : left;
-  return { ok: true, label: `The full kit · ${FOOTBALL_TEAMS.length} colourways`, granted: missing, cost, coins: finalCoins, save };
+  const petsPending = !await ownsFootballPet();
+  return { ok: true, label: `The full kit · ${FOOTBALL_TEAMS.length} colourways`, granted: missing, cost, coins: finalCoins, save, petsPending };
 }
 
 export async function buyDropItem(itemId) {

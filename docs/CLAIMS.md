@@ -19,6 +19,39 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## the bundle prorates, the pet kit says who it fits (2026-09-07)
+
+Not stamped to a release: hotfix/bundle-prorate-petkit, off v497. Two rulings
+from Tom, both dated 2026-09-06. Owned by this lane: `footballBundleQuote` in
+data/football-teams.js, the Locker Room buy flow in js/app.js and js/loot.js.
+
+1. PROOF: football-kit-audit.mjs | REACH: In the Shop's Kit room, the full-kit
+   tile's price is your 20% saving applied to whatever you are still missing,
+   not a flat 16,800 the moment you own anything. Missing 5 (nothing owned):
+   16,800. Missing 4: 13,400. Missing 3: 10,100. Missing 2: 6,700. Missing 1:
+   3,400 (each rounded to the nearest 100 coin; the exact 20%-off numbers are
+   16,800 / 13,440 / 10,080 / 6,720 / 3,360). Own everything and the tile reads
+   "The whole kit is yours" instead of a price. Before this fix, owning 1 of 5
+   garments quoted the full 16,800 for the other 4 -- the flat five-garment
+   price for one garment short of the whole kit -- because the superseded
+   2026-09-05 fix (charge only for the missing pieces, capped at the flat
+   bundle price) ties the flat price the moment 4 of 5 are missing.
+
+2. PROOF: football-kit-audit.mjs, football-render-audit.mjs | REACH: The two
+   lizard cosmetic tiles and the full-kit tile all say "For the lizard" on
+   their own line, whether or not you have one yet. If you own no lizard (no
+   C4 Beardie, no CX Founder's Lizard) when you buy a lizard piece or the
+   bundle, the confirm toast adds "The pet pieces wait in the Stable until a
+   lizard hatches." Nothing is withheld or refunded: the garment is granted
+   in all 32 team colours exactly as normal, it just has nowhere to be worn
+   yet. Own a lizard already and the same purchase confirms with no such
+   line. Measured on a fresh account: buying a pet tile with no lizard reads
+   "Lizard Jersey · 32 colourways is yours. ... The pet pieces wait in the
+   Stable until a lizard hatches."; the same account's bundle buy reads "The
+   full kit · 32 colourways is yours. ... The pet pieces wait in the Stable
+   until a lizard hatches."; a control account already owning a lizard reads
+   "Lizard Helmet · 32 colourways is yours. ..." with no such line.
+
 ## the Stable rail tells the truth (2026-09-06)
 
 Not stamped to a release: hotfix/stable-rail-truth, off v493. HANDOFFMASTER20260906.md
