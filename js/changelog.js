@@ -10,6 +10,8 @@ export const CHANGES = [
     'A friend\'s Crew card says the one thing that changed since you last looked: leveled up, new gear, took a spire. Cards and profiles show how many spires a friend holds, and the Crew badge lights when your own race rank improves overnight.',
     'The race gap is to the racer directly above you, not to first place. Settles tonight fires for the whole last day of the week. Everyone outside the podium gets told where they placed. And a friend whose stats never synced says so instead of showing a fight with NaN damage.',
     'The Wardrobe grid only paints the tiles on screen and one screen ahead, so opening a slot with two hundred hats no longer stalls.',
+    'Sparring says when the day\'s paid slots are spent instead of printing a silent +0 on a win, Gwart stops greeting you with the same line every morning, the daily spin can land on your first day, and the level chip on Today updates the moment a fight settles.',
+    'Opening a crate, hatching an egg, melting gear or salvaging a pet now happens in one step: the thing you spent and the thing you got are written together, so a crash in between can no longer leave you with neither.',
   ] },
   { n: 497, date: '2026-09-07', title: 'The Stable rail tells the truth', items: [
     'The lizard\'s team rail puts the teams you own first, parks on the team you picked last time, and tapping a team you own applies it to every football piece she has in that team. Tapping a team you do not own says which piece is missing, never that a helmet you own is not in your wardrobe.',
