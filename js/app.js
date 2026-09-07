@@ -66,7 +66,7 @@ import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear, bestInstance } from './loot.js';
-import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs, ownedCellCount } from './pets.js';
+import { buildBattlePet, legalPicks, isKnownPet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs, ownedCellCount } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
@@ -17476,18 +17476,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
       });
     });
     $$('[data-petpick]', content).forEach(b => b.addEventListener('click', async () => {
-      const petId = b.dataset.pet, tier = Number(b.dataset.tier), node = b.dataset.petpick;
-      const meta = fighter.petMeta;
-      if (!meta || meta.level < tier) { toast(`Pet reaches this at level ${tier}: keep walking.`, 2600); return; }
-      const cur = await petPicks(petId);
-      const tierNodes = (PET_TREES[familyOf(petId).key].find(t => t.tier === tier) || {}).opts.map(o => o.id);
-      const next = [...cur.filter(id => !tierNodes.includes(id)), node]; // one pick per tier
-      await setPetPick(petId, node, next);
+      const iid = b.dataset.iid, tier = Number(b.dataset.tier), node = b.dataset.petpick;
+      const next = await choosePetTalent(iid, node);
+      if (!next) { toast('This pet has not unlocked that talent. Keep walking.', 2600); return; }
       popSound(S.sounds);
       // update the highlight IN PLACE (a full re-render resets scroll and bounces
       // the view back up to the paperdoll); keep petMeta in sync for later renders
       $$(`.pet-opt[data-tier="${tier}"]`, content).forEach(o => o.classList.toggle('on', o.dataset.petpick === node));
-      if (fighter.petMeta && fighter.petMeta.id === petId) fighter.petMeta.picks = next;
+      if (fighter.petMeta && fighter.petMeta.iid === iid) fighter.petMeta.picks = next;
     }));
   }
   if (tab === 'looks') {
@@ -18089,7 +18085,7 @@ function petPanelHtml(petId, fighter) {
         <div class="pet-tier ${lvl >= row.tier ? '' : 'locked'}">
           <span class="pet-tier-lbl">Lv ${row.tier}${lvl < row.tier ? ' · locked' : ''}</span>
           <div class="pet-opts">
-            ${row.opts.map(o => `<button class="pet-opt ${picks.includes(o.id) ? 'on' : ''}" data-pet="${petId}" data-tier="${row.tier}" data-petpick="${o.id}" ${lvl < row.tier ? 'disabled' : ''}>
+            ${row.opts.map(o => `<button class="pet-opt ${picks.includes(o.id) ? 'on' : ''}" data-pet="${petId}" data-iid="${esc(meta.iid)}" data-tier="${row.tier}" data-petpick="${o.id}" ${lvl < row.tier ? 'disabled' : ''}>
               <b>${esc(o.name)}</b><small>${esc(o.desc)}</small></button>`).join('')}
           </div>
         </div>`).join('')}
@@ -19735,6 +19731,20 @@ async function openFriendPaddock(f) {
 }
 
 let stableGhostWarned = false;   // R39-31: one warning per session, not one per render
+// Re-read the instance and its earned level at the click, since an open tree
+// can outlive a restore or a removed pet. Never trust a button's cached level.
+async function choosePetTalent(iid, node) {
+  const inst = (await petInstances()).find(x => x.iid === iid);
+  if (!inst) return null;
+  const level = petLevel(await petStepsForIid(iid));
+  if (!legalPicks(inst.sp, level, [node]).includes(node)) return null;
+  const row = PET_TREES[familyOf(inst.sp).key].find(t => t.opts.some(o => o.id === node));
+  const cur = await petPicks(iid);
+  const next = [...cur.filter(id => !row.opts.some(o => o.id === id)), node];
+  const saved = await setPetPick(iid, node, next);
+  return saved.includes(node) ? saved : null;
+}
+
 async function openStable(opts = {}) {
   let sel = [];      // iids flagged for breeding
   let offSp = null;
@@ -19787,7 +19797,6 @@ async function openStable(opts = {}) {
     const eqIid0 = await equippedPetIid();
     const [instsAll, bank, st, eqOwn, nicks, ownedCos] = await Promise.all([petInstances(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds()]);
     /* R44-1: use the same known-species boundary as every state reader. */
-    const { isKnownPet } = await import('./pets.js');
     const insts = instsAll.filter(x => x && isKnownPet(x.sp));
     if (insts.length !== instsAll.length && !stableGhostWarned) { stableGhostWarned = true; console.warn('Stable: skipped unsupported pet row(s)', instsAll.filter(x => !x || !isKnownPet(x.sp))); }
     /* OUT WITH YOU means the C slot holds her. A petEquipped that the worn outfit
@@ -19813,7 +19822,7 @@ async function openStable(opts = {}) {
     if (openIid === undefined) openIid = null;
     if (openIid !== null && !insts.some(x => x.iid === openIid)) openIid = null;
     const openInst = insts.find(x => x.iid === openIid) || null;
-    const openPicks = openInst ? await petPicks(openInst.sp) : [];
+    const openPicks = openInst ? await petPicks(openInst.iid) : [];
     // inline talent tree for one pet, rendered directly under its card
     const petTalentTree = (inst, lvl, picks) => {
       const fam = familyOf(inst.sp);
@@ -19826,7 +19835,7 @@ async function openStable(opts = {}) {
         <div class="pet-tree">${PET_TREES[fam.key].map(row => `
           <div class="pet-tier ${lvl >= row.tier ? '' : 'locked'}">
             <span class="pet-tier-lbl">Lv ${row.tier}${lvl < row.tier ? ' · locked' : ''}</span>
-            <div class="pet-opts">${row.opts.map(o => `<button class="pet-opt ${picks.includes(o.id) ? 'on' : ''}" data-petpick2="${o.id}" data-sp="${inst.sp}" data-tier="${row.tier}" data-lvl="${lvl}" ${lvl < row.tier ? 'disabled' : ''}><b>${esc(o.name)}</b><small>${esc(o.desc)}</small></button>`).join('')}</div>
+            <div class="pet-opts">${row.opts.map(o => `<button class="pet-opt ${picks.includes(o.id) ? 'on' : ''}" data-petpick2="${o.id}" data-iid="${esc(inst.iid)}" data-sp="${inst.sp}" data-tier="${row.tier}" data-lvl="${lvl}" ${lvl < row.tier ? 'disabled' : ''}><b>${esc(o.name)}</b><small>${esc(o.desc)}</small></button>`).join('')}</div>
           </div>`).join('')}</div>`;
       const sigObj = petSignature(inst.sp);
       if (sigObj) {
@@ -20887,11 +20896,9 @@ async function openStable(opts = {}) {
       openPetBreedResult(res.offspring);       // reveal on top (Stable stays open, no race)
     });
     $$('[data-petpick2]', body).forEach(btn => btn.addEventListener('click', async () => {
-      const sp = btn.dataset.sp, tier = Number(btn.dataset.tier), node = btn.dataset.petpick2, lvl = Number(btn.dataset.lvl);
-      if (lvl < tier) { toast(`Reaches this at level ${tier}: keep walking.`, 2400); return; }
-      const cur = await petPicks(sp);
-      const tierNodes = (PET_TREES[familyOf(sp).key].find(t => t.tier === tier) || {}).opts.map(o => o.id);
-      await setPetPick(sp, node, [...cur.filter(id => !tierNodes.includes(id)), node]);
+      const iid = btn.dataset.iid, tier = Number(btn.dataset.tier), node = btn.dataset.petpick2;
+      const next = await choosePetTalent(iid, node);
+      if (!next) { toast('This pet has not unlocked that talent. Keep walking.', 2400); return; }
       popSound(S.sounds);
       $$(`.pet-opt[data-tier="${tier}"]`, body).forEach(o => o.classList.toggle('on', o.dataset.petpick2 === node));
     }));
@@ -23526,7 +23533,7 @@ async function buildFighter(pre = {}) {
   if (petInst) {
     const steps = await petStepsForIid(petInst.iid);
     const pl = petLevel(steps);
-    const picks = await petPicks(petInst.iid);
+    const picks = legalPicks(petInst.sp, pl, await petPicks(petInst.iid));
     battlePet = buildBattlePet(petInst.sp, pl, picks, { shiny: !!petInst.shiny, lineage: petInst.lineage || 0 });
     petMeta = { id: petInst.sp, iid: petInst.iid, level: pl, picks, steps, lineage: petInst.lineage || 0, shiny: !!petInst.shiny, morph: isMorph(petInst.morph) ? petInst.morph : 'base' };
   }

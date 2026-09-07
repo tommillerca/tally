@@ -1,5 +1,15 @@
 # What each patch note claims, and what backs it
 
+## Lane A: instance talent state, round two (2026-09-07)
+
+1. PROOF: pet-state-audit.mjs | REACH: Stable talent reads and clicks use the selected instance id. The real legalPicks export checks the instance's current earned level before a click writes; buildFighter filters again at the level passed to buildBattlePet. Node guards execute the production click bodies and battle assembly with the real pets, loot and db modules over the existing in-memory IndexedDB harness. All 11 rows pass. Restored historical source and isolated guard removals fail on throwaway copies. The dormant wardrobe talent handler is also converted and covered at the handler level; petPanelHtml currently has no call sites.
+
+2. PROOF: pet-state-audit.mjs | REACH: Existing migration archives legacy choices and preserves only legal choices per existing instance. Unknown species remain in storage but are excluded from selection. New duplicates do not inherit unearned talents. These state implementations already existed in round one and now execute against lane D's real exports without temporary pet-helper fixtures.
+
+No single copy is chosen to keep everything. Each of the five existing copies keeps the old species choices that its own level allows. For example, with copies at levels 10, 6, 4, 2 and 1, they keep five, three, two, one and zero choices respectively; five equally trained copies all keep the same legal choices. The next time the player opens the Stable, each copy shows its own saved choices and its unearned tiers are locked. Some players silently lose an active choice they previously made: choices above a copy's level disappear without a migration notice. The original choices remain archived, but they are not automatically restored when that copy levels up. Newly hatched copies start with no choices. This preserves the round-one migration ruling; whether that silent loss needs a notice or a different policy is for Tom to rule on.
+
+3. PROOF: pet-talent-ui-audit.mjs | REACH: Browser rows operate Stable save, reopen, stale-level refusal, a locked duplicate and a real fight. These rows are written and registered but UNRUN here because browser/server proofs are prohibited in this sandbox. Expected output: five PASS rows and pet-talent-ui: 5 passed, 0 failed. This is not a claim of browser verification.
+
 ## Lane D: pet family contract (2026-09-07)
 
 1. PROOF: pet-family-audit.mjs | REACH: A family registered without actions or an ability implementation is refused by name at the battle seams. The original source silently supplied Hound's Bite and Imp's petdebuff to the dummy family; both guards were run red on a throwaway copy, then green on this checkout. The shared isKnownPet and legalPicks helpers reject unknown species and retain only unlocked, in-family choices, first pick per tier and original order. Each pick rule also failed independently when its predicate was removed from a throwaway copy. Consumer integration belongs to lanes A and C.
