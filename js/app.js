@@ -90,7 +90,7 @@ import {
   deriveStats, legacyHabitStats, habitGrantPoints, derived, STAT_META, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP, TRAIN_CAP,
   applyAction, endTurn, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
-  petActionsFor, applyPetAction, talentRanks, nodeRanks, GUARD_STAMINA,
+  petActionsFor, applyPetAction, talentRanks, nodeRanks, GUARD_STAMINA, isOutmatched,
 } from './pit.js';
 import { HERO_EDGE } from '../data/hero-edge.js';
 import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers, petWornTints, petWornItems, petCanWear,
@@ -6626,6 +6626,13 @@ async function gluttonBeaten(slot) {
   return allXp.some(r => r.key === gluttonKey(dateKey(), slot));
 }
 
+/* The Glutton's own foe config, byte for byte what the #gluttonFight handler
+   below hands to openFight: mult, aiLevel and talents. isOutmatched (js/pit.js)
+   needs the exact numbers the real fight uses, not a re-derived guess. */
+const GLUTTON_FOE_TALENTS = ['heavyhands', 'marrowlust', 'bonebreaker'];
+const GLUTTON_FOE_AI_LEVEL = 3;
+const GLUTTON_FOE_MULT = 1.3;
+
 async function openGluttonSheet() {
   const slot = gluttonSlotNow();
   // "beaten" is per APPEARANCE, not forever: he's back next window. Note this no
@@ -6633,6 +6640,19 @@ async function openGluttonSheet() {
   // if the window closed while you were fighting, which is exactly the state that
   // used to re-offer the fight.
   const beaten = await gluttonBeaten(slot);
+  /* Master handoff B16 (2026-09-07): "at level 2 the Glutton is unwinnable and
+     the sheet doesn't say so." isOutmatched runs the real fight engine against
+     the player's REAL current stats/talents/pet, so this fires only when it is
+     actually true, not for every fresh account forever. Skipped once already
+     cleansed: no fight is being offered, so there is nothing to warn about. */
+  let outmatched = false;
+  if (!beaten) {
+    const f = await buildFighter();
+    outmatched = isOutmatched(
+      { stats: f.stats, talents: f.fightTalents, pet: f.battlePet, gearArmor: f.gearArmor },
+      { stats: scaleStats(f.stats, GLUTTON_FOE_MULT), talents: GLUTTON_FOE_TALENTS, aiLevel: GLUTTON_FOE_AI_LEVEL },
+    );
+  }
   const wrap = openSheet(`
     <button class="sheet-close" style="position:absolute;top:12px;right:14px;z-index:2">Done</button>
     <div class="sheet-body glutton-card" style="border:none;background:none;padding-top:8px">
@@ -6641,6 +6661,7 @@ async function openGluttonSheet() {
       ${gluttonHeroHtml()}
       ${gluttonLoreHtml()}
       <p class="glutton-mech">It <b>blights</b> the ground it eats. Hunt it down and win to <b>cleanse the land</b> and claim its hoard.</p>
+      ${outmatched ? '<p class="note glutton-outmatched">You are outmatched at this level.</p>' : ''}
       ${beaten
         ? '<p class="glutton-beaten">Cleansed for now. He crawls back out at his next feeding.</p>'
         : '<button class="glutton-cta" id="gluttonFight">FACE THE GLUTTON</button>'}
@@ -6698,8 +6719,8 @@ async function openGluttonSheet() {
     }
     const fighter = await buildFighter();
     openFight(wrap, fighter, {
-      mode: 'glutton', name: 'The Glutton', mult: 1.3, aiLevel: 3,
-      talents: ['heavyhands', 'marrowlust', 'bonebreaker'], venue: 'The Blighted Yard',
+      mode: 'glutton', name: 'The Glutton', mult: GLUTTON_FOE_MULT, aiLevel: GLUTTON_FOE_AI_LEVEL,
+      talents: GLUTTON_FOE_TALENTS, venue: 'The Blighted Yard',
       // carry the appearance INTO the fight, so a settle after the window closes
       // still files the win under the appearance that was actually fought
       gluttonSlot: slot,
@@ -6898,7 +6919,7 @@ function openDenSheet(den, { cleared = false, inRange = false, onFight = null } 
   return wrap;
 }
 
-function openSpireSheet(s, view, rival = null) {
+async function openSpireSheet(s, view, rival = null) {
   const holder = rival ? (rival.ownerName || 'A rival') : s.warden;
   /* NEVER OFFER A FIGHT THE SERVER WILL REFUSE (QA round 20, R20-P2). A rival
      takeover debits a Pit fight at the tap and the claim is only asked for after
@@ -6913,6 +6934,28 @@ function openSpireSheet(s, view, rival = null) {
   const shieldUntil = rival && rival.claimedAt ? rival.claimedAt + SPIRE_SHIELD_MS : 0;
   const shieldMins = Math.max(1, Math.ceil((shieldUntil - Date.now()) / 60000));
   const shielded = shieldUntil > Date.now();
+  /* This sheet is only ever opened for a tower you don't hold (js/app.js,
+     the !view.held route into it), and settle() spends spireKey(...) on ANY
+     outcome for that path (win, loss or draw), sieges and your own towers
+     exempt. So the line below is unconditionally true here, not gated on the
+     outmatched check: fight it or not, a loss still costs today's one shot at
+     THIS tower. */
+  const dailyAttemptNote = `Win or lose, fighting for ${esc(s.name)} spends your one shot at it today. Come back tomorrow if it doesn't go your way.`;
+  // The warden/defender this sheet will actually offer, computed once and
+  // reused by both the outmatched check and the fight click below, so neither
+  // can drift from the other or double up on buildFighter()/totalXp() reads.
+  const fighter = shielded ? null : await buildFighter();
+  const npcWarden = rival || shielded ? null : wardenFor(s, levelFor(await totalXp()).level);
+  let outmatched = false;
+  if (fighter) {
+    const foe = rival
+      ? { stats: (rival.defender && rival.defender.stats) || scaleStats(fighter.stats, 1), talents: (rival.defender && rival.defender.talents) || [], aiLevel: 3 }
+      : { stats: scaleStats(fighter.stats, npcWarden.mult), talents: [], aiLevel: npcWarden.aiLevel };
+    outmatched = isOutmatched(
+      { stats: fighter.stats, talents: fighter.fightTalents, pet: fighter.battlePet, gearArmor: fighter.gearArmor },
+      foe,
+    );
+  }
   const wrap = openSheet(`
     <div class="sheet-head"><h2>${esc(s.name)}</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
@@ -6929,14 +6972,15 @@ function openSpireSheet(s, view, rival = null) {
         <li>A tower <b>levels up</b> every time it changes hands or survives a siege, and pays more tribute for it.</li>
         <li>You can hold <b>${SPIRE_CAP}</b> at once, so pick towers you actually walk past.</li>
         ${rival ? '<li>Taking one off another player costs <b>one Pit fight</b>, and a tower just taken holds its walls for an hour.</li>' : ''}
+        <li>${dailyAttemptNote}</li>
       </ul>
+      ${outmatched ? '<p class="note spire-outmatched">You are outmatched at this level.</p>' : ''}
       ${shielded
         ? `<button class="btn" disabled style="width:100%">Walls hold for ${shieldMins} min</button>
            <div class="why">${esc(holder)} only just took it. Come back in ${shieldMins} min and it can change hands again: fighting now costs you a Pit fight and wins you nothing.</div>`
         : `<button class="btn" id="spireFight" style="width:100%">Face ${esc(holder)}</button>`}
     </div>`, { cls: '', name: 'Dark Spire' });
   $('#spireFight', wrap)?.addEventListener('click', async () => {
-    const fighter = await buildFighter();
     if (rival) {
       // Taking a tower off a PLAYER costs a Pit fight. Spire fights were free, so
       // two friends at one corner could flip a spire back and forth for 80 coins a
@@ -6965,9 +7009,8 @@ function openSpireSheet(s, view, rival = null) {
       });
       return;
     }
-    const w = wardenFor(s, levelFor(await totalXp()).level);
-    openFight(wrap, fighter, { mode: 'spire', name: w.name, mult: w.mult, aiLevel: w.aiLevel,
-      venue: w.venue, spire: s,
+    openFight(wrap, fighter, { mode: 'spire', name: npcWarden.name, mult: npcWarden.mult, aiLevel: npcWarden.aiLevel,
+      venue: npcWarden.venue, spire: s,
       // seeded off the TOWER, not the warden name: five names across every spire
       // in town would otherwise be five faces forever
       foeOutfit: themedLook('spire', s.id) });
