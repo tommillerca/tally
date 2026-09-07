@@ -2086,23 +2086,21 @@ export function rollCosmetic(owned, floor, slotBias) {
  * which is recoverable, where the other order pays a crate nobody owns out of
  * the economy, which is not. */
 export async function openCrate(invId) {
-  const crateRow = await db.take('inv', invId);
-  if (!crateRow || crateRow.kind !== 'crate') {
-    if (crateRow) await db.put('inv', crateRow);   // not a crate: put it straight back
-    throw new Error('crate gone');
-  }
   /* THE TAKE RECEIPT (QA round 34 P0). A cloud merge (js/db.js importAll,
      replace:false) `os.put`s every 'inv' row a blob carries, unconditionally:
      right, for a row this device has never seen, wrong for one it already
      opened, because a blob older than the local save still carries the
-     unopened row. Same bounded-list idiom js/social.js already uses for
-     'grantsSeen'. importAll checks this id before re-adding an inv row on a
-     merge; a crate this device has taken can never come back through one. */
-  await kvUpdate('crateTaken', cur => {
-    const arr = Array.isArray(cur) ? cur : [];
-    if (arr.includes(crateRow.id)) return undefined;
-    return [...arr, crateRow.id].slice(-500);
-  }, []);
+     unopened row. db.takeInv deletes the row and writes its id to kv
+     'invTaken' in ONE transaction (2026-09-06; it was db.take, then a separate
+     kvUpdate of a 500-id 'crateTaken' ring, so a crash between them lost the
+     receipt and crate 501 let a stale blob revive crate 1). importAll still
+     reads the legacy 'crateTaken' list; nothing writes it any more. The kind
+     check happens BEFORE the take so a non-crate row is never taken and never
+     gets a receipt it would otherwise have to hand back. */
+  const peek = await db.get('inv', invId);
+  if (!peek || peek.kind !== 'crate') throw new Error('crate gone');
+  const crateRow = await db.takeInv(invId);
+  if (!crateRow) throw new Error('crate gone');   // another caller took it between the peek and the take
   const def = CRATES[crateRow.crate] || CRATES.daily;
   const owned = await ownedCosmeticIds();
   const results = [];
