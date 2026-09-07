@@ -91,6 +91,41 @@ rather than behaviour. Nothing about what the app sends changed.
 1. PROOF: screen-sweep.mjs, unit.test.js | REACH: Settings, ABOUT, "Privacy policy", Read. The row is never gated, needs no account, and works offline and inside the store build because privacy.html is now in sw.js's PRECACHE and in native/build-www.sh's copy list. Before this, privacy.html was linked from exactly two places, both inside the survey sheet, whose Settings row is gated on `!surveyDone`, so the only route to the policy vanished the moment a player filled the survey: App Store guideline 5.1.1(i), and a rejection. PRIVACY-LINK walks all seven routes with `surveyDone` forced TRUE and fetches the href rather than trusting the anchor, because sw.js answers a navigation miss with index.html and a 404 would otherwise read as a pass. Proven red on origin/main: 0 matches across 7 routes, and the static half fails with "Settings must carry a privacy policy row".
 
 2. PROOF: unit.test.js | REACH: open the Boneyard map. The intro used to say, at the moment of the location grant, "Your location is used on this phone only, never stored, never uploaded", while the map's own boot sends a 0.02-degree grid cell (about 2.2 km, `GET /spires?ids=sp-2464--6156` from 49.2827, -123.1207) to the server for Spires. It now says spawns and dens are worked out on the phone and exact coordinates never leave it, and that the map cell you are in, about 2.2 km across, goes to the server for the shared towers. That matches the iOS purpose string corrected in v498 and privacy.html's "Location and the map" section; nothing on the wire changed. The guard is a conjunction, so if Spires ever stop sending a cell it goes red and asks for the copy to be revisited rather than letting "never uploaded" become true by accident. Proven red with the line restored: `js/app.js:21449: "used on this phone only"`.
+## the top of the screen is one colour (2026-09-07)
+
+Not stamped to a release: fix/top-sliver, off v504. Tom, from a screenshot of
+the live app on his own iPhone: "ive noticed this top sliver recently a couple
+times sometimes it goes away i think after an update but looks glitchy". A black
+band across the full width a few tens of points down from the top, with the top
+two rounded corners and the warm amber top edge of a card clipped inside it, and
+CORRECT hero green both above and below it.
+
+DIAGNOSED OFF A RENDER RATHER THAN OFF THE CSS, and reproduced on demand. The
+band is `.today-plate::before` (the page backdrop, rgb(13,12,18)) and the clipped
+card is `.upd-banner`, the "Update available" banner. `#updBanner` was the second
+child of the Today screen, between `.today-plate` and `.hero-card`, and it is
+EMPTY unless version.json says the live build is ahead of the running one: that
+is the whole of the intermittency, and it is exactly why an update clears it.
+The hero's bleed under the island is a negative `margin-top: calc(-1 * (--sat +
+14px))` on `.hero-scene` which collapses out through `.hero-card`, and it only
+lands the art at y=0 while nothing above it has height. Measured at 393x852,
+--sat 59, with the banner mounted: `#updBanner` 73 -> 152.9 (79.9 tall) and
+`.hero-scene` 91.9, i.e. 73 + 79.9 + 12 - 73. The negative margin ate 73px of the
+BANNER instead of the scroller's padding, the opaque hero painted over the rest,
+and the 18.9px left over is the band. At --sat 0 the same arithmetic leaves
+77.9px of it. Not a fade and not a gap: an overlap.
+
+RULED OUT, each against the render rather than in the abstract: a restored
+scrollTop (the band is there at scrollTop 0); a transform or containing block
+clipping the bleed (with the banner absent the hero's box measures top 0 at both
+insets); a crate or news plate mounting above the hero (the screen's child list
+is plate, hero-card, hero-actions, and nothing else can precede the hero: the only
+other insert in js/app.js is one `grid.insertBefore` in the Boneyard); and the
+service worker pairing a stale app.css with a fresh js/app.js (sw.js precaches
+both into ONE cache named VERSION, all-or-nothing on install, and serves the
+shell cache-first out of that single cache, so the two cannot disagree).
+
+1. PROOF: top-strip-audit.mjs | REACH: on the Bonehead tab the colour behind the status bar and the Dynamic Island runs unbroken into the hero art, including while you are on an old build with the "Update available" banner showing. That banner moved from above the hero to under the four doors, where it is the first card of the feed. Proven red on the pre-fix tree at both insets: hero top 91.9 against a ceiling of 0.5, and 144 of 408 (--sat 0) and 40 of 644 (--sat 59) page-background pixels in the strip above the currency chips.
 
 ## the crate deals its cards smoothly (2026-09-07)
 
