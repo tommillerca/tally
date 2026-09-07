@@ -461,6 +461,98 @@ try {
     `navy tapped ${wornNavy}, team tile ${gold ? 'found' : 'MISSING'}, wear ${JSON.stringify(wearNow)}, worn tile shows ${shownTile}`);
   if (wearNow.CH) await tapTile(wearNow.CH);
 
+  /* ---------------------------------------------------- STABLE-RAIL ---- */
+  /* HANDOFFMASTER20260906 B9/B10 and R40-28..31, measured on v488: the rail
+     listed 32 teams in catalogue order for an inventory of two, so the owned
+     Glasswater helmet sat 3113px along a 3337px rail; a worn garment PINNED the
+     rail to its own team so tapping another owned team did nothing; the toast
+     told a player who owned that helmet "That colourway is not in your
+     wardrobe"; a Locked tile read "Picked" with nothing worn; and the pick was a
+     fresh `let` per open, so the scroll was paid again every visit. A THIRD team
+     is granted with the helmet ONLY, so there is a real team that has one of her
+     two pieces and lacks the other: that is the state every one of these rows
+     needs and the two-team seed above cannot produce. */
+  const GREEN = 'glasswater-gannets';
+  setup('SAMPLE the third team the rail rows lean on is real', !!FOOTBALL_TEAM_BY_ID[GREEN], FOOTBALL_TEAM_BY_ID[GREEN]?.name);
+  await page.evaluate(() => document.querySelector('.sheet-close')?.click());
+  await sleep(600);
+  await page.evaluate(async id => { const loot = await import('/js/loot.js'); await loot.grantCosmetic(id, 'football'); }, footballItemId(GREEN, 'pet-helmet'));
+  await openStable();
+  /* every toast the page shows, read off the real #toast as it changes */
+  const armToasts = () => page.evaluate(() => {
+    window.__toasts = [];
+    const t = document.getElementById('toast');
+    new MutationObserver(() => { const s = (t.textContent || '').trim(); if (s && !t.hidden && window.__toasts[window.__toasts.length - 1] !== s) window.__toasts.push(s); })
+      .observe(t, { childList: true, characterData: true, subtree: true, attributes: true });
+  });
+  await armToasts();
+  const toasts = () => page.evaluate(() => window.__toasts.slice());
+  const railRead = () => page.evaluate(() => {
+    const p = document.querySelector('.pet-wear:not([hidden])'), rail = p && p.querySelector('.fb-rail');
+    if (!rail) return null;
+    const rr = rail.getBoundingClientRect();
+    const tiles = [...rail.querySelectorAll('[data-pwteam]')].map((b, i) => {
+      const r = b.getBoundingClientRect();
+      return { i, team: b.dataset.pwteam, locked: b.classList.contains('locked'), on: b.classList.contains('on'), tag: b.querySelector('small').textContent.trim(), end: Math.round(r.right - rr.left + rail.scrollLeft) };
+    });
+    const on = tiles.find(t => t.on) || null;
+    return { view: rail.clientWidth, total: rail.scrollWidth, tiles, on: on && on.team, onTag: on && on.tag, onLocked: !!(on && on.locked),
+      pickedLocked: tiles.filter(t => t.locked && /picked|worn/i.test(t.tag)).map(t => t.team),
+      garments: [...p.querySelectorAll('.pw-row:not(.fb-rail) [data-petwear]')].map(b => b.dataset.petwear) };
+  });
+  const wearOf = () => page.evaluate(async () => (await import('/js/loot.js')).petWear());
+  const tapTeam = async t => {
+    const c = await centreOf(`.pet-wear:not([hidden]) .fb-rail [data-pwteam="${t}"]`);
+    if (!c) return false;
+    await page.mouse.click(c.x, c.y); await sleep(900);
+    return true;
+  };
+  const r0 = await railRead();
+  setup('SAMPLE the Stable rail is on screen with three owned teams to order', !!r0 && r0.tiles.filter(t => !t.locked).length === 3, r0 ? `${r0.tiles.filter(t => !t.locked).length} owned of ${r0.tiles.length}` : 'no rail');
+  const owned0 = r0.tiles.filter(t => !t.locked), firstLocked = r0.tiles.findIndex(t => t.locked);
+  ok(`RAIL-ORDER owned teams come first and every one of them ends inside the first screen of the rail (view ${r0.view}px of ${r0.total}px)`,
+    owned0.every(t => t.i < firstLocked) && Math.max(...owned0.map(t => t.end)) <= r0.view,
+    `owned at positions ${owned0.map(t => `#${t.i + 1}`).join(' ')} (first locked #${firstLocked + 1}); farthest owned tile ends at ${Math.max(...owned0.map(t => t.end))}px, view ${r0.view}px`);
+  /* both NAVY pieces on, then tap the team that has only the helmet */
+  const navyOn = [await tapTile(footballItemId(NAVY, 'pet-helmet')), await tapTile(footballItemId(NAVY, 'pet-jersey'))];
+  const w0 = await wearOf();
+  setup('SAMPLE both navy pieces are on before the half-swap', navyOn.every(Boolean) && w0.CH === footballItemId(NAVY, 'pet-helmet') && w0.CT === footballItemId(NAVY, 'pet-jersey'), JSON.stringify(w0));
+  await page.evaluate(() => { window.__toasts = []; });
+  const greenTapped = await tapTeam(GREEN);
+  const w1 = await wearOf(), r1 = await railRead(), t1 = await toasts();
+  const jerseyLbl = 'Lizard Jersey';
+  ok(`RAIL-TOAST tapping ${FOOTBALL_TEAM_BY_ID[GREEN].name} (helmet owned, jersey not) names the piece that is missing and never says the colourway is not in your wardrobe`,
+    greenTapped && t1.length >= 1 && t1.every(s => s.includes(jerseyLbl) && s.includes(FOOTBALL_TEAM_BY_ID[GREEN].name) && !/colourway is not in your wardrobe/i.test(s)),
+    `toasts: ${JSON.stringify(t1)}`);
+  ok(`RAIL-HALF-SWAP the helmet she has in ${FOOTBALL_TEAM_BY_ID[GREEN].name} swaps, the jersey she lacks stays navy, and the rail parks on the tapped team`,
+    greenTapped && w1.CH === footballItemId(GREEN, 'pet-helmet') && w1.CT === footballItemId(NAVY, 'pet-jersey') && !!r1 && r1.on === GREEN && !r1.onLocked,
+    `wear ${JSON.stringify(w1)}, rail on ${r1 && r1.on} (${r1 && r1.onTag})`);
+  /* the team that has both: a full swap, no toast at all */
+  await page.evaluate(() => { window.__toasts = []; });
+  const goldTapped = await tapTeam(GOLD);
+  const w2 = await wearOf(), r2 = await railRead(), t2 = await toasts();
+  ok(`RAIL-FULL-SWAP tapping ${FOOTBALL_TEAM_BY_ID[GOLD].name} (both pieces owned) swaps both and says nothing`,
+    goldTapped && w2.CH === footballItemId(GOLD, 'pet-helmet') && w2.CT === footballItemId(GOLD, 'pet-jersey') && t2.length === 0 && !!r2 && r2.on === GOLD && r2.onTag === 'Worn',
+    `wear ${JSON.stringify(w2)}, toasts ${JSON.stringify(t2)}, rail on ${r2 && r2.on} (${r2 && r2.onTag})`);
+  /* everything off, then a Locked team: nothing applies, nothing reads Picked on a Locked tile, and the toast is true */
+  await tapTile(w2.CH); await tapTile(w2.CT);
+  const w3 = await wearOf();
+  setup('SAMPLE the lizard is bare before the locked tap', !w3.CH && !w3.CT, JSON.stringify(w3));
+  const LOCKED = r0.tiles.find(t => t.locked).team;
+  await page.evaluate(() => { window.__toasts = []; });
+  const lockedTapped = await tapTeam(LOCKED);
+  const r4 = await railRead(), t4 = await toasts();
+  ok(`RAIL-LOCKED tapping a Locked team (${FOOTBALL_TEAM_BY_ID[LOCKED].name}) with nothing on does not park the rail on it, no Locked tile reads Picked, and the toast names that team truthfully`,
+    lockedTapped && !!r4 && r4.on === GOLD && r4.pickedLocked.length === 0 && t4.length >= 1 && t4.every(s => s.includes(FOOTBALL_TEAM_BY_ID[LOCKED].name) && !/colourway is not in your wardrobe/i.test(s)),
+    `rail on ${r4 && r4.on} (${r4 && r4.onTag}), locked tiles reading Picked/Worn: ${JSON.stringify(r4 && r4.pickedLocked)}, toasts ${JSON.stringify(t4)}`);
+  /* the pick survives a close, a reload and a reopen */
+  await focus(LIZARDS[0].inst.iid);
+  await openStable();
+  const r5 = await railRead();
+  ok(`RAIL-REMEMBERS after a reload and a fresh open with nothing worn the rail is still parked on the last team picked (${FOOTBALL_TEAM_BY_ID[GOLD].name}), centred on screen`,
+    !!r5 && r5.on === GOLD && r5.garments.includes(footballItemId(GOLD, 'pet-helmet')),
+    `rail on ${r5 && r5.on} (${r5 && r5.onTag}); garment tiles ${r5 && r5.garments.join(' ')}`);
+
   /* ------------------------------------------------------ PET-WEARS ---- */
   const worn = [];
   for (const g of PET_GARMENTS) worn.push(await tapTile(footballItemId(NAVY, g)));
