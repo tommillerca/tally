@@ -19,6 +19,11 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v506
+1. A hotfix off v505 from Tom's own photograph of the live app on his phone: a dark strip with a card edge in it near the top of Today. Its dated section is further down, folded here.
+
+2. PROOF: top-strip-audit.mjs, today-peek-audit.mjs | REACH: Today, while the running build is behind the live one. `#updBanner` sat between `.today-plate` and `.hero-card`, and `.hero-scene`'s upward bleed is a negative top margin that collapses out through `.hero-card` and lands the art at y=0 only while nothing above it has height. With the banner mounted the negative margin ate the banner instead of the scroller's padding: hero top measured 91.9 instead of 0 (73 padding + 79.9 banner + 12 margin - 73 bleed) at --sat 59, leaving 18.9px of the plate's dark backdrop with the banner's amber top edge on it, between the safe-area strip and the hero. The banner moved below `.hero-actions` to become the first card of the feed, which also puts it where the scroll peek carries a player to it. The hero at rest is unchanged, because the div is empty and zero-height at every other time. Proven red at both insets on a stale client, with both fresh configurations green as the control.
+
 ## v505
 1. A hotfix off v504: the two App Store submission blockers from the R43 audit pack, both of them copy and reachability rather than behaviour. Its dated section is further down, folded here.
 

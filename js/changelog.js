@@ -4,6 +4,9 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 506, date: '2026-09-07', title: 'One colour at the top of the screen', items: [
+    'A dark strip with the edge of a card poking out of it could appear near the top of Today, between two bands of the right colour. It only ever showed up while your phone was running an older build than the live one, which is why it seemed to fix itself after an update: the banner telling you the update was ready sat in the one spot where the artwork behind it reaches up under the status bar, and the two were fighting over the same space. The banner now sits with the rest of your cards, where you will actually read it.',
+  ] },
   { n: 505, date: '2026-09-07', title: 'The app says where it stands', items: [
     'The privacy policy now has a permanent home in Settings, under ABOUT. It used to be reachable only through a link inside the Day One survey, which disappeared once you filled the survey in, so most players had no way to read it at all. It works with no account and it works offline.',
     'The line you see when the map asks for your location said your position was never uploaded. That was not true: the Boneyard asks the server about the map cell you are standing in, about 2.2 km across, because Spires are shared with other players. Spawns and dens really are worked out on your phone and your exact coordinates really do stay on it, and the copy now says exactly that instead of promising more.',
