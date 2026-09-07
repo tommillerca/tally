@@ -19,6 +19,17 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## currency and receipts are one transaction (2026-09-06)
+
+Not stamped to a release: fix/currency-revisions, off v493. Codex's read-only
+audit of v485 (the aggregator handoff of 2026-09-06, lanes 1 and 3).
+
+1. PROOF: coins-merge-tie-audit.mjs | REACH: buying something and then syncing can no longer refund the purchase while the item stays. Every coin and Bone Dust change (a spend, a Rack buy in either currency, a Boneyard coin pickup, a quest's dust reward, a melt) moves its balance and its merge-ordering revision in one IndexedDB transaction, so a cloud blob taken before the spend is recognised as older and refused. Bone Dust had no ordering signal at all before this and rides the same rule now. Red before, on v493: COIN-DEBIT got 100 expected 10; DUST-DEBIT got 100 expected 10; DUST-EARN got 100 expected 160; RACK-COIN coins 5000->2600 with coinsRev 5000->5000; RACK-DUST dust 500->280 with dustRev 500->500; SPAWN coins +12 with coinsRev +0.
+
+2. PROOF: currency-revision-lint.mjs | REACH: the next place somebody writes a coin or dust balance cannot forget the revision. A static scan of every script forbids a raw balance write, requires the revision function beside every balance function in a claim's pay map, and requires the three shared helpers to route through the one revisioned primitive. Red on v493 with four findings (RAW, MAP, ASSIGN, PRIM), then red on the fixed tree for each of three single-site mutations, one check each.
+
+3. PROOF: inv-tombstone-audit.mjs | REACH: a consumed item stays consumed. Using a draught or a Battle Charm, opening a crate, or losing a pet's last cosmetic copy deletes the row and writes its receipt in one transaction, and the receipt list has no size cap any more (it kept the newest 500, so the 501st use let an old backup bring item 1 back). Measured bound: about 23 bytes a receipt, so 10,000 consumed items is about 230 KB inside a 2.2 MB backup ceiling; a merge unions receipts from both devices and never drops one. Red before, on v493: RING 1 revived (the oldest: yes); RING-CRATE 1 revived (the oldest: yes); ATOMIC row gone: true, receipt: false; ATOMIC-CRATE row gone: true, receipt: false.
+
 ## pit readout and exit (2026-09-06)
 
 Not stamped to a release: hotfix/pit-ap-exit, off v487. Tom on live v487, two
@@ -192,6 +203,12 @@ READY cache, not the cache of the page still running").
 1. PROOF: sw-upgrade-audit.mjs | REACH: a player who keeps a sheet open on build A while build B and then build C install and take charge underneath still gets A's own modules when the old page lazily imports one (THREE GENERATIONS row, red before: the A page's import of the module only its build carries answered 404 with caches tally-v493, tally-v494; green after: 200, caches tally-v471, tally-v494). The worker keeps every generation an open page came from, at most two behind the current build, and sweeps the rest; the generation nobody is running (B here) goes.
 
 2. PROOF: sw-upgrade-audit.mjs, offline-boot-audit.mjs, dead-shell-audit.mjs | REACH: nothing else about the swap moved: the new worker still takes over the moment its whole build is cached (R38-1), the page it takes over from keeps its own generation (R38-17), identical entries are still reused across the install (R38-18), and a cold offline boot and the dead-shell recovery still work with the extra tally-clients bookkeeping cache present.
+## v494
+1. A hotfix off v493, lanes 1 and 3 of the data-integrity plan (Codex audit, 2026-09-06). Its rows are the dated "currency and receipts are one transaction" section further down, folded here.
+
+2. PROOF: coins-merge-tie-audit.mjs, currency-revision-lint.mjs, unit.test.js | REACH: coinsAdd, boneDustAdd, spendCoins and spendDust move the balance and its revision in one kv transaction (kvBumpRevisioned, revision by magnitude); buyRackItem, collectSpawn and claimQuest carry coinsRev/dustRev inside their claim pay maps; importAll ranks Bone Dust by dustRev the way coins are ranked; a static lint fails any site that moves coins or bonedust without its revision. Red before: COIN-DEBIT and DUST-DEBIT got 100 expected 10, DUST-EARN got 100 expected 160, RACK-COIN coinsRev 5000 to 5000, SPAWN coins +12 coinsRev +0; lint RAW/MAP/ASSIGN/PRIM red on the unfixed sites.
+
+3. PROOF: inv-tombstone-audit.mjs, restore-latch-audit.mjs, unit.test.js | REACH: db.takeInv removes an inventory row and writes its receipt in one transaction, every former db.del('inv') site and openCrate use it, the receipt list is uncapped (about 23 bytes an id, documented bound) and merges as a union with the payload's, so a snapshot older than 500 takes cannot revive the oldest item. Red before: RING and RING-CRATE 1 revived (the oldest), ATOMIC and ATOMIC-CRATE row gone with receipt missing.
 
 ## v493
 1. A hotfix off v492, Codex's round-37 lane (R37-24). Its rows are its dated section further down, folded here.
