@@ -7016,6 +7016,10 @@ async function openSpireSheet(s, view, rival = null) {
       foeOutfit: themedLook('spire', s.id) });
   });
 }
+/* Test hook (webdriver only), same idiom as __openGlutton / __spireSheet above:
+   the real route in is a map tap inside GPS range, which a test cannot walk
+   into on demand. */
+if (typeof window !== 'undefined' && navigator.webdriver) window.__spireFightSheet = (s, view, rival) => openSpireSheet(s, view, rival);
 
 /* The defense. A named NPC is at the gate and the clock is real, so this sheet
    says who, how long, and what happens either way: winning levels the tower,
