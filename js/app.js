@@ -15361,6 +15361,7 @@ function renderOnboarding(step = 0, ctx = {}) {
   if (step === 0) {
     el.innerHTML = `
     <div class="onb onb-in">
+      <div class="onb-scroll">
       ${dots}
       <h1>FEED THE<br>BONES</h1>
       <p class="onb-sub">The food tracker with a <b>skeleton in it</b>. Log your meals, and your Bonehead earns the loot.</p>
@@ -15368,6 +15369,7 @@ function renderOnboarding(step = 0, ctx = {}) {
       <div class="onb-poster">
         ${['B0-1', 'FW1', 'P1', 'SK0-1', 'H11-1', 'IL1-1', 'IR1'].map(ly).join('')}
         <div class="onb-pet"><img src="assets/bh/anim/cloud/body-noeyes.png" alt=""><img src="assets/bh/anim/cloud/eyes.png" alt=""></div>
+      </div>
       </div>
       <div class="onb-foot">
         <button class="btn" id="onbGo">Meet your Bonehead</button>
@@ -15387,6 +15389,7 @@ function renderOnboarding(step = 0, ctx = {}) {
     if (!ctx.pick) { ctx.pick = randomName(); stamp(); }
     el.innerHTML = `
     <div class="onb onb-in">
+      <div class="onb-scroll">
       ${back}${dots}
       <h1>THIS ONE'S<br>YOURS</h1>
       <div class="onb-poster bare">${['B0-1', 'SK0-1'].map(ly).join('')}</div>
@@ -15401,6 +15404,7 @@ function renderOnboarding(step = 0, ctx = {}) {
              icons in a three-icon row drawn in a different medium. */''}
         <div class="onb-earn"><span class="ic">${pixCur('egg', 18) || bhIcon('egg', 18)}</span><b>WALK</b><small>Hatch pets, find loot</small></div>
         <div class="onb-earn"><span class="ic">${ICONS.pit(18)}</span><b>FIGHT</b><small>Spend it all in the Pit</small></div>
+      </div>
       </div>
       <div class="onb-foot">
         <button class="btn" id="onbMe">That's me</button>
@@ -15425,10 +15429,12 @@ function renderOnboarding(step = 0, ctx = {}) {
 
   el.innerHTML = `
   <div class="onb onb-in onb-plan">
+    <div class="onb-scroll">
     ${back}${dots}
     <h1>THE PLAN</h1>
     ${onbGwartHtml(2)}
     <div id="pfHost">${profileFormHtml({}, 'lb')}</div>
+    </div>
     <div class="onb-foot">
       <button class="btn" id="onbSave">Start tracking</button>
       <button class="onb-quiet" id="onbSkip">Skip for now: uses a rough default plan <b>(30 yr &middot; 5'10" &middot; 180 lb)</b> you can fix any time in Settings.</button>

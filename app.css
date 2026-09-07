@@ -7923,9 +7923,33 @@ body::before {
    The first 90 seconds: sell the product, hand over the character, capture the
    plan honestly. Launch funnel: every step tracks. ============================================================================ */
 .onb {
-  position: relative; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column;
-  align-items: center; padding: calc(var(--sat) + 22px) 22px calc(var(--sab) + 24px);
+  position: relative; height: 100vh; height: 100dvh; display: flex; flex-direction: column;
+  align-items: center; padding: calc(var(--sat) + 22px) 22px 0;
   max-width: 600px; margin: 0 auto;
+}
+/* R43-4 / R43-5: THE STEP OWNS TWO BANDS, IT DOES NOT OVERLAY ONE ON THE OTHER.
+   The sticky footer below fixed R39-15 (the CTA under the fold) by floating an
+   OPAQUE 160px bar up to the scrollport edge, which is an overlay: at 320x568 it
+   painted over the bottom 159.8px of every step at every scroll offset. Measured
+   on the shipped tip: the nameplate on THIS ONE'S YOURS was 0% visible, a real
+   click at the reroll's coordinates left the name unchanged, and recovering the
+   plate took 144px of scroll. On THE PLAN a selected chip sat behind the footer
+   at all three viewports, 393x852 included.
+   Padding on the scroller cannot fix an overlay: reserved space at the END of
+   the document does nothing at scrollTop 0, which is where the defect lives.
+   So the content gets its OWN scrollport and the footer sits beside it, static,
+   as the second child of a viewport-height column. That is why neither defect
+   can come back: the button is a flex item of a box that is exactly one
+   viewport tall, so it is on screen at first paint by construction and does not
+   depend on the content fitting; and the content is clipped by a scrollport
+   that ends where the footer begins, so nothing can be underneath it. */
+.onb-scroll {
+  flex: 1; min-height: 0; width: 100%;
+  display: flex; flex-direction: column; align-items: center;
+  overflow-y: auto; overscroll-behavior: contain;
+  /* bleed to the screen edges: the parent's 22px gutter is re-applied inside so
+     scrolled content keeps its margin without the scrollport stopping short */
+  margin: 0 -22px; padding: 0 22px 10px;
 }
 .onb-in { animation: onbIn .26s ease-out; }
 @keyframes onbIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -7975,15 +7999,16 @@ body::before {
    height, so there is no leftover space to push into and the button just sits
    wherever the content stack ends: measured 22px under the fold at 375x667 and
    293px under it on the plan step, with no scroll cue either time.
-   sticky, not fixed: #screen is the scrolling ancestor (see the #app comment
-   above on why a position:fixed bottom bar detaches from iOS momentum scroll),
-   and a sticky element is laid out by the scroller itself so it can't detach.
-   Measured on a throwaway probe that a sticky bottom:0 footer inside a taller-
-   than-viewport flex column already sits flush with the scrollport's bottom
-   edge at scrollTop 0, so this fixes first paint, not just later scrolling.
+   The first fix for it was `position: sticky; bottom: 0`, and that overshot:
+   see R43-4 below. The footer is a static flex item of a viewport-height column
+   now, which pins it to the fold without overlaying anything.
    The negative margin + padding bleeds the backing colour to the screen edges
    (the parent's 22px gutter would otherwise show scrolled content beside it). */
-.onb-foot { width: 100%; margin-top: auto; position: sticky; bottom: 0; z-index: 2; margin-left: -22px; margin-right: -22px; padding: 14px 22px calc(var(--sab) + 16px); background: var(--bg); }
+/* R43-4: static, not sticky. See the .onb-scroll note above for why the sticky
+   form of this rule was an overlay and what replaced it. The footer keeps the
+   full-bleed backing (a hairline separates it from the scrolled content) and it
+   owns the bottom safe-area inset, which is why .onb's padding-bottom is 0. */
+.onb-foot { width: 100%; flex: none; z-index: 2; margin-left: -22px; margin-right: -22px; padding: 14px 22px calc(var(--sab) + 16px); background: var(--bg); border-top: 1px solid var(--line); }
 .onb-foot .btn { width: 100%; }
 .onb-quiet { display: block; width: 100%; text-align: center; font-size: 13px; font-weight: 700; color: var(--text-3); margin-top: 13px; line-height: 1.5; }
 .onb-quiet b { color: var(--coral); }
@@ -8011,6 +8036,33 @@ body::before {
 .onb-plan h1 { align-self: flex-start; text-align: left; font-size: 30px; }
 .onb-plan #pfHost { width: 100%; }
 .onb-plan .btn { width: 100%; margin-top: 4px; }
+
+/* SHORT PHONES GET A COMPACT FOOTER, NOT A SMALLER BUTTON. At 320x568 the step-3
+   footer measured 183.3px, a third of the screen, and all of it above the fold
+   now that it no longer overlaps. The button keeps its size and its 40px floor;
+   only the quiet secondary line tightens. */
+@media (max-height: 600px) {
+  .onb-foot { padding-top: 10px; padding-bottom: calc(var(--sab) + 10px); }
+  .onb-quiet { font-size: 12px; margin-top: 8px; line-height: 1.35; }
+  /* R43-4, THE OTHER HALF. Un-overlaying the footer stops the nameplate being
+     PAINTED OVER; it does not by itself put it on screen. Measured at 320x568
+     with the footer static: the step-2 scroller is 395px and its content 646px,
+     and the nameplate starts at 432px, so the screen titled THIS ONE'S YOURS
+     still opened with no name on it, one scroll away instead of one overlay
+     away. The overflow is 251px and the poster is 240 of it, so the poster is
+     where it comes from: the character shrinks on a 568px phone, the NAME does
+     not, because the name is what this step is for. Type stays on the design
+     scale (34px display, above the 30px THE PLAN already ships) and nothing
+     here is a tap target. The earns row is deliberately left to peek below the
+     fold: it is supporting copy, and a half-row is the scroll cue. */
+  .onb-dots { margin-bottom: 10px; }
+  .onb h1 { font-size: 34px; }
+  .onb-back ~ h1 { margin-top: 40px; }
+  .onb-poster { min-height: 140px; margin: 10px 0; }
+  .onb-nameplate { margin-top: 10px; }
+  .onb-earns { margin: 10px 0 10px; }
+  .onb-earn { padding: 8px 4px 6px; }
+}
 
 /* ---- Phase 4: FEEL. Exits for things that only knew how to enter. ---- */
 .sheet.closing { animation: sheetOut .2s ease-in forwards; }
