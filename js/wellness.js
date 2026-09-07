@@ -3,7 +3,7 @@
 // writes an idempotent ledger event (type 'wellness') dated today, so quests can
 // read it and the XP is one-time per day. State for the day lives in kv 'wellness'.
 import { kvGet, kvSet, db } from './db.js';
-import { award } from './game.js';
+import { award, awardCapped } from './game.js';
 import { addVigor } from './energy.js';
 import { dateKey } from './nutrition.js';
 
@@ -163,7 +163,22 @@ export async function markRoutine(id, date = dateKey()) {
   if (!item) return { ok: false };
   const done = await routinesDone(date);
   if (done.has(id)) return { ok: true, xp: 0, already: true };
-  const xp = done.size < ROUTINE_XP_CAP ? ROUTINE_XP : 0;
-  await award(`routine-${id}-${date}`, 'wellness', xp, `Routine: ${item.name}`, date);
+  /* THE CEILING USED TO BE READ, THEN DECIDED, ACROSS AN AWAIT: routinesDone()
+     (a ledger scan) told this call how many of the ROUTINE_XP_CAP slots were
+     already spent, and several awaits later a row was minted off that count.
+     Two DIFFERENT routines finishing at once both read cap-1, both decided
+     "I am the last paying slot", and both minted ROUTINE_XP: a documented
+     15 XP ceiling paid 20 (measured 2026-09-06). The slot now has to be WON,
+     not counted: awardCapped (js/game.js) claims one of ROUTINE_XP_CAP shared
+     ordinal rows ('rslot-<date>-<n>') with the same addIfAbsent test-and-set
+     every other repeatable daily reward uses, so only one caller can ever
+     land a given slot and a caller past the cap gets 0 back, decided and
+     written in the SAME transaction. `id` as the ref means a repeat tap of
+     the SAME routine can never take a second slot. That slot row carries the
+     real XP, so totalXp() counts it exactly once; the routine's OWN
+     completion row below always carries 0 and exists only so THIS routine is
+     remembered as done today, whether or not a slot was left for it. */
+  const xp = await awardCapped('rslot', 'wellness', ROUTINE_XP, `Routine: ${item.name}`, ROUTINE_XP_CAP, date, id);
+  await award(`routine-${id}-${date}`, 'wellness', 0, `Routine: ${item.name}`, date);
   return { ok: true, xp, capped: xp === 0 };
 }

@@ -2,7 +2,7 @@
 // Depends only on db + the generated cosmetics manifest, so the whole economy
 // stays portable (no DOM, no web-only APIs).
 
-import { db, kvGet, kvSet, kvBump, kvUpdate, newId } from './db.js';
+import { db, kvGet, kvSet, kvBumpRevisioned, kvUpdate, newId } from './db.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneheadz.js';
 import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SOLD, footballItemId, footballGrantIds, footballBundleIds, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
@@ -584,7 +584,11 @@ export async function buyRackItem(artId, currency = 'coins') {
   try {
     claimed = await db.claimAndPay('kv',
       { k: `rackbuy:${artId}`, v: { ts: Date.now(), price, currency } },
-      { kv: currency === 'dust' ? { bonedust: debitOrThrow } : { coins: debitOrThrow } });
+      /* the revision rides in the SAME transaction as the debit (2026-09-06),
+         or a pre-purchase blob at the same revision refunds this on merge */
+      { kv: currency === 'dust'
+        ? { bonedust: debitOrThrow, dustRev: cur => (Number(cur) || 0) + price }
+        : { coins: debitOrThrow, coinsRev: cur => (Number(cur) || 0) + price } });
   } catch (e) {
     if (e && e.insufficientFunds) {
       return { ok: false, reason: currency, need: price,
@@ -896,11 +900,12 @@ export async function coins() { return (await kvGet('coins', 0)) || 0; }
    dumps every kv row). js/db.js importAll's cloud merge (replace:false) reads
    it to tell a blob OLDER than the local ledger from one that is not, the
    same "keepHigher" idiom already used there for the day ceilings, applied to
-   coins instead (QA round 34 P0). Two separate kvBump calls, not one
-   transaction: a crash between them only leaves coinsRev a step behind coins,
-   which weakens the guard for one write, it does not reintroduce the refund
-   bug the guard exists to stop. ponytail: a real fix bumps both in one kv
-   transaction if this ever needs to be exact under a crash; not worth it here.
+   coins instead (QA round 34 P0). ONE transaction for both rows since
+   2026-09-06 (js/db.js kvBumpRevisioned): they were two kvBump calls, and
+   every DEBIT in this file moved the balance alone, so a same-revision blob
+   from before the spend won on "higher balance" and refunded the purchase
+   while the item stayed (Codex audit of v485; tests/coins-merge-tie-audit.mjs
+   COIN-DEBIT and DUST-DEBIT are the measured rows).
    R38-13 (2026-09-06): bumped by the MAGNITUDE of the change, not a flat 1.
    Two devices moving the ledger the same NUMBER of times used to tie under a
    flat counter regardless of how much money actually moved, and importAll's
@@ -908,7 +913,7 @@ export async function coins() { return (await kvGet('coins', 0)) || 0; }
    a real 25 replaced by a real 10. A magnitude sum only ties when the two
    devices' changes happened to add up to the exact same total, which an
    independently divergent history essentially never does by accident. */
-export async function coinsAdd(n) { const v = await kvBump('coins', n); await kvBump('coinsRev', Math.max(1, Math.abs(n))); return v; }
+export async function coinsAdd(n) { return kvBumpRevisioned('coins', 'coinsRev', n); }
 
 /* THE ATOMIC SPEND, and it is the only honest way to take money in this file.
    Every buy used to read the balance, compare it to the price, and THEN call
@@ -933,10 +938,9 @@ export async function spendCoins(cost) { return spendBalance('coins', cost); }
 export async function spendDust(cost) { return spendBalance('bonedust', cost); }
 async function spendBalance(k, cost) {
   if (!Number.isFinite(cost) || cost < 0) return null;
-  const left = await kvUpdate(k, cur => {
-    const bal = Number(cur) || 0;
-    return bal < cost ? undefined : bal - cost;
-  }, 0);
+  // requireFunds: the wallet that cannot cover it is left byte-identical, and
+  // the revision moves WITH the debit, so a stale blob cannot refund it
+  const left = await kvBumpRevisioned(k, k === 'coins' ? 'coinsRev' : 'dustRev', -cost, { requireFunds: true });
   return left === undefined ? null : left;
 }
 
@@ -1010,8 +1014,9 @@ export const DUST_VALUE = {
   pet:  { common: 10, uncommon: 15, rare: 30, epic: 60, legendary: 120 },
 };
 export async function boneDust() { return (await kvGet('bonedust', 0)) || 0; }
-// same read-modify-write hazard, and the same fix, as coinsAdd above
-export async function boneDustAdd(n) { return kvBump('bonedust', n); }
+// same read-modify-write hazard, and the same fix, as coinsAdd above; 'dustRev'
+// is Bone Dust's merge ordering signal (js/db.js importAll), added 2026-09-06
+export async function boneDustAdd(n) { return kvBumpRevisioned('bonedust', 'dustRev', n); }
 // Dust is rarity PLUS the piece's stat points. Tom asked for statted gear to be
 // worth more; measuring first showed that EVERY one of the 276 catalog pieces is
 // statted, so a flat "statted" bonus would have been a 50% dust inflation with no
@@ -1076,7 +1081,7 @@ export async function salvagePet(petId) {
     // last copy gone: drop ownership, unequip, clear the legacy anchor
     const inv = await db.all('inv');
     const row = inv.find(r => r.kind === 'cos' && r.itemId === petId);
-    if (row) { await db.del('inv', row.id); await markInvTaken(row.id); }   // R38-13
+    if (row) await db.takeInv(row.id);   // R38-13, one transaction since 2026-09-06
     const eq = await equipped({ raw: true });
     if (eq.C === petId) await equip('C', null);
     const pets = (await kvGet('pets', {})) || {}; delete pets[petId]; await kvSet('pets', pets);
@@ -1438,7 +1443,7 @@ export async function breedPets(keepIid, feedIid) {
   if (speciesCount(list, fed0.sp) === 0) {
     const inv = await db.all('inv');
     const row = inv.find(r => r.kind === 'cos' && r.itemId === fed0.sp);
-    if (row) { await db.del('inv', row.id); await markInvTaken(row.id); }   // R38-13
+    if (row) await db.takeInv(row.id);   // R38-13, one transaction since 2026-09-06
     const eqp = await equipped({ raw: true });
     if (eqp.C === fed0.sp && keep.sp !== fed0.sp) await equip('C', keep.sp);
     const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[fed0.sp]; await kvSet('pets', petsRec);
@@ -1735,7 +1740,7 @@ export async function salvageInstance(iid) {
   if (speciesCount(next, inst.sp) === 0) {
     const inv = await db.all('inv');
     const row = inv.find(r => r.kind === 'cos' && r.itemId === inst.sp);
-    if (row) { await db.del('inv', row.id); await markInvTaken(row.id); }   // R38-13
+    if (row) await db.takeInv(row.id);   // R38-13, one transaction since 2026-09-06
     const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[inst.sp]; await kvSet('pets', petsRec);
   }
   const dust = petDustValue(item) + (inst.shiny ? 15 : 0) + (inst.lineage || 0) * 8;
@@ -1993,9 +1998,9 @@ export async function consumableCount(type) {
 export async function consumeConsumable(type) {
   const row = (await inventory()).filter(r => r.kind === type).sort((a, b) => a.ts - b.ts)[0];
   if (!row) return false;
-  await db.del('inv', row.id);
-  await markInvTaken(row.id);   // R38-13
-  return true;
+  // the delete and its receipt are one transaction (js/db.js takeInv), and the
+  // take decides: two tabs spending the last Draught cannot both be told yes
+  return !!(await db.takeInv(row.id));
 }
 
 export async function unopenedCrates(inv) {   // `inv`: pre-read rows, QA round 28 G3 (see ownedGearIds)
@@ -2090,23 +2095,15 @@ export function rollCosmetic(owned, floor, slotBias) {
   return { item, dupe: true };
 }
 
-/* R38-13 (2026-09-06): the SAME receipt idiom openCrate's 'crateTaken' uses
-   below, for every OTHER 'inv' row this file deletes outright rather than
+/* R38-13 (2026-09-06): every 'inv' row this file deletes outright rather than
    through db.take (a spent consumable, a used Battle Charm, a pet's last
-   cosmetic copy on salvage/extinction). js/db.js importAll's merge (!replace)
-   `os.put`s every 'inv' row a blob carries, unconditionally: right for a row
-   this device has never seen, wrong for one it already removed, because a
-   blob older than the local save still carries it. Measured: a spent Vigor
-   Draught came back 1 -> 0 -> 1 through a two-device merge. Own kv key
-   ('invTaken', not 'crateTaken') so this never has to reason about the crate
-   path's own list; importAll checks both. */
-async function markInvTaken(id) {
-  await kvUpdate('invTaken', cur => {
-    const arr = Array.isArray(cur) ? cur : [];
-    if (arr.includes(id)) return undefined;
-    return [...arr, id].slice(-500);
-  }, []);
-}
+   cosmetic copy on salvage/extinction) goes through db.takeInv, which deletes
+   the row and records its id in kv 'invTaken' in ONE transaction; js/db.js
+   importAll's merge (!replace) never re-adds a row on that list. The receipt
+   used to be a separate kvUpdate after a db.del, capped at the newest 500 ids
+   (the 'crateTaken' idiom below): a crash between the two writes lost the
+   receipt, and item 501 let a stale blob revive item 1. Bound and merge rule
+   are documented on takeInv itself. */
 
 /* SPEND THE CRATE BEFORE YOU ROLL IT, AND SPEND IT ATOMICALLY.
  * The row used to be deleted at the END, after every grant, so two overlapping
@@ -2120,23 +2117,21 @@ async function markInvTaken(id) {
  * which is recoverable, where the other order pays a crate nobody owns out of
  * the economy, which is not. */
 export async function openCrate(invId) {
-  const crateRow = await db.take('inv', invId);
-  if (!crateRow || crateRow.kind !== 'crate') {
-    if (crateRow) await db.put('inv', crateRow);   // not a crate: put it straight back
-    throw new Error('crate gone');
-  }
   /* THE TAKE RECEIPT (QA round 34 P0). A cloud merge (js/db.js importAll,
      replace:false) `os.put`s every 'inv' row a blob carries, unconditionally:
      right, for a row this device has never seen, wrong for one it already
      opened, because a blob older than the local save still carries the
-     unopened row. Same bounded-list idiom js/social.js already uses for
-     'grantsSeen'. importAll checks this id before re-adding an inv row on a
-     merge; a crate this device has taken can never come back through one. */
-  await kvUpdate('crateTaken', cur => {
-    const arr = Array.isArray(cur) ? cur : [];
-    if (arr.includes(crateRow.id)) return undefined;
-    return [...arr, crateRow.id].slice(-500);
-  }, []);
+     unopened row. db.takeInv deletes the row and writes its id to kv
+     'invTaken' in ONE transaction (2026-09-06; it was db.take, then a separate
+     kvUpdate of a 500-id 'crateTaken' ring, so a crash between them lost the
+     receipt and crate 501 let a stale blob revive crate 1). importAll still
+     reads the legacy 'crateTaken' list; nothing writes it any more. The kind
+     check happens BEFORE the take so a non-crate row is never taken and never
+     gets a receipt it would otherwise have to hand back. */
+  const peek = await db.get('inv', invId);
+  if (!peek || peek.kind !== 'crate') throw new Error('crate gone');
+  const crateRow = await db.takeInv(invId);
+  if (!crateRow) throw new Error('crate gone');   // another caller took it between the peek and the take
   const def = CRATES[crateRow.crate] || CRATES.daily;
   const owned = await ownedCosmeticIds();
   const results = [];
@@ -2772,8 +2767,7 @@ export async function activateBattleCharm() {
   const inv = await inventory();
   const row = inv.find(r => r.kind === 'xp2');
   if (!row) return { ok: false, reason: 'none' };
-  await db.del('inv', row.id);
-  await markInvTaken(row.id);   // R38-13
+  if (!(await db.takeInv(row.id))) return { ok: false, reason: 'none' };   // R38-13, one transaction since 2026-09-06
   buffs.xp2 = 5;
   await kvSet('buffs', buffs);
   return { ok: true, charges: 5 };
@@ -2831,6 +2825,6 @@ export async function refundStreakFreezes() {
   if (!rows.length) return null;
   const coins = rows.length * 100;
   await coinsAdd(coins);
-  for (const r of rows) { await db.del('inv', r.id); await markInvTaken(r.id); }   // R38-13
+  for (const r of rows) await db.takeInv(r.id);   // R38-13, one transaction since 2026-09-06
   return { count: rows.length, coins };
 }

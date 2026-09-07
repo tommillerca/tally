@@ -443,12 +443,137 @@ export function kvUpdate(k, fn, fallback = null) {
   })));
 }
 
+/* kvUpdate ABOVE, BUT ACROSS SEVERAL KV ROWS IN ONE TRANSACTION.
+ *
+ * cancelCook (js/cooking.js) used to null the pot's kv row and refund its
+ * ingredients as two separate kvUpdate calls: correct against a same-instant
+ * double-cancel (each transaction refuses on its own), but a crash between the
+ * two left the pot gone with the ingredients never returned. Same shape as the
+ * `kv` map claimAndPay already runs inside ONE transaction for a claim-and-pay;
+ * this is that same multi-key loop without requiring a claim row to hang it
+ * off, for callers that only need several kv rows to commit or abort together.
+ *
+ * `updaters` is {key: fn}, each fn synchronous with kvUpdate's exact contract
+ * (cur => next; undefined writes nothing; a throw aborts the WHOLE transaction,
+ * so every key's write is discarded, not only the one that threw). Keys run in
+ * the order given, so a later updater can read state set by an earlier one
+ * (cancelCook's ingredients fn only refunds once the cooking fn has decided
+ * there is something to refund). `fallbacks` is {key: value} for a row that
+ * has never been written, same as kvUpdate's own `fallback` arg, per key
+ * because 'cooking' and 'ingredients' do not share a shape. Resolves
+ * {key: result}. */
+export function kvUpdateMulti(updaters, fallbacks = {}) {
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
+  bumpStore('kv');
+  const keys = Object.keys(updaters);
+  return guard('kv', keys, 'kvUpdateMulti', () => open().then(db => new Promise((resolve, reject) => {
+    const t = db.transaction('kv', 'readwrite');
+    const os = t.objectStore('kv');
+    const out = {};
+    let threw = null;
+    for (const k of keys) {
+      const g = os.get(k);
+      g.onsuccess = () => {
+        if (threw) return;
+        const cur = g.result ? g.result.v : (k in fallbacks ? fallbacks[k] : null);
+        let next;
+        try { next = updaters[k](cur); } catch (e) { threw = e; try { t.abort(); } catch { /* already going */ } return; }
+        out[k] = next;
+        if (next !== undefined) os.put({ k, v: next });
+      };
+    }
+    t.oncomplete = () => resolve(out);
+    t.onerror = () => reject(threw || t.error);
+    t.onabort = () => reject(threw || t.error || new Error('kvUpdateMulti aborted'));
+  })));
+}
+
 /* The currency primitive. `coins` and `bonedust` are plain numbers in kv and
    every balance change in the game goes through here, so this one function is
    the difference between an exact balance and a drifting one. The clamp is the
    same `Math.max(0, ...)` the callers used to apply outside the transaction. */
 export function kvBump(k, n, { min = 0 } = {}) {
   return kvUpdate(k, cur => Math.max(min, (Number(cur) || 0) + n), 0);
+}
+
+/* THE REVISIONED CURRENCY PRIMITIVE (2026-09-06, Codex audit of v485).
+   `coins`/`coinsRev` and `bonedust`/`dustRev` are the balance and the merge
+   ordering signal importAll reads to refuse a stale blob. They used to move in
+   TWO transactions (coinsAdd: kvBump, then kvBump), and every debit moved the
+   balance ALONE: spendCoins, spendDust, buyRackItem's claimAndPay, and Bone
+   Dust had no revision at all. A same-revision blob taken before the spend
+   then won on "higher balance" and silently refunded the purchase while the
+   item stayed. Measured in tests/coins-merge-tie-audit.mjs: COIN-DEBIT got
+   100 expected 10, DUST-DEBIT got 100 expected 10.
+   Both rows move in ONE readwrite transaction here, same shape as kvUpdate
+   (get inside the transaction, put inside the get's success callback, a sync
+   decision, nothing awaited). The revision bumps by the MAGNITUDE of the
+   change (see js/loot.js coinsAdd's R38-13 note on why not a flat 1).
+   `requireFunds`: refuse (write NOTHING, resolve undefined) when the balance
+   cannot cover the debit; that is spendCoins/spendDust's "could not afford
+   it". Without it the balance clamps at 0, kvBump's contract. */
+export function kvBumpRevisioned(k, revKey, n, { requireFunds = false } = {}) {
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
+  bumpStore('kv');
+  return guard('kv', k, 'kvBumpRevisioned', () => open().then(db => new Promise((resolve, reject) => {
+    const t = db.transaction('kv', 'readwrite');
+    const os = t.objectStore('kv');
+    const bg = os.get(k), rg = os.get(revKey);
+    let pending = 2, next;
+    const write = () => {
+      if (--pending) return;   // both reads are in; decide and put in one go
+      const bal = Number(bg.result && bg.result.v) || 0;
+      if (requireFunds && bal + n < 0) return;
+      next = Math.max(0, bal + n);
+      os.put({ k, v: next });
+      os.put({ k: revKey, v: (Number(rg.result && rg.result.v) || 0) + Math.max(1, Math.abs(n)) });
+    };
+    bg.onsuccess = write;
+    rg.onsuccess = write;
+    t.oncomplete = () => resolve(next);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error || new Error('kvBumpRevisioned aborted'));
+  })));
+}
+
+/* ATOMIC TAKE WITH RECEIPT (2026-09-06, Codex audit). Deletes an 'inv' row AND
+   records its id in kv 'invTaken' in ONE transaction. The two used to be
+   separate writes (db.del, then a kvUpdate), so a process death between them
+   left the row gone with no receipt, and the next cloud merge of a blob that
+   still carried it put it straight back. Resolves the row when this call found
+   it (and so owns the one payout it stood for), undefined when it was already
+   gone; a gone row writes no receipt, whoever took it wrote one.
+   THE TOMBSTONE HAS NO SIZE CAP. 'invTaken' and openCrate's 'crateTaken' kept
+   only the newest 500 ids, so an old enough snapshot revived item 1 the moment
+   item 501 was taken (tests/inv-tombstone-audit.mjs RING). Bound, measured:
+   one newId() is 20 bytes plus JSON punctuation, ~23 bytes an id, so 10,000
+   consumed rows is ~230 KB inside a backup blob whose D1 ceiling is 2.2 MB
+   (server/src/index.js). importAll UNIONS the list on a merge, so a tombstone
+   never drops while any device's blob can still carry the row.
+   ponytail: prune an id once it is absent from local inv AND the newest pulled
+   blob, if the list ever measurably matters; that reopens a third-device hole. */
+export function takeInv(id) {
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
+  bumpStore('inv'); bumpStore('kv');
+  return guard('inv', id, 'takeInv', () => open().then(db => new Promise((resolve, reject) => {
+    const t = db.transaction(['inv', 'kv'], 'readwrite');
+    const inv = t.objectStore('inv'), kv = t.objectStore('kv');
+    const g = inv.get(id);
+    let row;
+    g.onsuccess = () => {
+      row = g.result;
+      if (row === undefined) return;
+      inv.delete(id);
+      const tg = kv.get('invTaken');
+      tg.onsuccess = () => {
+        const arr = Array.isArray(tg.result && tg.result.v) ? tg.result.v : [];
+        if (!arr.includes(id)) kv.put({ k: 'invTaken', v: [...arr, id] });
+      };
+    };
+    t.oncomplete = () => resolve(row);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error || new Error('takeInv aborted'));
+  })));
 }
 
 export const db = {
@@ -464,6 +589,7 @@ export const db = {
   addIfAbsent: (store, val) => addIfAbsent(store, val),
   claimAndPay: (store, row, pay) => claimAndPay(store, row, pay),
   take: (store, key) => take(store, key),
+  takeInv: (id) => takeInv(id),
   byIndex: (store, index, value) => open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction(store, 'readonly');
     const req = t.objectStore(store).index(index).getAll(value);
@@ -933,8 +1059,6 @@ export async function importAll(data, { replace = true } = {}) {
          therefore reads 0) is untouched. Scoped to !replace: restoreDailyBackup
          calls this with replace:true specifically TO roll coins back to an
          older, known-good number, and this guard must never fight that. */
-      const localCoinsRev = Number((localKv.find(r => r.k === 'coinsRev') || {}).v) || 0;
-      const fileCoinsRev = Number((data.kv.find(r => r && r.k === 'coinsRev') || {}).v) || 0;
       /* R38-13 (2026-09-06): a TIE here -- both devices moved the ledger the
          SAME number of times, independently, offline -- used to fall straight
          through to the payload winning regardless of which balance was
@@ -949,14 +1073,36 @@ export async function importAll(data, { replace = true } = {}) {
          stale blob" is the rule this whole app runs on, not "resolve every
          conflict correctly", and a merge with no ordering signal left has no
          way to do the latter. */
-      const localCoinsRow = localKv.find(r => r.k === 'coins');
-      const fileCoinsRow = data.kv.find(r => r && r.k === 'coins');
-      const localCoins = Number(localCoinsRow && localCoinsRow.v) || 0;
-      const fileCoins = Number(fileCoinsRow && fileCoinsRow.v) || 0;
-      if (localCoinsRev > fileCoinsRev || (localCoinsRev === fileCoinsRev && localCoins > fileCoins)) {
-        const localRev = localKv.find(r => r.k === 'coinsRev');
-        if (localCoinsRow) keptKv.push(localCoinsRow);
-        if (localRev) keptKv.push(localRev);
+      const keepRevisionedBalance = (balanceKey, revKey) => {
+        const localRev = Number((localKv.find(r => r.k === revKey) || {}).v) || 0;
+        const fileRev = Number((data.kv.find(r => r && r.k === revKey) || {}).v) || 0;
+        const localRow = localKv.find(r => r.k === balanceKey);
+        const fileRow = data.kv.find(r => r && r.k === balanceKey);
+        const localBalance = Number(localRow && localRow.v) || 0;
+        const fileBalance = Number(fileRow && fileRow.v) || 0;
+        if (localRev > fileRev || (localRev === fileRev && localBalance > fileBalance)) {
+          const localRevRow = localKv.find(r => r.k === revKey);
+          if (localRow) keptKv.push(localRow);
+          if (localRevRow) keptKv.push(localRevRow);
+        }
+      };
+      keepRevisionedBalance('coins', 'coinsRev');
+      /* 2026-09-06 (Codex audit of v485): Bone Dust had NO ordering signal at
+         all, so any older blob restored dust already spent or erased dust just
+         earned. 'dustRev' moves with 'bonedust' in the same transaction
+         (kvBumpRevisioned above) and rides the same rule. */
+      keepRevisionedBalance('bonedust', 'dustRev');
+      /* THE TOMBSTONES ARE A UNION, NEVER PAYLOAD-WINS (2026-09-06). 'invTaken'
+         and 'crateTaken' are the receipts the inv filter below reads. Left as
+         an ordinary kv row the payload overwrote them on every pull, so device
+         B's own receipts vanished the moment it merged device A's blob, and
+         the next blob still carrying B's spent row revived it. A merge can
+         only ever ADD a receipt. */
+      for (const k of ['invTaken', 'crateTaken']) {
+        const local = localKv.find(r => r.k === k);
+        const file = data.kv.find(r => r && r.k === k);
+        if (!local) continue;
+        keptKv.push({ k, v: [...new Set([...(Array.isArray(local.v) ? local.v : []), ...(file && Array.isArray(file.v) ? file.v : [])])] });
       }
     }
     /* THE DAY CEILINGS ONLY EVER GO UP, INCLUDING THROUGH A RESTORE, and
@@ -992,16 +1138,22 @@ export async function importAll(data, { replace = true } = {}) {
      be second-guessed. */
   let invRows = data.inv;
   if (!replace && declared.has('inv')) {
-    const taken = new Set((await kvGet('crateTaken', [])) || []);
     /* R38-13 (2026-09-06): crateTaken above only ever covered openCrate. Every
        OTHER place this file deletes an 'inv' row outright (a spent
        consumable, a used Battle Charm, a pet's last cosmetic copy on
        salvage/extinction) had no receipt at all, so the SAME stale-blob merge
        revived them: measured, a spent Vigor Draught came back 1 -> 0 -> 1
-       through a two-device merge. js/loot.js now records every one of those
-       ids into kv 'invTaken' (same bounded idiom, see markInvTaken there). */
-    const invTaken = new Set((await kvGet('invTaken', [])) || []);
-    if (taken.size || invTaken.size) invRows = data.inv.filter(r => !(r && (taken.has(r.id) || invTaken.has(r.id))));
+       through a two-device merge. Every one of those sites now goes through
+       takeInv above, which deletes the row and writes 'invTaken' in one
+       transaction, unbounded. The payload's own receipts count too (the union
+       the kv merge above keeps), so a row the OTHER device took never lands. */
+    const taken = new Set();
+    for (const k of ['crateTaken', 'invTaken']) {
+      for (const id of ((await kvGet(k, [])) || [])) taken.add(id);
+      const file = Array.isArray(data.kv) && data.kv.find(r => r && r.k === k);
+      if (file && Array.isArray(file.v)) for (const id of file.v) taken.add(id);
+    }
+    if (taken.size) invRows = data.inv.filter(r => !(r && taken.has(r.id)));
   }
   return new Promise((resolve, reject) => {
     let t;

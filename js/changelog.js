@@ -4,12 +4,31 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
-  { n: 493, date: '2026-09-06', title: 'The Kennel opens, and the Crew tells you what changed', items: [
+  { n: 498, date: '2026-09-06', title: 'The Kennel opens, and the Crew tells you what changed', items: [
     'Pets hatch in colourways now. Every egg rolls a colour for the species inside: the plain one most of the time, or ember, frost, toxic or midnight. Each is a proper recolour of Cam\'s art, not a filter, and the Kennel in the Stable shows every species and colour you have collected, with the gaps you have not.',
     'Bumbleseal hatches from step eggs like every other pet now instead of sitting behind a 50,000 coin price. Your morph pets show everywhere your pets already show: Today\'s hero, the Stable, the Paddock, your friends\' paddocks and profiles.',
     'A friend\'s Crew card says the one thing that changed since you last looked: leveled up, new gear, took a spire. Cards and profiles show how many spires a friend holds, and the Crew badge lights when your own race rank improves overnight.',
     'The race gap is to the racer directly above you, not to first place. Settles tonight fires for the whole last day of the week. Everyone outside the podium gets told where they placed. And a friend whose stats never synced says so instead of showing a fight with NaN damage.',
     'The Wardrobe grid only paints the tiles on screen and one screen ahead, so opening a slot with two hundred hats no longer stalls.',
+  ] },
+  { n: 497, date: '2026-09-07', title: 'The Stable rail tells the truth', items: [
+    'The lizard\'s team rail puts the teams you own first, parks on the team you picked last time, and tapping a team you own applies it to every football piece she has in that team. Tapping a team you do not own says which piece is missing, never that a helmet you own is not in your wardrobe.',
+    'The Locker Room price line fits inside its card at every phone width, the pet copy chips meet the 44 px tap floor, a pet armed for breeding stays visible when you step to another copy, and a family tile\'s rarity badge matches the piece it shows.',
+  ] },
+  { n: 496, date: '2026-09-07', title: 'Three builds deep, nothing goes missing', items: [
+    'An update now remembers which build each open screen came from and keeps that build\'s files until the screen reloads, even if two updates land in a row. Before, a second update could sweep away files a still-open screen needed.',
+  ] },
+  { n: 495, date: '2026-09-07', title: 'Open all recovers, cancel is one step, the routine cap holds', items: [
+    'If one crate in an Open all fails partway, the ones already opened are still revealed, the rest stay in your Backpack, and the button comes back.',
+    'Cancelling a pot returns its ingredients in the same step it empties the pot, so a bad moment can no longer leave you with an empty pot and no ingredients.',
+    'Finishing two wellness routines at the same instant paid 20 XP against a 15 cap. The cap is checked and paid in one step now; both routines still count as done.',
+  ] },
+  { n: 494, date: '2026-09-07', title: 'Two phones, one wallet', items: [
+    'Coins and Bone Dust now carry their own change counter, written in the same step as the balance, on every path that moves them: earning, spending on the rack, a spawn pick-up, a quest payout. When two phones meet, the newer wallet wins and spent coins or dust can no longer come back from an older save.',
+    'Using up a potion, a battle charm, a streak freeze or a salvaged pet is recorded in the same step as the removal, and the record never expires, so an old backup can no longer bring a spent item back to life.',
+  ] },
+  { n: 493, date: '2026-09-06', title: 'Your welcome coins are yours even when signup stalls', items: [
+    'If the Crew servers refuse a brand-new signup for a moment (a busy shared wifi can do it), you no longer walk into Today with an empty wallet and no word about it. The 50 welcome coins land locally first, signup retries once, and if it still fails a line says so and the coins stay yours.',
   ] },
   { n: 492, date: '2026-09-06', title: 'The Pit reads clean and leaves smoothly', items: [
     'The stamina cost on each move no longer paints over the move\'s name; Bone Guard\'s cost line, the only one that wrapped to two lines, fits on one.',

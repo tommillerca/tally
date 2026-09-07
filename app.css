@@ -6640,8 +6640,9 @@ body::before {
 .fb-hero .pc-worn { transform: translateX(-50%); }
 /* the whole Bonehead, centred; the lizard sits IN FRONT of his feet (Tom, 2026-09-05) */
 .fb-hero .pc-worn.fit-body .bh-anim { transform-origin: 50% 50%; transform: translate(-5%, 1%) scale(0.96); }
-/* one line: the two prices at the poster's chip size wrapped "the / lot" in a 230px column */
-.fb-drop .t3-price { font-size: 15px; white-space: nowrap; }
+/* the two prices WRAP inside the card (R40-20: nowrap ran 7px past the card at 393,
+   24px at 375 and 79px at 320, where it read "4,200 A PIECE, 16" and stopped) */
+.fb-drop .t3-price { font-size: 15px; flex-wrap: wrap; max-width: 100%; box-sizing: border-box; row-gap: 0; line-height: 1.25; }
 .fb-hero-pet { position: absolute; right: -2px; bottom: -4px; z-index: 2; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45)); }
 .fb-hero-pet .petcrop { display: block; }
 .fb-teams { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 3px; margin: 0 0 8px; }
@@ -8945,7 +8946,7 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   margin: 10px calc(var(--pad) * -1) 0; padding: 0 var(--pad); }
 .cf-kin::-webkit-scrollbar { display: none; }
 .cf-kin:empty { display: none; }
-.cf-kin .chip { min-height: 40px; display: inline-flex; align-items: center; scroll-snap-align: center; }
+.cf-kin .chip { min-height: 44px; display: inline-flex; align-items: center; scroll-snap-align: center; }   /* 44, the tap floor (R40-30: measured 40) */
 .cf-cap { padding: 4px 4px 0; text-align: center; }
 .cf-cap b {
   display: block; font-family: var(--display); font-weight: 400; font-size: 27px;

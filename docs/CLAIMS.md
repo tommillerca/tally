@@ -19,8 +19,8 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
-## v493
-1. The integration train (integ/day5) off v492: Kennel phase A, palettes, the approved v2 recolour art and the Kennel UI; crew activity; the Wardrobe paint virtualization; the truthful iOS permission strings (not a player-visible change, documented in docs/PERMISSION-STRINGS.md). Each row below folds the dated sections further down.
+## v498
+1. The integration train (integ/day5) off v497: Kennel phase A, palettes, the approved v2 recolour art and the Kennel UI; crew activity; the Wardrobe paint virtualization; the truthful iOS permission strings (not a player-visible change, documented in docs/PERMISSION-STRINGS.md). Each row below folds the dated sections further down.
 
 2. PROOF: unit.test.js, pet-pool-audit.mjs, pet-morph-audit.mjs, kennel-audit.mjs | REACH: a granted egg rolls a morph fresh-first over species x morph pairs at MORPH_WEIGHT, the hatch reads it, morphs never touch stats; each morph is a per-fill recolour PNG of Cam's master (ink, whites and creams byte-identical, one midnight tier, Tom approved the sheet 2026-09-06) with tiers built; the Kennel sheet inside the Stable lists every species with a 30-cell collection grid and column headers.
 
@@ -44,6 +44,113 @@ R39-6, 8, 9, 10, 11, 13, 14, 21, 23, 30, 32, re-measured on this tree before fix
 6. PROOF: kennel-audit.mjs | REACH: Open the Kennel on a 320 wide phone owning every colourway of every pet: all six rows fit above the fold, the caption ends in an ellipsis instead of wrapping, and each column header sits over its column.
 7. PROOF: pet-morph-audit.mjs | REACH: Open the Backpack with an incubating Ember egg: the shell reads orange, not blue. Frost reads blue, Toxic green, Midnight purple.
 8. PROOF: hero-share-audit.mjs | REACH: Equip Bumbleseal from the Stable, visit it again and come back to Today: she still stands at her own size (169px box at 390x844) and the Bonehead still steps aside (-27px), because equipping through the Stable writes both the equipped-instance record and the outfit slot. The audit used to seed with the bare outfit slot, which v490's R39-1 heal reverts on the next Stable paint: red on origin/main since 49fc6878 (green at its parent, measured 2026-09-07), not a train regression. Re-premised onto addPetInstance + setEquippedPet, the writer every player path uses.
+## the Stable rail tells the truth (2026-09-06)
+
+Not stamped to a release: hotfix/stable-rail-truth, off v493. HANDOFFMASTER20260906.md
+B9, B10, B11 and R40-28..31, re-measured on this tree before fixing. Owned by this
+lane: the Stable's pet wardrobe shelf and team rail, the Locker Room price pill's
+CSS, the kin chips and the Dressing Room family tile's tier.
+
+1. PROOF: football-render-audit.mjs | REACH: Open the Stable on a lizard that
+   owns a football piece. The teams you own come first on the rail, the ones
+   you do not come after, dimmed and marked Locked with no price. Measured with
+   three owned teams: they sit at positions 1, 2 and 3 of 32, 192px from the
+   first to the last on a 393px screen, where before the owned Glasswater
+   helmet sat 3113px along a 3337px rail.
+
+2. PROOF: football-render-audit.mjs | REACH: The rail opens parked on the team
+   you last picked here, else the team she has on, else the first team you own
+   a piece for, and it remembers the pick across closing the Stable, a reload
+   and a fresh open. A team you own nothing in is never the parked one, so a
+   Locked tile never reads Picked.
+
+3. PROOF: football-render-audit.mjs | REACH: Tap a team you own and every
+   worn piece that exists in that team swaps to it, in one tap. When both
+   pieces exist you hear nothing. When one does not, the piece that does
+   swaps, the other stays as it was, and the toast names it: "Her Lizard
+   Jersey does not come in Glasswater Gannets colours in your wardrobe."
+   Before, the same tap on a helmet you owned did nothing and said "That
+   colourway is not in your wardrobe." Tap a Locked team with nothing on and
+   the toast is "Nothing of hers comes in Hollow Howlers colours yet." and
+   the rail stays where it was.
+
+4. PROOF: football-render-audit.mjs | REACH: In the Shop, the Locker Room
+   poster's price pill ("4,200 a piece, 16,800 the lot") wraps onto two lines
+   inside its card. Measured against the text column it is laid out in, on
+   v493 before fixing: the 203.1px nowrap pill ran 23.0px past it at 393,
+   40.1px at 375 and 95.1px at 320 (the brief's 7.0 / 24.1 / 79.1 are the same
+   overrun taken 16px further out, at the card's padding edge; the card clips,
+   so at 320 it read "4,200 A PIECE, 16" and stopped). After: 0px past the
+   column and 16px inside the card border at all three widths, both prices
+   readable.
+
+5. PROOF: pet-ownership-audit.mjs | REACH: In the Stable, the chips under a
+   pet with more than one copy are 44px tall (were 40). Arm one copy for
+   breeding, step to another copy through its chip, and the armed copy's chip
+   still says "breeding"; the BREED button speaks for the copy in front.
+
+6. PROOF: unit.test.js | REACH: In the Dressing Room, a family tile that shows
+   a lower-rarity colourway (the one you wear) carries that colourway's tier
+   badge and border, at that colourway's price, instead of the family's best
+   member's tier.
+## currency and receipts are one transaction (2026-09-06)
+
+Not stamped to a release: fix/currency-revisions, off v493. Codex's read-only
+audit of v485 (the aggregator handoff of 2026-09-06, lanes 1 and 3).
+
+1. PROOF: coins-merge-tie-audit.mjs | REACH: buying something and then syncing can no longer refund the purchase while the item stays. Every coin and Bone Dust change (a spend, a Rack buy in either currency, a Boneyard coin pickup, a quest's dust reward, a melt) moves its balance and its merge-ordering revision in one IndexedDB transaction, so a cloud blob taken before the spend is recognised as older and refused. Bone Dust had no ordering signal at all before this and rides the same rule now. Red before, on v493: COIN-DEBIT got 100 expected 10; DUST-DEBIT got 100 expected 10; DUST-EARN got 100 expected 160; RACK-COIN coins 5000->2600 with coinsRev 5000->5000; RACK-DUST dust 500->280 with dustRev 500->500; SPAWN coins +12 with coinsRev +0.
+
+2. PROOF: currency-revision-lint.mjs | REACH: the next place somebody writes a coin or dust balance cannot forget the revision. A static scan of every script forbids a raw balance write, requires the revision function beside every balance function in a claim's pay map, and requires the three shared helpers to route through the one revisioned primitive. Red on v493 with four findings (RAW, MAP, ASSIGN, PRIM), then red on the fixed tree for each of three single-site mutations, one check each.
+
+3. PROOF: inv-tombstone-audit.mjs | REACH: a consumed item stays consumed. Using a draught or a Battle Charm, opening a crate, or losing a pet's last cosmetic copy deletes the row and writes its receipt in one transaction, and the receipt list has no size cap any more (it kept the newest 500, so the 501st use let an old backup bring item 1 back). Measured bound: about 23 bytes a receipt, so 10,000 consumed items is about 230 KB inside a 2.2 MB backup ceiling; a merge unions receipts from both devices and never drops one. Red before, on v493: RING 1 revived (the oldest: yes); RING-CRATE 1 revived (the oldest: yes); ATOMIC row gone: true, receipt: false; ATOMIC-CRATE row gone: true, receipt: false.
+## open all recovers, cancel is one step (2026-09-06)
+
+Not stamped to a release: fix/openall-kitchen-atomic, off v493. HANDOFFr3920260906.md
+Lane 5 (open-all recovery) and Lane 6 (Kitchen cancel atomicity), both re-measured
+on this tree before fixing.
+
+1. PROOF: crate-reveal-audit.mjs | REACH: the Backpack's "Open all" control on a
+   row of Common Crates used to be able to spend several crates, hit a bad row
+   partway through, and lose the whole batch: nothing already opened was shown,
+   the crates the loop never reached still sat spent-looking in inventory, and
+   the button never came back. Poisoning the third of five crates mid-loop
+   reproduced it (0 cards shown, the button staying disabled forever). Now a
+   mid-loop failure still reveals whatever was actually taken, leaves every
+   untouched crate exactly where it was, and the control comes back the same
+   way a clean run leaves it.
+
+2. PROOF: kitchen-atomic-audit.mjs | REACH: cancelling a pot in the Kitchen
+   refunds its ingredients and empties the pot in one step. A crash between the
+   two used to be possible (the pot cleared with nothing refunded, or the
+   reverse), because they ran as two separate saves; forcing that exact
+   mid-cancel failure now leaves the pot and the ingredients both exactly where
+   they were before you tapped Cancel, never half-done. kitchen-day-one-strand-audit.mjs
+   (the recovery from the day-one mis-tap this shares its Cancel path with)
+   stays green.
+
+CORRECTION to "## v483" item 4 below: it called the pot-and-refund cancel "one
+atomic step" on the day it shipped. It was not; that was two separate saves with
+a real gap between them, exactly the failure item 2 above fixes. Corrected rather
+than left standing, because this file is read to check whether a note is true NOW.
+## the routine cap holds under a race (2026-09-07)
+
+Not stamped to a release: fix/wellness-xp-ceiling, no ticket-facing changelog
+line. markRoutine read the daily routine-XP cap off a ledger scan and decided
+the payout several awaits later, so two DIFFERENT routines finishing at once
+both read cap-1 and both minted the reward: a documented 15 XP ceiling
+(ROUTINE_XP 5 x ROUTINE_XP_CAP 3) paid 20 (measured 2026-09-06). The cap and
+the payout are now one atomic claim through awardCapped's shared-ordinal
+addIfAbsent (js/game.js), the same primitive every other repeatable daily
+reward already uses.
+
+1. PROOF: routine-race-audit.mjs, unit.test.js | REACH: marking two different
+   self-care routines done at the same moment, on the day only one XP-earning
+   slot is left, pays the XP to one of them and 0 to the other instead of
+   both; the day's total routine XP never exceeds 15 no matter how the taps
+   land, and both routines are still remembered as done today either way
+   (red before: +10 XP paid on the race, 20 XP total, 0 of 2 calls reporting
+   capped).
+
 ## pit readout and exit (2026-09-06)
 
 Not stamped to a release: hotfix/pit-ap-exit, off v487. Tom on live v487, two
@@ -205,6 +312,51 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 
 3. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a day-one cook that goes wrong is recoverable. The starter pouch ({marrow:2, salt:1}) is also enough to brew Stoneskin Draught, and doing that first used to leave nothing else affordable with no way back (measured: 606 coins of foraging to recover, against a roughly 300-coin day-one wallet). A Cancel control on any cooking pot (armed, so a stray tap cannot cost real progress) now refunds the ingredients in full, and the Kitchen names which recipe the starter ingredients are for before the first tap. Red independently on the tip and on the cancel control; the audit reproduces the exact strand (cooks Stoneskin, confirms 0 of 13 recipes affordable) before proving the recovery.
 
+## register 429 wallet (2026-09-06)
+
+1. PROOF: unit.test.js | REACH: a fresh install receives the complete social-welcome grant locally before registration. Two consecutive 429 responses retry once, leave exactly 50 welcome coins and 10 XP under the server's existing receipt key, and surface one named failure toast. A later registration cannot pay the grant twice.
+## three generations, no orphaned page (2026-09-06)
+
+Not stamped to a release: fix/sw-three-generations, off main at v493. Lane 4 of
+the Codex read-only audit (finding "prevGen() retains the numerically newest
+READY cache, not the cache of the page still running").
+
+1. PROOF: sw-upgrade-audit.mjs | REACH: a player who keeps a sheet open on build A while build B and then build C install and take charge underneath still gets A's own modules when the old page lazily imports one (THREE GENERATIONS row, red before: the A page's import of the module only its build carries answered 404 with caches tally-v493, tally-v494; green after: 200, caches tally-v471, tally-v494). The worker keeps every generation an open page came from, at most two behind the current build, and sweeps the rest; the generation nobody is running (B here) goes.
+
+2. PROOF: sw-upgrade-audit.mjs, offline-boot-audit.mjs, dead-shell-audit.mjs | REACH: nothing else about the swap moved: the new worker still takes over the moment its whole build is cached (R38-1), the page it takes over from keeps its own generation (R38-17), identical entries are still reused across the install (R38-18), and a cold offline boot and the dead-shell recovery still work with the extra tally-clients bookkeeping cache present.
+## v497
+1. A hotfix off v496, master handoff B9, B10, B11 and R40-28..31. Its rows are the dated section "the Stable rail tells the truth" further down, folded here.
+
+2. PROOF: football-render-audit.mjs | REACH: owned colourways lead the Stable rail (positions 1 to 3 of 32, 192 px span, was 3113 of 3337), the rail parks on and persists the last pick (S.settings.petRailTeam), an owned team applies to every worn piece that exists in it and the toast names only a genuinely missing piece, a Locked team never reads Picked (RAIL-ORDER, RAIL-TOAST, RAIL-HALF-SWAP, RAIL-LOCKED, RAIL-REMEMBERS, RAIL-SE red on v493 with the quoted positions and toasts).
+
+3. PROOF: football-render-audit.mjs, pet-ownership-audit.mjs, unit.test.js | REACH: the Locker Room price pill stays inside its text column at 320, 375 and 393 (PILL red before: 95.1, 40.1, 23.0 px past the column), kin chips are 44 px (KIN-TAP red at 40), a pet armed for breeding keeps its chip across copies (KIN-BREED), and a mixed-rarity family tile carries the shown item's rarity badge (R40-31 unit row red: fam r-legendary on a worn common).
+
+## v496
+1. A hotfix off v495, lane 4 of the data-integrity plan plus the hero-share audit re-premise. Its rows are the dated section "three generations, no orphaned page" further down, folded here.
+
+2. PROOF: sw-upgrade-audit.mjs, offline-boot-audit.mjs, dead-shell-audit.mjs | REACH: the worker records which build cache served each live client (tally-clients) and the activate sweep keeps the generations of every live client (bounded to this build plus two), so a page still running build A after B and C activated can lazily import an A-only module (THREE GENERATIONS row red before: 404, caches tally-v493 and tally-v494 only; after: 200 with tally-v471 kept). The self-admitting install, the conditional precache, the reachability-gated Get latest and updateViaCache none are unchanged; the full audit is ALL GREEN.
+
+## v495
+1. A hotfix off v494, lanes 5, 6 and 7 of the data-integrity plan. Its rows are the dated sections "open all recovers, cancel is one step" and "the routine cap holds under a race" further down, folded here.
+
+2. PROOF: crate-reveal-audit.mjs | REACH: the Common Open all loop reveals everything it actually opened when a later crate throws, leaves the unopened crates in place and re-enables the control (RECOVERY rows red before: cards=0, disabled=true with crate 3 poisoned).
+
+3. PROOF: kitchen-atomic-audit.mjs, kitchen-day-one-strand-audit.mjs | REACH: cancelCook empties the pot and refunds its ingredients in one transaction (MID-CANCEL red before: the pot emptied with no refund when the second write failed); the earlier CLAIMS row that called the cancel atomic is corrected.
+
+4. PROOF: routine-race-audit.mjs, unit.test.js | REACH: the wellness routine cap is claimed through per-day ordinal slots with the app's test-and-set, so two distinct routines finishing at once pay 15 total and both record completion (red before: 20 XP total, 0 of 2 capped).
+
+## v494
+1. A hotfix off v493, lanes 1 and 3 of the data-integrity plan (Codex audit, 2026-09-06). Its rows are the dated "currency and receipts are one transaction" section further down, folded here.
+
+2. PROOF: coins-merge-tie-audit.mjs, currency-revision-lint.mjs, unit.test.js | REACH: coinsAdd, boneDustAdd, spendCoins and spendDust move the balance and its revision in one kv transaction (kvBumpRevisioned, revision by magnitude); buyRackItem, collectSpawn and claimQuest carry coinsRev/dustRev inside their claim pay maps; importAll ranks Bone Dust by dustRev the way coins are ranked; a static lint fails any site that moves coins or bonedust without its revision. Red before: COIN-DEBIT and DUST-DEBIT got 100 expected 10, DUST-EARN got 100 expected 160, RACK-COIN coinsRev 5000 to 5000, SPAWN coins +12 coinsRev +0; lint RAW/MAP/ASSIGN/PRIM red on the unfixed sites.
+
+3. PROOF: inv-tombstone-audit.mjs, restore-latch-audit.mjs, unit.test.js | REACH: db.takeInv removes an inventory row and writes its receipt in one transaction, every former db.del('inv') site and openCrate use it, the receipt list is uncapped (about 23 bytes an id, documented bound) and merges as a union with the payload's, so a snapshot older than 500 takes cannot revive the oldest item. Red before: RING and RING-CRATE 1 revived (the oldest), ATOMIC and ATOMIC-CRATE row gone with receipt missing.
+
+## v493
+1. A hotfix off v492, Codex's round-37 lane (R37-24). Its rows are its dated section further down, folded here.
+
+2. PROOF: unit.test.js | REACH: a freshly minted identity receives the social-welcome payload (50 coins, 10 XP) locally through one claimAndPay transaction before registration; POST /register retries once after a 429 with backoff; a second failure shows one onboarding line saying the coins are safe; a later server grant dedupes against the same receipt so coins stay exactly 50 (red before: register must retry exactly once after a 429, 1 !== 2; the forced double-429 row asserts two attempts, 50 coins, 10 XP, one toast, then a permitted registration stores the real player id with no second toast).
+
 ## v492
 1. A hotfix off v491 from Tom's live play test. Its rows are the dated "pit readout and exit" section further down, folded here.
 
@@ -283,7 +435,7 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 
 3. PROOF: pit-kitchen-hint-audit.mjs | REACH: the Pit carries one line naming the active dish buff, or pointing at the Kitchen when ingredients or a dish are owned, and nothing when there is nothing to cook (BUFF and NUDGE rows red with the line removed, QUIET grades the absence).
 
-4. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a cooking pot can be cancelled and refunds its ingredients in one atomic step, and the day-one Kitchen says which recipe the starter kit is for before the first tap (TIP and CANCEL rows red when reverted separately; the strand itself reproduced first: marrow 1, salt 0, 0 of 13 buttons).
+4. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a cooking pot can be cancelled and refunds its ingredients, and the day-one Kitchen says which recipe the starter kit is for before the first tap (TIP and CANCEL rows red when reverted separately; the strand itself reproduced first: marrow 1, salt 0, 0 of 13 buttons). (This called the cancel "one atomic step" when it shipped. It was not: the pot was cleared and the ingredients refunded as two separate saves, with a real gap a crash could land in. See "## open all recovers, cancel is one step (2026-09-06)" above for the actual fix. Corrected rather than left standing, because this file is read to check whether a note is true NOW.)
 ## health card today (2026-09-06)
 
 1. PROOF: health-intake-audit.mjs | REACH: Open Today before connecting Apple

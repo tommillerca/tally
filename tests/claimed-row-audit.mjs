@@ -88,8 +88,6 @@ const ACCEPTED = [
     why: "Take it all off clears the map OUTRIGHT rather than editing it, so there is no read whose result could go stale. The comment above the line is explicit that a leftover entry on an emptied slot is the bug being closed, so preserving a concurrent write here would be wrong, not right." },
   { site: 'js/app.js:seedDemo', row: "'settings'",
     why: "the demo seeder, which replaces the whole profile on a virgin tally-demo database before any surface is reachable. It is not editing a player's settings and there is nothing live to race." },
-  { site: 'js/app.js:seedDemo', row: "'coins'",
-    why: "the same seeder, setting a starting balance rather than changing one. 'coins' counts as claimed because kvBump is how every real balance change moves it; this line runs once on a virgin demo database with no wallet to overdraw." },
 ];
 
 /* ===========================================================================
@@ -114,7 +112,11 @@ function stripProse(src) {
    identifier. Anything else (a template, an expression) is not something this
    scan can reason about and is skipped rather than guessed at. */
 const ARG = String.raw`\s*(['"][^'"]+['"]|[A-Za-z_$][\w$]*)`;
-const CLAIM_RE = new RegExp(String.raw`(?:^|[^\w.])kv(?:Update|Bump)\(${ARG}`);
+/* kvBumpRevisioned (2026-09-06) is the balance primitive coinsAdd, boneDustAdd
+   and spendCoins/spendDust route through now; its first argument is the balance
+   row, the same position kvBump's was. The seedDemo 'coins' ACCEPTED entry went
+   with that change: the seeder calls coinsAdd on a virgin demo database. */
+const CLAIM_RE = new RegExp(String.raw`(?:^|[^\w.])kv(?:Update|Bump|BumpRevisioned)\(${ARG}`);
 const SET_RE = new RegExp(String.raw`(?:^|[^\w.])kvSet\(${ARG}`);
 
 const files = readdirSync(path.join(ROOT, 'js')).filter(n => n.endsWith('.js') && n !== 'changelog.js');
@@ -173,7 +175,8 @@ ok('CONTROL the scanner found claimed rows and plain writers to grade (an empty 
    120 findings and every one of them was a blanked quote. So name rows that are
    known to be claimed and require the scan to have seen them by name. Pinned
    2026-09-02 against this tree: 'coins' and 'bonedust' are claimed by kvBump
-   (js/db.js is the primitive, every balance change routes through it),
+   (kvBumpRevisioned since 2026-09-06; js/db.js is the primitive, every balance
+   change routes through it),
    'pitEnergy' by spendPitFight, 'garden' by harvestPlot, 'cooking' by
    collectDish, 'spires' is NOT here because spires.js names it through a
    local const, which is the identifier half this scan keeps per-file. */

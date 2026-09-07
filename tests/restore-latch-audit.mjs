@@ -184,8 +184,10 @@ const fnBody = (text, header) => {
 };
 ok('SRC-LATCH  goOnline() latches bootRestored on a freshly-minted identity',
   /idMinted/.test(fnBody(socialSrc, 'export async function goOnline')) && /bootRestored/.test(fnBody(socialSrc, 'export async function goOnline')));
+/* 2026-09-06: the receipt moved into db.takeInv (delete and receipt in one
+   transaction, kv 'invTaken'); openCrate no longer names 'crateTaken' itself */
 ok('SRC-RECEIPT  openCrate records a take receipt',
-  /crateTaken/.test(fnBody(lootSrc, 'export async function openCrate')));
+  /takeInv/.test(fnBody(lootSrc, 'export async function openCrate')));
 ok('SRC-MERGEGUARD  importAll\'s merge path consults the crate receipt for inv rows',
   /crateTaken/.test(fnBody(dbSrc, 'export async function importAll')));
 ok('SRC-COINSREV  importAll\'s merge path guards coins with a coinsRev comparison',

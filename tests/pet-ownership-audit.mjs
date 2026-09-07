@@ -242,6 +242,32 @@ try {
     ring.badge !== null && new RegExp(`\\b${N_HERD}\\b`).test(ring.badge) && ring.badgeBox && ring.kin === N_HERD,
     `badge ${JSON.stringify(ring.badge)} (drawn ${ring.badgeBox}), ${ring.kin} copy chips under the caption`);
   setup(`SAMPLE the ring opened on the ${HERD}, so the swipe below has somewhere to go`, ring.focus === HERD, `opened on ${ring.focus}`);
+  /* KIN (HANDOFFMASTER20260906 R40-28..31, measured on v488): the copy chips
+     under the caption were 40px against the 44px tap floor, and a copy armed
+     for breeding lost every visible sign of it the moment the player stepped
+     to another copy through a chip (the BREED button repaints for the copy in
+     front, and nothing else said which one was armed). */
+  const kinBox = await page.evaluate(() => [...document.querySelectorAll('#stableBody .cf-kin [data-kin]')].map(b => { const r = b.getBoundingClientRect(); return { w: +r.width.toFixed(1), h: +r.height.toFixed(1) }; }));
+  ok(`KIN-TAP every copy chip under the caption is at least 44px tall (${kinBox.length} chips)`,
+    kinBox.length === N_HERD && kinBox.every(b => b.h >= 44 && b.w >= 44),
+    `heights ${[...new Set(kinBox.map(b => b.h))].join(' ')}px, narrowest ${Math.min(...kinBox.map(b => b.w))}px`);
+  const armed = await page.evaluate(() => document.querySelector('#stableBody [data-breedsel]')?.dataset.breedsel || null);
+  await page.evaluate(() => document.querySelector('#stableBody [data-breedsel]')?.click());
+  await sleep(500);
+  const other = await page.evaluate(a => { const b = [...document.querySelectorAll('#stableBody .cf-kin [data-kin]')].find(x => x.dataset.kin !== a); if (!b) return null; b.click(); return b.dataset.kin; }, armed);
+  await sleep(700);
+  const kinAfter = await page.evaluate(a => {
+    const chip = document.querySelector(`#stableBody .cf-kin [data-kin="${a}"]`), br = document.querySelector('#stableBody [data-breedsel]');
+    return { chip: chip ? chip.textContent.trim() : null, chipOn: !!chip && chip.classList.contains('on'), breedFor: br && br.dataset.breedsel, breedText: br && br.textContent.trim() };
+  }, armed);
+  ok('KIN-BREED a copy armed for breeding still reads as breeding on its chip after stepping to another copy, and the BREED button speaks for the copy in front',
+    !!armed && !!other && other !== armed && /breeding/i.test(kinAfter.chip || '') && !kinAfter.chipOn && kinAfter.breedFor === other && kinAfter.breedText === 'BREED',
+    `armed ${armed}, stepped to ${other}; its chip "${kinAfter.chip}", button for ${kinAfter.breedFor} reads "${kinAfter.breedText}"`);
+  /* step back and disarm, so the swipe below starts where COLLAPSE left it */
+  await page.evaluate(a => document.querySelector(`#stableBody .cf-kin [data-kin="${a}"]`)?.click(), armed);
+  await sleep(600);
+  await page.evaluate(() => document.querySelector('#stableBody [data-breedsel]')?.click());
+  await sleep(500);
   /* ONE REAL SWIPE, towards the lizard (the ring wraps, so the short way is
      read off the card indexes), slow enough that the ring's own momentum carries
      at most a card: 0.6 of a card over ~600ms, which the spring rounds to the

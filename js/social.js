@@ -429,18 +429,22 @@ const driven = () => typeof navigator !== 'undefined' && navigator.webdriver ===
 // BEFORE swapping the device identity (a register that fails after the swap
 // left a half-adopted device: signed as the new account, none of its data).
 // Never throws: a dropped connection is { ok:false }, same as every sibling.
-async function registerKey(id) {
+async function registerKey(id, { retryDelayMs = 600 } = {}) {
   const base = await apiBase();
   if (!base) return { ok: false, reason: 'no-api' };
-  try {
-    const r = await apiFetch(base + '/register', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ pubkey: id.pubJwk, ...(driven() ? { run: `webdriver ${new Date().toISOString()}` } : {}) }),
-    });
-    if (!r.ok) return { ok: false, reason: 'register-failed', status: r.status };
-    return { ok: true, me: await r.json() };
-  } catch { return { ok: false, reason: 'network' }; }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const r = await apiFetch(base + '/register', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ pubkey: id.pubJwk, ...(driven() ? { run: `webdriver ${new Date().toISOString()}` } : {}) }),
+      });
+      if (r.ok) return { ok: true, me: await r.json() };
+      if (r.status !== 429 || attempt === 1) return { ok: false, reason: 'register-failed', status: r.status };
+      await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+    } catch { return { ok: false, reason: 'network' }; }
+  }
+  return { ok: false, reason: 'register-failed' };
 }
 
 // Opt in: register this device's pubkey. Re-running (or restoring a backup)
@@ -461,13 +465,24 @@ async function registerKey(id) {
    Does NOT fire for a RECOVERED identity (keychain/kv, no idMinted): that is
    bootSync's own reinstall branch calling this same function, and a real
    backup can genuinely exist for that key — it must still pull. */
-export async function goOnline() {
+export async function goOnline({ retryDelayMs, onRegisterFailure } = {}) {
   const id = await ensureIdentity();
-  const r = await registerKey(id);
-  if (!r.ok) return r;
+  const minted = await kvGet('idMinted', null);
+  /* R37-24: onboarding is complete before /register can answer. Pay the exact
+     server welcome under its exact receipt key first, so a 429 cannot strand a
+     fresh player at zero and the eventual social-welcome grant is a harmless
+     replay. coinsRev moves in the same transaction for backup merge ordering. */
+  if (minted) await awardOnce('social-welcome', 'welcome', 10, 'Welcome to the Crew', undefined, null, { kv: {
+    coins: cur => (Number(cur) || 0) + 50,
+    coinsRev: cur => (Number(cur) || 0) + 50,
+  } });
+  const r = await registerKey(id, { retryDelayMs });
+  if (!r.ok) {
+    if (onRegisterFailure) onRegisterFailure('Crew signup failed. Your 50 welcome coins are safe. Try Go Online again later.');
+    return r;
+  }
   let me = r.me;
   await kvSet('social', { playerId: me.playerId, handle: me.handle, friendCode: me.friendCode, name: me.name || null, onlineAt: Date.now() });
-  const minted = await kvGet('idMinted', null);
   if (minted) await kvSet('bootRestored', true);
   /* CREW-1: the name picked at onboarding (kv onbName, js/app.js ctx.pick at
      the "That's me" tap) never reached the server -- registration hands out
