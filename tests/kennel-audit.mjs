@@ -125,6 +125,28 @@
  * demo save already owns Drizzle before this file grants anything. C4 (never
  * granted, no such default) is the UNOWNED control instead.
  *
+ * V500 FEEDBACK ROUND (2026-09-07). Three rows added -- DOOR, LEAD, ART x2 --
+ * for Tom's "Kennel button placement not intuitive", "How to use the kennel not
+ * clear at all" and "Some pets in the kennel blurry photos". Each was RUN RED in
+ * a `cp -R` throwaway copy of this tree with the new tests over the v500 code,
+ * HEADLESS_MODE=shell, restoring js/app.js between runs. Exactly one row failed
+ * in each and nothing else moved; verbatim:
+ *
+ *   the two croppedPetImg tier arguments reverted from `true` to a hardcoded 192
+ *     -> ART 393x852 FAIL "worst 1.821x C1|frost (349.6 device px off a 192px
+ *        source, assets/bh/thumb/192/C/morph/C1__frost.png); over 1.4x:
+ *        C1|frost 1.82, C1|base 1.82, C1|ember 1.82, C1|toxic 1.82,
+ *        C1|midnight 1.82, C5|frost 1.76 and 19 more" (25 of 36 images over).
+ *        ART 320x568 stayed GREEN at 1.396x -- under the ceiling by 0.004 --
+ *        which is exactly why both viewports are graded rather than one.
+ *   #kennelBtn moved back to the sheet head as `btn ghost small` and the body
+ *   door deleted (the shipped v500 shape)
+ *     -> DOOR FAIL "in body=false in head=true "" / "" 73.3x44.0 lands=true
+ *        swatches=0". Only DOOR: BUTTON stays green because the old button did
+ *        open the sheet, which is the whole point -- it worked and nobody found it.
+ *   the .k-lead sentence deleted from the Kennel's innerHTML
+ *     -> LEAD FAIL "(no .k-lead found)". Only LEAD.
+ *
  * Run: node tests/kennel-audit.mjs [baseUrl]
  * Self-serving: with no URL it serves this checkout, so it can never grade
  * production.

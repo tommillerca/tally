@@ -63,6 +63,21 @@
  *            delta 49.64" (the hue-rotate painted an Ember shell BLUE, the
  *            exact failure mode the brief measured at 155,158,188)
  *
+ * V500 FEEDBACK ROUND (2026-09-07), the KIN row. Tom: the Stable's copy rail
+ * "just shows their lvl not a little picture of them". Two mutations, each RUN
+ * in a `cp -R` throwaway copy over the v500 code, HEADLESS_MODE=shell:
+ *
+ *   the chip reverted to the shipped v500 text-only markup
+ *     -> SETUP "2 chip(s), with an image: 0" -> exit 2, "This audit GRADED
+ *        NOTHING", which is the right answer for a rail with no pictures on it
+ *        (an empty sample is a failure, never a pass).
+ *   the portrait kept but keyed off the SPECIES, dropping the instance's morph
+ *     -> KIN FAIL "copy-1 assets/bh/thumb/192/C/C5.png nw=192 h=46.0 ok |
+ *        copy-2 assets/bh/thumb/192/C/C5.png nw=192 h=46.0 WRONG ART". Only
+ *        KIN -- and this is the mutation that matters, because a picture that
+ *        is merely PRESENT is indistinguishable from a correct one on a rail of
+ *        one species until the two copies differ by colour.
+ *
  * Run: HEADLESS_MODE=shell node tests/pet-morph-audit.mjs [baseUrl] [--shots DIR]
  * Self-serving with no URL: serves this checkout, can never grade production.
  */
