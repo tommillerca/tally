@@ -6,18 +6,15 @@
  * sentence nobody reads:
  *
  *   TOP   R43-7. The one line telling a returning player they were paid for the
- *         day they walked away is a #toast at z-index 80. The daily wheel's veil
- *         goes up at 3.7s at z-index 210 and never times out, so 3 of 3 boot
- *         toasts were drawn UNDERNEATH it. Graded by hit test, not by geometry:
- *         document.elementFromPoint at the toast's own centre has to answer the
- *         toast (or something inside it), because a getBoundingClientRect over a
- *         covered element reads perfectly (anti-regression rule 6).
+ *         day they walked away is a #toast. The daily wheel's veil goes up at
+ *         3.7s at z-index 210 and never times out, and 3 of 3 boot toasts were
+ *         drawn UNDERNEATH it. Graded on PIXELS, not on a hit test: see the row.
  *   FOLD  R43-8a. #wbCard, the app's only greeting to a returning player, was
- *         measured at 1220px on an 852px viewport at all three gap lengths: 368px
- *         below the fold. It was put below the day container on 2026-09-05 for a
- *         real reason (inside .dayflow it pushed the collapsed summary off a
- *         568px screen) so this is graded from BOTH sides, and reverting fails
- *         the other one.
+ *         measured at 1220px on an 852px viewport at all three gap lengths, 368px
+ *         below the fold (1411px on this seed, which carries a news pill). It was
+ *         put below the day container on 2026-09-05 for a real reason (inside
+ *         .dayflow it pushed the collapsed summary off a 568px screen), so this is
+ *         graded from BOTH sides and reverting fails the other one.
  *   WHOLE R43-8b. The 320x568 half of that trade: .dayblk still fits inside one
  *         screen height, which is exactly what today-peek-audit's WHOLE row
  *         holds, re-asserted here on a LAPSED seed so the fix cannot buy the fold
@@ -35,24 +32,30 @@
  * wbReturnDay directly would have graded a card the app might never raise.
  *
  * AN EMPTY SAMPLE IS A FAILURE. SETUP refuses to grade anything unless the card
- * really rendered and the wheel veil really went up, because every row below
- * passes trivially on a screen with neither on it.
+ * really rendered, the wheel veil really went up and the day-close line was
+ * really photographed under it, because every row below passes trivially on a
+ * screen with none of them on it. FOLD also asserts scrollTop 0 in the same
+ * evaluate as the measurement, because "at first paint" is a claim about where
+ * the screen was, and a scrolled screen would read green on a buried card.
  *
- * PROVEN RED, 2026-09-07, on this tree, one revert at a time, exit codes to files:
- *   TOP    `.toast { z-index: 80 }` restored (app.css):
- *     FAIL TOP 393x852 the day-close line is the top element at its own centre
- *          point  covered by DIV.dw at (196, 700)
- *   FOLD   #wbCard moved back below the day section (js/app.js):
- *     FAIL FOLD 393x852 the returning player's greeting is above the fold at
- *          first paint  card top 1220.0 against a 852px viewport
- *   TRUE   the headline restored to "Everything is where you left it.":
- *     FAIL TRUE 393x852 the card does not claim everything survived when the
- *          streak did not  says "everything"
- *     FAIL TRUE 393x852 and it names the streak that reset  no mention of the
- *          streak
- *   WHOLE  #wbCard moved back INSIDE .dayflow (the pre-2026-09-05 position):
- *     FAIL WHOLE 320x568 the collapsed day still fits inside one screen height
- *          day is 611.4px against a 501.8px screen
+ * PROVEN RED, 2026-09-07, on this Mac, exit codes read from files, never a pipe.
+ * The whole shipped tree (origin/main js/app.js, js/quests.js, app.css and
+ * index.html copied into a throwaway rsync of this worktree) against THIS audit:
+ *   FAIL TOP 393x852 ...  0.0% of the toast's box is --surface-3, floor 25%;
+ *        mean rgb(10, 12, 10) over 676x130px          (the veil's own near-black)
+ *   FAIL FOLD 393x852 ... card top 1411, bottom 1540, fold 785.8 on a 852px
+ *        viewport
+ *   FAIL TRUE 393x852 the card does not claim everything survived when the streak
+ *        did not  card reads "Everything is where you left it. 3 crates are
+ *        waiting in your backpack. Good to be back"
+ *   FAIL TRUE 393x852 and it names the streak that reset   (same text)
+ * Each half of the TOP fix on its own, from the fixed tree, one at a time:
+ *   `.toast { z-index: 80 }`                       FAIL TOP  0.0%, rgb(10, 12, 10)
+ *   #toast moved back inside #app, z-index 320     FAIL TOP  0.0%, rgb(10, 12, 10)
+ * And WHOLE, which the fold fix could have bought back, by putting the card back
+ * INSIDE .dayflow on the shipped tree (its pre-2026-09-05 position):
+ *   FAIL WHOLE 320x568 the collapsed day still fits inside one screen height with
+ *        the return card on screen  day is 539.1px against a 501.8px screen
  *
  * Run: node tests/returning-boot-audit.mjs [baseUrl]
  */
@@ -65,6 +68,7 @@ const argv = process.argv[2] || process.env.URL;
 const srvHandle = argv ? null : await serveTree(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
 const base = argv || srvHandle.url;
 const SHOTS = process.env.SHOT_DIR || shotDir('returning-boot');
+fs.mkdirSync(SHOTS, { recursive: true });   // shotDir() makes its own; an env override may not exist yet
 const fails = [];
 const ok = (name, pass, detail = '') => {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`);
@@ -129,56 +133,86 @@ await page.evaluateOnNewDocument(() => {
      polls every 100ms from the first paint and hit-tests the toast AT ITS OWN
      CENTRE in the same tick it is measured, so every frame where a boot toast
      and the veil are both up is graded. */
-  window.__rbSamples = [];
   window.__rbVeilSeen = 0;
-  setInterval(() => {
-    if (document.querySelector('.dw')) window.__rbVeilSeen++;
+  setInterval(() => { if (document.querySelector('.dw')) window.__rbVeilSeen++; }, 100);
+  /* WHERE THE LINE IS, WHILE IT IS THERE. The day-close toast is fired on a
+     2400ms timer and lives 3400ms; the veil goes up at 3.7s. This reports the
+     overlap so the screenshot below is taken INSIDE it rather than at an instant
+     chosen in advance, which is how a guard grades a frame the bug is not on. */
+  window.__rbNow = () => {
     const t = document.getElementById('toast');
-    if (!t || t.hidden) return;
+    if (!t || t.hidden) return null;
     const r = t.getBoundingClientRect();
-    if (!(r.width > 0 && r.height > 0)) return;
-    const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
-    const el = document.elementFromPoint(x, y);
-    window.__rbSamples.push({
-      t: Math.round(performance.now()),
-      text: t.textContent,
-      veil: !!document.querySelector('.dw'),
-      x, y,
-      inToast: !!el && (el === t || t.contains(el)),
-      hit: el ? el.tagName + (el.id ? '#' + el.id : '') + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/)[0] : '') : 'nothing',
-    });
-  }, 100);
+    if (!(r.width > 0 && r.height > 0)) return null;
+    return { text: t.textContent, veil: !!document.querySelector('.dw'),
+      rect: { x: r.left, y: r.top, width: r.width, height: r.height } };
+  };
 });
 await page.reload({ waitUntil: 'networkidle2' });
 
 /* THE WHEEL VEIL IS THE POINT OF THE FIRST ROW, so this does NOT dismiss it. It
-   goes up at 3.7s and never times out; the boot toasts run from 2400ms. Wait out
-   the whole window, then read the samples. */
-await sleep(9000);
+   goes up at 3.7s and never times out. Poll for the overlap rather than sleeping
+   to a chosen instant, then photograph the toast's own box while both are up.
 
-const { samples, veilSeen } = await page.evaluate(() => ({ samples: window.__rbSamples || [], veilSeen: window.__rbVeilSeen || 0 }));
-const veiled = samples.filter(s => s.veil);
-/* THE LINE THIS IS ABOUT. Both branches of the day close (awardDayCloseIfDue in
-   js/app.js: the crate line and the consolation line) name the day the player
-   walked away from, and the returning-player branch of each says "your last
-   logged day". Matching on that phrase means the row cannot be satisfied by some
-   other boot toast that happened to be up under the veil. */
-const isDayClose = s => /last logged day/i.test(s.text);
-const dayCloseVeiled = veiled.filter(isDayClose);
+   GRADED ON PIXELS, NOT ON A HIT TEST. document.elementFromPoint is the tool
+   anti-regression rule 6 names, and it is the WRONG one here: .toast is
+   `pointer-events: none` on purpose (it ate taps on Today until 2026-08-31), so
+   it is transparent to hit testing whether it is on top or buried, and a row
+   built on it can never pass. It cannot fail either way on the shipped build, so
+   it would have looked like a working guard. What the player needs is to READ the
+   line, so what is graded is whether the pill's own surface is on the screen
+   inside its own box: #2a2734 (--surface-3) against the veil's opaque
+   near-black. */
+const VEIL_WAIT_MS = 12000;
+let shot = null, snap = null;
+for (let waited = 0; waited < VEIL_WAIT_MS; waited += 150) {
+  snap = await page.evaluate(() => window.__rbNow());
+  if (snap && snap.veil && /last logged day/i.test(snap.text)) {
+    const r = snap.rect;
+    shot = await page.screenshot({ encoding: 'base64', clip: { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } });
+    break;
+  }
+  shot = null;
+  await sleep(150);
+}
+const veilSeen = await page.evaluate(() => window.__rbVeilSeen || 0);
 
 ok('SETUP the daily wheel veil really went up over the returning boot (nothing below is graded without it)',
   veilSeen > 0, veilSeen ? `${veilSeen} samples with .dw up` : 'no .dw in any sample: the covering element this row is about never rendered');
+/* THE LINE THIS IS ABOUT. Both branches of the day close (awardDayCloseIfDue in
+   js/game.js: the crate line and the consolation line) name the day the player
+   walked away from, and the returning-player branch of each says "your last
+   logged day". Matching on that phrase means the row cannot be satisfied by some
+   other boot toast that happened to be up under the veil. */
 ok('SETUP the day-close line was really on screen while the veil was up (an empty sample is a failure)',
-  dayCloseVeiled.length > 0,
-  dayCloseVeiled.length ? `${dayCloseVeiled.length} samples, first at ${dayCloseVeiled[0].t}ms: ${JSON.stringify(dayCloseVeiled[0].text)}`
-    : `no day-close toast under the veil; saw ${JSON.stringify([...new Set(samples.map(s => s.text))])}`);
+  !!shot, shot ? `photographed at ${Math.round(snap.rect.x)},${Math.round(snap.rect.y)} ${Math.round(snap.rect.width)}x${Math.round(snap.rect.height)}: ${JSON.stringify(snap.text)}`
+    : 'no day-close toast under the veil in 12s');
 
-if (dayCloseVeiled.length) {
-  const covered = dayCloseVeiled.filter(s => !s.inToast);
-  ok('TOP 393x852 the day-close line is the top element at its own centre point on a returning boot',
-    covered.length === 0,
-    covered.length ? `covered in ${covered.length}/${dayCloseVeiled.length} samples by ${[...new Set(covered.map(s => s.hit))].join(', ')} at (${covered[0].x}, ${covered[0].y})`
-      : `${dayCloseVeiled.length}/${dayCloseVeiled.length} samples answer the toast itself`);
+if (shot) {
+  /* Decode in the page: the clip is in CSS px and the PNG is at dpr 2, so the
+     ratio is read off the image's own pixels rather than assumed. */
+  const px = await page.evaluate(async (b64) => {
+    const img = new Image();
+    await new Promise(r => { img.onload = r; img.src = 'data:image/png;base64,' + b64; });
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    c.getContext('2d').drawImage(img, 0, 0);
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let pill = 0, total = 0, sum = [0, 0, 0];
+    for (let i = 0; i < d.length; i += 4) {
+      total++; sum[0] += d[i]; sum[1] += d[i + 1]; sum[2] += d[i + 2];
+      // --surface-3 #2a2734, the pill's own fill, with room for the border and the antialiased type
+      if (Math.abs(d[i] - 0x2a) <= 14 && Math.abs(d[i + 1] - 0x27) <= 14 && Math.abs(d[i + 2] - 0x34) <= 14) pill++;
+    }
+    return { w: c.width, h: c.height, ratio: +(pill / total).toFixed(3), mean: sum.map(v => Math.round(v / total)) };
+  }, shot);
+  fs.writeFileSync(path.join(SHOTS, 'toast-under-veil.png'), Buffer.from(shot, 'base64'));
+  /* 0.25 is well under the ~0.6 a pill of type scores on this build and far over
+     the 0.0 the veil's own near-black gradient can reach. An empty sample cannot
+     reach it either. */
+  ok('TOP 393x852 the day-close line is the top element at its own centre point on a returning boot (its own surface is what is painted inside its own box)',
+    px.ratio >= 0.25,
+    `${(px.ratio * 100).toFixed(1)}% of the toast's box is --surface-3, floor 25%; mean rgb(${px.mean.join(', ')}) over ${px.w}x${px.h}px`);
 }
 
 /* Now clear the wheel and grade the settled Today, which is what the fold rows
@@ -198,6 +232,7 @@ for (const cfg of CONFIGS) {
   });
   await sleep(250);
   const m = await page.evaluate(() => {
+    const sc = document.getElementById('screen') || document.scrollingElement;
     const card = document.getElementById('wbCard');
     const dayBox = document.querySelector('section.dayblk');
     const tabs = document.querySelector('.tabbar');
@@ -209,6 +244,7 @@ for (const cfg of CONFIGS) {
       cardBottom: cr ? +cr.bottom.toFixed(1) : null,
       cardText: card ? card.textContent.replace(/\s+/g, ' ').trim() : null,
       dayH: dr ? +(dr.bottom - dr.top).toFixed(1) : null,
+      scrollTop: sc ? +(sc.scrollTop || 0).toFixed(1) : null,
       fold: +fold.toFixed(1),
       vh: window.innerHeight,
     };
@@ -227,6 +263,11 @@ for (const cfg of CONFIGS) {
     ok(`FOLD ${tag} the returning player's greeting is above the fold at first paint`,
       m.cardTop < m.fold - 44,
       `card top ${m.cardTop}, bottom ${m.cardBottom}, fold ${m.fold} on a ${m.vh}px viewport`);
+    /* FIRST PAINT MEANS THE TOP OF THE SCREEN. A row that measures the card
+       after something scrolled is measuring a screen the player did not arrive
+       on, and it would read green on a card 800px down. */
+    ok(`FOLD ${tag} and the screen really is at the top when that is measured`,
+      m.scrollTop === 0, `#screen scrollTop ${m.scrollTop}`);
 
     const text = (m.cardText || '').toLowerCase();
     ok(`TRUE ${tag} the card does not claim everything survived when the streak did not`,
