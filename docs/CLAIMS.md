@@ -75,6 +75,42 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 
 8. PROOF: take-and-pay-audit.mjs | REACH: openCrate, hatchEgg, disenchantGear, both salvage paths and the legacy-egg conversion spend their input and write their payout in one transaction, so killing every IndexedDB transaction after the take leaves the player with the item or the full payout, never neither (six CRASH rows red on the pre-fix order: crate consumed with 0 coins and no rows, egg gone with no pet, gear gone with no dust).
 
+## the top of the screen is one colour (2026-09-07)
+
+Not stamped to a release: fix/top-sliver, off v504. Tom, from a screenshot of
+the live app on his own iPhone: "ive noticed this top sliver recently a couple
+times sometimes it goes away i think after an update but looks glitchy". A black
+band across the full width a few tens of points down from the top, with the top
+two rounded corners and the warm amber top edge of a card clipped inside it, and
+CORRECT hero green both above and below it.
+
+DIAGNOSED OFF A RENDER RATHER THAN OFF THE CSS, and reproduced on demand. The
+band is `.today-plate::before` (the page backdrop, rgb(13,12,18)) and the clipped
+card is `.upd-banner`, the "Update available" banner. `#updBanner` was the second
+child of the Today screen, between `.today-plate` and `.hero-card`, and it is
+EMPTY unless version.json says the live build is ahead of the running one: that
+is the whole of the intermittency, and it is exactly why an update clears it.
+The hero's bleed under the island is a negative `margin-top: calc(-1 * (--sat +
+14px))` on `.hero-scene` which collapses out through `.hero-card`, and it only
+lands the art at y=0 while nothing above it has height. Measured at 393x852,
+--sat 59, with the banner mounted: `#updBanner` 73 -> 152.9 (79.9 tall) and
+`.hero-scene` 91.9, i.e. 73 + 79.9 + 12 - 73. The negative margin ate 73px of the
+BANNER instead of the scroller's padding, the opaque hero painted over the rest,
+and the 18.9px left over is the band. At --sat 0 the same arithmetic leaves
+77.9px of it. Not a fade and not a gap: an overlap.
+
+RULED OUT, each against the render rather than in the abstract: a restored
+scrollTop (the band is there at scrollTop 0); a transform or containing block
+clipping the bleed (with the banner absent the hero's box measures top 0 at both
+insets); a crate or news plate mounting above the hero (the screen's child list
+is plate, hero-card, hero-actions, and nothing else can precede the hero: the only
+other insert in js/app.js is one `grid.insertBefore` in the Boneyard); and the
+service worker pairing a stale app.css with a fresh js/app.js (sw.js precaches
+both into ONE cache named VERSION, all-or-nothing on install, and serves the
+shell cache-first out of that single cache, so the two cannot disagree).
+
+1. PROOF: top-strip-audit.mjs | REACH: on the Bonehead tab the colour behind the status bar and the Dynamic Island runs unbroken into the hero art, including while you are on an old build with the "Update available" banner showing. That banner moved from above the hero to under the four doors, where it is the first card of the feed. Proven red on the pre-fix tree at both insets: hero top 91.9 against a ceiling of 0.5, and 144 of 408 (--sat 0) and 40 of 644 (--sat 59) page-background pixels in the strip above the currency chips.
+
 ## the crate deals its cards smoothly (2026-09-07)
 
 Not stamped to a release: hotfix/crate-reveal-jank, off v498. Tom, on v498:
