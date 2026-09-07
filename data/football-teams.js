@@ -271,18 +271,29 @@ export function footballOwnedGarmentCount(ownedIds) {
   return FOOTBALL_SOLD.filter(g => FOOTBALL_TEAMS.some(t => ownedIds.has(footballItemId(t.id, g.key)))).length;
 }
 
-/* THE QUOTE: what the bundle costs GIVEN what a player already owns. Tom,
-   2026-09-05, after Impeccable's football-kit critique: buying 3 of 5 garments
-   (12,600 spent) then paying the flat 16,800 for the other two (worth 8,400)
-   was the bug. Charges only for the missing garments, capped at the flat
-   bundle price so nobody who owns nothing pays more than footballBundleMath's
-   `bundle`. Takes the COUNT, not a Set, so both callers (buyFootballBundle,
-   the tile) resolve "how many owned" their own way. */
-export function footballBundleQuote(ownedGarmentCount, piece = FOOTBALL_KIT_PRICE_PLACEHOLDER, bundle = FOOTBALL_BUNDLE_PRICE_PLACEHOLDER) {
+/* THE QUOTE: what the bundle costs GIVEN what a player already owns.
+   Tom, 2026-09-05, after Impeccable's football-kit critique: buying 3 of 5
+   garments (12,600 spent) then paying the flat 16,800 for the other two
+   (worth 8,400) was the bug. First fix charged min(bundle, piece x missing),
+   which stopped the overcharge but tied the FLAT five-garment price the
+   moment 4 were missing (piece x 4 == bundle == 16,800 for one garment
+   short of the whole kit) -- SUPERSEDED 2026-09-06.
+   Tom, 2026-09-06: "prorate the discount." The bundle keeps its 20% saving on
+   WHATEVER is missing, not just on the full five: cost = round(piece x
+   missing x 0.8) to the nearest 100 coins, so the tile always prints a round
+   number. missing=5 (nothing owned) reproduces the flat bundle price exactly
+   (21,000 x 0.8 = 16,800, no rounding needed); missing=4 is 16,800 x 0.8 =
+   13,440 -> rounds to 13,400; missing=1 is 4,200 x 0.8 = 3,360 -> rounds to
+   3,400 (docs/FOOTBALL-KIT.md's price table states the rounding). Owning
+   everything (missing=0) returns nulls -- there is nothing left to sell, and
+   the tile says so instead of printing a price. Takes the COUNT, not a Set,
+   so both callers (buyFootballBundle, the tile) resolve "how many owned"
+   their own way. */
+export function footballBundleQuote(ownedGarmentCount, piece = FOOTBALL_KIT_PRICE_PLACEHOLDER) {
   const missing = Math.max(0, FOOTBALL_SOLD.length - ownedGarmentCount);
   if (!missing) return { cost: null, missing: 0, full: null, save: null };
   const full = Number.isFinite(piece) ? piece * missing : null;
-  const cost = full !== null && Number.isFinite(bundle) ? Math.min(bundle, full) : full;
+  const cost = full !== null ? Math.round(full * 0.8 / 100) * 100 : null;
   const save = full !== null && cost !== null ? full - cost : null;
   return { cost, missing, full, save };
 }

@@ -710,6 +710,36 @@ ok('SAVE the live bundle saves a real, positive amount, and it is exactly the pr
   mathLive.full === FB.FOOTBALL_KIT_PRICE_PLACEHOLDER * SOLD.length,
   `${SOLD.length} garments at ${FB.FOOTBALL_KIT_PRICE_PLACEHOLDER} = ${mathLive.full}, bundle ${mathLive.bundle}, save ${mathLive.save} (one garment is ${FB.FOOTBALL_KIT_PRICE_PLACEHOLDER})`);
 
+/* THE QUOTE, RE-PREMISED. Two rulings, dated, and the first is superseded:
+ *   Tom, 2026-09-05 (Impeccable's football-kit critique): "a player who owns
+ *   3 of 5 garments must not pay the flat 16,800 for the other two, worth
+ *   8,400." The first fix was min(bundle, piece x missing), which stopped
+ *   that overcharge but tied the FLAT five-garment price the moment 4 of 5
+ *   were missing (piece x 4 == bundle == 16,800 for one garment short of the
+ *   whole kit) -- itself a smaller version of the same bug. SUPERSEDED
+ *   2026-09-06.
+ *   Tom, 2026-09-06: "prorate the discount." The bundle keeps its 20% saving
+ *   on whatever is missing, rounded to the nearest 100 so the tile always
+ *   prints a round number. Measured: missing=5 (nothing owned) reproduces
+ *   16,800 exactly; missing=4 is 16,800 x 0.8 = 13,440 -> 13,400; missing=1
+ *   is 4,200 x 0.8 = 3,360 -> 3,400 (docs/FOOTBALL-KIT.md 7.2 states the
+ *   rounding). This row is PURE arithmetic over footballBundleQuote for
+ *   every owned count 0..5; the driven till below (BUY-BUNDLE) only exercises
+ *   the 0-owned case. Reverting to the superseded min(bundle, piece x
+ *   missing) formula reddens this row alone at owned=1..3 (missing=4200,
+ *   8400, 12600 instead of 13400, 10100, 6700). */
+const quoteCases = [
+  { owned: 0, cost: 16800 }, { owned: 1, cost: 13400 }, { owned: 2, cost: 10100 },
+  { owned: 3, cost: 6700 }, { owned: 4, cost: 3400 }, { owned: 5, cost: null },
+];
+const quoteBad = quoteCases.map(c => ({ c, q: FB.footballBundleQuote(c.owned) }))
+  .filter(({ c, q }) => q.cost !== c.cost || (c.owned === 5 ? q.missing !== 0 : q.missing !== SOLD.length - c.owned));
+ok('BUNDLE-QUOTE footballBundleQuote prorates its 20% saving on whatever is missing, rounded to the nearest 100, for every owned count',
+  SOLD.length === 5 && quoteBad.length === 0,
+  quoteBad.length
+    ? quoteBad.map(({ c, q }) => `owned=${c.owned}: expected cost ${c.cost}, missing ${c.owned === 5 ? 0 : SOLD.length - c.owned}, got ${JSON.stringify(q)}`).join('; ')
+    : quoteCases.map(c => `${c.owned} owned -> ${JSON.stringify(FB.footballBundleQuote(c.owned))}`).join('; '));
+
 const lootSrc = readFileSync(path.join(ROOT, 'js/loot.js'), 'utf8');
 const bundleGuarded = /!stocked/.test(lootSrc) && /footballBundleSellable\(\)/.test(lootSrc) && /buyFootballBundle/.test(lootSrc);
 const bundleWired = /data-buyfbkit/.test(appSrc) && /buyFootballBundle\(b\.dataset\.buyfbkit\)/.test(appSrc);
@@ -835,6 +865,44 @@ ok('NOT-SOLD the till refuses a garment that has no shelf tile (a visor), and ta
   (await loot.coins()) === WALLET && (await ownedFb()).length === 0,
   `visor60 at the till: ${visorBuy.ok ? 'SOLD' : `refused '${visorBuy.reason}'`}, coins ${WALLET} -> ${await loot.coins()}, ` +
   `${(await ownedFb()).length} football rows granted`);
+
+/* WARN BEFORE BUYING (Tom, 2026-09-06): a pet garment (or the bundle, which
+   always includes both) grants cosmetics that live on a lizard, and a save
+   with no lizard yet (C4 Beardie or CX Founder's Lizard, FOOTBALL_PETS) has
+   nowhere to wear them. Nothing is withheld or refunded -- the garment is
+   granted exactly as normal -- but buyFootballItem/buyFootballBundle report
+   `petsPending: true` so js/app.js's confirm toast can say the pieces wait in
+   the Stable. Driven both ways: a fresh save (no lizard) and a control save
+   (one hatched) on the same purchases, so a flag that is ALWAYS true (or
+   always false) cannot pass this row. The browser half -- the actual toast
+   copy on the real screen -- is tests/football-render-audit.mjs PET-WARN. */
+useDbName('football-kit-audit-petwarn-nopet');
+await kvSet('coins', WALLET);
+const petTileBuy = await loot.buyFootballItem(FB.footballItemId(TEAMS[0].id, 'pet-helmet'), true);
+useDbName('football-kit-audit-petwarn-nopet-bundle');
+await kvSet('coins', WALLET);
+const bundleBuyNoPet = await loot.buyFootballBundle('ignored', true);
+useDbName('football-kit-audit-petwarn-nonpet-tile');
+await kvSet('coins', WALLET);
+const nonPetTileBuy = await loot.buyFootballItem(FB.footballItemId(TEAMS[0].id, 'jersey'), true);
+ok('PET-WARN a fresh save with no lizard is warned when a pet tile or the bundle is bought, but not for a non-pet tile',
+  petTileBuy.ok === true && petTileBuy.petsPending === true &&
+  bundleBuyNoPet.ok === true && bundleBuyNoPet.petsPending === true &&
+  nonPetTileBuy.ok === true && nonPetTileBuy.petsPending === false,
+  `pet-helmet tile: ${JSON.stringify(petTileBuy.petsPending)}; bundle: ${JSON.stringify(bundleBuyNoPet.petsPending)}; jersey tile: ${JSON.stringify(nonPetTileBuy.petsPending)}`);
+
+useDbName('football-kit-audit-petwarn-haspet');
+await kvSet('coins', WALLET);
+await loot.grantPet('C4');
+const petTileBuyControl = await loot.buyFootballItem(FB.footballItemId(TEAMS[0].id, 'pet-helmet'), true);
+useDbName('football-kit-audit-petwarn-haspet-bundle');
+await kvSet('coins', WALLET);
+await loot.grantPet('C4');
+const bundleBuyControl = await loot.buyFootballBundle('ignored', true);
+ok('PET-WARN-CONTROL a save that already owns a lizard is not warned, so the row above can fail',
+  petTileBuyControl.ok === true && petTileBuyControl.petsPending === false &&
+  bundleBuyControl.ok === true && bundleBuyControl.petsPending === false,
+  `pet-helmet tile: ${JSON.stringify(petTileBuyControl.petsPending)}; bundle: ${JSON.stringify(bundleBuyControl.petsPending)}`);
 
 /* ---------------------------------------------------------------------------
    THE WARDROBE'S COLOURWAY RAIL rests on ONE arithmetic fact, and this is the

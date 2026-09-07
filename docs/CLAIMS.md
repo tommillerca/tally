@@ -19,6 +19,13 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v499
+1. A hotfix off v498 carrying two lanes: the prorated bundle with its pet-kit warning (Tom's rulings, 2026-09-06) and the Boneyard's outmatched line. Their dated sections are further down, folded here.
+
+2. PROOF: football-kit-audit.mjs, football-render-audit.mjs, unit.test.js | REACH: footballBundleQuote keeps the 20 percent saving on the missing pieces (5 missing 16,800; 4 missing 13,400; 1 missing 3,400, rounded to the nearest 100) so buying a piece first no longer costs 21,000 for the set, and the save line always states the real saving (BUNDLE-QUOTE rows red on the superseded formula, which quoted 16,800 for four missing). A purchase that includes lizard gear on a save with no lizard says the pet pieces wait in the Stable until one hatches, and a save that owns one sees no such line (PET-WARN rows red with petsPending forced false, PET-WARN-CONTROL green throughout).
+
+3. PROOF: outmatched-audit.mjs, unit.test.js | REACH: one helper answers whether the player can plausibly win a foe, calibrated on the fight sim (below a 5 percent simulated win rate reads as outmatched; measured 0 percent for a flat level-2 build against the Glutton and against a rival's specced Spire tower, 8 to 52 percent against an eased NPC warden, which is why the line does not fire there). The Glutton and Spire sheets show one plain line when it fires and nothing when it does not, and the Spire sheet always states that fighting for a tower you do not hold spends today's attempt (rows red before: the helper did not exist and the Spire sheet had no such copy).
+
 ## v498
 1. The integration train (integ/day5) off v497: Kennel phase A, palettes, the approved v2 recolour art and the Kennel UI; crew activity; the Wardrobe paint virtualization; the truthful iOS permission strings (not a player-visible change, documented in docs/PERMISSION-STRINGS.md). Each row below folds the dated sections further down.
 
@@ -68,6 +75,77 @@ Not stamped to a release: fix/atomic-take-and-pay, off v492. Lane 2 of the
    with its ownership row and level seed, and the dust with its revision are all
    on disk. The legacy egg-crate sweep on the Crates tab converts a crate to an
    egg in the same one save.
+## the bundle prorates, the pet kit says who it fits (2026-09-07)
+
+Not stamped to a release: hotfix/bundle-prorate-petkit, off v497. Two rulings
+from Tom, both dated 2026-09-06. Owned by this lane: `footballBundleQuote` in
+data/football-teams.js, the Locker Room buy flow in js/app.js and js/loot.js.
+
+1. PROOF: football-kit-audit.mjs | REACH: In the Shop's Kit room, the full-kit
+   tile's price is your 20% saving applied to whatever you are still missing,
+   not a flat 16,800 the moment you own anything. Missing 5 (nothing owned):
+   16,800. Missing 4: 13,400. Missing 3: 10,100. Missing 2: 6,700. Missing 1:
+   3,400 (each rounded to the nearest 100 coin; the exact 20%-off numbers are
+   16,800 / 13,440 / 10,080 / 6,720 / 3,360). Own everything and the tile reads
+   "The whole kit is yours" instead of a price. Before this fix, owning 1 of 5
+   garments quoted the full 16,800 for the other 4 -- the flat five-garment
+   price for one garment short of the whole kit -- because the superseded
+   2026-09-05 fix (charge only for the missing pieces, capped at the flat
+   bundle price) ties the flat price the moment 4 of 5 are missing.
+
+2. PROOF: football-kit-audit.mjs, football-render-audit.mjs | REACH: The two
+   lizard cosmetic tiles and the full-kit tile all say "For the lizard" on
+   their own line, whether or not you have one yet. If you own no lizard (no
+   C4 Beardie, no CX Founder's Lizard) when you buy a lizard piece or the
+   bundle, the confirm toast adds "The pet pieces wait in the Stable until a
+   lizard hatches." Nothing is withheld or refunded: the garment is granted
+   in all 32 team colours exactly as normal, it just has nowhere to be worn
+   yet. Own a lizard already and the same purchase confirms with no such
+   line. Measured on a fresh account: buying a pet tile with no lizard reads
+   "Lizard Jersey · 32 colourways is yours. ... The pet pieces wait in the
+   Stable until a lizard hatches."; the same account's bundle buy reads "The
+   full kit · 32 colourways is yours. ... The pet pieces wait in the Stable
+   until a lizard hatches."; a control account already owning a lizard reads
+   "Lizard Helmet · 32 colourways is yours. ..." with no such line.
+## the Boneyard states the odds (2026-09-07)
+
+Not stamped to a release: hotfix/boneyard-odds, off v497. Master handoff B16,
+"Explainers state the odds", no balance change, re-measured on this tree
+before fixing. Owned by this lane: the Glutton and Spire explainer sheets
+(openGluttonSheet, openSpireSheet in js/app.js) and the shared isOutmatched
+helper (js/pit.js).
+
+1. PROOF: unit.test.js | REACH: Open the Glutton, or a Spire you don't hold,
+   badly outmatched and the sheet says "You are outmatched at this level."
+   above the fight button, nothing more. isOutmatched (js/pit.js) runs the
+   real fight engine against your current stats, talents and pet and the
+   exact foe config the fight itself is about to use; it fires for a fresh
+   level 2 against the Glutton (0% measured win rate) and against a rival's
+   specced Spire tower (0%), and stops firing once real training points and
+   talent picks sit behind a build. Measured curve recorded in the comment
+   above OUTMATCHED_WIN_RATE: a plain unclaimed Spire's NPC warden never
+   actually crosses the 5% line at any tower roll (8-52% across its full
+   0.90-1.25 mult range, three player policies tried), because it gets an
+   easier AI below character level 12 (spires.js wardenFor) — only a rival's
+   specced tower does. The line is measured per fight, not hardcoded to
+   either foe's name or HP figure.
+
+2. PROOF: outmatched-audit.mjs | REACH: Same claim, read off a real rendered
+   page in both states (a fresh level-2 build: no training points, no
+   talents; and a build with real stat + talent progress) for both sheets.
+
+3. PROOF: unit.test.js | REACH: Any Spire sheet for a tower you don't hold
+   now says, in its own terms list, that fighting for it spends your one
+   shot at it today whatever the outcome, not only for a rival's tower: this
+   sheet only ever opens on that path, and settle() already spends
+   spireKey() on any result (win, loss or draw) there.
+
+4. PROOF: NONE, no dedicated audit (same untested shape as the map's own
+   long-press discovery hint, `mapLpHint`, which has none either) | REACH:
+   R41-8 (Haymaker carries the biggest number and is the worst play): a
+   one-time toast, "Tip: press and hold a move to see what it actually
+   does.", now points a new player at the existing 750ms press-and-hold
+   detail popup the first time any Pit-style fight opens, shown once, ever.
 
 ## the Stable rail tells the truth (2026-09-06)
 
