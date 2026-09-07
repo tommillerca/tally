@@ -241,6 +241,15 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 ## register 429 wallet (2026-09-06)
 
 1. PROOF: unit.test.js | REACH: a fresh install receives the complete social-welcome grant locally before registration. Two consecutive 429 responses retry once, leave exactly 50 welcome coins and 10 XP under the server's existing receipt key, and surface one named failure toast. A later registration cannot pay the grant twice.
+## v495
+1. A hotfix off v494, lanes 5, 6 and 7 of the data-integrity plan. Its rows are the dated sections "open all recovers, cancel is one step" and "the routine cap holds under a race" further down, folded here.
+
+2. PROOF: crate-reveal-audit.mjs | REACH: the Common Open all loop reveals everything it actually opened when a later crate throws, leaves the unopened crates in place and re-enables the control (RECOVERY rows red before: cards=0, disabled=true with crate 3 poisoned).
+
+3. PROOF: kitchen-atomic-audit.mjs, kitchen-day-one-strand-audit.mjs | REACH: cancelCook empties the pot and refunds its ingredients in one transaction (MID-CANCEL red before: the pot emptied with no refund when the second write failed); the earlier CLAIMS row that called the cancel atomic is corrected.
+
+4. PROOF: routine-race-audit.mjs, unit.test.js | REACH: the wellness routine cap is claimed through per-day ordinal slots with the app's test-and-set, so two distinct routines finishing at once pay 15 total and both record completion (red before: 20 XP total, 0 of 2 capped).
+
 ## v494
 1. A hotfix off v493, lanes 1 and 3 of the data-integrity plan (Codex audit, 2026-09-06). Its rows are the dated "currency and receipts are one transaction" section further down, folded here.
 
