@@ -8050,7 +8050,9 @@ test('R43-2 no shipped string claims location is never uploaded while spires.js 
   assert.ok(/cellOf/.test(spires) && /\bids=|\bids:/.test(spires + readFileSync(join(here, '..', 'js', 'social.js'), 'utf8')),
     'the cell must still be sent to the server; if it is not, this guard and the copy both need revisiting');
 
-  /* Every file whose strings a player or a reviewer can read. js/changelog.js is
+  /* Every file whose strings a player or a reviewer can read. Derived 2026-09-07
+     from the R43 audit pack's own sweep (HANDOFFr43part1, R43-2), which searched
+     the whole tree for the claim and found it in exactly one shipped surface. js/changelog.js is
      excluded on purpose: its entries are a dated historical record, and the entry
      that mentions location already names the Spire exception correctly. */
   const FILES = ['js/app.js', 'js/hunt.js', 'js/spires.js', 'js/geo.js', 'privacy.html', 'support.html'];

@@ -75,6 +75,16 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 
 8. PROOF: take-and-pay-audit.mjs | REACH: openCrate, hatchEgg, disenchantGear, both salvage paths and the legacy-egg conversion spend their input and write their payout in one transaction, so killing every IndexedDB transaction after the take leaves the player with the item or the full payout, never neither (six CRASH rows red on the pre-fix order: crate consumed with 0 coins and no rows, egg gone with no pet, gear gone with no dust).
 
+## the app says where it stands (2026-09-07)
+
+Not stamped to a release: hotfix/privacy-and-location-copy, off v504. Two
+submission blockers from the R43 audit pack, both of them copy and reachability
+rather than behaviour. Nothing about what the app sends changed.
+
+1. PROOF: screen-sweep.mjs, unit.test.js | REACH: Settings, ABOUT, "Privacy policy", Read. The row is never gated, needs no account, and works offline and inside the store build because privacy.html is now in sw.js's PRECACHE and in native/build-www.sh's copy list. Before this, privacy.html was linked from exactly two places, both inside the survey sheet, whose Settings row is gated on `!surveyDone`, so the only route to the policy vanished the moment a player filled the survey: App Store guideline 5.1.1(i), and a rejection. PRIVACY-LINK walks all seven routes with `surveyDone` forced TRUE and fetches the href rather than trusting the anchor, because sw.js answers a navigation miss with index.html and a 404 would otherwise read as a pass. Proven red on origin/main: 0 matches across 7 routes, and the static half fails with "Settings must carry a privacy policy row".
+
+2. PROOF: unit.test.js | REACH: open the Boneyard map. The intro used to say, at the moment of the location grant, "Your location is used on this phone only, never stored, never uploaded", while the map's own boot sends a 0.02-degree grid cell (about 2.2 km, `GET /spires?ids=sp-2464--6156` from 49.2827, -123.1207) to the server for Spires. It now says spawns and dens are worked out on the phone and exact coordinates never leave it, and that the map cell you are in, about 2.2 km across, goes to the server for the shared towers. That matches the iOS purpose string corrected in v498 and privacy.html's "Location and the map" section; nothing on the wire changed. The guard is a conjunction, so if Spires ever stop sending a cell it goes red and asks for the copy to be revisited rather than letting "never uploaded" become true by accident. Proven red with the line restored: `js/app.js:21449: "used on this phone only"`.
+
 ## the crate deals its cards smoothly (2026-09-07)
 
 Not stamped to a release: hotfix/crate-reveal-jank, off v498. Tom, on v498:
