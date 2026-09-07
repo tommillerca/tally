@@ -19,6 +19,15 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v503
+1. A hotfix off v502 from Tom's play of the Kennel: blurry pets, the entry nobody finds, the grid nobody can read, and a copy rail worth no scroll. Its dated section is further down, folded here.
+
+2. PROOF: kennel-audit.mjs, art-resolution-audit.mjs | REACH: every Kennel cell and roster thumb draws at or under its source. The sheet asked for a fixed 192 tier while the crop scales each species' ink to fill its cell, so a pet drew at up to 1.82 times its source at 393 wide (C1 349.5 device px off 192) while the same cell measured 1.396 at 320, under the ceiling: the ART row grades both viewports for exactly that reason. Handing the pick to the tier picker every other surface uses takes the worst to 0.910, at a measured cost of 55.2 to 67.9 MB decoded on a full-collection save against a 90 MB ceiling.
+
+3. PROOF: kennel-audit.mjs | REACH: the Kennel's door sits in the Stable's body under the Paddock's, built from the same door parts, showing your five colourway swatches and how many of the thirty you hold, and one line above the grid says a filled cell is a colour you have hatched and a locked one is not (DOOR row red with the entry back in the header at 73.3 by 44 in the dismiss corner and no swatches; LEAD row red with the line deleted). Roster dots carry each colourway's own hue instead of one accent, and an unowned cell flattens to a silhouette so the grid reads as a set with holes.
+
+4. PROOF: pet-ownership-audit.mjs, kennel-audit.mjs | REACH: each copy chip under a Stable card carries a 26 px portrait of that instance, so a base copy and a midnight copy of one species look different in the rail, inside the same 44 px tap target (KIN row red when the portrait is keyed off the species: copy-2 drew copy-1's art; the chips-are-text state exits without grading rather than passing).
+
 ## v502
 1. A hotfix off v501: the Locker Room polish and the Boneyard's frame cost (master handoff R40-21..27 and R41-18). Its dated section is further down, folded here.
 

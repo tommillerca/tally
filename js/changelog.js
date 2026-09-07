@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 503, date: '2026-09-07', title: 'The Kennel explains itself', items: [
+    'Pets in the Kennel were drawn from art smaller than the space they fill, so some looked soft. They are sharp now, at every phone size.',
+    'The Kennel moved out of the corner of the Stable header into a proper door under the Paddock\'s, showing your colours and how many of the thirty you have found, and a line above the grid says what a filled cell and a locked one mean.',
+    'The copies under a pet in the Stable show the pet, in its own colour, instead of a row of Lv 1 chips, so the rail is worth scrolling.',
+  ] },
   { n: 502, date: '2026-09-07', title: 'A quiet Boneyard, and a Locker Room that reads', items: [
     'Standing still on the Boneyard map was redrawing the whole map hundreds of times a second because your position wobbles by a metre or two even when you are not moving. It now redraws when you actually move, which is the single biggest thing you will feel in your battery.',
     'The Locker Room\'s row of team colours was a line of dots too small to read: it shows six real colour discs and a count of the rest. The poster loads the right size of art instead of a 359 KB file into a thumbnail, the price you can afford updates the moment you spend, and the football art is cached with everything else so the room opens offline.',
