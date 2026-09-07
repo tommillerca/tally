@@ -1,5 +1,13 @@
 # What each patch note claims, and what backs it
 
+## Lane C: pet rendering, round two (2026-09-07)
+
+1. PROOF: pet-C-node-guard.mjs | REACH: The Paddock card retains the shared petLevel formula at all 30 threshold-adjacent samples and two above-cap samples, including its rendered LV label. The production EQUIP listener refreshes the morph cache before rendering or scheduling the profile push. Automatic cropped-pet tiers retain the round-one DPR correction. Five isolated throwaway reversions failed, then all five Node rows passed on the restored source. DPR geometry values are replays of QA measurements, not fresh browser measurements.
+
+2. PROOF: pet-C-node-guard.mjs | REACH: setWidth accepts a fourth deviceScaleFactor argument. Omission still means 2, height still defaults to 932, and both mobile flags remain true. The Paddock roster uses the shared isKnownPet predicate to exclude unrenderable species while keeping CX, instance morphs and banked steps. Both behaviors have independently failing mutation guards.
+
+3. PROOF: pet-C-browser-audit.mjs | REACH: PENDING REVIEWER EXECUTION. The guard drives the real Stable copy selector and EQUIP button, checks six named hero return paths without reload, and asserts decoded nonempty art on splash, hero, Stable, own field, friend's field, Pit, Crew fan/profile hero, level-up sheet and Boneyard marker. It checks 31 Kennel images at DPR 2 and 3 across five phone sizes with a 1.4 ceiling. Browser/server execution was prohibited in this lane. Splash checks persistence at boot; foreign surfaces use an exported snapshot against a viewer wearing the opposite morph. The card slider's known base-art mismatch (C4) remains reported and unbuilt.
+
 ## Lane D: pet family contract (2026-09-07)
 
 1. PROOF: pet-family-audit.mjs | REACH: A family registered without actions or an ability implementation is refused by name at the battle seams. The original source silently supplied Hound's Bite and Imp's petdebuff to the dummy family; both guards were run red on a throwaway copy, then green on this checkout. The shared isKnownPet and legalPicks helpers reject unknown species and retain only unlocked, in-family choices, first pick per tier and original order. Each pick rule also failed independently when its predicate was removed from a throwaway copy. Consumer integration belongs to lanes A and C.

@@ -275,7 +275,10 @@ PURE.unshift('no-debug-markers-lint.mjs');
 PURE.push('routine-race-audit.mjs');
 PURE.unshift('version-align-lint.mjs');
 PURE.push('serve-tree-identity-audit.mjs'); // serveTree refuses a fixed port that answers from another checkout; node-only
+PURE.push('pet-C-node-guard.mjs'); // Lane C: level thresholds/cap, production EQUIP cache, DPR replay/harness, known-species roster.
 const BROWSER = [
+  'pet-C-browser-audit.mjs', // Lane C: real EQUIP return paths and nine surfaces, 31 decoded Kennel images at DPR 2/3 on five phone sizes. Browser proof pending reviewer.
+
   /* the raw-sink fix's STATE half. render-sink-lint pins the source, and this
      repo has watched shape assertions stay green over broken state, so this one
      feeds a real `<img src=x onerror=...>` through the real window.__packReveal
