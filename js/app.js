@@ -20663,7 +20663,7 @@ async function openKennel() {
     const dots = MORPHS.map(m => `<i class="k-dot${owned.has(`${s.id}|${m}`) ? ' on' : ''}"></i>`).join('');
     const morphNames = MORPHS.filter(m => owned.has(`${s.id}|${m}`) && m !== 'base').map(m => MORPH_LABEL[m]);
     return `<div class="k-row">
-      <span class="k-thumb">${croppedPetImg(s.id, 48, false, morphAsset(s.id, morph) || null, undefined, 192)}</span>
+      <span class="k-thumb">${croppedPetImg(s.id, 48, false, morphAsset(s.id, morph) || null, undefined, true)}</span>
       <div class="k-id">
         <b>${esc(s.name)}</b>
         <div class="k-dots" aria-hidden="true">${dots}</div>
@@ -20677,11 +20677,21 @@ async function openKennel() {
      at open survived a rotation (154px art in a 48px cell). croppedPetImg's
      layers are percentages of their box, so the box is drawn at a nominal 48
      and app.css (.k-cell .petcrop, 100%) lets the grid track size it, live. */
+  /* THE TIER IS GEOMETRY-DERIVED (`true`), NOT A HARDCODED 192. Tom, on v500:
+     "Some pets in the kennel blurry photos". Measured cause, not a guess: the
+     crop scales the ink to fill the cell, so the <img> is ~2.8x the box it
+     peeps through -- at 393x852 the 62.6px cell drew a 349.5 DEVICE-pixel
+     Drizzle off a 192px file, 1.82x its source. Five of six species were over
+     the house 1.4x ceiling (C1 1.82, C5 1.76, C3/C4 1.51, C2 1.43); only
+     Bumbleseal, drawn small in her own canvas, was under. `true` hands the
+     tier to bhTierFor(imgSize), the same picker every other tiered surface
+     uses, which lands each species on 384 or 192 by its own crop and drops the
+     worst ratio to 0.88. Guard: tests/kennel-audit.mjs, the ART row. */
   const gridRow = s => `<div class="k-grid-row">
       <span class="k-grid-label" data-sp="${esc(s.id)}">${esc(s.name)}</span>
       <div class="k-grid-cells">${MORPHS.map(m => {
         const isOwned = owned.has(`${s.id}|${m}`);
-        const art = croppedPetImg(s.id, 48, false, isOwned ? (morphAsset(s.id, m) || null) : null, undefined, 192);
+        const art = croppedPetImg(s.id, 48, false, isOwned ? (morphAsset(s.id, m) || null) : null, undefined, true);
         // R39-11/23: the cell IS the control (a real <button>, so Enter and Space
         // come free), and it toggles the row label back on a second press.
         return `<button type="button" class="k-cell${isOwned ? '' : ' locked'}" data-sp="${esc(s.id)}" data-morph="${esc(m)}" aria-pressed="false" aria-label="${esc(dotLabel(s.id, m, s.name))}">${art}${isOwned ? '' : ICONS.lock(14)}</button>`;
