@@ -19,6 +19,13 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v505
+1. A hotfix off v504: the two App Store submission blockers from the R43 audit pack, both of them copy and reachability rather than behaviour. Its dated section is further down, folded here.
+
+2. PROOF: screen-sweep.mjs, unit.test.js | REACH: Settings, ABOUT, "Privacy policy", Read. App Store guideline 5.1.1(i) requires the policy to be reachable in the app; before this it was linked from exactly two places, both inside the survey sheet, and that row is gated on !surveyDone, so a DOM sweep of all six routes on a save with the survey already filled returned zero anchors matching privacy|terms|legal|eula. The row is now permanent and ungated, needs no account, and resolves offline and inside the store build because privacy.html was added to sw.js's PRECACHE and to native/build-www.sh's copy list (it had never been in the native bundle at all, so a relative href would have 404'd in the exact build App Review opens, and shell() answers a navigation miss with index.html, which would have handed a reviewer the app instead of the policy). The browser row fetches the href rather than trusting the anchor, for that reason. Proven red at 0 matches across 7 routes.
+
+3. PROOF: unit.test.js | REACH: open the Boneyard map. The intro said, at the moment of the location grant, "Your location is used on this phone only, never stored, never uploaded", while the map's own boot sends a 0.02-degree grid cell of about 2.2 km to the server for Spires (js/spires.js SPIRE_CELL_DEG). The copy now says spawns and dens are worked out on the phone and exact coordinates never leave it, and that the map cell goes to the server for the shared towers, which matches the iOS purpose string corrected in v498 and privacy.html's "Location and the map" section. Nothing on the wire changed. The guard is a conjunction, so if Spires ever stop sending a cell it goes red and asks for the copy to be revisited rather than letting "never uploaded" become true by accident. Proven red with the line restored.
+
 ## v504
 1. A hotfix off v503: the 32 football colourways repainted to the palettes players recognise, approved by Tom on the rendered before and after sheet, 2026-09-07. Its dated section is further down, folded here.
 

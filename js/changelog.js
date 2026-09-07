@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 505, date: '2026-09-07', title: 'The app says where it stands', items: [
+    'The privacy policy now has a permanent home in Settings, under ABOUT. It used to be reachable only through a link inside the Day One survey, which disappeared once you filled the survey in, so most players had no way to read it at all. It works with no account and it works offline.',
+    'The line you see when the map asks for your location said your position was never uploaded. That was not true: the Boneyard asks the server about the map cell you are standing in, about 2.2 km across, because Spires are shared with other players. Spawns and dens really are worked out on your phone and your exact coordinates really do stay on it, and the copy now says exactly that instead of promising more.',
+  ] },
   { n: 504, date: '2026-09-07', title: 'The kit finally looks like the teams', items: [
     'Every one of the 32 team colourways was redrawn to its real colours. Some were a long way off: the ones you would picture as royal blue and red, or navy and neon green, were painted cream and grey, brown and gold, moss and pink. The names have not changed, only the paint.',
   ] },
