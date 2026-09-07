@@ -15722,9 +15722,9 @@ async function celeStats() {
     pieces = cos.size; pets = insts.length; badges = earned.size;
   } catch { return null; }
   const chips = [];
-  if (pieces) chips.push(`<span class="bh-pill">${ICONS.bone(14)} ${pieces} piece${pieces === 1 ? '' : 's'} found</span>`);
-  if (pets) chips.push(`<span class="bh-pill">${crateIcon('egg', 14)} ${pets} pet${pets === 1 ? '' : 's'}</span>`);
-  if (badges) chips.push(`<span class="bh-pill">${ICONS.star(14)} ${badges} badge${badges === 1 ? '' : 's'}</span>`);
+  if (pieces) chips.push(`<span class="bh-pill">${ICONS.bone(16)} ${pieces} piece${pieces === 1 ? '' : 's'} found</span>`);
+  if (pets) chips.push(`<span class="bh-pill">${crateIcon('egg', 16)} ${pets} pet${pets === 1 ? '' : 's'}</span>`);
+  if (badges) chips.push(`<span class="bh-pill">${ICONS.star(16)} ${badges} badge${badges === 1 ? '' : 's'}</span>`);
   return chips.length ? `<div class="cele-stats">${chips.join('')}</div>` : null;
 }
 
