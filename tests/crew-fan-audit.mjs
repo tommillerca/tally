@@ -12,7 +12,7 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { boot, sleep, serveTree} from './godmode.js';
+import { boot, sleep, serveTree, waitForImageDecode } from './godmode.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 let fails = 0;
@@ -64,6 +64,7 @@ const name = () => page.$eval('#cfanSel .cfan-sel-nm', el => el.textContent.trim
 const deckX = () => page.$eval('#cfanDeck', el => new DOMMatrixReadOnly(getComputedStyle(el).transform).m41);
 
 /* -------- render + decode: an empty or blank fan is a FAILURE ------------- */
+await waitForImageDecode(page, '.cfan-card img');
 const art = await page.evaluate(() => {
   const cards = [...document.querySelectorAll('.cfan-card')];
   const imgs = cards.flatMap(c => [...c.querySelectorAll('img')]);

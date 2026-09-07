@@ -223,6 +223,20 @@ export const chromePath = () => {
    exactly that and died at launch on every root container. */
 export const sandboxArgs = () => (process.getuid?.() === 0 ? ['--no-sandbox', '--disable-setuid-sandbox'] : []);
 
+/* naturalWidth is also zero while valid art is still decoding. Audits that use
+   it as pixel evidence wait here first, with a hard cap so a broken image still
+   reaches their existing red assertion instead of hanging the suite. */
+export async function waitForImageDecode(page, selector = 'img', timeoutMs = 5000) {
+  return page.evaluate(async ({ selector, timeoutMs }) => {
+    const imgs = [...document.querySelectorAll(selector)];
+    await Promise.race([
+      Promise.all(imgs.map(img => img.decode().catch(() => {}))),
+      new Promise(resolve => setTimeout(resolve, timeoutMs)),
+    ]);
+    return { found: imgs.length, decoded: imgs.filter(img => img.naturalWidth > 0).length };
+  }, { selector, timeoutMs });
+}
+
 /* =====================================================================
  * UNPROVEN: A CHECK THAT DID NOT RUN IS NOT A CHECK THAT PASSED.
  *
@@ -1059,8 +1073,9 @@ export function reapStrandedBrowsers() {
   if (process.platform === 'win32') return 0;
   try {
     const out = execSync("ps -Ao pid,ppid,args", { encoding: 'utf8' });
+    const configuredBrowser = chromePath();
     const dead = out.split('\n')
-      .filter(l => /cache\/puppeteer/.test(l) && !/--type=/.test(l))
+      .filter(l => (/cache\/puppeteer/.test(l) || (configuredBrowser && l.includes(configuredBrowser))) && !/--type=/.test(l))
       .map(l => l.trim().split(/\s+/))
       .filter(f => f[1] === '1')
       .map(f => +f[0])
