@@ -4,6 +4,12 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 519, date: '2026-09-08', title: 'Your pet helps, it does not win the fight for you', items: [
+    'A trained pet had stopped being an advantage and started being the whole fight: on the hardest rungs it turned a near-certain loss into a near-certain win. Pets still help a lot, and they no longer decide the fight before it starts.',
+    'A fight with no pet is completely unchanged. This only touches what a pet contributes.',
+    'Two descriptions that were no longer true have been corrected: breeding no longer claims a flat bonus to every stat now that the combined bonus has a ceiling, and the hunter\'s skewer no longer claims a measured effect that the measurements do not support.',
+  ] },
+
   { n: 518, date: '2026-09-08', title: 'It tells you what happened', items: [
     'Opening a crate with several things in it used to sit on the empty chest between each one. The wait between items is about half what it was.',
     'If the app cannot use your phone\'s storage at all, it used to show a permanently blank screen with no explanation. It now says what is wrong and offers to reload.',

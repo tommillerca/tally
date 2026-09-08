@@ -6,8 +6,25 @@ import { petStressCells, measurePet, BUILDS } from './fight-sim.mjs';
 import { petStatMultiplier, petStatBonusText, petBreedGainText, petBattleStats, PET_STAT_MULT_CAP,
   petCombatLead, petDamageMultiplier, petTargetChance, petAbilityEffect, buildBattlePet } from '../js/pets.js';
 const SEEDS = 200;
+/* PROVENANCE, 2026-09-08. Tom's ruling: "do what you need to do to balance the
+   pet if it needs to be 20% instead of 40% that's fine", so the target band is
+   ours and the CELL SET is what must not drift. These three lists are the
+   stress board the retune was measured against, and they are pinned so a later
+   change cannot quietly shrink the sample until nothing fails: an empty or
+   narrowed board would read as a pass. IDS is every pet species including the
+   founder (CX) and C6; KINDS are the dish loadouts; FOES are the five rungs the
+   before/after/held-out distributions were taken on. Changing any of these
+   invalidates the recorded distributions in docs/CLAIMS.md v519 and needs a
+   fresh measurement, not an edited expectation. */
 const IDS = ['C1', 'C2', 'C3', 'C4', 'C5', 'CX', 'C6'];
+/* PROVENANCE, 2026-09-08 (Tom's pet-balance ruling): the dish loadouts the
+   v519 distributions were measured on. Pinned so the board cannot be narrowed
+   to hide a regression; changing it invalidates CLAIMS.md v519. */
 const KINDS = ['Skewer', 'Crow Lord', 'Crow Lord + Skewer'];
+/* PROVENANCE, 2026-09-08 (Tom's pet-balance ruling): the five rungs the
+   before/after/held-out win rates were taken on. dailyGlutton is the easiest
+   and is the pair that still exceeds 90% on held-out seeds with Crow Lord, a
+   residual accepted deliberately in CLAIMS.md v519 rather than tuned away. */
 const FOES = ['dailyGlutton', 'champion', 'endless1', 'glutton10', 'wanderer13'];
 const expected = IDS.flatMap(id => KINDS.flatMap(kind => FOES.map(foe => `${id} ${kind}/${foe}`))).sort();
 // Frozen round-1 no-pet wins on seeds 1..200, in FOES order. Targeting and
