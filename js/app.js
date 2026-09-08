@@ -1258,15 +1258,11 @@ function randomOutfit() {
 }
 
 async function showSplash(userEq) {
-  /* QA round 27 R14(a). On a fresh install this full-screen montage sat over
-     the onboarding for ~2.7s (measured: the first CTA refused taps for
-     2,676 ms) and a tap on it only dismissed the splash, so the player's first
-     tap did nothing visible. The onboarding IS the intro on a first run (FEED
-     THE BONES + poster + Gwart), so the montage adds nothing there and costs
-     the first tap. Returning players keep it. Checked before `forced` so the
-     onb-audit tap row can prove itself on the real gate. */
-  if (!S.settings) return;
+  // M5, 2026-09-07: first run keeps the intro; returning players go straight
+  // to their daily reward. The explicit preview remains available to both.
+  const returning = !!S.settings;
   const forced = location.search.includes('splash=1');
+  if (returning && !forced) return;
   if (navigator.webdriver && !forced) return;
   if (reducedMotion && !forced) return;
   if (sessionStorage.getItem('bhg-splash') && !forced) return;
@@ -15460,7 +15456,7 @@ function openProfileSheet() {
    (same art, same entrance, same stars) as a non-interactive span: the Guide
    it would open references screens a brand-new player has not seen yet. */
 const ONB_GWART = [
-  'New bones. I\'m Gwart. You eat, the skeleton earns.',
+  'New bones. I\'m Gwart. You eat, the skeleton earns. I keep an anonymous account for you. No email, password, or sign-up. The Privacy policy tells the long version.',
   null,
   'Four questions. The plan bends to your bones, not the other way round.',
 ];
