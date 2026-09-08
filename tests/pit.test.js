@@ -1023,7 +1023,7 @@ test('Heavy Hands also steadies aim (accuracy talent)', () => {
   assert.ok(missRate(slab) < missRate(plain), 'heavy hands lands more often');
 });
 
-import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_ASSIGN, PET_FAMILIES, PET_TREES, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petAbilityEffect } from '../js/pets.js';
+import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_ASSIGN, PET_FAMILIES, PET_TREES, PET_MAX_LEVEL, PET_LEVEL_STEPS, PET_SIGNATURE, PET_ACTIONS, petStepsToNext, petAbilityEffect } from '../js/pets.js';
 
 /* ============ v34: pets in battle ============ */
 
@@ -1104,9 +1104,16 @@ test('pets: species signatures are per-pet, auto-lit only at max level (Lv 10)',
   // C1 Cosmic Storm: adds burn
   assert.ok(petAbilityEffect(buildBattlePet('C1', 10, []), self, foe).burn, 'Cosmic Storm lays burn');
   assert.ok(!petAbilityEffect(buildBattlePet('C1', 9, []), self, foe).burn, 'no burn before Lv10');
-  // C2 Eternal Guard: arms last stand + big heal fraction
+  // C2 Eternal Guard: species-only save, automatically armed by the max-level special.
   const fxC2 = petAbilityEffect(buildBattlePet('C2', 10, []), self, foe);
-  assert.equal(fxC2.armLastStand, true); assert.ok(fxC2.lastStandHeal >= 0.4);
+  assert.equal(fxC2.armLastStand, true); assert.equal(fxC2.lastStandHeal, 0.2, 'Eternal Guard promises exactly 20% HP');
+  assert.match(PET_SIGNATURE.C2.desc, /mends you to 20% HP/);
+  for (let level = 1; level < PET_MAX_LEVEL; level++) {
+    const low = buildBattlePet('C2', level, []);
+    assert.equal(low.signatureActive, false);
+    assert.equal(petAbilityEffect(low, self, foe).armLastStand, false);
+  }
+  assert.equal(petAbilityEffect(buildBattlePet('C5', 10, []), self, foe).armLastStand, false);
   // C5 Loyal Bulwark: much bigger shield than the same pet at Lv9
   assert.ok(petAbilityEffect(buildBattlePet('C5', 10, []), self, foe).shield >
             petAbilityEffect(buildBattlePet('C5', 9, []), self, foe).shield * 1.5, 'Loyal Bulwark ~doubles the shield');
@@ -1128,6 +1135,44 @@ test('pets: Hound passive raises your damage; Warden passive lowers damage taken
   const Dward = makeFighter({ name: 'DW', stats: MID, pet: wardenPet });
   const vsWarden = resolveHit({ move: 'swing', attacker: plain, defender: Dward, rng: noLuck }).damage;
   assert.ok(vsWarden < without, `warden owner takes less (${vsWarden} < ${without})`);
+});
+
+// T1 red control: restore the old 40% effect or Skewer bypass in a throwaway tree.
+test('pets: Eternal Guard survives a real lethal hit at 20% HP only once', () => {
+  const fight = createFight({
+    player: makeFighter({ name: 'P', stats: MID, pet: buildBattlePet('C2', 10, []) }),
+    foe: makeFighter({ name: 'F', stats: MID }), seed: 7,
+  });
+  applyPetAction(fight, 'shield');
+  fight.p.ward = 0;
+  dealDamage(fight, 'p', fight.p.d.maxHp * 2, []);
+  assert.equal(fight.p.hp, Math.round(fight.p.d.maxHp * 0.2), 'lethal hit heals to 20% HP');
+  assert.equal(fight.p.pet.lastStandUsed, true);
+  dealDamage(fight, 'p', fight.p.d.maxHp * 2, []);
+  assert.equal(fight.p.hp, 0, 'second killing blow is not saved');
+});
+
+for (const id of Object.keys(PET_ASSIGN)) test(`pets: Skewer ${id} shortens recovery by one turn without bypassing it`, () => {
+  for (const skewer of [false, true]) {
+    const fight = createFight({
+      player: makeFighter({ name: 'P', stats: MID, pet: buildBattlePet(id, 10, []), food: { petFree: skewer } }),
+      foe: makeFighter({ name: 'F', stats: { ...MID, marrow: 4000 } }), seed: 7,
+    });
+    const special = PET_ACTIONS[PET_ASSIGN[id]].find(a => a.kind === 'special');
+    const recovery = special.cd - (skewer ? 1 : 0);
+    for (let cycle = 0; cycle < 2; cycle++) {
+      assert.ok(applyPetAction(fight, special.id).length > 0);
+      assert.equal(fight.p.pet.specialCd, recovery, `${id} ${skewer ? 'Skewer' : 'normal'} recovery`);
+      for (let turn = 0; turn < recovery; turn++) {
+        const action = petActionsFor(fight).find(a => a.id === special.id);
+        assert.equal(action.cd, recovery - turn, 'displayed timer matches actual recovery');
+        assert.equal(action.enabled, false, 'special stays disabled during recovery');
+        assert.deepEqual(applyPetAction(fight, special.id), [], 'direct dispatch cannot bypass recovery');
+        endTurn(fight); endTurn(fight);
+      }
+      assert.equal(petActionsFor(fight).find(a => a.id === special.id).enabled, true);
+    }
+  }
 });
 
 test('pets: manual Hound Bite deals damage + applies poison that ticks; special on cooldown', () => {

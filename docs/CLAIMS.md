@@ -1,5 +1,20 @@
 # What each patch note claims, and what backs it
 
+## T1: pet re-tune rulings (2026-09-07)
+
+1. PROOF: pit.test.js | REACH: Eternal Guard retains its per-species, automatic level-10 unlock, with the contract and existing player text both promising exactly 20% HP. A real lethal hit saves once at that amount; reverting to 40% fails both effect and resolved-HP checks.
+2. PROOF: pit.test.js, dish-worth-audit.mjs | REACH: Hunter's Skewer shortens special recovery by one turn, with a one-turn minimum. All seven species enforce the timer in displayed availability and direct dispatch. Recipe, active-buff label and worth copy agree. Existing dishes, charges and saved petFree flags remain usable; no progression or inventory is migrated.
+3. PROOF: dish-worth-audit.mjs | REACH: Re-measured 2,000 seeds in each arm. The trained C6 hound improves from 1836 to 1900 wins; without a pet both arms win 747. The copy contains no percentage. Removing the edge fails PET, falsely marking the working dish unclaimed fails NOCLAIM upward, and restoring the old mechanical copy fails both copy rows.
+4. PROOF: pet-family-audit.mjs | REACH: Deliberately ratified the already-frozen tuned baseline under the 20% ruling. All 13,552 builds and 54,208 effects match. The original fixture, frozen hashes and separate family identity guard remain; reverting the C2 effect fails NO-DRIFT.
+5. PROOF: balance.mjs, fight-sim.mjs | REACH: Whole-board before/after measurements use the real five-rung ladder and all mixed legal paths. The ordinary target passes 128/128 guards, but daily-Glutton stress still reaches 99.5% for maxed shiny lineage20 C4 with Crow Lord and Skewer. No fourth family or release clearance is claimed.
+6. PROOF: pit.test.js, dish-worth-audit.mjs | REACH: The agreed command exits 0: 101 passed, 0 failed; dish-worth: all rows green. Every one of the 80 actual PURE entries exits 0. Browser/server proofs were prohibited. No commit, push, publication or version change occurred.
+
+The complete advisory report, before/after boards, red/green output, file list,
+limitations and proposed owner fixes are in `tests/fight-sim.mjs`, printable with
+`node tests/fight-sim.mjs --report`. Existing maxed pets keep all earned records
+and unlocks but have less combat power under the inherited tuning. The unowned
+app.js lineage promises still contradict its cap and remain a release blocker.
+
 ## R3: operational debt (2026-09-07)
 
 1. PROOF: unit.test.js | REACH: The hotfix registerKey/goOnline regions and strengthened R37-24 guard are byte-identical to locally available origin/main. The current unit suite checks the failed retry, welcome receipt and successful later signup. Branch left intact; no live-wallet measurement is claimed.
