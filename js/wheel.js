@@ -235,7 +235,7 @@ const STYLE = `
   box-shadow:0 4px 0 #6f9c2f,0 0 18px rgba(165,232,71,.4);transition:transform .1s}
 .dw-cta:active{transform:translateY(3px);box-shadow:0 1px 0 #6f9c2f}
 .dw-cta[disabled]{opacity:.5;pointer-events:none}
-.dw-result{display:grid;justify-items:center;gap:8px;min-height:70px;animation:dwPop .45s cubic-bezier(.34,1.6,.64,1) both}
+.dw-result{display:grid;justify-items:center;gap:8px;min-height:70px;animation:dwPop .45s cubic-bezier(.13,.72,.16,1) both}
 .dw-result .ri{font-size:46px;filter:drop-shadow(0 3px 4px rgba(0,0,0,.5))}
 .dw-result .rl{font-family:var(--display,'Bangers',sans-serif);font-size:24px;color:#f2e9d7}
 .dw-result .rl b{color:#a5e847}

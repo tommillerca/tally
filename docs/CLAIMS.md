@@ -456,6 +456,9 @@ the upload path and its guards.
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
 
+## v521
+1. PROOF: wheel-easing-audit.mjs | REACH: spin the wheel and watch the prize card land. Tom's ruling, 2026-09-08: "Smooth it out." `js/wheel.js` animated `.dw-result` with `cubic-bezier(.34,1.6,.64,1)`, whose 1.6 control point overshoots, and bounce reads as dated next to a real object decelerating. The answer was already one line away in the same file: `.dw-spinning` uses `cubic-bezier(.13,.72,.16,1)`, a clean deceleration, so the prize card now settles the way the wheel it came from settles rather than inventing a third feel. Keyframes, durations and the reduced-motion handling are untouched. The guard asserts no easing curve in the file has a control point above 1 and was proven RED against the previous value before the change. The visual feel itself is unverified: this was a node-only lane.
+
 ## v520
 1. Tom, 2026-09-08: "my apple health at some point disconnected and i dont know when it happened just had to resync, could have been last week for all i know." The defect was never the disconnect, it was the silence, and the interesting part is that **a watchdog for exactly this already existed** and had been built the last time this burned him.
 
