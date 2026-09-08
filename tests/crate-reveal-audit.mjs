@@ -691,6 +691,12 @@ for (const [w, h] of [[393, 852], [375, 667]]) {
 await setWidth(page, 393, 852);  // restore, for the sections below
 
 /* ---- TAIL: THE LAST AUTHORED FRAME HAS TO BE SEEN -------------------------
+   c1, 2026-09-08: this is the OPENING tail, not the between-card dwell.
+   Preserve the 100ms authored HOLD in playCrateSeq and this 60ms measured
+   floor. The separate PURE crate-cadence-audit pins browsing at 400ms instead
+   of 790ms and rejects the old numbers as a positive control. Re-baselining
+   this row would change the first-card cinematic, outside c1's scope.
+
    Tom, 2026-08-17: "the first chest you open for both kind clips the end of the
    animation a little bit but the second chest doesn't."
 
@@ -929,7 +935,7 @@ for (let run = 1; run <= 5; run++) {
     const m = { over20: w.filter(g => g.d > 20).length, over34: w.filter(g => g.d > 34).length,
       worst: Math.round(Math.max(0, ...w.map(g => g.d))), rafSamples: w.length,
       // where the worst one landed, in ms after the tap: a hitch at 0 is the
-      // fling, one at ~330 is the deck rebuild; resume is >=330+480ms
+      // fling and deck rebuild now overlap; burst resume is >=560ms
       worstAt: w.length ? Math.round(w.reduce((a, b) => (b.d > a.d ? b : a)).t - t0) : null };
     const minFrames = Math.floor(520 / (1000 / 60)) - 6;
     ok(`${label} cadence: >=${minFrames} rAF samples and <=6 gaps over 20ms`,

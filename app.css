@@ -5221,7 +5221,7 @@ body::before {
 .pack-reveal.r-legendary { --rar: var(--gold); --rar-rgb: var(--gold-rgb); }
 /* flicking to the next card is not a re-open: everything collapses to one beat */
 .pack-reveal.browsing {
-  --b-card: .04s; --b-count: .1s; --b-title: .1s; --b-foot: .3s;
+  --b-card: .02s; --b-count: .1s; --b-title: .1s; --b-foot: .3s;
   --b-sway: .6s; --b-spark: 1s;
 }
 
@@ -5320,6 +5320,8 @@ body::before {
 
 /* ---- the hand ---- */
 .pack-deck { position: absolute; left: 50%; bottom: calc(var(--pc-w) * .2269); z-index: 1; width: var(--pc-w); transform: translateX(-50%); }
+/* The departing card keeps the deck's geometry above the incoming card. */
+.pack-deck.pack-outgoing { z-index: 2; pointer-events: none; }
 /* the rest of the pack, stacked behind the card you are looking at */
 .pc-ghost {
   position: absolute; left: 0; bottom: 0; width: 100%; aspect-ratio: 3 / 4.9; border-radius: 20px;
@@ -5348,7 +5350,7 @@ body::before {
    here so the sway actually gets one. */
 .pc-rise { transform-origin: 50% 100%; perspective: 1100px; visibility: hidden; }
 .pack-deck.go .pc-rise { visibility: visible; animation: crCard 1.05s cubic-bezier(.18,.86,.26,1) var(--b-card) both; }
-.pack-reveal.browsing .pack-deck.go .pc-rise { animation: crNext .42s cubic-bezier(.2,.9,.3,1) var(--b-card) both; }
+.pack-reveal.browsing .pack-deck.go .pc-rise { animation: crNext .38s cubic-bezier(.2,.9,.3,1) var(--b-card) both; }
 .pack-deck.go .pc-sway { animation: crSway 4.8s ease-in-out var(--b-sway) infinite; }
 @keyframes crDrop {
   0% { transform: translateY(calc(var(--pc-w) * -1.5966)) scale(.86); opacity: 0; }

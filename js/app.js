@@ -19209,7 +19209,12 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
          deck for the rest of the reveal, still composited on every frame, for
          a picture that has already sunk to nothing. Dropping the subtree on
          the first advance is the cheapest thing the flick can be given. */
-      if (!first && opening) { $('.pack-crate', wrap)?.remove(); $('.pack-bloom', wrap)?.remove(); }
+      if (!first && opening) {
+        $('.pack-crate', wrap)?.remove(); $('.pack-bloom', wrap)?.remove();
+        // A slow opening decode can have pushed these beats inline. Release
+        // that opening-only schedule so browsing uses its own CSS timings.
+        for (const key of ['--b-sink', '--b-card', '--b-count', '--b-title', '--b-foot', '--b-sway', '--b-spark']) reveal.style.removeProperty(key);
+      }
       // .opening runs the crate beats; .browsing collapses every delay to one
       // beat. r-<rarity> carries --rar / --rar-rgb to the dots, bloom and haze.
       /* KEEP pix-crate. This line reassigns className wholesale on every card, so
@@ -19255,7 +19260,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
          two frames to have a previous value to interpolate from. The timer is
          the floor under it. ClassList.add is idempotent. */
       const go = () => {
-        const add = () => deck.classList.add('go');
+        const add = () => { if (!flung && reveal.isConnected) deck.classList.add('go'); };
         requestAnimationFrame(() => requestAnimationFrame(add));
         setTimeout(add, 300);
       };
@@ -19283,15 +19288,18 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         // panel and fill itself a moment later, which robbed the payoff. Capped so
         // a slow asset delays the reveal rather than blocking it forever.
         Promise.race([hydratePackArt(deck), new Promise(r => setTimeout(r, 700))]).then(() => {
+          if (flung || !reveal.isConnected) return;
           go(); landed(tier);
-          // past crNext's own .42s rise (+ --b-card .04s), so the light comes
-          // back only once the card has finished arriving
-          at(480, () => burst?.resume());
+          // The move now overlaps: 20ms delay + 380ms rise. Keep the shader
+          // paused through the audit's full 520ms flick window, and never let
+          // an older card's timer resume it during a newer throw.
+          at(560, () => { if (!flung && reveal.isConnected) burst?.resume(); });
         });
       }
 
       let sx = 0, dx = 0, pid = null, flung = false;
       const settle = () => {
+        if (flung) return;
         tilt.style.transition = 'transform .3s cubic-bezier(.22,1,.36,1)';
         tilt.style.transform = '';
         sway.style.animation = ''; sway.style.transition = ''; sway.style.transform = '';
@@ -19317,12 +19325,36 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
            had failed and dismissed the screen by accident. Same flight either
            way; only what happens at the end of it differs. */
         const last = i >= cards.length - 1;
+        let outgoing = null;
+        if (!last && !reduced) {
+          // Keep the actual decoded card alive outside the deck renderCard
+          // rebuilds. Freeze its inner pose before .opening becomes .browsing
+          // so the departing first card cannot restart with crNext mid-flight.
+          const rise = $('.pc-rise', tilt);
+          const riseTransform = getComputedStyle(rise).transform;
+          const swayTransform = getComputedStyle(sway).transform;
+          outgoing = document.createElement('div');
+          outgoing.className = 'pack-deck pack-outgoing';
+          outgoing.setAttribute('aria-hidden', 'true');
+          for (const key of ['--rar', '--rar-rgb']) outgoing.style.setProperty(key, getComputedStyle(reveal).getPropertyValue(key));
+          rise.style.animation = 'none'; rise.style.transform = riseTransform; rise.style.visibility = 'visible';
+          sway.style.animation = 'none'; sway.style.transform = swayTransform;
+          deck.parentNode.appendChild(outgoing);
+          outgoing.appendChild(tilt);
+          // Commit the same starting pose in its new layer before transitioning.
+          void tilt.offsetWidth;
+        }
+        delete reveal.dataset.landed;
         tilt.style.transition = 'transform .34s cubic-bezier(.3,.9,.4,1), opacity .34s ease-out';
         tilt.style.transform = `translateX(${Math.round(dir * innerWidth * 1.2)}px) rotate(${dir * 15}deg)`;
         tilt.style.opacity = '0';
-        at(330, last ? done : advance);
+        if (outgoing) {
+          at(340, () => outgoing.remove());
+          at(0, advance); // the next rise overlaps the readable outgoing flight
+        } else at(330, last ? done : advance);
       };
       tilt.addEventListener('pointerdown', e => {
+        if (flung) return;
         /* S6: setPointerCapture retargets the compat mouse events too, so a
            click that lands on #giftShopLink (or any button in the stats band)
            would fire with e.target === tilt, not the button -- the exact
