@@ -362,6 +362,7 @@ export function panelHtml(roster, eggs, { tileBox = 0, showTeaser = true, inFiel
       <button class="pdk-seg" data-seg="pedia" disabled>BONEPEDIA · SOON</button>
       <span class="pdk-seg pdk-count">${esc(footerLabel(roster))}</span>
     </div>
+    <p class="pdk-bench">Pets are individual copies. Kinds are species, including the founder. The Kennel counts species colourways and excludes the founder.</p>
     ${out !== null && out < total ? `<p class="pdk-bench">${out} of ${total} out today, the rest are resting.</p>` : ''}
   </div>`;
 }
