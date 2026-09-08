@@ -166,7 +166,7 @@ function ensureStyle() {
 /* The line is the app's talk box, not two centred labels. Narrower than the
    screen and centred under the chest: he is an OBJECT you are looking down at,
    where the Wanderer is a figure filling a stage. */
-.mimic-reveal .mimic-enc-box { position: relative; z-index: 2; width: min(84vw, 330px); --tb-size: 14px; }
+.mimic-reveal .mimic-enc-box { position: relative; z-index: 2; width: min(84vw, 330px); --tb-size: .875rem; }
 /* THE HANDOVER COVER. One beat, no strobe and no charge: the scrim closes to
    black and STAYS there while the caller builds the arena underneath it. It is a
    layer rather than a background swap because a gradient cannot interpolate to a

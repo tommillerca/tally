@@ -8217,6 +8217,12 @@ test('L2 independent offline currency earnings survive both backup entry paths',
   assert.match(output, /17 passed, 0 failed/);
 });
 
+test('R60-2 type tokens follow the root while fixed geometry stays px', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'fontscale-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /px TYPE tokens: 0/);
+  assert.match(output, /9 regression mutations rejected/);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

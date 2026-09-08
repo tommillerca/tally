@@ -261,6 +261,7 @@ const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-ato
      shape the merge audit never drove. */
   'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs',
   'take-and-pay-audit.mjs'];   // L1/L5: transaction-boundary kills for inventory, Shop, Pit, meal XP retry (including midnight and overlapping opens), grants and Spire recovery; Node-only.
+PURE.push('fontscale-audit.mjs'); // R60-2: rem type seam, root doubling and px geometry controls; no browser or sockets.
 PURE.unshift('store-copy-lint.mjs');
 PURE.push('storage-boot-audit.mjs'); // R54-4: throwing IndexedDB boot and normal control, no browser or sockets.
 PURE.push('paddock-pack-audit.mjs');   // 2026-09-08 R44-12/20/25: the Paddock packer honours its own header contract at 200 pets (76 pairs overlapped >20px in both axes, worst 121x72, among the 50 drawn), a breeding-armed and an equipped pet are marked in the field, and the Stable copy row keeps its scroll position (2,160px lost per tap); node-only source and geometry proof, the real-render half is paddock-pack-browser-audit.mjs
