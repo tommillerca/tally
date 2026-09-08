@@ -1,8 +1,7 @@
 /* Dark Spires: territory you claim by walking to it, and keep by coming back.
  *
- * PHASE 1, "The Lone Warden": entirely local, no server. Every spire is either
- * unclaimed (an NPC Wraith Warden holds it) or yours. Rival ownership and sieges
- * are later phases and deliberately absent here.
+ * Shared ownership is confirmed by the server. Offline fights are pending:
+ * they cannot grant tribute or Boon. Stored rows alone are never authority.
  *
  * The design constraint this bends around, stated plainly because it drove every
  * choice: Pokemon Go gyms run on player density we do not have (~92 accounts,
@@ -42,6 +41,23 @@ export const LEVEL_TRIBUTE_STEP = 0.10;  // +10% tribute per level above 1
 export const LEVEL_TRIBUTE_MAX = 1.5;    // ...never more than half again
 export const SIEGE_WARN_MS = 12 * 3600000; // remind me this long before the window shuts
 
+// Confirmation is session-only: a restored kv row is never proof of ownership.
+let ownership = new Map();
+let clockSample = null;
+export function setSpireClock(serverNow) {
+  if (Number.isFinite(serverNow)) clockSample = { now: serverNow, tick: performance.now() };
+}
+export function spireNow() {
+  return clockSample ? clockSample.now + performance.now() - clockSample.tick : Date.now();
+}
+export function forgetSpireAuthority() { ownership = new Map(); }
+async function verifyOwnership() {
+  const { fetchMySpires } = await import('./social.js');
+  const rows = await fetchMySpires();
+  if (rows === null) { forgetSpireAuthority(); return false; }
+  await syncSieges(rows);
+  return true;
+}
 const KV = 'spires';                     // { [id]: {claimedAt, tendedAt, collectedAt, level} }
 
 function hashStr(s) {
@@ -114,13 +130,20 @@ const DAY = 86400000;
 const daysBetween = (from, to = Date.now()) => Math.max(0, (to - from) / DAY);
 
 /** Everything the UI needs about one spire, with decay already applied. */
-export function readSpire(state, s, now = Date.now()) {
-  const rec = state[s.id];
+export function readSpire(state, s, now = spireNow()) {
+  let rec = state[s.id];
   if (!rec) return { ...s, held: false, dormant: false };
+  const confirmed = ownership.get(s.id);
+  if (!confirmed || confirmed.claimedAt !== rec.claimedAt) return {
+    ...s, held: false, dormant: false, pending: true, level: rec.level || 1,
+    siege: null, tribute: { coins: 0, dust: 0, days: 0, capped: false },
+  };
+  rec = { ...rec, tendedAt: confirmed.tendedAt, siege: confirmed.siege };
+  const expired = !!(rec.siege && rec.siege.until <= now);
   const sinceTend = daysBetween(rec.tendedAt, now);
   // DORMANT, never destroyed: decay pauses your income, it does not punish you
   // for a holiday. Shame-free is a hard rule in this app.
-  const dormant = sinceTend >= RESOLVE_DAYS;
+  const dormant = expired || sinceTend >= RESOLVE_DAYS;
   const days = Math.min(TRIBUTE_CAP_DAYS, Math.floor(daysBetween(rec.collectedAt, now)));
   const cappedFor = daysBetween(rec.collectedAt, now) >= TRIBUTE_CAP_DAYS;
   return {
@@ -169,7 +192,9 @@ export function boonBonusFor(n = 0) {
   return Math.round(raw * 100) / 100;
 }
 
-export async function heldSpires(now = Date.now()) {
+export async function heldSpires(now) {
+  await verifyOwnership();
+  now ??= spireNow();
   const state = await spireState();
   return Object.keys(state)
     .map(id => readSpire(state, { id, ...state[id].meta }, now))
@@ -177,18 +202,20 @@ export async function heldSpires(now = Date.now()) {
 }
 
 /** Keeper's Boon: a small always-on perk for holding ANY spire. */
-export async function keepersBoon(now = Date.now()) {
+export async function keepersBoon(now) {
   const held = await heldSpires(now);
   return held.length ? { questCoinBonus: boonBonusFor(held.length), spires: held.length } : null;
 }
 
 /** Claim after beating the warden. Refuses past the cap so choice stays real. */
-export async function claimSpire(s, now = Date.now()) {
+export async function claimSpire(s, now = spireNow()) {
+  ownership.delete(s.id);
   let out = { ok: false, reason: 'cap', cap: SPIRE_CAP };
   await mutate(state => {
-    const held = Object.keys(state).filter(id => !readSpire(state, { id }, now).dormant);
+    const held = Object.keys(state).filter(id => readSpire(state, { id }, now).held);
     if (!state[s.id] && held.length >= SPIRE_CAP) return false;
     state[s.id] = {
+      pending: true,
       claimedAt: state[s.id]?.claimedAt || now,
       tendedAt: now,
       collectedAt: now,
@@ -201,7 +228,7 @@ export async function claimSpire(s, now = Date.now()) {
       // player is nowhere near (Today card, future leaderboard)
       meta: { name: s.name, lat: s.lat, lng: s.lng, cx: s.cx, cy: s.cy, warden: s.warden },
     };
-    out = { ok: true, level: state[s.id].level };
+    out = { ok: true, pending: !ownership.has(s.id), level: state[s.id].level };
   });
   return out;
 }
@@ -224,26 +251,28 @@ export async function setSpireLevel(id, level, now = Date.now()) {
  *  thing that may start or end a siege; this just makes it readable offline and
  *  between polls. Returns the sieges that are NEW to this device, so the caller
  *  can announce them exactly once. */
-export async function syncSieges(rows, now = Date.now()) {
+export async function syncSieges(rows, now = spireNow()) {
   if (!Array.isArray(rows)) return [];
-  let fresh = [];
+  const next = new Map(rows.map(r => [r.id, {
+    ...r, siege: r.siegeUntil ? { until: r.siegeUntil, name: r.siegeName || 'The siege' } : null,
+  }]));
+  const fresh = [];
   await mutate(state => {
-    fresh = [];
-    let dirty = false;
-    for (const r of rows) {
-      const rec = state[r.id];
-      if (!rec) continue;                     // a tower this device has never claimed
-      const had = rec.siege && rec.siege.until;
-      if (r.siegeUntil && r.siegeUntil > now) {
-        if (had !== r.siegeUntil) { rec.siege = { until: r.siegeUntil, name: r.siegeName || 'The siege' }; dirty = true; fresh.push({ id: r.id, name: rec.meta?.name || r.name, until: r.siegeUntil, siegeName: r.siegeName }); }
-      } else if (rec.siege) { delete rec.siege; dirty = true; }
-      // the server also owns level and the true claim date (which survives reinstall)
-      if (r.level && rec.level !== r.level) { rec.level = r.level; dirty = true; }
-      if (r.claimedAt && r.claimedAt < (rec.claimedAt || Infinity)) { rec.claimedAt = r.claimedAt; dirty = true; }
-      if (r.tendedAt && r.tendedAt !== rec.tendedAt) { rec.tendedAt = r.tendedAt; dirty = true; }
+    for (const id of Object.keys(state)) if (!next.has(id)) delete state[id];
+    for (const [id, r] of next) {
+      const old = state[id];
+      if (r.siege && r.siege.until > now && old?.siege?.until !== r.siege.until)
+        fresh.push({ id, name: r.name, until: r.siege.until, siegeName: r.siege.name });
+      const sameClaim = old?.claimedAt === r.claimedAt;
+      state[id] = {
+        claimedAt: r.claimedAt, tendedAt: r.tendedAt,
+        collectedAt: sameClaim ? old.collectedAt : now,
+        level: r.level || 1, siege: r.siege,
+        meta: { ...old?.meta, name: r.name, lat: r.lat, lng: r.lng },
+      };
     }
-    if (!dirty) return false;   // the poll said nothing new: leave the record alone
   });
+  ownership = next;
   return fresh;
 }
 
@@ -258,7 +287,7 @@ export async function breakSiege(id, now = Date.now()) {
 }
 
 /** Towers of mine with an open siege, soonest deadline first. */
-export async function besiegedSpires(now = Date.now()) {
+export async function besiegedSpires(now = spireNow()) {
   const state = await spireState();
   return Object.keys(state)
     .map(id => readSpire(state, { id, ...state[id].meta }, now))
@@ -285,14 +314,16 @@ export async function tendSpire(id, now = Date.now()) {
  * tribute, and the map's collect button has no re-entry guard on it. Moving
  * `collectedAt` INSIDE the same transaction that reads it means the second
  * caller reads a tower that has just been emptied and gets `empty`. */
-export async function collectTribute(id, now = Date.now()) {
+export async function collectTribute(id, now = spireNow()) {
+  if (!await verifyOwnership()) return { ok: false, reason: 'pending' };
+  now = spireNow();
   let out = { ok: false, reason: 'not-held' };
   await kvUpdate(KV, (state) => {
     const st = state || {};
     const rec = st[id];
     if (!rec) { out = { ok: false, reason: 'not-held' }; return undefined; }
     const view = readSpire(st, { id, ...rec.meta }, now);
-    if (view.dormant) { out = { ok: false, reason: 'dormant' }; return undefined; }
+    if (!view.held) { out = { ok: false, reason: 'dormant' }; return undefined; }
     if (!view.tribute.days) { out = { ok: false, reason: 'empty' }; return undefined; }
     rec.collectedAt = now;
     rec.tendedAt = now;                  // collecting IS a visit

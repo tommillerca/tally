@@ -4,6 +4,12 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 511, date: '2026-09-08', title: 'A tower you lost is a tower you lost', items: [
+    'When somebody took one of your Spires, your phone never found out. It kept flying your name over it, kept offering to defend it, kept counting it towards your quest bonus, and would still hand you tribute from a tower somebody else owned. That is fixed, and a claim you make with no signal now waits, clearly, until the server agrees rather than pretending it went through.',
+    'A reward the server sent you could be marked as paid a moment before it was actually paid. If the app closed in that gap the reward was skipped for good. The receipt and the payout are now one step, so it either all lands or none of it does.',
+    'Losing a tower used to be completely silent, and for the first half minute the app actively told you that you still held it. It now says what happened, when it happened.',
+    'Every countdown was read off your phone\'s clock against a deadline set by the server, so a slightly wrong clock showed a slightly wrong deadline, and a very wrong one hid the siege from you entirely. Times now come from the same clock the deadline does, and if your clock is too far out the app says so instead of going quiet.',
+  ] },
   { n: 510, date: '2026-09-07', title: 'Pets, told the truth about', items: [
     'One pet from an older or newer build could take the whole Stable down with it: no pets, no Kennel, no Paddock, no equipping, no breeding, and no message saying why. A guard had been written for exactly this and was looking for the wrong shape of broken. Now an unrecognised pet is quietly set aside and everything else opens.',
     'Talents belonged to a species instead of to the animal. A brand new pet of a kind you had already levelled walked into a fight carrying its older sibling\'s full talent tree. Each pet now keeps its own, as the Stable always said it did.',

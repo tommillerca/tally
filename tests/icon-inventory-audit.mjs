@@ -205,7 +205,9 @@ const EMITTERS = {
   'js/app.js:openDenSheet':         ['scene', 'the den preview art.'],
   'js/app.js:openHatchReveal':      ['scene', 'the hatching egg.'],
   'js/app.js:warmCrateFrames':      ['scene', 'pre-decodes the crate opening frames; R20-P3 moved this off openPackReveal so the Backpack can warm them before the tap.'],
-  'js/app.js:presentGrantDelivery': ['scene', 'the delivered-grant card art.'],
+  /* R47, 2026-09-08: presentGrantDelivery split — it now decides WHEN to show a
+     grant and drawGrantDelivery draws it. The declaration follows the drawing. */
+  'js/app.js:drawGrantDelivery': ['scene', 'the delivered-grant card art.'],
   /* revealGift UN-DECLARED 2026-09-03. It matched SIG on a raw <img> in its gear
      branch; the reveal-on-a-mannequin change replaced that with `wear:`/`imgSrc`
      DATA handed to packCardHtml, so the function no longer emits any markup of

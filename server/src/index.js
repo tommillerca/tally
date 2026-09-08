@@ -2779,6 +2779,7 @@ export default {
           rows = rows.map(r => r.id === target.id ? { ...r, siege_until: until, siege_name: nm } : r);
         }
         return json({
+          serverNow: now,
           spires: rows.map(r => ({
             id: r.id, name: r.name, lat: r.lat, lng: r.lng, level: r.level || 1,
             claimedAt: r.claimed_at, tendedAt: r.tended_at,
