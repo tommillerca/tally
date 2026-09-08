@@ -9,6 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const root = resolve(process.argv[2] || resolve(dirname(fileURLToPath(import.meta.url)), '..'));
 const app = readFileSync(resolve(root, 'js/app.js'), 'utf8');
 const nutrition = await import(pathToFileURL(resolve(root, 'js/nutrition.js')));
+const { streakDateSet } = await import(pathToFileURL(resolve(root, 'js/game.js')));
 const { searchLocalFoods } = await import(pathToFileURL(resolve(root, 'js/sources.js')));
 const noop = () => {};
 function span(start, end, from = 0) {
@@ -128,6 +129,8 @@ await test('Search 25 of 52 announced and 40 of 52 visible', async () => {
 await test('Weight chart 45 of 63 becomes 63 of 63', async () => {
   const weights = Array.from({ length: 63 }, (_, i) => ({ date: nutrition.addDays('2026-09-07', i - 62), kg: 80 + i / 10 }));
   const E = env({ db: { all: async table => table === 'weights' ? weights : [] },
+    // renderTrends imports this production helper; extracted VM functions need it too.
+    streakDateSet,
     totalXp: async () => 0, levelFor: () => ({ level: 1, need: 100, into: 0, pct: 0 }), earnedBadgeIds: async () => new Set(),
     shownTotals: nutrition.dayTotals, calorieRingCard: () => '', activityRecoveryHtml: () => '',
     badgesGridHtml: () => '', barChart: () => '', kcalChart: () => '', proteinChart: () => '',
@@ -137,6 +140,7 @@ await test('Weight chart 45 of 63 becomes 63 of 63', async () => {
   E.run(fn('weightChart') + fn('renderTrends')); const screen = node(); screen.dataset.liveWired = '1'; E.context.screen = screen;
   await E.run('renderTrends(screen)');
   const count = (screen.innerHTML.match(/<circle /g) || []).length;
+  // Nonempty CONTROL: all 63 stored weights must be disclosed AND drawn, never just the last 45.
   assert.match(screen.innerHTML, /63 entries/);
   assert.equal(count, 63, `${count} of 63 points drawn, header says 63 entries`);
   return `${count} of 63 circles in production SVG; 63 entries`;
