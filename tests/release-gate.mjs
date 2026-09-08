@@ -260,6 +260,7 @@ const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-ato
   'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs',
   'take-and-pay-audit.mjs'];   // 2026-09-06 lane 2: the take and its whole payout are one transaction; node-only, ~1s
 PURE.unshift('store-copy-lint.mjs');
+PURE.push('r47-economy-audit.mjs');   // 2026-09-08 round 47: a lost tower stops paying (measured 90 coins / 12 Bone Dust), an offline re-fight stays pending and cannot mint a rival's tower, a stale restore cannot resurrect the income, and a grant's receipt and payout commit together; mem-idb + the Worker source, no browser
 PURE.push('submission-preflight-audit.mjs');   // 2026-09-07: drives native/submission-preflight.mjs for real and proves it refuses all three (a bundle without STORE_BUILD=1, a synced config that still has a server URL, a reachable TestFlight string) with a healthy control; node-only, <1s
 PURE.push('pet-state-audit.mjs'); // Lane A: real pet exports, migration, unsupported rows, instance talent clicks and the input to battle construction; Node-only.
 PURE.push('pet-family-audit.mjs'); // Lane D: refuses incomplete family kits, validates species/picks and tree unlocks, checks cooldown agreement and exhaustive frozen combat outputs; Node-only.

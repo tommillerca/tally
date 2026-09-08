@@ -6,7 +6,7 @@ import { db, kvSet, kvGet, useDbName, importAll } from '../js/db.js';
 import * as sp from '../js/spires.js';
 import * as social from '../js/social.js';
 const app = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
-const worker = readFileSync(new URL('./src/index.js', import.meta.url), 'utf8');
+const worker = readFileSync(new URL('../server/src/index.js', import.meta.url), 'utf8');
 const DAY = 86400000, now = Date.now();
 const tower = { id: 'sp-1-1', name: 'Audit tower', level: 6, claimedAt: now - 2 * DAY, tendedAt: now };
 const record = { ...tower, collectedAt: now - DAY - 1000, meta: { name: tower.name } };
