@@ -291,126 +291,109 @@ function printPetBoard() {
 }
 
 // Advisory stress board. Food and player talent combinations are separate from
-// the no-player-talents pet envelope. In particular petFree bypasses recovery.
+// the no-player-talents pet envelope. Skewer now shortens recovery by one turn.
 function printPetStress() {
   console.log('\nSTRESS EXCEPTIONS (not covered by the ordinary pet envelope): ' + FOES.map(f => f.key).join('/'));
-  for (const id of ['C1', 'C2', 'C3', 'C4', 'C5']) for (const kind of ['petFree', 'Crow Lord']) {
+  for (const id of Object.keys(PET_ASSIGN)) for (const kind of ['petFree', 'Crow Lord', 'Crow Lord + Skewer']) {
     const picks = id === 'C1' ? ['i-jinx', 'i-doublehex', 'i-mark', 'i-deephex', 'i-havoc'] : petPicks(id, 10);
-    const build = { ...(kind === 'Crow Lord' ? BUILDS.find(b => b.name.includes('Crow Lord')) : BUILDS[0]),
+    const build = { ...(kind.includes('Crow Lord') ? BUILDS.find(b => b.name.includes('Crow Lord')) : BUILDS[0]),
       pet: buildBattlePet(id, 10, picks, { shiny: true, lineage: HIGH_LINEAGE }),
-      food: kind === 'petFree' ? { petFree: true } : null };
+      food: kind !== 'Crow Lord' ? { petFree: true } : null };
     const rates = FOES.map(foeCfg => measurePet(build, { foeCfg }).winRate);
     console.log(`${id} ${kind}: ${rates.map(r => (100 * r).toFixed(1)).join('/')} ${rates.some(r => r >= 0.95) ? 'FLAG >=95%' : ''}`);
   }
 }
 
 // Frozen advisory report; run with --report for the complete handoff.
-export const WAVE_REPORT = `WAVE advisory work-order report, 2026-09-07
+export const WAVE_REPORT = `T1 advisory work-order report, 2026-09-07
 
 Scope and provenance
-Frozen plan SHA256: 0fa0c55fac97dfb3692cc8f5860d1972be2d93bb5aa71579328d2732df75b5c6.
-Checkout base: b6b581da03c76366c35ac3cb19329426f1caa047.
-Changed: js/pets.js, js/pit.js, tests/fight-sim.mjs, tests/balance.mjs,
-tests/pet-family-audit.mjs. No new family, commits, pushes or publishing.
-Read root CLAUDE.md. tally/CLAUDE.md is absent in this checkout; root is the
-Tally-specific contract. All production paths resolved within this checkout.
+Frozen plan SHA256: a3abec03d6dee9376c829a0fbfa8acbb74dd1f406830d58ab26ce851efad9e65.
+Verified the supplied plan file against that digest before editing.
+Checkout HEAD: b394f11e907a2a49b3fa010f794bfd1619cfe312 (a merge).
+Read git show HEAD, then its first parent's actual re-tune, 8e8aeb1b.
+Read root CLAUDE.md. tally/CLAUDE.md does not exist in this checkout.
+All source paths resolve inside this checkout. Historical sources come from
+this checkout's Git objects and were written only to throwaway /private/tmp trees.
+
+Files changed
+js/pit.js: Skewer reduces the family special's recovery by one turn, minimum
+one. Both the displayed availability and direct action dispatcher enforce it.
+js/cooking.js: recipe, active-buff label and measured worth sentence match the
+new recovery. Saved petFree remains the compatibility key; no migration needed.
+tests/pit.test.js: exact 20% Signature contract, dormant below max and per-species;
+real lethal hit and second-hit checks; normal and Skewer recovery for all seven
+species, across two cycles, including direct attempts while disabled.
+tests/dish-worth-audit.mjs: guards recipe/live-buff promises, retains every
+measurement band, numerical threshold, no-percentage rule and NOCLAIM path.
+tests/balance.mjs: replaces the old zero-cooldown expectation with the hound's
+one-turn recovery; existing outcome ceilings and reward floors are unchanged.
+tests/pet-family-audit.mjs: records deliberate ratification of the existing
+rebaseline. Its frozen hashes, original fixture and identity guard are retained.
+tests/fight-sim.mjs: stress coverage now includes all seven species and combined
+Crow Lord plus Skewer, as well as each separately; this current advisory report
+replaces the prior handoff. Run node tests/fight-sim.mjs --report to read it.
+docs/CLAIMS.md: one dated T1 section, no other section edited.
+
+Eternal Guard's 20% effect and player-facing text were already present in HEAD.
+They are retained in js/pets.js; the stale >=0.4 test is now exactly 0.2.
+The Signature stays per species, activates automatically at level 10 with no
+Signature pick required, and its shield special arms the once-per-fight save.
+No acquisition, purchase, inventory or progression source was changed.
+
+Nothing earned is lost: what existing owners experience
+A maxed pet keeps its iid, species/family, level 10, 82,000-step unlock, stored
+steps, talent choices, Signature, shiny, lineage, nickname and cosmetics.
+The inherited re-tune reduces HP growth and sustained combat output and caps
+the combined rarity/shiny/lineage stat multiplier at 1.5. It does not grandfather
+old combat power: pets can faint sooner and formerly automatic wins can be lost.
+For example, ordinary C2 intrinsic HP is 84 instead of 176 before the re-tune,
+plus the same owner-Marrow contribution. Eternal Guard saves at 20% instead of
+40% HP, once per fight. The recorded lineage can still grow beyond its stat cap.
+
+A player who stocked Skewers keeps every dish and remaining active charge.
+The same saved petFree flag now means one-turn-faster recovery for the same two
+fights: hound 2 -> 1 turns, warden/imp 4 -> 3. Hounds can still use their special
+every player round; wardens/imps must wait through recovery. Recipe ingredients,
+cook time, serving XP and charge consumption are unchanged. No paid power or
+paid shortcut was added. The money-never-buys-power boundary is unchanged;
+this is not a new audit of every historical purchase path.
+
+Deliberate family rebaseline
+The prior re-tune already froze new per-row hashes in pet-family-audit.mjs,
+while preserving fixtures/pet-family-baseline.json from the original source.
+Tom's ruling ratifies those exact tuned values: HEAD already has the 20% effect.
+Re-measurement confirms all 13,552 builds and 54,208 effects match; Skewer is an
+engine recovery rule outside the serialized build/effect snapshot, so no new
+hash change is warranted. NO-DRIFT still fails on an old 40% C2 effect, and the
+independent identity guard still protects assignments, roles and talent unlocks.
+No baseline is regenerated during ordinary audit runs.
 
 Measurement contract
-This checkout's initial balance.mjs failed at import: "does not provide an
-export named 'createSimFight'". Restored the missing sim exports before tuning.
-The instrument now builds actual encounter stats, styles, talents, AI and adds,
-then drives smartPlayerTurn -> exactly one smartPetTurn -> endTurn. A no-pet
-control and manual-action reference guard the consumer. The original production
-modules were preserved in /private/tmp/wave-proof/before for before/red runs.
-No before result is read off a changed production module.
+Ran the entire default board with 200 deterministic paired seeds (s*7919),
+owner stats 55, actual encounter multipliers/styles/talents/AI and additional
+opponents. The five columns are daily Glutton, Champion, Endless 1, Glutton 10,
+Wanderer 13. Every comparison drives the real smartPlayerTurn pet phase.
+The default output includes 78 representative rows (no pet plus 77 pet builds),
+75 decomposition rows, the 560,000-fight mixed-path envelope, 21 stress rows,
+and the existing player-build summaries. Primary ladder conclusions below
+come from fighting ladder opponents, not the ancillary damage dummy.
 
-All primary cells: 200 deterministic seeds s*7919, owner stats 55 in each stat,
-no player talents or food. The default command prints the representative board,
-Wilson 95% intervals, decomposition, all mixed-pick extrema (including winning
-median turns and order-statistic median intervals), and separate stress flags.
-Extrema sweep: 7 species, all 8 level-6 and 32 level-10 mixed legal paths, each
-ordinary and shiny lineage 20, 5 encounters, 560000 fights. Maxima may come from
-different picks before/after and on different rungs. They are observed sample
-maxima, not population upper confidence bounds. These five rungs are a sample,
-not the whole ladder or every stat allocation.
+Three complete runs, all exit 0:
+1. untuned-full-board.txt: production pets.js/pit.js from 8e8aeb1b^, before the
+   inherited re-tune, with the current measuring instrument.
+2. before-full-board.txt: incoming HEAD production, including its 20% Eternal
+   Guard but the old Skewer bypass, with the same instrument.
+3. after-full-board.txt: final production with both rulings completed.
+All three logs live in /private/tmp/t1-proof. Cells carry Wilson intervals;
+mixed-path extrema also retain winning-turn medians and their intervals.
+Sample maxima and the >=95% stress flag describe these 200 seeds. They do not
+certify every player build, policy, interaction or population win probability.
 
-The plan's 40.5% alone baseline is not reproduced with these caller settings.
-Measured alone: daily Glutton 1.5% [0.5,4.3], Champion 0.5% [0.1,2.8],
-Endless 1 0.5% [0.1,2.8], rank-10 Glutton 0% [0,1.9], Wanderer 13 0.5% [0.1,2.8].
-Daily Glutton is mult 1.3 / AI3 / three talents. Rank-10 Glutton is mult 2.384 /
-AI5 / heavy / six talents. The report does not substitute a plain 1.3 dummy
-for either encounter. The sim and audit source pin the daily caller constants.
-
-Diagnosis before tuning
-Ordered additions at level 10, first option in each tier, ordinary specimens;
-these are win percentages on Glutton 10, not additive causal shares:
-component             C1 imp   C2 warden   C3 hound   C4 hound   C5 warden
-alone                  0.0       0.0        0.0        0.0        0.0
-body only              0.5       0.5        0.0        0.0        0.0
-+ family passive       0.5       0.5        0.0        0.0        0.0
-+ ability/basic        0.5       2.0        3.5        2.5        0.0
-+ tier 2               4.5       2.5        3.0        3.0        0.0
-+ tier 4               4.5       2.5        3.0        3.0        0.0
-+ tier 6               9.5      12.5        3.0        3.5        6.5
-+ tier 8              12.0      19.5        5.5        5.0       12.5
-+ tier 10             13.5      23.5        6.5        6.0       15.5
-+ Signature           67.5      35.5       10.5       30.0       51.0
-+ shiny / lineage20   71.0      77.5       25.5       62.5       95.5
-
-The imp's Signature, not its shiny multiplier, dominates this path. Warden
-sustain depends heavily on body survival: replacing C2's full intrinsic line
-with L1 common stats while retaining its L10 kit drops 35.5% to 3.0%. Replacing
-it with L10 common stats gives 15.0%, isolating the rarity/personality share.
-The instrument also prints shiny-only and lineage-only ablations. Random-number
-consumption and interactions mean adding a tier can slightly lower a sample
-rate; the rows are not independent percentages to sum.
-
-The combined stat cap was tested first, before talent tuning. At unchanged HP
-and kits, cap 1.5 alone still left C5 shiny lineage20 path1 at 97% on Champion
-and 74.5% on Glutton10. It was necessary but insufficient. The full mixed-pick
-sweep also caught poison stacking that the all-first-option path understated.
-Hound poison stacked Venom, Rupture and Chum Slick multiplicatively; warden
-shielding stacked Bulwark, Fortify and Loyal Bulwark the same way. Imp curse
-could last through its entire special recovery cycle.
-
-Target and defence
-Desired maxed-pet contribution is broad and matchup-dependent, approximately
-+25 to +85 percentage points on daily Glutton, +15 to +70 on Champion,
-+10 to +65 on early Endless, +2 to +40 on Glutton10 and +10 to +50 on Wanderer13.
-Fixed-seed guard ceilings, allowing a little sampling/design headroom, are
-90/75/70/45/55 percent wins respectively. Relative to the alone controls their
-maximum permitted lifts are 88.5/74.5/69.5/45/54.5 points. The ordinary walking
-reward should open encounters, while harder rungs still demand player progress.
-Do not force every family to the same rate; matchup and talent choices matter.
-The best legal builds per species must also clear useful floors of
-25/15/10/2/10 percent, preventing a ceiling-only fix from making a family inert.
-Level-6 ceilings are 75/40/35/10/15, leaving space for the 82000-step Signature.
-These numerical ceilings cover this specified owner/food-free scenario only.
-
-Tuned numbers
-Combined rarity * shiny * lineage multiplier: min(1.5, old product). Species
-rarity/tilts, shiny's 1.08 factor and +5% lineage term remain; raw lineage is
-retained even above the combat cap. Intrinsic HP is 47+level instead of 40+8*level:
-hatch HP stays 48; L10 is 57 instead of 120, before multipliers. Owner Marrow's
-HP contribution is unchanged, and the engine's descriptor fallback matches.
-Other intrinsic stat growth and family passive magnitudes are unchanged.
-Hound Bite recovers in 2 turns; Warden Shield and Imp Hex recover in 4 instead
-of 2. Their basic actions still fill the intervening turns.
-Poison base tick: 1+0.20*level instead of 1+0.35*level. Venom +50%, Rupture +50%
-and Chum Slick +40% add against the base before one rounding. Max C3 tick at
-L10: 7 instead of 14; poison stacks/duration choices remain. Apex Ambush keeps
-its guaranteed crit, with a 25% bonus instead of 50%.
-Shield bonuses add against the base: Bulwark +50%, Fortify +40%, C5 Signature
-+60% (previously +90%). Fully stacked L10 shield: 55 instead of 87. Cleansing,
-stamina and healing choices remain. Last Stand saves at 5% instead of 15% HP;
-C2's Signature saves at 20% instead of 40%. Both remain once per fight.
-Imp base weaken: 8% instead of 12%, fully stacked 21.6% instead of 32.4%.
-Blind: 20% instead of 30%. L10 storm tick: 8 instead of 16. Oblivion adds one
-turn instead of two, leaving one actual enemy phase without weaken before the
-next special. Stagger, mark, drain and burn identities remain.
-
-Before -> after board
-All maxed legal picks and both intrinsic profiles, best sampled win% per rung:
+Before -> after whole pet envelope
+Maximum sampled win% across all 32 legal level-10 paths, ordinary and shiny
+lineage20, no player talents or food. Incoming HEAD and final values are identical
+in this no-food arm; the original re-tune's before values were freshly rerun.
 species | daily Glutton | Champion | Endless 1 | Glutton 10 | Wanderer 13
 C1 | 100.0 -> 87.0 | 98.0 -> 55.5 | 99.0 -> 49.0 | 88.5 -> 14.0 | 97.5 -> 22.0
 C2 | 100.0 -> 88.5 | 100.0 -> 54.0 | 100.0 -> 45.5 | 98.5 -> 10.0 | 100.0 -> 26.5
@@ -419,98 +402,153 @@ C4 | 99.5 -> 88.5 | 87.0 -> 48.5 | 86.5 -> 46.0 | 70.0 -> 25.0 | 91.0 -> 46.0
 C5 | 100.0 -> 89.5 | 100.0 -> 57.5 | 100.0 -> 46.0 | 97.0 -> 14.5 | 100.0 -> 30.5
 CX | 98.0 -> 84.5 | 74.5 -> 38.0 | 69.0 -> 33.0 | 47.0 -> 7.0 | 65.5 -> 27.0
 C6 | 98.0 -> 82.0 | 72.5 -> 37.0 | 68.5 -> 30.0 | 42.0 -> 6.0 | 60.5 -> 25.5
-
-Level-6 maximum across every species/path on the same five rungs:
+Level-6 maxima across all species, all eight legal paths and both profiles:
 96.5/82.5/69.0/24.5/43.5 -> 69.0/18.5/14.0/3.5/5.5.
-The current default output includes every cell and its uncertainty. For example,
-C1 ordinary first-path Glutton10 goes 67.5% [60.7,73.6] to 13.0% [9.0,18.4];
-its pre-Signature path goes 13.5% to 1.5%, so the Signature remains meaningful.
+The ordinary pet outcome target passes; it is not a universal saturation claim.
 
-Existing owners and level 11
-No inventory, iid, banked level, steps, talent picks, lineage, shiny or morph is
-deleted or rewritten. A maxed pet stays level 10 with the same unlocked choices
-and Signature. It has less battle HP and less sustained special output, so it
-can faint sooner and its owner can lose fights that were formerly automatic.
-This is a real combat-power reduction, not grandfathered old power. For example,
-ordinary C2's intrinsic HP goes 176 to 84, plus the same owner-Marrow contribution.
-At capped lineage the pedigree number still increases but cannot increase stats
-past 1.5. There is no new reason to spend pets solely for post-cap combat power.
-No payment path or morph power is introduced; existing acquisition is unchanged.
+Stress board: incoming HEAD -> final
+Each row uses a level-10 shiny lineage20 pet. C1 picks Jinx, Double Hex, Mark,
+Deep Hex, Havoc; other species use the first legal path. Crow Lord is the real
+player build from BUILDS. Skewer rows use the production food flag.
+All cells are win%, in the same five-rung order above.
+build | incoming HEAD | final
+C1 Skewer | 100.0/97.5/98.0/89.5/92.0 | 90.0/62.5/61.0/21.5/37.5
+C1 Crow Lord | 94.5/59.0/61.0/31.0/57.5 | 94.5/59.0/61.0/31.0/57.5
+C1 Crow Lord + Skewer | 100.0/100.0/100.0/95.5/99.0 | 96.0/77.0/78.5/50.0/72.0
+C2 Skewer | 90.0/61.0/52.5/24.5/29.0 | 82.5/44.0/39.5/9.0/14.5
+C2 Crow Lord | 84.0/56.0/50.0/28.5/32.5 | 84.0/56.0/50.0/28.5/32.5
+C2 Crow Lord + Skewer | 93.5/74.0/71.5/39.5/49.0 | 85.5/60.5/53.0/30.0/35.5
+C3 Skewer | 83.5/34.5/37.0/11.0/31.5 | 83.5/34.5/37.0/11.0/31.5
+C3 Crow Lord | 96.5/62.0/54.0/27.5/53.0 | 96.5/62.0/54.0/27.5/53.0
+C3 Crow Lord + Skewer | 98.0/73.5/68.5/35.5/68.0 | 98.0/73.5/68.5/35.5/68.0
+C4 Skewer | 93.5/64.5/65.5/48.5/65.5 | 93.5/64.5/65.5/48.5/65.5
+C4 Crow Lord | 96.5/75.0/70.0/43.5/66.0 | 96.5/75.0/70.0/43.5/66.0
+C4 Crow Lord + Skewer | 99.5/83.5/87.0/69.5/85.0 | 99.5/83.5/87.0/69.5/85.0
+C5 Skewer | 98.0/80.5/73.5/39.5/58.5 | 92.0/61.0/45.0/16.0/29.0
+C5 Crow Lord | 86.0/70.5/58.5/31.5/48.0 | 86.0/70.5/58.5/31.5/48.0
+C5 Crow Lord + Skewer | 98.0/91.0/84.0/60.0/71.5 | 89.0/77.5/68.0/42.0/56.0
+CX Skewer | 85.5/40.5/39.5/11.5/33.0 | 85.5/40.5/39.5/11.5/33.0
+CX Crow Lord | 95.5/65.0/57.0/27.5/51.5 | 95.5/65.0/57.0/27.5/51.5
+CX Crow Lord + Skewer | 98.0/75.5/72.5/39.5/68.0 | 98.0/75.5/72.5/39.5/68.0
+C6 Skewer | 82.5/38.0/32.5/8.5/27.5 | 82.5/38.0/32.5/8.5/27.5
+C6 Crow Lord | 95.0/62.0/54.0/25.0/49.0 | 95.0/62.0/54.0/25.0/49.0
+C6 Crow Lord + Skewer | 98.0/74.0/69.0/37.0/64.0 | 98.0/74.0/69.0/37.0/64.0
 
-Under today's formulas level 11 would buy more stats/passive/ability power and
-no new unlock: the last tree tier and per-species Signature are already at 10.
-That is exactly the vertical power this work bounds. Do not extend the current
-formulas blindly. Leave max level 10 and its 82000-step cost intact. A future
-11+ track can buy cosmetic mastery, titles or collection goals only after those
-rewards are designed; this patch implements none of them and adds no family.
+Residual saturation is explicit. Daily Glutton remains at 96.0% for C1 with
+Crow Lord plus Skewer; C3/C4 are 96.5% with Crow Lord alone and 98.0%/99.5%
+with both; CX is 95.5%/98.0%, and C6 is 95.0%/98.0% respectively. These are
+1.0, 1.5, 3.0, 4.5, 0.5 or 0 percentage points above the descriptive 95% flag,
+as applicable. No other final stress cell reaches 95% on this board.
+C4 with both still wins 83.5/87.0/69.5/85.0% on the four harder rungs, so there
+is substantial strength below that flag too. No clearance for a fourth family,
+level-11 combat growth or publication follows from these measurements.
 
-Guard evidence and ownership deviations
-New guards live in existing release tiers: balance.mjs (FULL) and
-pet-family-audit.mjs (PURE). No new audit file, so no release-gate edit needed.
-The old family fixture remains immutable. New per-row hashes are frozen inside
-the owned audit deliberately, and still cover 13552 builds / 54208 effects.
-A separate original identity hash pins all three families and existing trees.
-Original production files restored on a throwaway copy make guards fail:
-  FAIL WAVE-STAT-CAP C1 ... HP=8229765, lineage=1000000
-  FAIL WAVE-POISON ... per=14, stacks=3
-  FAIL WAVE-SHIELD ... shield=87
-  FAIL WAVE-CURSE ... weaken=0.324, burn=16
-  FAIL WAVE-RECOVERY C1 ... cooldown=2
-  FAIL WAVE-BLIND ... blind=0.3
-  FAIL WAVE-SAVE C2 ... HP=126
-Restored tuned source passes these with HP=86, poison=7, shield=55,
-weaken=0.216/burn=8, cooldown=4, blind=0.2 and save HP=63 respectively.
-The family audit reports 14 passed, 0 failed; the original-source red run reports
-11 passed, 3 failed (cooldown, engine recovery and NO-DRIFT). An independent role
-mutation also makes FAMILY-IDENTITY fail. Full red/green logs are in
-/private/tmp/wave-proof, with exit codes stored separately, never read via pipes.
+Re-measured dish truth
+Both configurations: 2,000 seeds, actual mirror foe, no player talents.
+Hound (C6 level 5): baseline 1836 wins, Skewer 1900; win difference interval
+[1.7, 4.8] percentage points, 39% of baseline losses removed. Without a pet:
+both 747 wins, difference interval [-3.0, 3.0]pp. Copy contains no percentage:
+Measured: with a trained hound at your side, recovering a turn sooner helps you
+lose fewer fights against an even foe.
 
-Agreed instrument: node tests/fight-sim.mjs --seeds 200, exit 0. An instrument
-exit is not a universal balance pass. balance-audit.js also runs to exit 0.
-The owned balance guard reports 128/128 passed, including the 560000-fight
-envelope. The original-production red control reports 79/128 passed, exit 1;
-49 checks fail on the real old behavior. The restored green run exits 0.
-Pit unit checks report 92 passed, 1 failed: the unowned tests/pit.test.js still
-requires fxC2.lastStandHeal >= 0.4. Reviewer change: pin it to 0.2, retaining the
-existing once-per-fight test. This expected rebaseline was not made outside
-file ownership. unit.test.js reports 362 passed, 1 failed: its embedded
-serveTree child failed. That suite inadvertently attempted a server-dependent
-check; no server/browser proof is claimed or retried. Browser/server review
-remains unavailable under this work order. No approval rejection occurred.
+The plan predicted that changing Skewer would make the numerical dish claim
+go red. Measurement shows that premise is false for this hound-only claim:
+one-turn recovery and zero recovery both permit one special each player round.
+The measured edge is identical. The proposed and implemented adjustment is to
+retain the measured bands, rewrite the mechanical wording, and separately guard
+real recovery for every species. No threshold was lowered to manufacture green.
+Restoring the old recipe/live-buff promises fails the new copy rows.
+Removing Skewer's edge fails PET; falsely registering it unclaimed fails NOCLAIM
+upward. Both directions are demonstrated below.
 
-Strict ownership conflicts with adding docs/CLAIMS.md. That file was not edited;
-this dated report is kept in an owned file instead. Suggested lane PROOF entries:
-balance.mjs
-pet-family-audit.mjs
-fight-sim.mjs
-No original checkout, app.js, loot.js, spires.js, release metadata, App Store,
-Worker, PR, native/ASC-SUBMISSION.md or integ/day5 was modified or contacted.
+Proof output
+Agreed command, run verbatim in this checkout:
+node tests/pit.test.js && node tests/dish-worth-audit.mjs
+101 passed, 0 failed
+dish-worth: all rows green
+Exit 0. Full output: /private/tmp/t1-proof/agreed-proof.txt and agreed-proof.exit.
 
-Integration blocker: uncapped lineage copy remains in unowned app.js at lines
-18080, 19418, 19939, 20206, 20245, 20642 and 21036. These describe lineage*5%
-or unconditional +5% to every stat. Before release, the owning lane must show
-the effective capped multiplier from petBattleStats/PET_STAT_MULT_CAP, state
-when breeding grants no further combat stats, and remove the unconditional
-"stronger" claim from that celebration. Do not encourage sacrificing a spare
-for a combat gain the cap prevents. This patch cannot fix those call sites
-under strict ownership, so engine completion is not integration completion.
+node tests/balance.mjs: 128/128 passed, exit 0, including all 560,000 envelope
+fights. PET-COOLDOWN Skewer: cooldowns=1,1,1,1. WAVE-ETERNAL: save=0.2.
+node tests/pet-family-audit.mjs: 14 passed, 0 failed, exit 0;
+13552 builds and 54208 effects byte-identical.
+Every entry in the actual PURE initializer plus all subsequent push/unshift
+calls was executed using Node without the browser/server gate wrapper:
+80/80 exit 0. No test was skipped, filtered, re-tiered or weakened.
+Per-file receipts: /private/tmp/t1-proof/pure-results.json; full outputs and
+separate exit files are named pure-<filename>.txt and pure-<filename>.exit.
+The release-gate's browser/full tiers were not executed as a gate. balance.mjs
+is an existing FULL-tier Node-only file and was run directly. No new audit was
+added, so no tier registration was needed.
 
-Unresolved interaction, proposed deviation for review
-Hunter's Skewer's existing petFree flag bypasses cooldown entirely. A stress
-probe with maxed shiny/lineage C1 and picks Jinx/Double Hex/Mark/Deep Hex/Havoc
-still wins 100/97.5/98/89.5/92 percent on these rungs. With the same pet plus the
-Crow Lord player build, rates are 94.5/59/61/31/57.5. Other combinations appear
-in STRESS EXCEPTIONS in the default output. The ordinary pet target is met;
-a claim that saturation is solved for the entire game would be false.
-Do not treat this as clearance to add a fourth family or publish. Proposed
-follow-up: replace petFree's zero cooldown with one-turn-faster recovery, then
-remeasure. This requires agreeing a different dish contract, updating cooking.js
-recipe/buff descriptions and app-facing copy plus the existing petFree tests.
-Those files/semantics are outside this frozen lane. No silent food redesign was
-made. Existing Pack Tactics is also still a deprecated auto-companion field;
-the manual Bite remains on its existing two-turn cadence, as the original
-family contract requires. This pre-existing identity/copy issue was not expanded
-into another mechanics change.
+Red -> restored-green controls (throwaway copies only)
+Skewer engine reverted to HEAD:
+FAIL pets: Skewer C1 shortens recovery by one turn without bypassing it
+C1 Skewer recovery: 0 !== 3
+All seven species fail their recovery row: 94 passed, 7 failed, exit 1.
+Restored final source: 101 passed, 0 failed, exit 0.
+
+Eternal effect reverted to 40%:
+FAIL pets: species signatures are per-pet, auto-lit only at max level (Lv 10)
+Eternal Guard promises exactly 20% HP: 0.4 !== 0.2
+FAIL pets: Eternal Guard survives a real lethal hit at 20% HP only once
+lethal hit heals to 20% HP: 120 !== 60
+99 passed, 2 failed, exit 1. Restored: 101 passed, 0 failed, exit 0.
+Reverting only the description to 40% also fails the Signature text assertion.
+
+Same old effect against the frozen family baseline:
+FAIL NO-DRIFT full serialized builds and effects match the frozen WAVE baseline: C2 level 10
+13 passed, 1 failed, exit 1. Restored: 14 passed, 0 failed, exit 0.
+An initial throwaway lacked render assets and also failed KNOWN; copied the seven
+required assets and reran both arms to isolate the actual baseline failure.
+An initial asset-copy helper passed an ID where bhAsset requires an item object;
+it failed ENOENT, was corrected, and affected no checkout file.
+
+Old Skewer recipe and live-buff text:
+FAIL SKEWER recipe promises one-turn-faster recovery
+FAIL SKEWER saved petFree buffs print the same recovery promise
+dish-worth: 2 FAILED, exit 1. Restored: dish-worth: all rows green, exit 0.
+
+Skewer disabled in makeFighter, eliminating its measured edge:
+FAIL PET Hunter's Skewer cuts losses with a trained hound  delta [-1.7, 1.7]pp
+dish-worth: 1 FAILED, exit 1. Restored: dish-worth: all rows green, exit 0.
+
+Working Skewer falsely registered UNCLAIMED with its worth sentence removed:
+FAIL NOCLAIM Hunter's Skewer still measures no edge this harness can see (hound)
+delta [1.7, 4.8]pp: if this no longer spans zero, write the sentence
+dish-worth: 1 FAILED, exit 1. Restored: dish-worth: all rows green, exit 0.
+Every red/green transcript and exit code is in /private/tmp/t1-proof, with
+exit codes written directly to files, never read through a pipe.
+
+Denied/blocked actions, deviations and integration findings
+No approval rejection, denied command, commit, push, PR, publish, version stamp,
+changelog edit, App Store Connect request or Worker request occurred. The direct
+user prohibition on commit/push overrides the plan's contradictory closing line.
+Browser and server proofs were prohibited and were not attempted. UI operation
+and rendered-copy checks remain for the independent reviewer; Node results do
+not certify those environments. Expect the revised Skewer recovery wording in
+Kitchen/Pantry/Pit, and Eternal Guard's existing 20% text in the Stable.
+
+The plan contains strict ownership boilerplate but no new explicit file list.
+Scope was resolved from the prior lane's five owned files, the newly named
+pit.test.js/cooking.js/dish-worth-audit.mjs permissions, and its explicit
+CLAIMS.md instruction. No app.js, loot.js or sibling lane source was edited.
+The absent nested CLAUDE.md and hound measurement limitation are disclosed above.
+The rebaseline was already in HEAD; its exact hashes were deliberately ratified
+instead of manufacturing a needless new baseline.
+
+Integration blocker retained from the earlier report: app.js still advertises
+uncapped lineage gains at lines 18166, 19504, 19509, 20051, 20320, 20759 and
+21163, plus the unconditional 'got stronger' celebration at 21159. The owning
+lane must replace raw lineage*5% and unconditional +5%/stronger promises with
+the effective capped multiplier from petBattleStats/PET_STAT_MULT_CAP, disclose
+when breeding adds no combat stats, and stop inviting players to sacrifice a
+spare for power the cap prevents. These were read, not edited. This remains a
+release blocker even though the scoped Node proofs pass.
+Pack Tactics still changes only the deprecated companion field while manual
+Bite uses its family recovery; C6 still has no species Signature definition.
+Those inherited identity/copy issues require their owners' separate decisions.
+This report is advisory for independent review, not release certification.
 `;
 
 // pathToFileURL, not string concatenation: this project lives under

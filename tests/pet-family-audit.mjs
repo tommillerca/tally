@@ -73,6 +73,11 @@ if (process.argv.includes('--capture-baseline')) {
 // WAVE 2026-09-07: deliberate rebaseline after measured tuning. Keep the original
 // fixture immutable. Counts/order remain frozen; only the new serialized output
 // hashes are replaced here, inside this lane's owned audit. No recapture-at-run.
+// T1 2026-09-07: deliberately ratified this rebaseline under Tom's 20% ruling.
+// HEAD already includes the tuned C2 effect and these exact hashes. Skewer's
+// engine-only recovery change does not alter serialized pet builds/effects.
+// Re-measured all 13,552 builds / 54,208 effects; retain these frozen values,
+// plus the original fixture and independent FAMILY-IDENTITY guard.
 const tunedHashes = [
   ["67e00ee6cf442efe1dd4b2c075943e57f488a5d5a1360b5b8d84d6a8f34cae43", "17930abf3bc69811cd831c1354dc6a43b861778b25826a06836c9be7695de862"], // C1 L1
   ["a1a8a176813eb0727cba4810a9df332363dfb64b8f094781e343f44f493a2f4d", "760e5f7e1cacad466968fc8ab557c09aa94e79f8035aad25f184effdc439901c"], // C1 L2

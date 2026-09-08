@@ -89,7 +89,7 @@ for (const state of ['fainted', 'dead', 'over', 'foe', 'body-kill', 'pet-kill'])
 }
 for (const [label, opts, expected] of [
   ['Pack Tactics follows shipped meta.cd', { picks: ['h-pack'] }, [2, 1, 2, 1]],
-  ['petFree special every phase', { food: { petFree: true } }, [0, 0, 0, 0]],
+  ['Skewer hound recovers one turn sooner', { food: { petFree: true } }, [1, 1, 1, 1]],
 ]) {
   const actual = petFixture('C3', opts), reference = petFixture('C3', opts), cds = [];
   let same = true;

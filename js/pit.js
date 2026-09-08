@@ -425,11 +425,10 @@ function gainHype(f, amt) {
 export function petActionsFor(fight) {
   const pet = fight.p && fight.p.pet, body = fight.pAux;
   if (!pet || !body || body.fainted || body.hp <= 0 || fight.over) return [];
-  const petFree = !!(fight.p && fight.p.foodPetFree); // Hunter's Skewer
   return petActionMeta(pet.family).map(a => ({
     ...a,
-    cd: a.kind === 'special' && !petFree ? (pet.specialCd || 0) : 0,
-    enabled: a.kind !== 'special' || petFree || (pet.specialCd || 0) <= 0,
+    cd: a.kind === 'special' ? (pet.specialCd || 0) : 0,
+    enabled: a.kind !== 'special' || (pet.specialCd || 0) <= 0,
   }));
 }
 
@@ -439,13 +438,13 @@ export function applyPetAction(fight, actionId) {
   if (!pet || !body || body.fainted || fight.over) return events;
   const meta = petActionMeta(pet.family).find(a => a.id === actionId);
   if (!meta) return events;
-  const petFree = !!me.foodPetFree; // Hunter's Skewer: special ignores cooldown
-  if (meta.kind === 'special' && !petFree && (pet.specialCd || 0) > 0) return events;
+  if (meta.kind === 'special' && (pet.specialCd || 0) > 0) return events;
   const foeWho = targetWhoFor(fight, 'p');
   const foe = fighterOf(fight, foeWho);
 
   if (meta.kind === 'special') {
-    if (!petFree) pet.specialCd = meta.cd;
+    // Keep the saved petFree flag compatible: Skewer shortens recovery by one turn.
+    pet.specialCd = Math.max(1, meta.cd - (me.foodPetFree ? 1 : 0));
     const fx = petAbilityEffect(pet, me, foe);
     if (fx.kind === 'pethit') {
       for (let b = 0; b < fx.bites && foe.hp > 0; b++) {
@@ -1827,7 +1826,7 @@ export const SETUP_FIRST = ['rage', 'totem', 'raisedead', 'callcrows', 'ward'];
 // Mirrors app.js endPlayerBody -> petAct -> doEndTurn: one living-pet action
 // after the body, before endTurn. Read dispatch availability, not pet.cooldown:
 // applyPetAction uses meta.cd (including for Pack Tactics), and foodPetFree
-// bypasses that timer. Prefer the special, then the basic on cooldown.
+// shortens that timer by one turn. Prefer the special, then the basic on cooldown.
 export function smartPetTurn(fight) {
   if (fight.over || fight.active !== 'p') return null;
   const legal = petActionsFor(fight).filter(a => a.enabled);

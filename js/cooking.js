@@ -91,7 +91,7 @@ export const RECIPES = [
   { id: 'marrow-stew', iconId: 'dish-stew', name: 'Marrow Stew', icon: '🍜', needs: { marrow: 2, graveroot: 1 }, cookMin: 45,
     buff: { kind: 'combat', damagePct: 0.10, fights: 3 }, desc: '+10% your damage, next 3 fights' },
   { id: 'hunters-skewer', iconId: 'dish-skewer', name: "Hunter's Skewer", icon: '🍢', needs: { sinew: 2, ember: 1 }, cookMin: 45,
-    buff: { kind: 'combat', petFree: true, fights: 2 }, desc: "Pet's special has no cooldown, next 2 fights" },
+    buff: { kind: 'combat', petFree: true, fights: 2 }, desc: "Pet's special recovers one turn sooner, next 2 fights" },
   { id: 'zombie-fajita', iconId: 'dish-fajita', name: 'Zombie Fajita', icon: '🌯', needs: { ember: 1, sinew: 1, bog: 1 }, cookMin: 120,
     buff: { kind: 'coins', pct: 0.25, hours: 2 }, desc: '+25% coins from the world, 2 hours' },
   /* RE-COSTED 2026-08-08. The Feast was the ONLY sink for Ectoplasm and it lost to
@@ -685,7 +685,7 @@ export function foodBuffLabel(b, now = Date.now()) {
   if (b.damagePct) bits.push(`+${Math.round(b.damagePct * 100)}% dmg`);
   if (b.hype) bits.push(`+${b.hype} Hype start`);
   if (b.regenPct) bits.push(`heal ${Math.round(b.regenPct * 100)}%/turn`);
-  if (b.petFree) bits.push('pet special free');
+  if (b.petFree) bits.push('pet special recovers one turn sooner');
   return `${bits.join(' · ')} · ${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left`;
 }
 
@@ -701,18 +701,17 @@ export function foodBuffLabel(b, now = Date.now()) {
  * Hound and with no pet. smartPlayerTurn now takes one smartPetTurn before
  * endTurn, matching the app's body -> pet -> end-turn sequence.
  *
- * The hound baseline wins 1941/2000, the no-pet baseline 747/2000. Broth,
- * Hash and Feast more than halve losses in both. Stew wins 1976/2000 and
- * 1108/2000: a real edge, still below each big dish. Compare those dishes
- * directly: the weakest big dish (Hash) beats Stew by an interval of
- * [0.25, 1.41]pp with the hound; without a pet, Broth is the closest at
- * [16.74, 22.51]pp. Overlapping dish-vs-baseline intervals do not answer
- * that comparison because both include uncertainty about the same baseline.
- *
- * Skewer wins 1975/2000 and Kibble 1972/2000 with the hound, both clear of
- * baseline; neither changes the no-pet result. Their sentences explicitly
- * name the trained hound, the configuration that supports the claim. No
- * percentage belongs in the copy: the size depends on the configuration.
+ * T1 remeasurement, 2026-09-07: hound baseline 1836/2000, no pet 747/2000.
+ * Broth, Hash and Feast still more than halve losses in both arms; Stew
+ * remains below each of those dishes. Skewer now shortens recovery by one
+ * turn, retaining petFree as the saved-data key so stocked/active dishes work.
+ * With the level-5 C6 hound it wins 1900/2000 (difference interval
+ * [1.7, 4.8]pp), versus 747/2000 without a pet. Kibble wins 1923/2000
+ * and 747/2000 respectively. Hounds already act once per round, so their
+ * new one-turn recovery produces the same outcomes as the former bypass.
+ * The hound-only worth instrument cannot detect the warden/imp cooldown
+ * defect: pit.test.js guards recovery for every species on the real engine.
+ * No percentage belongs in the copy: size depends on the configuration.
  *
  * tests/dish-worth-audit.mjs re-measures this on every gate run and fails if a
  * dish's claim stops being true, so a re-cost cannot leave the copy lying. */
@@ -721,7 +720,7 @@ export const DISH_WORTH = {
   'hearty-hash': 'Measured: against an even fight it more than halves the fights you lose.',
   'necro-feast': 'Measured: against an even fight it more than halves the fights you lose.',
   'marrow-stew': 'Measured: it cuts the fights you lose against an even foe, less than the big dishes do.',
-  'hunters-skewer': 'Measured: with a trained hound at your side, more special attacks help you lose fewer fights against an even foe.',
+  'hunters-skewer': 'Measured: with a trained hound at your side, recovering a turn sooner helps you lose fewer fights against an even foe.',
   'bonemeal-kibble': 'Measured: with a trained hound at your side, a tougher, harder-hitting pet helps you lose fewer fights against an even foe.',
 };
 export const dishWorth = recipeId => DISH_WORTH[recipeId] || '';
