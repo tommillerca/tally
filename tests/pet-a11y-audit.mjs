@@ -25,11 +25,12 @@ const attr = html => Object.fromEntries([...html.matchAll(/([\w-]+)="([^"]*)"/g)
 async function render(instances) {
   const body = { innerHTML: '' }, labels = new Map(), cells = [], art = [];
   const context = vm.createContext({
+    wireLabLinks: () => {}, // Laboratory navigation has its own production-control guard.
     openSheet: () => ({}), petInstances: async () => instances,
     KENNEL_SPECIES: species, MORPHS, MORPH_LABEL, MORPH_TIER,
     ownedPairs, ownedCellCount, BH_BY_ID,
     esc: s => String(s).replaceAll('&', '&amp;').replaceAll('"', '&quot;'),
-    morphSwatch: m => ({ base: '#f2e9d7', ember: '#f0763a', frost: '#5fb8ec', toxic: '#8fd23c', midnight: '#6b4fc4' })[m],
+    morphSwatch: m => ({ base: '#f2e9d7', ember: '#f0763a', frost: '#5fb8ec', toxic: '#8fd23c', rose: '#e878a5', midnight: '#6b4fc4' })[m],
     morphAsset: (sp, m) => `${sp}/${m}`,
     croppedPetImg: (sp, px, ground, src) => { art.push({ sp, px, src }); return '<img>'; },
     ICONS: { lock: () => '<svg></svg>' }, CSS: { escape: s => s },
@@ -61,7 +62,7 @@ for (const state of ['zero', 'partial', 'full']) {
     for (const c of r.cells) {
       assert(c.attrs['aria-label'].includes(BH_BY_ID[c.dataset.sp].name));
       assert(c.attrs['aria-label'].includes(c.dataset.morph === 'base' ? 'Base' : MORPH_LABEL[c.dataset.morph]));
-      assert.equal(c.attrs['aria-label'].includes('Not hatched yet.'), c.attrs.class.includes('locked'));
+      assert.equal(c.attrs['aria-label'].includes('Not owned yet.'), c.attrs.class.includes('locked'));
     }
   });
   check(`CLICKS ${state}: every selection retains identity and toggles back`, () => {

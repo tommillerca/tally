@@ -107,7 +107,8 @@ async function destroyHarness(instances, steps = {}, iid = instances[0].iid) {
     addEventListener: (name, fn) => { events[name] = fn; } };
   const input = { value: '', addEventListener: (name, fn) => { inputEvents[name] = fn; } };
   const go = { disabled: true, addEventListener: (name, fn) => { goEvents[name] = fn; } };
-  await run(destroyCode, { insts: instances, bank: steps, body: {}, S: { sounds: false },
+  const sharedReview = cut('function openPetDestructionReview(', '\nfunction wireLabLinks(');
+  await run(sharedReview + '\n' + destroyCode, { insts: instances, bank: steps, body: {}, S: { sounds: false },
     $$: () => [btn], $: s => s === '#pdIn' ? input : go,
     openSheet: html => { sheets.push(html); return {}; },
     toast: message => toasts.push(message), setTimeout: fn => timers.push(fn),
@@ -169,6 +170,7 @@ async function kennel(instances) {
   await run(cut('async function openKennel()', '\nif (typeof window') + '\nawait openKennel();', {
     openSheet: () => ({}), $: () => body, $$: () => [], petInstances: async () => instances,
     KENNEL_SPECIES: ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'].map(id => BH_BY_ID[id]),
+    wireLabLinks: () => {}, // Navigation is exercised in lab-ui-audit; this fixture owns collection copy.
     croppedPetImg: () => '<img>', morphSwatch: () => '#fff' });
   return body.innerHTML;
 }

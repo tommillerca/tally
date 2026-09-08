@@ -10050,9 +10050,9 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    whole -- border, drop shadow, press, text column, chevron -- because it is
    the same object as the Paddock's door and a second set of tokens for one
    more row is how a design system grows two of everything. The only override
-   is the left panel: no scene, a strip of the five colourway swatches instead,
+   is the left panel: no scene, a strip of the six colourway swatches instead,
    filled for the ones you own. Same reading rule as the grid behind it. */
-.kdoor .kdoor-sw { flex: 0 0 74px; align-self: stretch; display: grid; grid-template-columns: repeat(5, 1fr);
+.kdoor .kdoor-sw { flex: 0 0 74px; align-self: stretch; display: grid; grid-template-columns: repeat(var(--kennel-columns, 6), 1fr);
   align-items: center; gap: 4px; padding: 0 10px; background: var(--surface-3); }
 .kdoor .kdoor-sw i { display: block; height: 22px; border-radius: 4px;
   background: var(--surface-2); border: 1px solid var(--line-strong); }
@@ -10093,12 +10093,12 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .k-cap { font-size: 0.71875rem; color: var(--text-3); margin: 3px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .k-empty { color: var(--text-3); font-size: 0.8125rem; padding: 12px 0; }
 .k-lead { font-size: 0.75rem; color: var(--text-3); margin: -2px 0 10px; line-height: 1.45; }
-/* LABEL ABOVE, NOT BESIDE: a side label would eat into the same 5-column
-   budget the plan derives from sheet width alone (viewport - outer pad - four
-   12px gutters, over five columns), so the cell size computed in JS would no
+/* LABEL ABOVE, NOT BESIDE: a side label would eat into the same six-column
+   budget the plan derives from sheet width alone (viewport - outer pad - five
+   4px gutters, over six columns), so the cell size computed in JS would no
    longer match what CSS actually gives the row. Stacking keeps one formula. */
 /* COLUMN HEADERS, one row, above every species block -- same flex/gap as
-   .k-grid-cells so its 5 labels land over the 5 cells beneath them in every
+   .k-grid-cells so its six labels land over the six cells beneath them in every
    row. DESIGN.md's one section-header idiom (.sect-h: 12px/700/.06em/upper-
    case/--text-3), sized down for a column as narrow as 40px: "Midnight" does
    not fit at 12px, so this shrinks the size rather than the tracking or the
@@ -10107,7 +10107,7 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    As flex rows, "MIDNIGHT" at 9px could not shrink below its own text and the
    headers drifted up to 4.52px off the cells at 320px; minmax(0, 1fr) lets
    both rows split the width identically whatever their content measures. */
-.k-grid-head, .k-grid-cells { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.k-grid-head, .k-grid-cells { display: grid; grid-template-columns: repeat(var(--kennel-columns, 6), minmax(0, 1fr)); gap: 4px; }
 .k-grid-head { margin-bottom: 4px; }
 .k-grid-head-cell { text-align: center; font-size: 0.5625rem; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--text-3); line-height: 1.2; }
 .k-grid-row { margin-bottom: 10px; }
@@ -11878,3 +11878,37 @@ button.t3-price::before {
 .pet-a11y .k-id b, .pet-a11y .k-grid-label { white-space: normal; overflow-wrap: anywhere; }
 .pet-a11y .pw-item.famr .look-cost { font-size: .5625rem; }
 .pet-a11y .pw-item.famr .look-cost.dust { font-size: .625rem; line-height: 1rem; }
+
+/* Laboratory, 2026-09-08. Uses the existing sheets and destructive controls. */
+.lab-room { display: flex; flex-direction: column; gap: 14px; padding-bottom: calc(24px + var(--sab, 0px)); }
+.lab-room p, .lab-review p { margin: 0 0 10px; line-height: 1.5; }
+.lab-room select { width: 100%; min-height: 44px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 10px; }
+.lab-recipes, .lab-branches { display: grid; gap: 10px; }
+.lab-recipe, .lab-branch, .lab-loss { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 14px; background: var(--surface-2); overflow-wrap: anywhere; }
+.lab-recipe h3 { margin: 0 0 8px; font-size: 1rem; }
+.lab-recipe small, .lab-pet small { color: var(--text-2); line-height: 1.5; }
+.lab-slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.lab-slots > section { min-width: 0; }
+.lab-pet { display: flex; flex-direction: column; gap: 6px; text-align: left; width: 100%; min-height: 64px; padding: 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); overflow-wrap: anywhere; }
+.lab-pet span, .lab-loss span { display: block; font-size: .8125rem; line-height: 1.5; }
+.lab-pet:disabled { opacity: .7; cursor: default; }
+#labPickRows { display: grid; gap: 10px; }
+.lab-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.lab-links .btn { flex: 1 1 110px; min-height: 44px; }
+.lab-door { width: 100%; margin-bottom: 12px; }
+.lab-sinks { color: var(--text); line-height: 1.5; }
+.lab-clock { display: flex; flex-direction: column; gap: 6px; font-variant-numeric: tabular-nums; }
+.lab-clock span { color: var(--text-2); }
+.lab-room summary, .lab-room .link { min-height: 44px; padding: 10px 0; }
+.lab-room details { border-bottom: 1px solid var(--line-strong); }
+.lab-loss { margin: 12px 0; border-color: var(--danger); }
+.lab-reveal { text-align: center; }
+.lab-reveal [data-lab-result-art] { display: grid; place-items: center; min-height: 160px; }
+.lab-surprise.lab-play [data-lab-result-art] { animation: lab-result-arrive .65s ease-out both; }
+@keyframes lab-result-arrive { from { transform: scale(.65); opacity: .15; } 65% { transform: scale(1.06); opacity: 1; } to { transform: scale(1); opacity: 1; } }
+.lab-today, .lab-interruption, .lab-egg-help { padding: 14px 0; border-top: 1px solid var(--line-strong); margin-top: 16px; }
+.lab-today p, .lab-interruption p, .lab-egg-help p { color: var(--text-2); line-height: 1.5; margin: 8px 0; }
+.lab-today .link { min-height: 44px; padding: 10px 14px; }
+.lab-room :focus-visible, .lab-review :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 360px) { .lab-slots { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .lab-surprise.lab-play [data-lab-result-art] { animation: none; } }
