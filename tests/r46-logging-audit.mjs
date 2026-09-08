@@ -27,7 +27,7 @@ function wireRouter(c) {
   const teardown = new Error('router reached teardown');
   const timers = c.routeTimers = [];
   Object.assign(c, {
-    _dayRefreshPending: false, updatePending: false, wheelRetryPending: false,
+    _dayRefreshPending: false, updatePending: false, wheelRetryPending: false, saveRecoveryActive: false,
     reducedMotion: true, $: () => null, setTimeout: f => timers.push(f),
     closeAllSheets: () => { c.routes++; c.sheetStack.length = 0; throw teardown; },
   });

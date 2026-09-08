@@ -65,6 +65,9 @@ async function freshPage() {
   p.on('pageerror', e => { errors.push(e.message); console.log('  PAGEERROR:', e.message.slice(0, 140)); });
   await p.goto(base, { waitUntil: 'networkidle2' });  // NO ?demo
   await sleep(2400);
+  await p.waitForSelector('#saveNew', { visible: true });
+  await p.click('#saveNew');
+  await p.waitForSelector('#onbGo', { visible: true });
   return p;
 }
 const shot = async (p, n) => { if (sh) await p.screenshot({ path: auditOutputPath(path.join(sh, `onb-${n}.png`)) }); };

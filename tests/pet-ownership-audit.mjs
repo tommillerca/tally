@@ -550,7 +550,7 @@ try {
     await fresh.goto(base.replace(/\/?$/, '/'), { waitUntil: 'networkidle2' });
     await sleep(900);
     const onb = [];
-    for (const id of ['#onbGo', '#onbMe', '#onbSkip']) {
+    for (const id of ['#saveNew', '#onbGo', '#onbMe', '#onbSkip']) {
       const has = await fresh.$(id);
       onb.push(`${id}:${!!has}`);
       if (has) { await fresh.click(id); await sleep(id === '#onbSkip' ? 1800 : 500); }

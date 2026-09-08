@@ -178,6 +178,9 @@ const census = () => page.evaluate(async () => {
 /* Onboard exactly the way onb-audit's HONEST-SKIP path does: real controls, the
    real save, the real welcome kit. */
 async function onboard() {
+  await page.waitForSelector('#saveNew', { visible: true });
+  await page.click('#saveNew');
+  await page.waitForSelector('#onbGo', { visible: true });
   await page.evaluate(() => document.getElementById('onbGo')?.click()); await sleep(900);
   await page.evaluate(() => document.getElementById('onbMe')?.click()); await sleep(900);
   const has = await page.evaluate(() => !!document.getElementById('onbSkip'));
