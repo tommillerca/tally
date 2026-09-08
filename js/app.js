@@ -11835,6 +11835,7 @@ function activityRecoveryHtml(days) {
    killswitch stamp: thirty bytes, never cached by any route (sw.js), so this is
    both the cheapest and the only honest question. 0 means offline or unreadable. */
 async function latestBuild() {
+  if (STORE_BUILD) return 0; // Bundled releases update through the App Store.
   try {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), 5000);
@@ -11859,6 +11860,7 @@ const runningBuild = () => parseInt(String(APP_BUILD).replace(/\D/g, ''), 10) ||
    activate is what deletes the old cache, and controllerchange reloads this
    page. Nothing is deleted before the new build has fully landed. */
 async function hardRefresh() {
+  if (STORE_BUILD) { toast('To update Boneheadz Gym, open the App Store and check for updates.', 4200); return; }
   if (!(await latestBuild())) { toast('No connection. Try again when you have signal', 3200); return; }
   toast('Getting the latest build...', 2200);
   try {
@@ -14963,7 +14965,7 @@ async function renderSettings(el) {
     <div class="settings-row"><div class="lab"><b>Privacy policy</b><span>What stays on this phone, what gets sent, and what nobody else can read</span></div><a class="btn small ghost" id="privacyBtn" href="privacy.html" target="_blank" rel="noopener" style="text-decoration:none">Read</a></div>
     ${surveyDone ? '' : `<div class="settings-row"><div class="lab"><b>Day One survey 💜</b><span>Share your thoughts, keep the exclusive Day One Lizard</span></div><button class="btn small" id="surveyBtn" style="background:#b96cf0;color:#1a0f26">Claim</button></div>`}
     <div class="settings-row"><div class="lab"><b>What's New</b><span>See what changed in recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</button></div>
-    <div class="settings-row"><div class="lab"><b>App version</b><span id="buildLine">Build ${APP_BUILD}${shellV} · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>
+    <div class="settings-row"><div class="lab"><b>App version</b><span id="buildLine">Build ${APP_BUILD}${shellV} · ${STORE_BUILD ? 'Updates are available through the App Store' : 'tap if the app looks out of date'}</span></div><button class="btn small ghost" id="updateBtn">${STORE_BUILD ? 'How to update' : 'Get latest'}</button></div>
     ${STORE_BUILD ? '' : `<div class="settings-row"><div class="lab"><b>Diagnostics</b><span id="diagLine">${esc(diag)}</span></div><button class="btn small ghost" id="copyDiag">Copy</button></div>`}
   </div>
 

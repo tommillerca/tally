@@ -261,7 +261,7 @@ const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-ato
   'take-and-pay-audit.mjs'];   // 2026-09-06 lane 2: the take and its whole payout are one transaction; node-only, ~1s
 PURE.unshift('store-copy-lint.mjs');
 PURE.push('branch-graveyard-audit.mjs');   // 2026-09-08: the branch classifier only calls a branch shipped on merged-PR evidence and never on commit counts or three-dot diffs, both of which lie under squash-merge; node-only, no network
-PURE.push('store-runtime-audit.mjs'); // M4: Node-only real web bundle in a temporary checkout, local asset inventory, scheme condition and store-refresh behavior; fails on the outstanding app-owned web updater.
+PURE.push('store-runtime-audit.mjs'); // M4/K1: Node-only real web bundle, local paths, scheme condition, App Store refresh/background checks and web update controls.
 PURE.push('r47-rest-audit.mjs');   // 2026-09-08 round 47 remainder: GET /spires returns only what a rival needs (the profile blob carried nine more fields than /leaderboard, including yard, gear and plat, against the app's own friends-only comment), the lost-tower card stops contradicting itself, the siege clock ticks
 PURE.push('r47-economy-audit.mjs');   // 2026-09-08 round 47: a lost tower stops paying (measured 90 coins / 12 Bone Dust), an offline re-fight stays pending and cannot mint a rival's tower, a stale restore cannot resurrect the income, and a grant's receipt and payout commit together; mem-idb + the Worker source, no browser
 PURE.push('submission-build-audit.mjs'); // R45-9: PURE runs refusal/control fixtures. Explicit artifact paths require SUBMISSION=1, hash-bound build marker and native store-content preflight; native producer integration remains out of lane.
@@ -307,6 +307,9 @@ PURE.push('audit-completion-audit.mjs'); // N2: subprocess crash/row-count recei
 PURE.push('n3-deadpaths-audit.mjs'); // N3: real artifact path expressions stay outside this checkout; real News callback delivers the current outfit to the poster renderer. Node-only, no pixel claim.
 PURE.push('m5-prove-red.mjs'); // M5: throws away seven real-source reversions; requires failing children and restored green guards, Node-only.
 PURE.push('lookup-guard-lint.mjs'); // M5: bounded truth-only id/lookup scan, reviewed-site ratchet and positive controls; Node-only.
+// K1: lib/lookup-guard-scan.mjs is a helper imported by lookup-guard-lint.mjs.
+// It exports scanning functions and asserts nothing. Helpers under tests/lib
+// are outside the top-level runnable inventory; no top-level scanner exists.
 const BROWSER = [
   'first-run-honesty-audit.mjs', // M5: real first-run disclosure/intro, capped toast dwell, returning daily reward and review screenshots.
   'orientation-audit.mjs', // N1: 393x852 -> 852x393 -> portrait, real rotateLock coverage and hit tests, plus Intl/timezone persistence on reload.

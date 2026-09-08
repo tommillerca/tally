@@ -53,6 +53,15 @@ for (const args of [['--dry-run'], ['--acknowledge-deletion-plan'], ['--execute'
   });
 }
 const frozen = JSON.parse(readFileSync(resolve(root, 'docs/branch-graveyard.snapshot.json'), 'utf8'));
+check('CONTROL captured reachable head is shipped and appears in the same classified rows', () => {
+  const candidate = frozen.branches.find(b => b.inMain === true && b.name !== 'main');
+  assert.ok(candidate, 'captured reachable non-main branch must exist');
+  const result = classify(candidate, frozen.remotes.find(r => r.name === candidate.remote));
+  assert.equal(result.bucket, 'shipped');
+  const found = rows(frozen).filter(r => r.remote === candidate.remote && r.name === candidate.name);
+  assert.equal(found.length, 1);
+  assert.equal(found[0].bucket, 'shipped');
+});
 check('real captured divergent branch is not a phantom unmerged item', () => {
   const candidate = frozen.branches.find(b => b.inMain === false && b.mainInHead === false && !b.prEvidence.length);
   assert.ok(candidate, 'real divergent negative control must exist');
@@ -67,4 +76,4 @@ check('acknowledged CLI preview matches pure plan', () => {
     '--dry-run', '--acknowledge-deletion-plan'], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr); assert.equal(result.stdout, deletionPlan(frozen));
 });
-console.log(`Branch graveyard audit: ${passed}/21 passed.`);
+console.log(`Branch graveyard audit: ${passed}/22 passed.`);

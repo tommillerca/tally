@@ -1,6 +1,6 @@
 /* M5 frozen order, 2026-09-07. Node-only, no installed parser dependency.
  * Report every candidate, ratchet reviewed sites by identity AND multiplicity,
- * and fail any new site. See lookup-guard-review.md for measured precision and
+ * and fail any new site. See ../docs/lookup-guard-review.md for measured precision and
  * deliberately unsupported syntax/dataflow. This does not close the full class.
  * CONTROL fixtures below exercise the scanner, not hand-written app anchors.
  */
@@ -62,6 +62,6 @@ for (const row of findings) {
   if (!review) ok('NEW unresolved lookup guard', false, `${row.file}:${row.line} ${row.key}`);
 }
 ok('REVIEW no stale suppressions', remaining.length === 0, remaining.map(identity).join(', ') || 'all reviewed sites still present');
-console.log(`PRECISION ${debt} boundary debts, ${falsePositives} false positives, ${findings.length - debt - falsePositives} unreviewed. Terminal fallbacks mean boundary debts are not proven crashes.`);
+console.log(`PRECISION ${debt} true positives (boundary debts, not proven crashes), ${falsePositives} false positives, ${findings.length - debt - falsePositives} unreviewed. Incomplete class coverage; no crash-prevention claim.`);
 console.log(`lookup-guard: ${failed ? `${failed} FAILED` : 'PASS'}`);
 process.exitCode = failed ? 1 : 0;

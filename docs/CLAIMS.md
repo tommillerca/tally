@@ -2572,3 +2572,310 @@ Pending reviewer proofs, with expected results rather than measured passes:
 
 Raw logs and throwaway copies are in `/private/tmp/m2-r46-proof`. This report is
 advisory for independent review and is not release approval.
+
+
+## K1, 2026-09-07: App Store updates and guard controls
+
+Advisory implementation report for independent review. No release approval is
+claimed. Frozen plan SHA256 verified as
+`5e902dada55d0406102247336752c9ed6d7dc00e0df9507e11e3d6986c465aa4`.
+All source paths were resolved against this checkout. The root `CLAUDE.md` was
+read before editing; `tally/CLAUDE.md` does not exist here.
+
+1. PROOF: store-runtime-audit.mjs | REACH: Store Settings > App version > How to update explains App Store updates. Background checks in Settings, Today and Progress return without a web version fetch. Browser/device operation is pending.
+2. PROOF: guard-hygiene-lint.mjs, branch-graveyard-audit.mjs | REACH: Node-only real controls observe web updater effects and a shipped head from the same captured branch inventory. The existing ceiling remains 49.
+3. PROOF: submission-preflight-audit.mjs | REACH: The gate recognizes all current top-level runnables and refuses an injected unregistered one. The lookup scanner is an imported helper under tests/lib.
+4. PROOF: lookup-guard-lint.mjs, m5-prove-red.mjs | REACH: A bounded source scan reports four reviewed candidates and rejects real species/equipped-art regression mutations. It does not cover the entire defect class.
+
+**Files changed (7).**
+
+- `js/app.js`: two STORE_BUILD early returns, App Store Settings explanation and button label. Existing web updater bodies are byte-identical after removing those two returns; the web Settings row renders identical bytes.
+- `tests/store-runtime-audit.mjs`: retained bundle/config/path checks, added real web positive controls, store background checks, Settings copy and handler reach assertions. The same extracted functions and instruments observe web fetches, banner binding, worker update and reload.
+- `tests/branch-graveyard-audit.mjs`: added a nonempty, reachable non-main head control from the captured snapshot, checked against the same classified rows. It fails if the classifier stops recognizing shipped heads.
+- `tests/release-gate.mjs`: documented the existing scanner helper location and updated the store audit description. No tier, allowance, threshold or executable registration changed.
+- `tests/lookup-guard-lint.mjs`: made true-positive/false-positive counts explicit and corrected its review-document reference. No scanner rule or reviewed-site allowance changed.
+- `docs/lookup-guard-review.md`: added the missing precision/coverage review, including evidence for each candidate.
+- `docs/CLAIMS.md`: appended only this dated K1 section.
+
+**Three named guards.**
+
+| Guard | Baseline | Final | Fixed the change or the guard? |
+| --- | --- | --- | --- |
+| store-runtime-audit.mjs | Exit 1, 4/5 | Exit 0, 13/13 | Fixed the app defect; also strengthened the guard with controls and background coverage. |
+| guard-hygiene-lint.mjs | Exit 1, 51 of 297 lack controls | Exit 0, 49 of 297 lack controls | Fixed the two audits' missing controls. The hygiene lint and its ceiling were not edited. |
+| submission-preflight-audit.mjs | Exit 0 | Exit 0 | Already resolved in this checkout. Documented the actual helper layout, with no guard weakening or duplicate registration. |
+
+`first-run-honesty-audit.mjs` already has a meaningful positive premise: it
+observes one real first-run splash insertion using the same instrument that
+requires zero returning-user insertions. It did not cause this ratchet failure.
+Its browser proof was not run. `m5-prove-red.mjs` already emits measured CONTROL
+rows requiring exact replacement counts, expected child exits and failure text.
+It passed all seven mutations and restored-green runs. It needs no exception;
+its filename is also outside the hygiene lint's audit filename pattern.
+
+**Agreed proof command.**
+
+`node tests/guard-hygiene-lint.mjs && node tests/store-runtime-audit.mjs`
+
+Executed unchanged, exit 0. Output:
+
+```text
+ok    SETUP the lint found test files to scan  333 files
+ok    RUNNER no case is registered after the runner has already drained  none
+ok    SETUP the audit scan is not vacuous  297 audits
+ok    CONTROL the number of audits with NO positive control does not rise above 49  49 of 297 carry no CONTROL/PREMISE/SETUP/REACH/SAMPLE row. ratchet holding
+ok    LITERAL-TRUE no audit asserts a constant success (including NO page errors)  0 offenders
+ok    LITERAL-TRUE the ten justified reports are excused exactly once  10 excused; 0 stale or duplicated
+ok    CONTROL literal-true catches a new offender even inside an excused file
+ok    PARSES every audit is something Node will actually execute  333 files parse
+ok    SEAM no NEW audit proves a feature only through a test hook  29 known seam-only, 0 new
+ok    SEAM the seam-only inventory has no stale entries (fixed one? delete its line)  inventory matches
+
+guard-hygiene: clean
+PASS real web bundle producer completes in throwaway checkout
+PASS generated store config is local and bundled flag is true
+PASS bundle paths: 54 modules, 180 literal entry/CSS/import references, missing=[], root-absolute=[]
+PASS real service-worker condition skips capacitor and admits HTTPS control
+PASS CONTROL web Settings update row retains identical rendered bytes
+PASS store Settings names the update channel before the player taps
+PASS REACH Settings update button is bound to the audited handler
+PASS store refresh must explain App Store updates without web fetch/reload: calls=[], messages=["To update Boneheadz Gym, open the App Store and check for updates."]
+PASS store background update checks never fetch or show a web banner: calls=[]
+PASS CONTROL web stale banner observes the live version and binds its update button
+PASS CONTROL web banner click updates the waiting worker without a premature reload
+PASS CONTROL web refresh without a worker fetches and reloads
+PASS CONTROL offline web refresh retains its connection message without reloading
+LIMIT: literal path inventory and VM functions only; dynamic assets, WKWebView APIs and rendered controls require device proof.
+store runtime: 13/13 passed
+```
+
+Submission proof, exit 0:
+
+```text
+PASS  COVERAGE registered helper  exit 0 (want 0)  coverage: 316 audits on disk, 116 fast, 128 full, 72 skipped
+PASS  COVERAGE unregistered runnable refused  exit 1 (want 1)  FAIL  coverage: 1 declared audit file(s) belong to no running tier:
+        unregistered-store-fixture.mjs
+submission preflight: refuses marker, flag, server and copy defects; passes the control
+```
+
+The `FAIL` inside that second coverage row is the expected child negative
+control. The parent audit exited 0.
+
+**Red/restored-green evidence.**
+
+Every mutation was made on a throwaway copy under `/private/tmp/k1-proof`,
+with exact-once replacements asserted. The original app was saved before any
+edit, restored on the throwaway tree, and tested with the strengthened guard.
+Each child output and exit status was saved separately; no exit code was read
+through a pipe. The working source was never reverted.
+
+Baseline actual bundled-path failure, exit 1:
+
+```text
+FAIL store refresh must explain App Store updates without web fetch/reload: calls=["version.json"], messages=["No connection. Try again when you have signal"]
+store runtime: 4/5 passed
+```
+
+Strengthened audit on the original app, exit 1 (its instrument supplies a newer
+web version, proving the incorrect store update/reload path too):
+
+```text
+FAIL store Settings names the update channel before the player taps
+FAIL store refresh must explain App Store updates without web fetch/reload: calls=["version.json","reload"], messages=["Getting the latest build..."]
+store runtime: 10/13 passed
+```
+
+Remove only the background gate, exit 1:
+
+```text
+FAIL store background update checks never fetch or show a web banner: calls=["version.json","version.json"]
+store runtime: 12/13 passed
+```
+
+Disconnect the web fetch, exit 1:
+
+```text
+FAIL CONTROL web stale banner observes the live version and binds its update button
+FAIL CONTROL web banner click updates the waiting worker without a premature reload
+FAIL CONTROL web refresh without a worker fetches and reloads
+FAIL CONTROL offline web refresh retains its connection message without reloading
+store runtime: 9/13 passed
+```
+
+Misclassify reachable heads, exit 1:
+
+```text
+FAIL CONTROL captured reachable head is shipped and appears in the same classified rows: Expected values to be strictly equal:
+Branch graveyard audit: 18/22 passed.
+```
+
+Restore the two pre-K1 audits on the throwaway tree, exit 1:
+
+```text
+FAIL  CONTROL the number of audits with NO positive control does not rise above 49  51 of 297 carry no CONTROL/PREMISE/SETUP/REACH/SAMPLE row.
+guard-hygiene: 1 FAILED
+```
+
+Restore fixed sources and controls, all exit 0:
+
+```text
+store runtime: 13/13 passed
+Branch graveyard audit: 22/22 passed.
+guard-hygiene: clean
+PASS existing latestBuild, hardRefresh and checkForUpdate bytes identical after removing the two store-only early returns.
+```
+
+The existing M5 runner also proved both lookup regressions red and then green:
+
+```text
+PASS CONTROL red-pet-species: exit 1, expected 1
+FAIL NEW unresolved lookup guard: js/app.js:19886 x.sp
+PASS CONTROL red-equipped-art: exit 1, expected 1
+FAIL NEW unresolved lookup guard: js/app.js:16973 baseArtId
+PASS CONTROL restored-lint: exit 0, expected 0
+lookup-guard: PASS
+m5-prove-red: PASS
+```
+
+**Lookup precision and limits.**
+
+Measured 54 source modules and 4 candidates: **2 true positives for missing
+boundary validation, 2 false positives, 0 unreviewed, 0 proven crashes**. Both
+true positives pass a merely-present peer pet id into a renderer. One false
+positive misses the catalogue filter upstream of `lurkSp`; the other misses the
+same-expression catalogue check for `petArtId`. Boundary precision is 50%.
+
+The scan is useful as a narrow reviewed-candidate ratchet. Cheap lexical matching
+cannot reliably cover the full absent-versus-unresolvable class. Broader coverage
+needs validated data boundaries, runtime tests using unknown ids at the final
+consumer, and an AST/control-flow approach if a static guarantee is required.
+The seven historical incidents are not seven measured detections. See
+`docs/lookup-guard-review.md` for the complete site review and limitations.
+
+**PURE enumeration and measured results.**
+
+The runner evaluated the actual `const PURE` initialization and every subsequent
+push/unshift through `const BROWSER` in `tests/release-gate.mjs`, without executing
+the release gate or starting its server. It asserted a nonempty, unique inventory.
+All 72 entries are listed below in their derived order. **70 passed, 0 executed
+entries failed, 2 were blocked and not run.** Each executed entry has separate
+stdout/stderr and exit files under `/private/tmp/k1-proof/pure`.
+
+```text
+version-align-lint.mjs  0
+no-debug-markers-lint.mjs  0
+store-copy-lint.mjs  0
+transmog-receipt-audit.mjs  0
+today-reads-lint.mjs  0
+kitchen-atomic-audit.mjs  0
+backup-encoder-audit.mjs  0
+backup-key-audit.mjs  0
+backup-version-audit.mjs  0
+backup-conflict-audit.mjs  0
+unit.test.js  BLOCKED, NOT RUN: local server required
+log-xp-farm-audit.mjs  0
+drip-badge-audit.mjs  0
+xp-key-provenance-lint.mjs  0
+facegate-audit.mjs  0
+garden-appetite-guard.mjs  0
+pit.test.js  0
+quest-daymore-audit.mjs  0
+quest-pick-audit.mjs  0
+first-fight-audit.mjs  0
+stat-source-audit.mjs  0
+bastions-rep-sim.mjs  0
+analytics-tag-audit.mjs  0
+icon-inventory-audit.mjs  0
+version-stamp-audit.mjs  0
+boneyard-supply-audit.mjs  0
+loot-fallback-audit.mjs  0
+guard-hygiene-lint.mjs  0
+guard-provenance-lint.mjs  0
+feedback-status-lint.mjs  0
+rack-theme-lint.mjs  0
+rack-rotate-audit.mjs  0
+pet-accessory-lint.mjs  0
+pet-pool-audit.mjs  0
+manifest-exports-audit.mjs  0
+xp-curve-audit.mjs  0
+live-api-register-lint.mjs  0
+claim-evidence-lint.mjs  0
+thumb-freshness-lint.mjs  0
+render-sink-lint.mjs  0
+lapse-witness-audit.mjs  0
+spawn-claim-atomic-audit.mjs  0
+wardrobe-family-audit.mjs  0
+football-kit-audit.mjs  0
+restore-latch-audit.mjs  0
+first-pet-audit.mjs  0
+currency-revision-lint.mjs  0
+inv-tombstone-audit.mjs  0
+take-and-pay-audit.mjs  0
+branch-graveyard-audit.mjs  0
+store-runtime-audit.mjs  0
+r47-rest-audit.mjs  0
+r47-economy-audit.mjs  0
+submission-build-audit.mjs  0
+harness-environment-audit.mjs  0
+guard-debts-audit.mjs  0
+submission-preflight-audit.mjs  0
+pet-state-audit.mjs  0
+pet-family-audit.mjs  0
+coins-merge-tie-audit.mjs  0
+routine-race-audit.mjs  0
+dayone-topup-audit.mjs  0
+dish-worth-audit.mjs  0
+serve-tree-identity-audit.mjs  BLOCKED, NOT RUN: local server required
+pet-C-node-guard.mjs  0
+r48-state-audit.mjs  0
+r46-logging-audit.mjs  0
+r46-diary-audit.mjs  0
+audit-completion-audit.mjs  0
+n3-deadpaths-audit.mjs  0
+m5-prove-red.mjs  0
+lookup-guard-lint.mjs  0
+
+```
+
+**Blocked actions and deviations.**
+
+The success criterion requiring every PURE entry to exit 0 remains unmet.
+`unit.test.js` starts a server for its serveTree process-lifetime test, and
+`serve-tree-identity-audit.mjs` requires real local sockets. The work order
+explicitly prohibits server/browser proofs. Neither whole file was run or
+silently modified to pass. Proposed verification deviation: the independent
+reviewer runs these two files in a socket-capable environment. Expected, not
+measured here: `363 passed, 0 failed` for unit.test.js and `PASS WRONG-TREE` for
+serve-tree-identity-audit.mjs, both exit 0. The M5 runner did separately execute
+its three extracted unit test bodies; this is not a full unit-suite pass.
+
+Browser/device verification remains pending. In a real store bundle, open
+Settings, operate How to update, and visit Today and Progress. Expected: the
+App Store explanation, zero version.json requests, no web update banner or
+reload. Run first-run-honesty-audit.mjs in the reviewer environment; expected
+8/8, not measured here. UI audit, hit testing and WKWebView behavior were not
+claimed from Node VM/source checks.
+
+The plan names `tests/lookup-guard-scan.mjs`, but this checkout already places it
+at `tests/lib/lookup-guard-scan.mjs` and registers the actual runnable lint once
+in PURE. The helper was declared in the gate comments instead of adding a
+nonexistent top-level runnable or a redundant tier entry. Preflight was already
+green at baseline. The two audits actually missing recognized positive controls
+were store-runtime and branch-graveyard. No m5-prove-red exception was needed.
+
+The opening K1 ownership grant (all merged lanes, no siblings running) was used
+over the stale boilerplate about three sibling lanes and unspecified ownership
+lists. The user's no-commit/no-push instruction overrode the plan's contradictory
+commit-and-push line. No version stamp, changelog edit, PR, commit, push,
+publication, deployment, App Store Connect or Worker operation was performed.
+No tracked native file, native/ASC-SUBMISSION.md, or integ/day5 file was edited.
+No original checkout was edited. Dependency packages were read through this
+checkout's existing node_modules symlink only.
+
+No automatic approval rejection or permission-denied tool action occurred.
+Missing tally/CLAUDE.md and the plan's missing scanner path are explicitly
+reported above. The browser/server prohibition was honored without an attempted
+bypass. The all-PURE-green criterion is pending reviewer proof, not certified.
+
+Evidence and reproduction scripts: `/private/tmp/k1-proof`. This section and the
+final changes are advisory inputs to the independent review.

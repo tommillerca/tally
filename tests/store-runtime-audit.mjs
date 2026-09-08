@@ -89,20 +89,69 @@ try {
   const swAllowed = protocol => vm.runInNewContext(swCondition[1], { navigator: { serviceWorker: {} }, S: { demo: false }, location: { protocol } });
   check(!swAllowed('capacitor:') && swAllowed('https:'), 'real service-worker condition skips capacitor and admits HTTPS control');
 
-  const calls = [], messages = [];
-  const context = vm.createContext({ STORE_BUILD: true, AbortController, setTimeout, clearTimeout,
-    navigator: {}, location: { protocol: 'capacitor:', reload: () => calls.push('reload') },
-    toast: text => messages.push(text),
-    fetch: async url => {
-      calls.push(url.split('?')[0]);
-      const file = path.join(www, url.split('?')[0]);
-      return { ok: existsSync(file), json: async () => JSON.parse(read(file)) };
-    },
+  // Use the same function extraction and instruments for both channels. The web
+  // control must observe the fetch, banner, click and update, so an empty/wrong
+  // source selection or disconnected instrument cannot make the store pass.
+  const web = read(path.join(root, 'js/app.js'));
+  const settingsRow = web.match(/^    <div class="settings-row">.*id="buildLine".*$/m)?.[0];
+  if (!settingsRow) throw new Error('Settings version row missing');
+  const settings = store => vm.runInNewContext('`' + settingsRow + '`', {
+    STORE_BUILD: store, APP_BUILD: 'v514', shellV: '',
   });
-  vm.runInContext(functionSource(app, 'latestBuild') + '\n' + functionSource(app, 'hardRefresh'), context);
-  await vm.runInContext('hardRefresh()', context);
-  check(!calls.length && messages.length > 0 && messages.every(m => /app store/i.test(m)),
-    `store refresh must explain App Store updates without web fetch/reload: calls=${JSON.stringify(calls)}, messages=${JSON.stringify(messages)}`);
+  check(settings(false) === '    <div class="settings-row"><div class="lab"><b>App version</b><span id="buildLine">Build v514 · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>',
+    'CONTROL web Settings update row retains identical rendered bytes');
+  check(settings(true).includes('Updates are available through the App Store') && settings(true).includes('>How to update</button>'),
+    'store Settings names the update channel before the player taps');
+  check(web.includes("$('#updateBtn')?.addEventListener('click', hardRefresh);"),
+    'REACH Settings update button is bound to the audited handler');
+  function runtime(source, store, online = true, withWorker = false) {
+    const calls = [], messages = [], handlers = {};
+    const banner = { isConnected: true, innerHTML: '' };
+    const button = { addEventListener: (event, fn) => { handlers[event] = fn; } };
+    const context = vm.createContext({ STORE_BUILD: store, AbortController, setTimeout, clearTimeout,
+      APP_BUILD: 'v514', runningBuild: () => 514, esc: String,
+      $: selector => selector === '#updBanner' ? banner : selector === '#updBannerBtn' ? button : null,
+      navigator: withWorker ? { serviceWorker: { getRegistration: async () => ({
+        update: async () => calls.push('update'),
+        waiting: { state: 'installed', postMessage: m => calls.push(m), addEventListener: () => {} },
+      }) } } : {},
+      location: { protocol: store ? 'capacitor:' : 'https:', reload: () => calls.push('reload') },
+      toast: text => messages.push(text),
+      fetch: async url => {
+        calls.push(url.split('?')[0]);
+        return { ok: online, json: async () => ({ version: 'tally-v515' }) };
+      },
+    });
+    vm.runInContext(['latestBuild', 'hardRefresh', 'checkForUpdate'].map(name => functionSource(source, name)).join('\n'), context);
+    return { calls, messages, handlers, banner, run: code => vm.runInContext(code, context) };
+  }
+  const store = runtime(app, true);
+  await store.run('hardRefresh()');
+  check(!store.calls.length && store.messages.length === 1
+    && store.messages[0] === 'To update Boneheadz Gym, open the App Store and check for updates.',
+    `store refresh must explain App Store updates without web fetch/reload: calls=${JSON.stringify(store.calls)}, messages=${JSON.stringify(store.messages)}`);
+  const latest = await store.run('latestBuild()');
+  await store.run('checkForUpdate({})');
+  check(latest === 0 && !store.calls.length && store.banner.innerHTML === '',
+    `store background update checks never fetch or show a web banner: calls=${JSON.stringify(store.calls)}`);
+  const live = runtime(web, false, true, true);
+  await live.run('checkForUpdate({})');
+  check(JSON.stringify(live.calls) === '["version.json"]'
+    && live.banner.innerHTML.includes("You're on v514; v515 is live.")
+    && typeof live.handlers.click === 'function', 'CONTROL web stale banner observes the live version and binds its update button');
+  if (live.handlers.click) await live.handlers.click();
+  check(JSON.stringify(live.calls) === '["version.json","version.json","update","SKIP_WAITING"]'
+    && JSON.stringify(live.messages) === '["Getting the latest build..."]',
+    'CONTROL web banner click updates the waiting worker without a premature reload');
+  const plain = runtime(web, false);
+  await plain.run('hardRefresh()');
+  check(JSON.stringify(plain.calls) === '["version.json","reload"]'
+    && JSON.stringify(plain.messages) === '["Getting the latest build..."]', 'CONTROL web refresh without a worker fetches and reloads');
+  const offline = runtime(web, false, false);
+  await offline.run('hardRefresh()');
+  check(JSON.stringify(offline.calls) === '["version.json"]'
+    && JSON.stringify(offline.messages) === '["No connection. Try again when you have signal"]',
+    'CONTROL offline web refresh retains its connection message without reloading');
   console.log('LIMIT: literal path inventory and VM functions only; dynamic assets, WKWebView APIs and rendered controls require device proof.');
 } catch (error) {
   check(false, `audit could not complete: ${error.message}`);
