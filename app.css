@@ -63,9 +63,10 @@
   --mint: #a2e0a6;
   --sh: 4px 5px 0 rgba(0, 0, 0, 0.55);    /* the sticker shadow: hard offset, never blurred */
   --sh-sm: 3px 4px 0 rgba(0, 0, 0, 0.55);
-  /* type scale, 8 steps, no half-pixels. The app currently ships 52 sizes. */
-  --fs-0: 11px; --fs-1: 12px; --fs-2: 13px; --fs-3: 15px;
-  --fs-4: 17px; --fs-5: 21px; --fs-6: 28px; --fs-7: 40px;
+  /* R60-2 Stage 1: preserve the 16px-root design while following root text size.
+     Direct legacy px text is staged separately in docs/a1-fontscale.md. */
+  --fs-0: .6875rem; --fs-1: .75rem; --fs-2: .8125rem; --fs-3: .9375rem;
+  --fs-4: 1.0625rem; --fs-5: 1.3125rem; --fs-6: 1.75rem; --fs-7: 2.5rem;
   /* --muted was referenced 12 times and declared nowhere. An unresolvable var()
      on `color` inherits, so every one of those rendered at full primary
      brightness and silently flattened the hierarchy it was meant to create. */
@@ -117,7 +118,7 @@ body {
   background-attachment: fixed;
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
-  font-size: 16px;
+  font-size: 1rem;
   line-height: 1.35;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
@@ -672,6 +673,7 @@ svg { display: block; }
      one. Radius drops from 999px so the two-line case still looks deliberate. */
   width: max-content; max-width: 86%; text-align: center;
 }
+.toast.toast-error { border: 2px solid var(--bad, #e58c8c); }
 @keyframes toastin { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
 /* THE TOAST MUST NOT LAND ON THE MAP ACTION CARD. On the Boneyard the one
    surface that says what you can do right now is #mapAct ("Grab it" / "Slow
@@ -1553,7 +1555,7 @@ body::before {
    ABSENCE of .tb-done and the chevron off its PRESENCE, so a box that says "wait"
    twice is not a bug JS can reintroduce. Do not add a second state class. */
 .talkbox {
-  --tb-size: 16px;
+  --tb-size: 1rem;
   font-family: var(--dialogue);
   font-size: var(--tb-size);
   line-height: 1.55;
@@ -1663,7 +1665,7 @@ body::before {
    fits in 176px, so a fourth wrapped line is what this is guarding against.
    The border is an OPAQUE cream, see below. */
 .gw-box {
-  flex: 1; min-width: 0; --tb-size: 13px;
+  flex: 1; min-width: 0; --tb-size: .8125rem;
   line-height: 1.35; padding-block: calc(var(--tb-size) * 0.62);
   text-align: left; border-color: #e6dcc8;
 }
@@ -1688,7 +1690,7 @@ body::before {
      that types on has to grow rightwards off a fixed left edge or every single
      character shifts the whole line sideways. */
   text-align: left;
-  --tb-size: 11px;
+  --tb-size: .6875rem;
   animation: bubblePop 0.45s cubic-bezier(0.34, 1.6, 0.64, 1) both,
     bubbleFloat 2.2s ease-in-out 0.5s 2 alternate,
     /* 7s, was 5.2s. The longest line in speechLine() is 69 characters, which is
@@ -5220,7 +5222,7 @@ body::before {
 .pack-reveal.r-legendary { --rar: var(--gold); --rar-rgb: var(--gold-rgb); }
 /* flicking to the next card is not a re-open: everything collapses to one beat */
 .pack-reveal.browsing {
-  --b-card: .04s; --b-count: .1s; --b-title: .1s; --b-foot: .3s;
+  --b-card: .02s; --b-count: .1s; --b-title: .1s; --b-foot: .3s;
   --b-sway: .6s; --b-spark: 1s;
 }
 
@@ -5319,6 +5321,8 @@ body::before {
 
 /* ---- the hand ---- */
 .pack-deck { position: absolute; left: 50%; bottom: calc(var(--pc-w) * .2269); z-index: 1; width: var(--pc-w); transform: translateX(-50%); }
+/* The departing card keeps the deck's geometry above the incoming card. */
+.pack-deck.pack-outgoing { z-index: 2; pointer-events: none; }
 /* the rest of the pack, stacked behind the card you are looking at */
 .pc-ghost {
   position: absolute; left: 0; bottom: 0; width: 100%; aspect-ratio: 3 / 4.9; border-radius: 20px;
@@ -5347,7 +5351,7 @@ body::before {
    here so the sway actually gets one. */
 .pc-rise { transform-origin: 50% 100%; perspective: 1100px; visibility: hidden; }
 .pack-deck.go .pc-rise { visibility: visible; animation: crCard 1.05s cubic-bezier(.18,.86,.26,1) var(--b-card) both; }
-.pack-reveal.browsing .pack-deck.go .pc-rise { animation: crNext .42s cubic-bezier(.2,.9,.3,1) var(--b-card) both; }
+.pack-reveal.browsing .pack-deck.go .pc-rise { animation: crNext .38s cubic-bezier(.2,.9,.3,1) var(--b-card) both; }
 .pack-deck.go .pc-sway { animation: crSway 4.8s ease-in-out var(--b-sway) infinite; }
 @keyframes crDrop {
   0% { transform: translateY(calc(var(--pc-w) * -1.5966)) scale(.86); opacity: 0; }

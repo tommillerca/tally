@@ -1,5 +1,6 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG, dayIsUnwitnessed } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, storageStatus, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG, dayIsUnwitnessed } from './db.js';
+import { takeSaveInterruption, interruptionCopy, writeFailureCopy, ERASED_COPY } from './save-disclosure.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
@@ -131,33 +132,53 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
  * loss, silent and permanent. That format is not exotic either, it is the
  * format THIS APP prints: every kcal readout goes through toLocaleString().
  *
- * Accept plain decimals and a single decimal comma. In dot-grouping locales,
- * read that locale's grouped output back as thousands (L4). Comma grouping
- * keeps its existing explicit refusal because it overlaps decimal-comma input.
+ * Read the default Intl locale back, including its digits and separators.
+ * Locale syntax settles grouping versus decimals (L4, extended by R52-9).
+ * Otherwise accept plain decimals, but refuse ambiguous foreign grouping.
  *
  * `numParse` returns { ok, value } or { why } so callers can say WHICH kind of
  * wrong it was. `num` keeps the old null-or-number shape for the live-preview
  * call sites that must not nag on every keystroke. */
 const NUM_SHAPE = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/;
-/* `1,234` / `1,234.5` / `1,234,567`: digit grouping, and the exact shape where
-   the decimal-comma reading and the grouping reading disagree by 1000x. Never
-   guessed, always refused. */
-const NUM_GROUPED = /^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?$/;
 // L4: the default Intl locale is also the one used by the app's readouts.
-const NUM_DOT_GROUPED = /^[+-]?\d{1,3}(?:\.\d{3})+(?:,\d+)?$/;
-const NUM_LOCALE_DOT_GROUP = new Intl.NumberFormat().formatToParts(1234.5)
-  .some(p => p.type === 'group' && p.value === '.');
+// R52-9: derive the whole numeric shape from that same formatter, including
+// Indian grouping and localized signs/digits. Space grouping has three aliases.
+const NUM_LOCALE = new Intl.NumberFormat();
+const NUM_PARTS = NUM_LOCALE.formatToParts(-123456789.5);
+const NUM_SPACE = s => s.replace(/[\u00a0\u202f]/g, ' ');
+const NUM_ESCAPE = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const NUM_GROUP = NUM_SPACE(NUM_PARTS.find(p => p.type === 'group')?.value || '');
+const NUM_DECIMAL = NUM_PARTS.find(p => p.type === 'decimal')?.value || '.';
+const NUM_MINUS = NUM_PARTS.find(p => p.type === 'minusSign')?.value || '-';
+const NUM_DIGITS = new Map();
+for (let i = 0; i < 10; i++) {
+  NUM_DIGITS.set(NUM_LOCALE.formatToParts(i).find(p => p.type === 'integer').value, String(i));
+  NUM_DIGITS.set(String.fromCharCode(0x0660 + i), String(i));
+}
+const NUM_INTEGERS = NUM_PARTS.filter(p => p.type === 'integer');
+const NUM_PRIMARY = Array.from(NUM_INTEGERS.at(-1).value).length;
+const NUM_SECONDARY = Array.from(NUM_INTEGERS.at(-2)?.value || NUM_INTEGERS.at(-1).value).length;
+const NUM_GROUPED = NUM_GROUP ? `\\d{1,${NUM_SECONDARY}}(?:${NUM_ESCAPE(NUM_GROUP)}\\d{${NUM_SECONDARY}})*${NUM_ESCAPE(NUM_GROUP)}\\d{${NUM_PRIMARY}}` : '(?!)';
+const NUM_LOCAL_SHAPE = new RegExp(`^[+-]?(?:(?:\\d+|${NUM_GROUPED})(?:${NUM_ESCAPE(NUM_DECIMAL)}\\d+)?|${NUM_ESCAPE(NUM_DECIMAL)}\\d+)$`);
+// A foreign single separator before three digits can mean either a decimal
+// or thousands. Only the locale branch above can settle that disagreement.
+const NUM_AMBIGUOUS = /^[+-]?\d{1,3}(?:([.,])\d{3})+(?:[.,]\d+)?$/;
 function numParse(v) {
   if (typeof v === 'number') return isFinite(v) ? { ok: true, value: v } : { why: 'shape' };
-  const s = String(v ?? '').trim();
+  // Intl may prefix a signed number with a bidi mark. Do not strip marks from
+  // inside a number, where doing so could silently join separate digit runs.
+  let s = NUM_SPACE(String(v ?? '').trim()).replace(/^[\u061c\u200e\u200f]+/, '');
   if (!s) return { why: 'empty' };
-  if (NUM_LOCALE_DOT_GROUP && NUM_DOT_GROUPED.test(s)) {
-    const value = Number(s.replace(/\./g, '').replace(',', '.'));
-    return isFinite(value) ? { ok: true, value } : { why: 'shape' };
+  s = Array.from(s, c => NUM_DIGITS.get(c) ?? c).join('');
+  if (s.startsWith(NUM_MINUS)) s = '-' + s.slice(NUM_MINUS.length);
+  let t;
+  if (NUM_LOCAL_SHAPE.test(s)) {
+    t = (NUM_GROUP ? s.split(NUM_GROUP).join('') : s).replace(NUM_DECIMAL, '.');
+  } else {
+    if (NUM_AMBIGUOUS.test(s)) return { why: 'grouped' };
+    const commas = (s.match(/,/g) || []).length;
+    t = commas === 1 && !s.includes('.') ? s.replace(',', '.') : s;
   }
-  if (NUM_GROUPED.test(s)) return { why: 'grouped' };
-  const commas = (s.match(/,/g) || []).length;
-  const t = commas === 1 && !s.includes('.') ? s.replace(',', '.') : s;
   if (!NUM_SHAPE.test(t)) return { why: 'shape' };
   const x = Number(t);
   return isFinite(x) ? { ok: true, value: x } : { why: 'shape' };
@@ -183,7 +204,7 @@ function readNum(input, { name, min = null, max = null, optional = false, blank 
   const refuse = msg => { toast(msg, 3600); input?.focus(); return { ok: false }; };
   if (!r.ok) {
     if (r.why === 'empty') return optional ? { ok: true, value: blank } : refuse(`${name} is required`);
-    if (r.why === 'grouped') return refuse(`${name}: leave out the thousands comma, type 1234 not 1,234`);
+    if (r.why === 'grouped') return refuse(`${name}: ambiguous separators; use your locale’s number format or omit thousands separators`);
     return refuse(`${name}: digits only, like 1234 or 12.5`);
   }
   if (min != null && r.value < min) return refuse(`${name} must be at least ${min}${unit}`);
@@ -1410,7 +1431,7 @@ function renderAccountRecovery(status = saveRecoveryStatus) {
   markBooted();
   $('#tabbar').style.display = 'none';
   const gear = $('#gearBtn'); if (gear) gear.hidden = true;
-  el.innerHTML = `<div class="onb onb-in"><div class="onb-scroll">
+  el.innerHTML = `<div class="onb onb-in"${known ? ' data-severity="error" role="alert"' : ''}><div class="onb-scroll">
     <h1>${known ? 'RECOVER YOUR BONES' : 'PLAYED BEFORE?'}</h1>
     <p class="onb-sub">${known
       ? 'Your saved progress is missing or could not be read. Restore your backup before continuing.'
@@ -1439,8 +1460,37 @@ function renderAccountRecovery(status = saveRecoveryStatus) {
   });
 }
 
+function renderStorageUnavailable() {
+  const el = $('#screen');
+  el.innerHTML = `<div class="onb onb-in" role="alert"><div class="onb-scroll">
+    <h1>Storage is unavailable</h1>
+    <p class="onb-sub">Boneheadz cannot open this browser's local storage for saved progress. Private browsing, blocked site data, or a damaged store may be the cause.</p>
+    <p class="onb-sub">The app cannot continue until storage is available. Allow site data for this site, or reopen it outside private browsing, then reload. Avoid clearing site data if you have progress on this device.</p>
+    </div><div class="onb-foot"><button class="btn" id="storageRetry">Reload</button></div></div>`;
+  $('#tabbar').style.display = 'none';
+  const gear = $('#gearBtn'); if (gear) gear.hidden = true;
+  $('#storageRetry').addEventListener('click', () => location.reload());
+  el.scrollTop = 0;
+  el.classList.add('screen-in');
+  markBooted();
+}
+
 async function boot() {
   if (S.demo) { useDbName('tally-demo'); document.body.insertAdjacentHTML('beforeend', '<div class="demo-badge">DEMO</div>'); }
+  // Explain and stop before reads, migrations, cloud recovery, or lifecycle setup.
+  if (!(await storageStatus()).ok) { renderStorageUnavailable(); return; }
+  // Register before boot can write, including migrations and demo seeding.
+  const interruptedSave = takeSaveInterruption();
+  onWriteFailure(({ store, key, op, quiet, quota, error }) => {
+    quota ||= storageIsFull(error);
+    try { trackEvent('write_fail', { store, key, op, quiet, quota }); } catch { /* reporting cannot hide the disclosure */ }
+    if (quiet) return;
+    const now = Date.now();
+    if (now - lastWriteFailToast < WRITE_FAIL_QUIET_MS) return;
+    lastWriteFailToast = now;
+    toast(writeFailureCopy(quota), 8000, { error: true });
+  });
+  if (interruptedSave) toast(interruptionCopy({ save: interruptedSave }), 8000, { error: true });
   saveWitness.settings ||= !!S.settings;
   S.settings = await kvGet('settings');
   saveWitness.settings ||= !!S.settings;
@@ -1518,43 +1568,9 @@ async function boot() {
   try {
     if (sessionStorage.getItem(ERASED_FLAG)) {
       sessionStorage.removeItem(ERASED_FLAG);
-      toast('Everything on this device was erased.', 4600);
+      toast(ERASED_COPY, 8000, { error: true });
     }
   } catch { /* private mode */ }
-  /* THE OTHER HALF OF THE WRITE-FAILURE SEAM. js/db.js routes every rejected
-     write through one reporter and then RE-THROWS, so callers keep their control
-     flow, but the reporter only calls a sink and nothing registered one: the
-     seam shipped in v425 with `writeFailureSink` permanently null, so a lost
-     meal, weight, crate or coin row was still silent. This is the consumer, and
-     it lives here because js/app.js is what owns the toast.
-
-     LOUD ONLY: db.js's `quiet` is true for ambient bookkeeping the app re-derives next
-     launch, and false for anything the player did or earned and could name
-     afterwards. A key nobody classified arrives LOUD, which is the right way
-     round (anti-regression rule 8).
-
-     THROTTLED, because a failing database does not fail once. A full disk
-     rejects every write in the same second, and toast() caps its queue at four,
-     which is still four identical lectures. One message per WRITE_FAIL_QUIET_MS
-     is enough to tell the player something is wrong; the telemetry row is what
-     counts them.
-
-     THE TELEMETRY CALL CANNOT RECURSE, and that is db.js's guarantee rather than
-     luck: track() queues by writing kv 'evq', so a quota failure makes that write
-     fail too, and reportWriteFailure returns early for exactly `kv`/`evq` before
-     it reaches any sink. Checked in js/db.js before this was written. */
-  onWriteFailure(({ store, key, op, quiet, quota, error }) => {
-    // Some engines report a full disk as DataError: Failed to write blobs (IOError).
-    quota ||= storageIsFull(error);
-    trackEvent('write_fail', { store, key, op, quiet, quota });
-    if (quiet) return;
-    const now = Date.now();
-    if (now - lastWriteFailToast < WRITE_FAIL_QUIET_MS) return;
-    lastWriteFailToast = now;
-    toast(quota
-      ? 'Your phone is out of storage, so that did not save. Free some space, then export a backup from Settings.'
-      : 'That did not save. If it keeps happening, export a backup from Settings.', 4600);
-  });
   S.sounds = (await kvGet('sounds', true)) !== false;
   S.haptics = (await kvGet('haptics', true)) !== false;
   setHaptics(S.haptics);
@@ -1651,6 +1667,21 @@ async function boot() {
     return;
   }
   if (await guardSaveBeforeInit()) return;
+  const interruptedFight = await kvGet('pitFight', null);
+  const interruptedDraft = await kvGet('addDraft', null);
+  const unfinished = interruptionCopy({ fight: interruptedFight, draft: interruptedDraft });
+  // Once per unchanged interrupted action in this tab, including later reloads.
+  if (unfinished) {
+    let seen = false;
+    try {
+      const evidence = JSON.stringify([interruptedFight?.phase, interruptedFight?.mode, interruptedFight?.at, interruptedDraft?.ts]);
+      seen = sessionStorage.getItem('tally-interruption-seen') === evidence;
+      sessionStorage.setItem('tally-interruption-seen', evidence);
+    } catch { /* unavailable storage: show the evidence-backed notice */ }
+    if (!seen) toast(unfinished, 10000, { error: true });
+  } else {
+    try { sessionStorage.removeItem('tally-interruption-seen'); } catch { /* unavailable */ }
+  }
 
   /* FIRST PAINT COMES BEFORE THE AWARDING WORK, NOT AFTER IT.
    *
@@ -3711,30 +3742,51 @@ function bgRefresh() {
 let toastTimer = 0;
 /* One write-failure message per this window. See the sink in boot(). */
 const WRITE_FAIL_QUIET_MS = 8000;
-let lastWriteFailToast = 0;
+let lastWriteFailToast = -Infinity;
 const toastQ = [];
 let toastBusy = false;
-function toast(msg, ms = 2200) {
-  toastQ.push({ msg, ms });
-  if (toastQ.length > 4) toastQ.splice(0, toastQ.length - 4); // never a backlog lecture
+let activeToast = null;
+let toastGeneration = 0;
+function toast(msg, ms = 2200, { error = false } = {}) {
+  if (error && (activeToast?.msg === msg || toastQ.some(job => job.error && job.msg === msg))) return;
+  const job = { msg, ms, error };
+  if (error) {
+    // Failure notices cannot be evicted by the four-message routine backlog.
+    const firstRoutine = toastQ.findIndex(item => !item.error);
+    toastQ.splice(firstRoutine < 0 ? toastQ.length : firstRoutine, 0, job);
+    if (toastBusy && !activeToast?.error) {
+      clearTimeout(toastTimer);
+      toastGeneration++; // invalidate an already scheduled exit animation
+      toastBusy = false;
+    }
+  } else {
+    toastQ.push(job);
+    while (toastQ.filter(item => !item.error).length > 4) {
+      toastQ.splice(toastQ.findIndex(item => !item.error), 1);
+    }
+  }
   if (!toastBusy) nextToast();
 }
 function nextToast() {
   const t = $('#toast');
   const job = toastQ.shift();
-  if (!job) { toastBusy = false; return; }
+  if (!job) { toastBusy = false; activeToast = null; return; }
   toastBusy = true;
-  /* aria-live and role are in index.html now. Attaching them here meant the
-     region came into existence in the same tick as the message it carried, so
-     the first toast of a session announced to nobody. */
+  activeToast = job;
+  const generation = ++toastGeneration;
   t.classList.remove('out');
+  t.classList.toggle('toast-error', job.error);
+  t.dataset.severity = job.error ? 'error' : 'status';
   t.textContent = job.msg;
   t.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
+    if (generation !== toastGeneration) return;
     t.classList.add('out');
-    // exit animation, then the next message; reduced-motion gets the instant path
-    const done = () => { t.hidden = true; t.classList.remove('out'); nextToast(); };
+    const done = () => {
+      if (generation !== toastGeneration) return;
+      t.hidden = true; t.classList.remove('out'); nextToast();
+    };
     if (reducedMotion) done(); else setTimeout(done, 180);
   }, job.ms);
 }
@@ -9289,8 +9341,8 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
       qin.addEventListener('input', e => { amtRaw = e.target.value; sel.qty = Math.max(0, num(e.target.value) || 0); preview(); });
       qin.addEventListener('focus', () => qin.select());
       qin.addEventListener('blur', () => {
-        // P2 playtest: "1,234" is refused by numParse (grouped, ambiguous with a
-        // decimal comma) but blur used to clamp the FIELD to 0.25 regardless,
+        // P2 playtest: malformed text is refused by numParse, but blur used
+        // to clamp the FIELD to 0.25 regardless,
         // so it looked valid while amtRaw (what Add actually checks) still held
         // the refused text. Leave invalid text on screen; only a genuinely
         // blank field gets the 0.25 default.
@@ -9316,8 +9368,8 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
     });
   }
 
-  /* P2 playtest: while amtRaw holds text numParse refuses (e.g. "1,234",
-     grouped/ambiguous with a decimal comma), sel.qty/grams already sit at
+  /* P2 playtest: while amtRaw holds text numParse refuses (e.g. "1,23,4"),
+     sel.qty/grams already sit at
      whatever the live-typing coercion left them (usually 0), so the old
      preview showed "0 kcal" and "0 x 1 large": a valid-looking answer the
      draft does not actually hold. Blank it instead, same signal the Add
@@ -9407,7 +9459,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
       const amtEl = $(sel.mode === 'grams' ? '#gramsIn' : '#qtyIn', wrap);
       if (!raw.ok && raw.why !== 'empty') {
         toast(raw.why === 'grouped'
-          ? `${amt.name}: leave out the thousands comma, type 1234 not 1,234`
+          ? `${amt.name}: ambiguous separators; use your locale’s number format or omit thousands separators`
           : `${amt.name}: digits only, like 150 or 1.5`, 3600);
         amtEl?.focus();
         return;
@@ -19172,7 +19224,12 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
          deck for the rest of the reveal, still composited on every frame, for
          a picture that has already sunk to nothing. Dropping the subtree on
          the first advance is the cheapest thing the flick can be given. */
-      if (!first && opening) { $('.pack-crate', wrap)?.remove(); $('.pack-bloom', wrap)?.remove(); }
+      if (!first && opening) {
+        $('.pack-crate', wrap)?.remove(); $('.pack-bloom', wrap)?.remove();
+        // A slow opening decode can have pushed these beats inline. Release
+        // that opening-only schedule so browsing uses its own CSS timings.
+        for (const key of ['--b-sink', '--b-card', '--b-count', '--b-title', '--b-foot', '--b-sway', '--b-spark']) reveal.style.removeProperty(key);
+      }
       // .opening runs the crate beats; .browsing collapses every delay to one
       // beat. r-<rarity> carries --rar / --rar-rgb to the dots, bloom and haze.
       /* KEEP pix-crate. This line reassigns className wholesale on every card, so
@@ -19218,7 +19275,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
          two frames to have a previous value to interpolate from. The timer is
          the floor under it. ClassList.add is idempotent. */
       const go = () => {
-        const add = () => deck.classList.add('go');
+        const add = () => { if (!flung && reveal.isConnected) deck.classList.add('go'); };
         requestAnimationFrame(() => requestAnimationFrame(add));
         setTimeout(add, 300);
       };
@@ -19246,15 +19303,18 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         // panel and fill itself a moment later, which robbed the payoff. Capped so
         // a slow asset delays the reveal rather than blocking it forever.
         Promise.race([hydratePackArt(deck), new Promise(r => setTimeout(r, 700))]).then(() => {
+          if (flung || !reveal.isConnected) return;
           go(); landed(tier);
-          // past crNext's own .42s rise (+ --b-card .04s), so the light comes
-          // back only once the card has finished arriving
-          at(480, () => burst?.resume());
+          // The move now overlaps: 20ms delay + 380ms rise. Keep the shader
+          // paused through the audit's full 520ms flick window, and never let
+          // an older card's timer resume it during a newer throw.
+          at(560, () => { if (!flung && reveal.isConnected) burst?.resume(); });
         });
       }
 
       let sx = 0, dx = 0, pid = null, flung = false;
       const settle = () => {
+        if (flung) return;
         tilt.style.transition = 'transform .3s cubic-bezier(.22,1,.36,1)';
         tilt.style.transform = '';
         sway.style.animation = ''; sway.style.transition = ''; sway.style.transform = '';
@@ -19280,12 +19340,36 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
            had failed and dismissed the screen by accident. Same flight either
            way; only what happens at the end of it differs. */
         const last = i >= cards.length - 1;
+        let outgoing = null;
+        if (!last && !reduced) {
+          // Keep the actual decoded card alive outside the deck renderCard
+          // rebuilds. Freeze its inner pose before .opening becomes .browsing
+          // so the departing first card cannot restart with crNext mid-flight.
+          const rise = $('.pc-rise', tilt);
+          const riseTransform = getComputedStyle(rise).transform;
+          const swayTransform = getComputedStyle(sway).transform;
+          outgoing = document.createElement('div');
+          outgoing.className = 'pack-deck pack-outgoing';
+          outgoing.setAttribute('aria-hidden', 'true');
+          for (const key of ['--rar', '--rar-rgb']) outgoing.style.setProperty(key, getComputedStyle(reveal).getPropertyValue(key));
+          rise.style.animation = 'none'; rise.style.transform = riseTransform; rise.style.visibility = 'visible';
+          sway.style.animation = 'none'; sway.style.transform = swayTransform;
+          deck.parentNode.appendChild(outgoing);
+          outgoing.appendChild(tilt);
+          // Commit the same starting pose in its new layer before transitioning.
+          void tilt.offsetWidth;
+        }
+        delete reveal.dataset.landed;
         tilt.style.transition = 'transform .34s cubic-bezier(.3,.9,.4,1), opacity .34s ease-out';
         tilt.style.transform = `translateX(${Math.round(dir * innerWidth * 1.2)}px) rotate(${dir * 15}deg)`;
         tilt.style.opacity = '0';
-        at(330, last ? done : advance);
+        if (outgoing) {
+          at(340, () => outgoing.remove());
+          at(0, advance); // the next rise overlaps the readable outgoing flight
+        } else at(330, last ? done : advance);
       };
       tilt.addEventListener('pointerdown', e => {
+        if (flung) return;
         /* S6: setPointerCapture retargets the compat mouse events too, so a
            click that lands on #giftShopLink (or any button in the stats band)
            would fire with e.target === tilt, not the button -- the exact
@@ -23857,7 +23941,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v517'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v518'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

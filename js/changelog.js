@@ -4,6 +4,15 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 518, date: '2026-09-08', title: 'It tells you what happened', items: [
+    'Opening a crate with several things in it used to sit on the empty chest between each one. The wait between items is about half what it was.',
+    'If the app cannot use your phone\'s storage at all, it used to show a permanently blank screen with no explanation. It now says what is wrong and offers to reload.',
+    'When something goes wrong saving, or the app is closed mid-save, it says so. It used to lose the work in complete silence.',
+    'A server problem while restoring an account used to be reported as "No account found for that recovery ID.", on the screen that warns it is about to replace what is on your phone. A server fault and a genuinely missing account now say different things, and waiting is offered.',
+    'Numbers you type are read the way your language writes them. French and Arabic number formats were refused outright, including the app\'s own printed output.',
+    'Text sizes now follow your phone\'s font-size setting instead of ignoring it.',
+  ] },
+
   { n: 517, date: '2026-09-08', title: 'Nothing you earned goes missing', items: [
     'If the app was killed at exactly the wrong moment you could pay for something in the Shop and not get it, lose a Pit charge along with its coins and XP, or log a meal that never paid its XP. Ten dinners could add up to no XP at all. Those three are closed, and a meal that was interrupted now collects its XP the next time you open the app.',
     'Two phones both earning offline no longer overwrite each other. Whichever one had moved a number further used to keep its whole version of everything, and the other phone\'s entire session was deleted with no warning.',

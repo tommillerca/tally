@@ -66,8 +66,15 @@ try {
     ['red-first-run-suppressed', s => replaceOnce(s, 'if (returning && !forced) return;', 'if (!forced) return;'), 'FAIL M5 splash'],
     ['red-old-splash-gate', s => replaceOnce(s, 'if (returning && !forced) return;', 'if (!S.settings) return;'), 'FAIL M5 splash'],
     ['red-returning-splash', s => replaceOnce(s, 'if (returning && !forced) return;', ''), 'FAIL M5 splash'],
+    /* v518 (L6): the blunt cap became a ROUTINE-only cap, so an error
+       disclosure can no longer be evicted by routine toast spam. Same
+       behaviour this row has always guarded (no backlog lecture), new source
+       text. Re-pointed at the assertion, deliberately, rather than deleted:
+       deleting the loop must still go red. */
     ['red-toast-cap-deleted', s => replaceOnce(s,
-      '  if (toastQ.length > 4) toastQ.splice(0, toastQ.length - 4); // never a backlog lecture\n', ''), 'FAIL M5 toast'],
+      `    while (toastQ.filter(item => !item.error).length > 4) {
+      toastQ.splice(toastQ.findIndex(item => !item.error), 1);`,
+      '    if (false) {'), 'FAIL M5 toast'],
   ];
   for (const [name, mutate, message] of variants) {
     writeFileSync(auditOutputPath(appPath), mutate(original));
