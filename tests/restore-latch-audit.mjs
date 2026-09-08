@@ -152,7 +152,8 @@ ok('GUARD-RECEIPT  coins are not refunded either, under the same forced merge (c
    more crate and push again so the server holds A's latest state. */
 await loot.grantCrate('golden', 'level-up');
 const crateCountA = (await db.all('inv')).filter(r => r.kind === 'crate').length;
-await kvSet('coins', 500);
+// Keep the production currency history coherent while seeding the newer save.
+await loot.coinsAdd(500 - await kvGet('coins', 0));
 await social.pushBackup('audit');
 const identityA = await kvGet('identity', null);
 

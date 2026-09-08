@@ -1,0 +1,18 @@
+ok   SETUP crate: the kill switch was armed by the take  armed=true killed=0
+ok   CRASH crate: the crate is gone AND the whole hand is on disk  crate gone=true, hand landed=true: results=consumable,consumable,cos coins=18
+ok   REBOOT crate: a death before the take leaves the crate unopened and unpaid  threw=true crate present=true coins=0
+ok   REBOOT crate: the next open, with the process alive, pays in full  coins=23 results=3
+ok   REBOOT crate: two overlapping opens of one crate pay exactly once  wins=1 coins=16 (winner said 16)
+ok   SETUP egg: the kill switch was armed by the take  armed=true killed=1
+ok   CRASH egg: the egg is gone AND the pet is minted in the same transaction  egg gone=true, pet minted=true, instances=["C1"] cos row=true bank=true pets=true
+ok   RNG hatchEgg draws exactly 1 + hatchChance species + 1 random values, as before the reorder  draws=2 want 2 (H=0)
+ok   SETUP gear: the kill switch was armed by the take  armed=true killed=0
+ok   CRASH gear: the piece is gone AND the dust is paid with its revision  row gone=true, bonedust 20 (want 20), dustRev 20
+ok   SETUP salvageInstance: the kill switch was armed by the take  armed=true killed=1
+ok   CRASH salvageInstance: the copy is gone AND dust, ownership teardown and receipt are on disk  copy gone=true, bonedust 10 (want 10), cos row present=false, invTaken=true, pets has species=false (call threw "null")
+ok   SETUP salvagePet: the kill switch was armed by the take  armed=true killed=1
+ok   CRASH salvagePet: the copy is gone AND dust, ownership teardown and receipt are on disk  copy gone=true, bonedust 10 (want 10), cos row present=false, invTaken=true, pets has species=false (call threw "null")
+ok   SETUP legacy: the kill switch was armed by the take  armed=true killed=0
+ok   CRASH legacy: the egg-crate is gone AND the egg exists (count conserved)  legacy rows=0, eggs=1
+
+all clean

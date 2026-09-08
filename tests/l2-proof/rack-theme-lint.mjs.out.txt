@@ -1,0 +1,12 @@
+PASS  SAMPLE the theme parsed into rungs, prices and a dust ladder  | 8 rungs, 8 dust prices, 370 catalogue items
+PASS  SAMPLE every rung parsed with its ids  | 6000x3 4800x3 4000x3 3000x3 2000x3 1800x3 1400x3 300x3
+PASS  EXISTS every id on the rack is a real catalogue item  | 24 ids all resolve
+PASS  COLLIDE no art id appears in two rungs, so indexOf cannot price the wrong one  | 24 distinct ids
+PASS  LENGTH the dust ladder has exactly one price per rung  | 8 dust prices for 8 rungs
+PASS  LADDER coins-per-dust is strictly single-directional, dearest to cheapest  | 15, 13.714, 12.5, 11.538, 10.526, 10, 9.333, 8.571
+PASS  ANCHOR the rack carries one piece a 340-coin starting wallet can afford  | cheapest rung is 300
+PASS  RUNG-SLOT every rung sells ONE body part, so a reroll cannot change what the tile is  | 8 single-slot rungs
+PASS  ADJACENT no two neighbouring tiles sell the same body part  | H B IL T FW P S U
+PASS  AURA the aura carrier is a real item and is not for sale on the rack  | carrier IR7-3, in catalogue true, on the rack false
+
+RACK THEME LINT: the theme is well-formed and safe to drop art into

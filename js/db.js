@@ -299,6 +299,78 @@ function guard(store, val, op, run) {
   return run().catch(err => { reportWriteFailure(store, val, op, err); throw err; });
 }
 
+/* L2 currency history. A balance is a projection of one shared opening balance
+   and a union of signed mutations. Replays add nothing; independent credits and
+   debits both survive. The opening id is exported with the save, never a device
+   id copied into two writers. There is deliberately no history pruning without
+   an acknowledgement protocol from every offline device. */
+const CURRENCY = { coins: 'coinsRev', bonedust: 'dustRev' };
+const historyKey = k => `${k}History`;
+function currencyTotal(h) {
+  return h.balance + Object.values(h.ops).reduce((n, d) => n + d, 0);
+}
+function currencyHistory(h) {
+  return h && h.format === 1 && typeof h.id === 'string' && h.id.length > 0 &&
+    Number.isFinite(h.balance) && h.balance >= 0 && Number.isFinite(h.revision) && h.revision >= 0 &&
+    h.ops && typeof h.ops === 'object' && !Array.isArray(h.ops) &&
+    Object.values(h.ops).every(Number.isFinite) && Number.isFinite(currencyTotal(h)) && currencyTotal(h) >= 0;
+}
+function openingHistory(balance, revision) {
+  return { format: 1, id: balance === 0 && revision === 0 ? 'empty' : crypto.randomUUID(),
+    balance, revision, ops: {} };
+}
+// Queue reads BEFORE the balance updater, including before its sibling revision
+// updater. Everything below runs within the caller's existing transaction.
+function currencyRecorder(os, k, receipt = null) {
+  if (!Object.hasOwn(CURRENCY, k)) return () => {};
+  const hg = os.get(historyKey(k)), rg = os.get(CURRENCY[k]);
+  return (before, next) => {
+    const balance = Number(before) || 0, revision = Number(rg.result?.v) || 0;
+    const h = hg.result?.v ?? openingHistory(balance, revision);
+    if (!currencyHistory(h) || currencyTotal(h) !== balance) {
+      throw new Error(`Cannot update ${k}: currency history does not match the balance.`);
+    }
+    const id = receipt || crypto.randomUUID();
+    const delta = next - balance;
+    if (Object.hasOwn(h.ops, id)) throw new Error(`Cannot repeat currency receipt ${id}.`);
+    const updated = { ...h, ops: { ...h.ops, [id]: delta } };
+    if (!currencyHistory(updated)) throw new Error(`Cannot update ${k}: invalid currency amount.`);
+    os.put({ k: historyKey(k), v: updated });
+  };
+}
+function mergeCurrencyHistory(k, local, file) {
+  const rev = CURRENCY[k], hk = historyKey(k);
+  const a = local.get(hk), b = file.get(hk);
+  const fail = () => { throw new Error(`Cannot merge ${k}: missing or incompatible currency history. Both saves must be retained for recovery.`); };
+  for (const [rows, h] of [[local, a], [file, b]]) {
+    if (h !== undefined && (!currencyHistory(h) || !rows.has(k) || currencyTotal(h) !== rows.get(k))) fail();
+  }
+  if (!a && !b) return null; // Legacy-only snapshots retain the documented revision fallback.
+  if (!file.has(k)) return a ? [{ k: hk, v: a }] : fail();
+  if (!local.has(k)) return b ? [{ k: hk, v: b }] : fail();
+  let h;
+  if (a && b) {
+    if (a.id !== b.id || a.balance !== b.balance || a.revision !== b.revision) fail();
+    const ops = Object.assign(Object.create(null), a.ops);
+    for (const [id, delta] of Object.entries(b.ops)) {
+      if (Object.hasOwn(ops, id) && ops[id] !== delta) fail();
+      ops[id] = delta;
+    }
+    h = { ...a, ops };
+  } else {
+    h = a || b;
+    const legacy = a ? file : local;
+    // An untracked copy of the opening snapshot or this exact projection adds
+    // nothing. Anything else is ambiguous, so do not overwrite either session.
+    const balance = legacy.get(k), revision = Number(legacy.get(rev)) || 0;
+    const tracked = a ? local : file;
+    if (!((balance === h.balance && revision === h.revision) ||
+        (balance === currencyTotal(h) && revision === (Number(tracked.get(rev)) || 0)))) fail();
+  }
+  if (!currencyHistory(h)) fail(); // Concurrent spends cannot exceed the shared wallet.
+  return [{ k, v: currencyTotal(h) }, { k: rev, v: Math.max(Number(local.get(rev)) || 0, Number(file.get(rev)) || 0) }, { k: hk, v: h }];
+}
+
 /* ATOMIC INSERT-IF-ABSENT. Returns true only for the caller whose row landed.
  *
  * `add` (not `put`) fails with ConstraintError when the key is taken, and the
@@ -372,11 +444,12 @@ export function claimAndPay(store, row, { kv = {}, puts = [] } = {}) {
       try {
         const os = kvKeys.length ? t.objectStore('kv') : null;
         for (const k of kvKeys) {
+          const record = currencyRecorder(os, k, `claim:${store}:${row.key ?? row.k ?? row.id}:${k}`);
           const g = os.get(k);
           g.onsuccess = () => {
             try {
               const next = kv[k](g.result ? g.result.v : undefined);
-              if (next !== undefined) os.put({ k, v: next });
+              if (next !== undefined) { record(g.result?.v, next); os.put({ k, v: next }); }
             } catch (e) { die(e); }
           };
         }
@@ -461,11 +534,12 @@ function atomic({ take = null, kv = {}, puts = [], dels = [] }, op) {
       try {
         const os = kvKeys.length ? t.objectStore('kv') : null;
         for (const k of kvKeys) {
+          const record = currencyRecorder(os, k, take ? `take:${take.store}:${take.key}:${k}` : null);
           const g = os.get(k);
           g.onsuccess = () => {
             try {
               const next = kv[k](g.result ? g.result.v : undefined);
-              if (next !== undefined) os.put({ k, v: next });
+              if (next !== undefined) { record(g.result?.v, next); os.put({ k, v: next }); }
             } catch (e) { die(e); }
           };
         }
@@ -514,12 +588,13 @@ export function kvUpdate(k, fn, fallback = null) {
   return guard('kv', k, 'kvUpdate', () => open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction('kv', 'readwrite');
     const os = t.objectStore('kv');
+    const record = currencyRecorder(os, k);
     const g = os.get(k);
     let next;
     let threw = null;
     g.onsuccess = () => {
       const cur = g.result ? g.result.v : fallback;
-      try { next = fn(cur); } catch (e) { threw = e; try { t.abort(); } catch { /* already going */ } return; }
+      try { next = fn(cur); if (next !== undefined) record(cur, next); } catch (e) { threw = e; try { t.abort(); } catch { /* already going */ } return; }
       if (next !== undefined) os.put({ k, v: next });
     };
     t.oncomplete = () => resolve(next);
@@ -557,12 +632,13 @@ export function kvUpdateMulti(updaters, fallbacks = {}) {
     const out = {};
     let threw = null;
     for (const k of keys) {
+      const record = currencyRecorder(os, k);
       const g = os.get(k);
       g.onsuccess = () => {
         if (threw) return;
         const cur = g.result ? g.result.v : (k in fallbacks ? fallbacks[k] : null);
         let next;
-        try { next = updaters[k](cur); } catch (e) { threw = e; try { t.abort(); } catch { /* already going */ } return; }
+        try { next = updaters[k](cur); if (next !== undefined) record(cur, next); } catch (e) { threw = e; try { t.abort(); } catch { /* already going */ } return; }
         out[k] = next;
         if (next !== undefined) os.put({ k, v: next });
       };
@@ -603,13 +679,15 @@ export function kvBumpRevisioned(k, revKey, n, { requireFunds = false } = {}) {
   return guard('kv', k, 'kvBumpRevisioned', () => open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction('kv', 'readwrite');
     const os = t.objectStore('kv');
+    const record = currencyRecorder(os, k);
     const bg = os.get(k), rg = os.get(revKey);
-    let pending = 2, next;
+    let pending = 2, next, threw;
     const write = () => {
       if (--pending) return;   // both reads are in; decide and put in one go
       const bal = Number(bg.result && bg.result.v) || 0;
       if (requireFunds && bal + n < 0) return;
       next = Math.max(0, bal + n);
+      try { record(bal, next); } catch (e) { threw = e; t.abort(); return; }
       os.put({ k, v: next });
       os.put({ k: revKey, v: (Number(rg.result && rg.result.v) || 0) + Math.max(1, Math.abs(n)) });
     };
@@ -617,7 +695,7 @@ export function kvBumpRevisioned(k, revKey, n, { requireFunds = false } = {}) {
     rg.onsuccess = write;
     t.oncomplete = () => resolve(next);
     t.onerror = () => reject(t.error);
-    t.onabort = () => reject(t.error || new Error('kvBumpRevisioned aborted'));
+    t.onabort = () => reject(threw || t.error || new Error('kvBumpRevisioned aborted'));
   })));
 }
 
@@ -949,10 +1027,37 @@ export async function dayGuardState() {
 }
 
 export async function exportAll() {
-  const [foods, log, weights, kv, xp, health, inv] = await Promise.all([
-    db.all('foods'), db.all('log'), db.all('weights'), db.all('kv'), db.all('xp'), db.all('health'), db.all('inv'),
-  ]);
-  return { app: 'tally', version: DB_VERSION, exportedAt: new Date().toISOString(), foods, log, weights, kv, xp, health, inv };
+  if (frozen) throw new Error(FROZEN_MSG);
+  const idb = await open();
+  return new Promise((resolve, reject) => {
+    const t = idb.transaction(STORES, 'readwrite');
+    const snapshot = { app: 'tally', version: DB_VERSION, exportedAt: new Date().toISOString() };
+    let threw;
+    for (const store of STORES) {
+      const g = t.objectStore(store).getAll();
+      g.onsuccess = () => {
+        snapshot[store] = g.result;
+        if (store !== 'kv') return;
+        try {
+          const rows = new Map(g.result.map(r => [r.k, r.v]));
+          for (const [k, rev] of Object.entries(CURRENCY)) {
+            if (rows.has(historyKey(k))) {
+              const h = rows.get(historyKey(k));
+              if (!currencyHistory(h) || currencyTotal(h) !== rows.get(k)) throw new Error(`Cannot export ${k}: currency history does not match the balance.`);
+              continue;
+            }
+            if (!rows.has(k)) continue;
+            const row = { k: historyKey(k), v: openingHistory(Number(rows.get(k)) || 0, Number(rows.get(rev)) || 0) };
+            t.objectStore('kv').put(row);
+            snapshot.kv.push(row);
+            bumpStore('kv');
+          }
+        } catch (e) { threw = e; t.abort(); }
+      };
+    }
+    t.oncomplete = () => resolve(snapshot);
+    t.onerror = t.onabort = () => reject(threw || t.error || new Error('Could not export storage'));
+  });
 }
 
 /* kv rows that belong to the DEVICE, not to the save.
@@ -1119,247 +1224,225 @@ export async function importAll(data, { replace = true } = {}) {
   const fileVersion = Number(data.version) || 0;
   if (fileVersion > DB_VERSION) throw new Error(`that backup was made by a newer version of the app (v${fileVersion}; this app reads v${DB_VERSION}). Update the app, then import it again. Your old data is unchanged.`);
   if (Array.isArray(data.kv)) validateRestoreKv(data.kv);
+  if (Array.isArray(data.kv)) {
+    const rows = new Map(data.kv.map(r => [r.k, r.v]));
+    for (const k of Object.keys(CURRENCY)) {
+      const h = rows.get(historyKey(k));
+      if (rows.has(historyKey(k)) && (!currencyHistory(h) || !rows.has(k) || currencyTotal(h) !== rows.get(k))) {
+        throw new Error(`that backup has damaged or unsupported ${k} history. Your old data is unchanged.`);
+      }
+    }
+  }
   const idb = await open();
   const declared = new Set(STORES.filter(s => Array.isArray(data[s])));
   const skipped = STORES.filter(s => !declared.has(s));
-  /* Read the device rows out here, not inside the transaction. An `await`
-     between the puts would let IDB auto-commit on the drained microtask
-     queue and we would be back to piecewise commit, which is exactly what
-     this function was rewritten to stop. */
+  // Read and decide under the same write lock as the final puts. A gameplay
+  // payout queued during import must never disappear behind a stale pre-read.
   let keptKv = [];
   let kvRows = data.kv;
-  if (declared.has('kv')) {
-    const payloadKeys = new Set(data.kv.map(r => r && r.k));
-    let localKv;
-    try { localKv = await db.all('kv'); }
-    catch (e) { throw new Error('the restore could not read storage. Your old data is unchanged. Try again.'); }
-    if (replace) keptKv = localKv.filter(r => DEVICE_KV.includes(r.k) && !payloadKeys.has(r.k));
-    /* MERGE: the payload never overwrites a device key this device holds
-       (see the DEVICE_KV header). Non-device keys keep payload-wins. */
-    if (!replace) {
-      const localKeys = new Set(localKv.map(r => r && r.k));
-      kvRows = data.kv.filter(r => !(r && DEVICE_KV.includes(r.k) && localKeys.has(r.k)));
-      /* QA round 34 P0: A BLOB OLDER THAN THE LOCAL COIN LEDGER DOES NOT GET TO
-         WIN. 'coins' is deliberately not in DEVICE_KV (a genuine restore, e.g.
-         adopting a different identity's account, SHOULD hand over that
-         identity's balance), so on an ordinary merge the payload's 'coins' row
-         always overwrote the local one. That is exactly backwards the one time
-         the blob is older than the device's own ledger: the device that just
-         registered pushes its starting balance, the player spends some of it,
-         and the next boot's pull (or any later merge of that same stale blob)
-         handed the pre-spend number straight back, a silent refund.
-         'coinsRev' (js/loot.js coinsAdd) is a plain counter bumped on every
-         real coin change and carried in the same blob 'coins' is, so it is the
-         local proxy for "has this ledger moved since this blob was written"
-         without needing the server-side blob version QA round 34's follow-up
-         (docs/ROADMAP.md) will add. Only ever refuses the payload; never forces
-         local coins UP either, so a genuine restore (payload's coinsRev is
-         equal or ahead, including every file that predates 'coinsRev' and
-         therefore reads 0) is untouched. Scoped to !replace: restoreDailyBackup
-         calls this with replace:true specifically TO roll coins back to an
-         older, known-good number, and this guard must never fight that. */
-      /* R38-13 (2026-09-06): a TIE here -- both devices moved the ledger the
-         SAME number of times, independently, offline -- used to fall straight
-         through to the payload winning regardless of which balance was
-         actually higher. Measured on two real devices: B's 25 silently
-         replaced by A's 10. coinsRev now bumps by the MAGNITUDE of each
-         change (js/loot.js coinsAdd), not a flat 1, so an exact tie means the
-         two devices' changes happened to sum to the exact same total, which
-         an independently divergent history essentially never produces by
-         accident. Any tie that still slips through (including two saves that
-         both predate coinsRev, which both read 0 via the fallback above and
-         always tie) keeps the HIGHER balance: "never lower a balance from a
-         stale blob" is the rule this whole app runs on, not "resolve every
-         conflict correctly", and a merge with no ordering signal left has no
-         way to do the latter. */
-      const keepRevisionedBalance = (balanceKey, revKey) => {
-        const localRev = Number((localKv.find(r => r.k === revKey) || {}).v) || 0;
-        const fileRev = Number((data.kv.find(r => r && r.k === revKey) || {}).v) || 0;
-        const localRow = localKv.find(r => r.k === balanceKey);
-        const fileRow = data.kv.find(r => r && r.k === balanceKey);
-        const localBalance = Number(localRow && localRow.v) || 0;
-        const fileBalance = Number(fileRow && fileRow.v) || 0;
-        if (localRev > fileRev || (localRev === fileRev && localBalance > fileBalance)) {
-          const localRevRow = localKv.find(r => r.k === revKey);
-          if (localRow) keptKv.push(localRow);
-          if (localRevRow) keptKv.push(localRevRow);
-        }
-      };
-      keepRevisionedBalance('coins', 'coinsRev');
-      /* 2026-09-06 (Codex audit of v485): Bone Dust had NO ordering signal at
-         all, so any older blob restored dust already spent or erased dust just
-         earned. 'dustRev' moves with 'bonedust' in the same transaction
-         (kvBumpRevisioned above) and rides the same rule. */
-      keepRevisionedBalance('bonedust', 'dustRev');
-      // Q1: each potion id is its own balance. Use the currency revision shape,
-      // so spending one kind cannot erase another kind earned on another device.
-      const localValue = k => localKv.find(r => r.k === k)?.v;
-      const fileValue = k => data.kv.find(r => r.k === k)?.v;
-      if (payloadKeys.has('potions')) {
-        const local = localValue('potions') || {}, file = fileValue('potions') || {};
-        const lr = localValue('potionsRev') || {}, fr = fileValue('potionsRev') || {};
-        const balance = {}, revisions = {};
-        for (const id of new Set([...Object.keys(local), ...Object.keys(file), ...Object.keys(lr), ...Object.keys(fr)])) {
-          const a = Number(lr[id]) || 0, b = Number(fr[id]) || 0;
-          const count = a > b ? (local[id] || 0) : b > a ? (file[id] || 0) : Math.max(local[id] || 0, file[id] || 0);
-          if (count > 0) balance[id] = count;
-          revisions[id] = Math.max(a, b);
-        }
-        keptKv.push({ k: 'potions', v: balance }, { k: 'potionsRev', v: revisions });
-      } else {
-        // A revision alone must not advance the ordering of an absent balance.
-        kvRows = kvRows.filter(r => r.k !== 'potionsRev');
-      }
-
-      // Ownership is a union by INSTANCE, minus permanent take receipts.
-      // Absence alone cannot distinguish a stale roster from a consumed copy.
-      const taken = new Set([...(localValue('petTaken') || []), ...(fileValue('petTaken') || [])]);
-      const roster = [...(localValue('petInst') || [])];
-      const matched = new Set();
-      const localCount = roster.length;
-      for (const row of fileValue('petInst') || []) {
-        // Match each local occurrence once, leaving corrupt duplicate iids for
-        // petInstances' existing healer instead of silently losing a copy.
-        const i = roster.findIndex((x, index) => index < localCount && !matched.has(index) &&
-          (row?.iid ? x?.iid === row.iid : JSON.stringify(x) === JSON.stringify(row)));
-        if (i < 0) {
-          roster.push(row);
-        } else {
-          matched.add(i);
-          const prior = roster[i];
-          roster[i] = row?.iid ? { ...prior, ...row } : row;
-          // Feeding earns lineage on the keeper, which a stale copy cannot undo.
-          if (typeof prior?.lineage === 'number' && typeof row?.lineage === 'number') {
-            roster[i].lineage = Math.max(prior.lineage, row.lineage);
-          }
-        }
-      }
-      const livePets = roster.filter(row => !taken.has(row?.iid));
-      if (payloadKeys.has('petInst') || taken.size) keptKv.push({ k: 'petInst', v: livePets });
-
-      // Steps are earned, never spent on a surviving iid. Keep the higher bank
-      // entry, like the existing high-water marks. Convert legacy species banks
-      // before comparing, or an old format marker would remigrate and zero iids.
-      const lv = Number(localValue('petLvlV')) || 0, fv = Number(fileValue('petLvlV')) || 0;
-      if (payloadKeys.has('petLvlSteps') || payloadKeys.has('petLvlV') || taken.size) {
-        const perInstance = Math.max(lv, fv) >= 2;
-        const normalize = (bank, version) => {
-          if (!perInstance || version >= 2) return bank || {};
-          return Object.fromEntries(livePets.filter(x => x?.iid && x?.sp && bank?.[x.sp] != null)
-            .map(x => [x.iid, bank[x.sp]]));
-        };
-        const local = normalize(localValue('petLvlSteps'), lv);
-        const file = normalize(fileValue('petLvlSteps'), fv);
-        const bank = { ...local };
-        for (const [iid, steps] of Object.entries(file)) bank[iid] = Math.max(bank[iid] || 0, steps);
-        if (perInstance) for (const iid of taken) delete bank[iid];
-        if (localValue('petLvlSteps') != null || fileValue('petLvlSteps') != null) keptKv.push({ k: 'petLvlSteps', v: bank });
-        keptKv.push({ k: 'petLvlV', v: Math.max(lv, fv) });
-      }
-      if (payloadKeys.has('petStepCredit')) keptKv.push({ k: 'petStepCredit',
-        v: Math.max(localValue('petStepCredit') || 0, fileValue('petStepCredit') || 0) });
-
-      /* THE TOMBSTONES ARE A UNION, NEVER PAYLOAD-WINS (2026-09-06). 'invTaken'
-         and 'crateTaken' are the receipts the inv filter below reads. Left as
-         an ordinary kv row the payload overwrote them on every pull, so device
-         B's own receipts vanished the moment it merged device A's blob, and
-         the next blob still carrying B's spent row revived it. A merge can
-         only ever ADD a receipt. */
-      // Purchase and delivery receipts are also permanent on a merge. A stale
-      // backup must not un-buy a look or forget that a code/grant was handled.
-      for (const k of MERGE_RECEIPTS) {
-        const local = localKv.find(r => r.k === k);
-        const file = data.kv.find(r => r && r.k === k);
-        if (!local) continue;
-        keptKv.push({ k, v: [...new Set([...(Array.isArray(local.v) ? local.v : []), ...(file && Array.isArray(file.v) ? file.v : [])])] });
-      }
-    }
-    /* THE DAY CEILINGS ONLY EVER GO UP, INCLUDING THROUGH A RESTORE, and
-       unlike DEVICE_KV above the payload does NOT get to win. Every other mark
-       in this app can be rewound by restoring an export taken before it moved
-       (see the clock-trust audit's closing FINDING), which for a ceiling on
-       future days is a one-click reset of the ceiling while the rows farmed
-       under it stay put. Keeping the higher of the two costs three lines and
-       takes that hole away on BOTH import paths, the Settings file restore and
-       the cloud pull, which is why this sits outside the `replace` branch. */
-    /* BOTH marks, not just the witness: rule 1's high-water mark is the other
-       half of the same ceiling, and leaving it payload-wins meant a cloud pull
-       could hand back a day the device had already climbed past. They are
-       ranked differently only because one stores an ordinal and the other
-       stores a date key. */
-    const keepHigher = (k, rank) => {
-      const local = localKv.find(r => r.k === k);
-      const file = data.kv.find(r => r && r.k === k);
-      if (local && rank(local.v) > rank(file ? file.v : null)) keptKv.push(local);
-    };
-    keepHigher(DAY_WITNESS_KEY, v => Number(v) || 0);
-    keepHigher('dayHighWater', v => dayOrdinal(v) || 0);
-  }
-  /* THE TAKE RECEIPT (QA round 34 P0). A merge (!replace) `os.put`s every
-     'inv' row the blob carries, which is right for a row this device has
-     never seen and wrong for one it already opened: a blob older than the
-     local save still carries the now-opened crate, and the put brings it
-     back. js/loot.js openCrate records every crate id it takes in kv
-     'crateTaken' (bounded, same idiom as js/social.js's 'grantsSeen'); a
-     merge never re-adds an inv row on that list. Scoped to !replace for the
-     same reason as the coinsRev guard above: a `replace:true` restore is
-     deliberately reverting to an older save, receipts and all, and must not
-     be second-guessed. */
-  let invRows = data.inv;
-  const takenInv = new Set();
-  if (!replace) {
-    /* R38-13 (2026-09-06): crateTaken above only ever covered openCrate. Every
-       OTHER place this file deletes an 'inv' row outright (a spent
-       consumable, a used Battle Charm, a pet's last cosmetic copy on
-       salvage/extinction) had no receipt at all, so the SAME stale-blob merge
-       revived them: measured, a spent Vigor Draught came back 1 -> 0 -> 1
-       through a two-device merge. Every one of those sites now goes through
-       takeInv above, which deletes the row and writes 'invTaken' in one
-       transaction, unbounded. The payload's own receipts count too (the union
-       the kv merge above keeps), so a row the OTHER device took never lands. */
-    const taken = takenInv;
-    for (const k of ['crateTaken', 'invTaken']) {
-      for (const id of ((await kvGet(k, [])) || [])) taken.add(id);
-      const file = Array.isArray(data.kv) && data.kv.find(r => r && r.k === k);
-      if (file && Array.isArray(file.v)) for (const id of file.v) taken.add(id);
-    }
-    if (taken.size && declared.has('inv')) invRows = data.inv.filter(r => !(r && taken.has(r.id)));
-  }
   return new Promise((resolve, reject) => {
-    let t;
+    let t, mergeError;
     try { t = idb.transaction(STORES, 'readwrite'); }
-    catch (e) { reject(new Error('the restore could not open storage. Your old data is unchanged. Try again.')); return; }
+    catch { reject(new Error('the restore could not open storage. Your old data is unchanged. Try again.')); return; }
     t.oncomplete = () => resolve({ foods: (data.foods || []).length, log: (data.log || []).length, weights: (data.weights || []).length, skipped });
-    /* onerror and onabort BOTH need handling. onerror bubbles from a
-       failed put; onabort fires when the transaction is explicitly
-       aborted OR when the tab is torn down mid-flight. Either way IDB
-       rolls back and the player's old save survives. */
-    t.onerror = () => reject(new Error('the restore did not finish. Your old data is unchanged. Try again.'));
-    t.onabort = () => reject(new Error('the restore did not finish. Your old data is unchanged. Try again.'));
-    try {
-      for (const s of STORES) {
-        const os = t.objectStore(s);
-        /* Clear and puts in one transaction, so they land together or not
-           at all. Only for stores the file declares: see the header. */
-        if (replace && declared.has(s)) os.clear();
-        for (const row of (s === 'kv' ? (kvRows || []) : s === 'inv' ? (invRows || []) : (data[s] || []))) os.put(row);
-        if (s === 'kv') for (const row of keptKv) os.put(row);
-        // A remote receipt also removes a LOCAL ownership row. Otherwise the
-        // next Stable boot can reclaim a pet whose instance was just removed.
-        if (s === 'inv') for (const id of takenInv) os.delete(id);
+    t.onerror = t.onabort = () => reject(mergeError || new Error('the restore did not finish. Your old data is unchanged. Try again.'));
+    const read = t.objectStore('kv').getAll();
+    read.onsuccess = () => {
+      try {
+        const localKv = read.result;
+        if (declared.has('kv')) {
+          const payloadKeys = new Set(data.kv.map(r => r && r.k));
+          if (replace) keptKv = localKv.filter(r => DEVICE_KV.includes(r.k) && !payloadKeys.has(r.k));
+          /* MERGE: the payload never overwrites a device key this device holds
+             (see the DEVICE_KV header). Resource-specific rules follow. */
+          if (!replace) {
+            const localKeys = new Set(localKv.map(r => r && r.k));
+            kvRows = data.kv.filter(r => !(r && DEVICE_KV.includes(r.k) && localKeys.has(r.k)));
+            // L2: union signed currency receipts when either snapshot has history.
+            // Legacy-only snapshots cannot reveal their shared earnings; retain
+            // the old revision / higher-on-tie policy for compatibility. This is
+            // explicitly NOT an additive guarantee for already-diverged old saves.
+            // replace:true remains an intentional rollback, outside this branch.
+            const keepRevisionedBalance = (balanceKey, revKey) => {
+              const local = new Map(localKv.map(r => [r.k, r.v]));
+              const file = new Map(data.kv.map(r => [r.k, r.v]));
+              if (!file.has(balanceKey)) {
+                kvRows = kvRows.filter(r => r.k !== revKey && r.k !== historyKey(balanceKey));
+                return;
+              }
+              const merged = mergeCurrencyHistory(balanceKey, local, file);
+              if (merged) { keptKv.push(...merged); return; }
+              const localRev = Number((localKv.find(r => r.k === revKey) || {}).v) || 0;
+              const fileRev = Number((data.kv.find(r => r && r.k === revKey) || {}).v) || 0;
+              const localRow = localKv.find(r => r.k === balanceKey);
+              const fileRow = data.kv.find(r => r && r.k === balanceKey);
+              const localBalance = Number(localRow && localRow.v) || 0;
+              const fileBalance = Number(fileRow && fileRow.v) || 0;
+              if (localRev > fileRev || (localRev === fileRev && localBalance > fileBalance)) {
+                const localRevRow = localKv.find(r => r.k === revKey);
+                if (localRow) keptKv.push(localRow);
+                if (localRevRow) keptKv.push(localRevRow);
+              }
+            };
+            keepRevisionedBalance('coins', 'coinsRev');
+            /* 2026-09-06 (Codex audit of v485): Bone Dust had NO ordering signal at
+               all, so any older blob restored dust already spent or erased dust just
+               earned. 'dustRev' moves with 'bonedust' in the same transaction
+               (kvBumpRevisioned above) and rides the same rule. */
+            keepRevisionedBalance('bonedust', 'dustRev');
+            // Q1: each potion id is its own balance. Use the currency revision shape,
+            // so spending one kind cannot erase another kind earned on another device.
+            const localValue = k => localKv.find(r => r.k === k)?.v;
+            const fileValue = k => data.kv.find(r => r.k === k)?.v;
+            if (payloadKeys.has('potions')) {
+              const local = localValue('potions') || {}, file = fileValue('potions') || {};
+              const lr = localValue('potionsRev') || {}, fr = fileValue('potionsRev') || {};
+              const balance = {}, revisions = {};
+              for (const id of new Set([...Object.keys(local), ...Object.keys(file), ...Object.keys(lr), ...Object.keys(fr)])) {
+                const a = Number(lr[id]) || 0, b = Number(fr[id]) || 0;
+                const count = a > b ? (local[id] || 0) : b > a ? (file[id] || 0) : Math.max(local[id] || 0, file[id] || 0);
+                if (count > 0) balance[id] = count;
+                revisions[id] = Math.max(a, b);
+              }
+              keptKv.push({ k: 'potions', v: balance }, { k: 'potionsRev', v: revisions });
+            } else {
+              // A revision alone must not advance the ordering of an absent balance.
+              kvRows = kvRows.filter(r => r.k !== 'potionsRev');
+            }
+
+            // Ownership is a union by INSTANCE, minus permanent take receipts.
+            // Absence alone cannot distinguish a stale roster from a consumed copy.
+            const taken = new Set([...(localValue('petTaken') || []), ...(fileValue('petTaken') || [])]);
+            const roster = [...(localValue('petInst') || [])];
+            const matched = new Set();
+            const localCount = roster.length;
+            for (const row of fileValue('petInst') || []) {
+              // Match each local occurrence once, leaving corrupt duplicate iids for
+              // petInstances' existing healer instead of silently losing a copy.
+              const i = roster.findIndex((x, index) => index < localCount && !matched.has(index) &&
+                (row?.iid ? x?.iid === row.iid : JSON.stringify(x) === JSON.stringify(row)));
+              if (i < 0) {
+                roster.push(row);
+              } else {
+                matched.add(i);
+                const prior = roster[i];
+                roster[i] = row?.iid ? { ...prior, ...row } : row;
+                // Feeding earns lineage on the keeper, which a stale copy cannot undo.
+                if (typeof prior?.lineage === 'number' && typeof row?.lineage === 'number') {
+                  roster[i].lineage = Math.max(prior.lineage, row.lineage);
+                }
+              }
+            }
+            const livePets = roster.filter(row => !taken.has(row?.iid));
+            if (payloadKeys.has('petInst') || taken.size) keptKv.push({ k: 'petInst', v: livePets });
+
+            // Steps are earned, never spent on a surviving iid. Keep the higher bank
+            // entry, like the existing high-water marks. Convert legacy species banks
+            // before comparing, or an old format marker would remigrate and zero iids.
+            const lv = Number(localValue('petLvlV')) || 0, fv = Number(fileValue('petLvlV')) || 0;
+            if (payloadKeys.has('petLvlSteps') || payloadKeys.has('petLvlV') || taken.size) {
+              const perInstance = Math.max(lv, fv) >= 2;
+              const normalize = (bank, version) => {
+                if (!perInstance || version >= 2) return bank || {};
+                return Object.fromEntries(livePets.filter(x => x?.iid && x?.sp && bank?.[x.sp] != null)
+                  .map(x => [x.iid, bank[x.sp]]));
+              };
+              const local = normalize(localValue('petLvlSteps'), lv);
+              const file = normalize(fileValue('petLvlSteps'), fv);
+              const bank = { ...local };
+              for (const [iid, steps] of Object.entries(file)) bank[iid] = Math.max(bank[iid] || 0, steps);
+              if (perInstance) for (const iid of taken) delete bank[iid];
+              if (localValue('petLvlSteps') != null || fileValue('petLvlSteps') != null) keptKv.push({ k: 'petLvlSteps', v: bank });
+              keptKv.push({ k: 'petLvlV', v: Math.max(lv, fv) });
+            }
+            if (payloadKeys.has('petStepCredit')) keptKv.push({ k: 'petStepCredit',
+              v: Math.max(localValue('petStepCredit') || 0, fileValue('petStepCredit') || 0) });
+
+            /* THE TOMBSTONES ARE A UNION, NEVER PAYLOAD-WINS (2026-09-06). 'invTaken'
+               and 'crateTaken' are the receipts the inv filter below reads. Left as
+               an ordinary kv row the payload overwrote them on every pull, so device
+               B's own receipts vanished the moment it merged device A's blob, and
+               the next blob still carrying B's spent row revived it. A merge can
+               only ever ADD a receipt. */
+            // Purchase and delivery receipts are also permanent on a merge. A stale
+            // backup must not un-buy a look or forget that a code/grant was handled.
+            for (const k of MERGE_RECEIPTS) {
+              const local = localKv.find(r => r.k === k);
+              const file = data.kv.find(r => r && r.k === k);
+              if (!local) continue;
+              keptKv.push({ k, v: [...new Set([...(Array.isArray(local.v) ? local.v : []), ...(file && Array.isArray(file.v) ? file.v : [])])] });
+            }
+          }
+          /* THE DAY CEILINGS ONLY EVER GO UP, INCLUDING THROUGH A RESTORE, and
+             unlike DEVICE_KV above the payload does NOT get to win. Every other mark
+             in this app can be rewound by restoring an export taken before it moved
+             (see the clock-trust audit's closing FINDING), which for a ceiling on
+             future days is a one-click reset of the ceiling while the rows farmed
+             under it stay put. Keeping the higher of the two costs three lines and
+             takes that hole away on BOTH import paths, the Settings file restore and
+             the cloud pull, which is why this sits outside the `replace` branch. */
+          /* BOTH marks, not just the witness: rule 1's high-water mark is the other
+             half of the same ceiling, and leaving it payload-wins meant a cloud pull
+             could hand back a day the device had already climbed past. They are
+             ranked differently only because one stores an ordinal and the other
+             stores a date key. */
+          const keepHigher = (k, rank) => {
+            const local = localKv.find(r => r.k === k);
+            const file = data.kv.find(r => r && r.k === k);
+            if (local && rank(local.v) > rank(file ? file.v : null)) keptKv.push(local);
+          };
+          keepHigher(DAY_WITNESS_KEY, v => Number(v) || 0);
+          keepHigher('dayHighWater', v => dayOrdinal(v) || 0);
+        }
+        /* THE TAKE RECEIPT (QA round 34 P0). A merge (!replace) `os.put`s every
+           'inv' row the blob carries, which is right for a row this device has
+           never seen and wrong for one it already opened: a blob older than the
+           local save still carries the now-opened crate, and the put brings it
+           back. js/loot.js openCrate records every crate id it takes in kv
+           'crateTaken' (bounded, same idiom as js/social.js's 'grantsSeen'); a
+           merge never re-adds an inv row on that list. Scoped to !replace for the
+           same reason as the coinsRev guard above: a `replace:true` restore is
+           deliberately reverting to an older save, receipts and all, and must not
+           be second-guessed. */
+        let invRows = data.inv;
+        const takenInv = new Set();
+        if (!replace) {
+          /* R38-13 (2026-09-06): crateTaken above only ever covered openCrate. Every
+             OTHER place this file deletes an 'inv' row outright (a spent
+             consumable, a used Battle Charm, a pet's last cosmetic copy on
+             salvage/extinction) had no receipt at all, so the SAME stale-blob merge
+             revived them: measured, a spent Vigor Draught came back 1 -> 0 -> 1
+             through a two-device merge. Every one of those sites now goes through
+             takeInv above, which deletes the row and writes 'invTaken' in one
+             transaction, unbounded. The payload's own receipts count too (the union
+             the kv merge above keeps), so a row the OTHER device took never lands. */
+          const taken = takenInv;
+          for (const k of ['crateTaken', 'invTaken']) {
+            for (const id of (localKv.find(r => r.k === k)?.v || [])) taken.add(id);
+            const file = Array.isArray(data.kv) && data.kv.find(r => r && r.k === k);
+            if (file && Array.isArray(file.v)) for (const id of file.v) taken.add(id);
+          }
+          if (taken.size && declared.has('inv')) invRows = data.inv.filter(r => !(r && taken.has(r.id)));
+        }
+        for (const s of STORES) {
+          const os = t.objectStore(s);
+          /* Clear and puts in one transaction, so they land together or not
+             at all. Only for stores the file declares: see the header. */
+          if (replace && declared.has(s)) os.clear();
+          for (const row of (s === 'kv' ? (kvRows || []) : s === 'inv' ? (invRows || []) : (data[s] || []))) os.put(row);
+          if (s === 'kv') for (const row of keptKv) os.put(row);
+          // A remote receipt also removes a LOCAL ownership row. Otherwise the
+          // next Stable boot can reclaim a pet whose instance was just removed.
+          if (s === 'inv') for (const id of takenInv) os.delete(id);
+        }
+        /* An import replaces the contents of every store, so every derived cache
+           built on the old contents is now wrong. Stamp them all. */
+        for (const s of STORES) bumpStore(s);
+      } catch (e) {
+        mergeError = e;
+        try { t.abort(); } catch { /* already aborting */ }
       }
-      /* An import replaces the contents of every store, so every derived cache
-         built on the old contents is now wrong. Stamp them all. */
-      for (const s of STORES) bumpStore(s);
-    } catch (e) {
-      /* LOAD-BEARING, do not delete. A synchronous throw out of `os.put`
-         (malformed row, unclonable value) does NOT abort the transaction
-         on its own: measured, such a transaction goes on to COMPLETE and
-         commits the clear, leaving the store empty. This abort is what
-         rolls the clear back and keeps the promise in the rejection copy
-         literally true. onabort then rejects with the standard message. */
-      try { t.abort(); } catch { /* already aborting */ }
-    }
+    };
   });
 }
 

@@ -1,0 +1,13 @@
+PASS CONTROL earned talent round-trip reaches the selected instance bank
+PASS MIGRATION five copies keep only their own earned tiers and archive legacy choices
+PASS MIGRATION explicit instance choices win over species choices
+PASS HATCH new level-one duplicate never inherits the legacy full tree
+PASS STORAGE rejects unearned, wrong-family, duplicate-tier and unknown choices
+PASS UNKNOWN unsupported rows survive storage but cannot equip, mint or fight
+PASS HEAL duplicate ids never steal an existing reserved id
+PASS STABLE click writes selected iid only and refuses a stale unlocked button
+PASS WARDROBE click writes selected iid only and refuses a stale unlocked button
+PASS UI-WIRING rendered controls and Stable reads carry instance ids
+PASS BATTLE real app assembly gives buildBattlePet no unearned picks, including imported stale data
+PASS BATTLE-SNAPSHOT picks are legal for the level passed to the builder
+pet-state: 12 passed, 0 failed

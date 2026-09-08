@@ -1,0 +1,407 @@
+[
+  {
+    "name": "version-align-lint.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "no-debug-markers-lint.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "store-copy-lint.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "transmog-receipt-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "today-reads-lint.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "kitchen-atomic-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "backup-encoder-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "backup-key-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "backup-version-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "backup-conflict-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "unit.test.js",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "log-xp-farm-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "drip-badge-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "xp-key-provenance-lint.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "facegate-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "garden-appetite-guard.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "pit.test.js",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "quest-daymore-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "quest-pick-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "first-fight-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "stat-source-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "bastions-rep-sim.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "analytics-tag-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "icon-inventory-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "version-stamp-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "boneyard-supply-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "loot-fallback-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "guard-hygiene-lint.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "guard-provenance-lint.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "feedback-status-lint.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "rack-theme-lint.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "rack-rotate-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "pet-accessory-lint.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "pet-pool-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "manifest-exports-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "xp-curve-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "live-api-register-lint.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "claim-evidence-lint.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "thumb-freshness-lint.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "render-sink-lint.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "lapse-witness-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "spawn-claim-atomic-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "wardrobe-family-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "football-kit-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "restore-latch-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "first-pet-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "currency-revision-lint.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "inv-tombstone-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "take-and-pay-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "paddock-pack-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "audit-output-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "branch-graveyard-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "store-runtime-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "r47-rest-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "r47-economy-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "submission-build-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "harness-environment-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "guard-debts-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "submission-preflight-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "pet-state-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "pet-family-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "coins-merge-tie-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "routine-race-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "dayone-topup-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "dish-worth-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "pet-C-node-guard.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "r48-state-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "r46-logging-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "r46-diary-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "audit-completion-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "machine-character-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "n3-deadpaths-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "m5-prove-red.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "lookup-guard-lint.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "restore-state-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "restore-debt-edges-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "restore-debt-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "p1-r48-rest-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "pet-a11y-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "kennel-copy-audit.mjs",
+    "exit": 0,
+    "signal": null
+  },
+  {
+    "name": "multidevice-earnings-audit.mjs",
+    "exit": 0,
+    "signal": null
+  }
+]

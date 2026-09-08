@@ -136,7 +136,7 @@ globalThis.fetch = async (url, opts = {}) => {
 
 /* ==================== the REAL modules under test ========================= */
 const social = await import(ROOT + '/js/social.js');
-const { db, kvGet, kvSet, importAll, useDbName } = await import(ROOT + '/js/db.js');
+const { db, kvGet, kvSet, kvBumpRevisioned, importAll, useDbName } = await import(ROOT + '/js/db.js');
 
 // switch "phones": a device is a dbName, same as the real app's useDbName
 async function device(name) { useDbName(name); await kvSet('apiBase', API); }
@@ -171,7 +171,8 @@ await device('devA');
 const onA = await social.goOnline();
 ok('SETUP  device A registered', onA.ok, onA.reason || '');
 await db.put('log', { id: 'L_audit', date: '2026-08-30', foodId: 'F_x', kcal: 123, name: 'audit meal' });
-await kvSet('coins', 777);
+// Seed through the production currency transaction so its history stays coherent.
+await kvBumpRevisioned('coins', 'coinsRev', 777 - await kvGet('coins', 0));
 const pushedA = await social.pushBackup('audit');
 ok('SETUP  device A pushed its FIRST-EVER backup (empty sample = FAIL)', pushedA === true && pushes.length === 1, `pushes=${pushes.length}`);
 
@@ -233,7 +234,7 @@ ok('ROUNDTRIP  A\'s own data survived the round trip', (await kvGet('coins', 0))
 /* ---------------- DECRYPT: a blob written by a different key ------------- */
 await device('devC');
 const onC = await social.goOnline();
-await kvSet('coins', 55);
+await kvBumpRevisioned('coins', 'coinsRev', 55 - await kvGet('coins', 0));
 const meC = await kvGet('social', null);
 backups.set(meC.playerId, { blob: await encryptForeign({ app: 'tally', version: 3, log: [], kv: [] }), updatedAt: Date.now() });
 const pullC = await social.pullBackup();
