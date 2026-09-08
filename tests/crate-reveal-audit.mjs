@@ -32,7 +32,7 @@
  */
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { boot, sleep, serveTree, setWidth } from './godmode.js';
 
@@ -51,17 +51,18 @@ const results = [];
 const ok = (name, pass, detail = '') => { results.push({ name, pass }); console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`); };
 const APP_SRC = readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');
 
-const { browser, page } = await boot(base, {
+const FLICK_BROWSER = {
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
-});
+};
+const { browser, page } = await boot(base, FLICK_BROWSER);
 await page.setViewport({ width: 393, height: 852, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 
 /* Silence every first-run takeover. They fire in a QUEUE, so dismissing once is
    not enough, and `changelogSeen` holds a build number: kvSet(..., true) reads as
    0 and What's New shows anyway. */
-const quiet = async () => {
-  await page.evaluate(async () => {
+const quiet = async (targetPage = page) => {
+  await targetPage.evaluate(async () => {
     const db = await import('/js/db.js?q=1');
     const { DROP } = await import('/js/loot.js?q=1');
     await db.kvSet('changelogSeen', 999999);
@@ -779,9 +780,34 @@ await setWidth(page, 393, 852);  // restore, for the sections below
    require at least floor(520 / (1000/60)) - 6 = 25 samples per move. A long
    stall must not pass merely because it leaves few intervals to count.
    rAF samples measure cadence, not a count of compositor-rendered frames.
-   The app fix for the first flick belongs to another lane.
+   N5: the earlier rows have already opened many crates in this process.
+   Each repetition below uses a NEW browser process and profile, so those rows
+   cannot warm its shaders, textures or layers. This is a cold crate reveal
+   after ordinary app boot, not a claim that the OS disk cache is cold.
+   Five runs print ten separate cadence rows. No average can hide a bad first.
+
+   Optional diagnosis: FLICK_TRACE_DIR=/tmp/crate-traces saves one Chromium
+   trace and a tap-time/DOM record per run. Trace mode adds profiling overhead;
+   its cadence results are diagnostic, not release performance evidence. Run
+   again without tracing for the cadence verdict. Traces include GPU, paint,
+   raster and layer work, plus user-timing marks for each tap. Compare the
+   first and second move before selecting any app fix. No cause or new
+   performance improvement has been measured in this sandbox.
  */
-{
+await browser.close();
+const traceDir = process.env.FLICK_TRACE_DIR;
+if (traceDir) {
+  mkdirSync(traceDir, { recursive: true });
+  console.log('FLICK DIAGNOSTIC tracing enabled: cadence includes profiling overhead');
+}
+for (let run = 1; run <= 5; run++) {
+  console.log(`FLICK RUN ${run}/5: fresh browser process and profile`);
+  const { browser: flickBrowser, page, errors: flickErrors } = await boot(base, FLICK_BROWSER);
+  let tracing = false;
+  try {
+  await page.setViewport({ width: 393, height: 852, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
+  await quiet(page);
   await page.evaluate(async () => {
     for (let i = 0; i < 6; i++) {
       if (!document.querySelector('.pack-reveal')) break;
@@ -798,12 +824,33 @@ await setWidth(page, 393, 852);  // restore, for the sections below
   await sleep(1600);
   await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="crates"]')?.click());
   await sleep(1200);
-  await page.evaluate(() => {
+  if (traceDir) {
+    await page.tracing.start({ path: path.join(traceDir, `flick-${run}.trace.json`),
+      categories: ['devtools.timeline', 'blink.user_timing', 'gpu', 'cc',
+        'disabled-by-default-devtools.timeline', 'disabled-by-default-devtools.timeline.layers'] });
+    tracing = true;
+  }
+  await page.evaluate(trace => {
     window.__crateForce = 1;
-    const M = window.__flick = { raf: [], long: [], counts: [], burstDraws: [] };
+    const M = window.__flick = { raf: [], long: [], counts: [], burstDraws: [], taps: [], glOps: [] };
     // CONTROL below must see this exact canvas draw before either move.
     for (const C of [window.WebGLRenderingContext, window.WebGL2RenderingContext]) {
       if (!C) continue;
+      // Synchronous API cost only. Deferred GPU work belongs to the trace.
+      // The canvas class is set before shaders compile, before DOM attachment.
+      if (trace) for (const method of ['compileShader', 'linkProgram', 'texImage2D', 'texSubImage2D', 'bufferData']) {
+        const call = C.prototype[method];
+        C.prototype[method] = function (...args) {
+          if (!this.canvas.classList.contains('burst-gl')) return call.apply(this, args);
+          const t = performance.now();
+          try { return call.apply(this, args); }
+          finally {
+            const end = performance.now();
+            M.glOps.push({ method, t, d: end - t });
+            performance.measure(`crate-${method}`, { start: t, end });
+          }
+        };
+      }
       const draw = C.prototype.drawArrays;
       C.prototype.drawArrays = function (...args) {
         if (this.canvas.closest('#packBurst')) M.burstDraws.push(performance.now());
@@ -823,7 +870,7 @@ await setWidth(page, 393, 852);  // restore, for the sections below
       if (c && M.counts[M.counts.length - 1] !== c) M.counts.push(c);
     }).observe(document.documentElement, { subtree: true, childList: true, characterData: true });
     document.querySelector('[data-open]')?.click();
-  });
+  }, !!traceDir);
   /* the real control: wait for the card to be up, then tap it, exactly as the
      TAP row above proves a player does (pointerdown/pointerup, no click) */
   const moves = [];
@@ -835,7 +882,14 @@ await setWidth(page, 393, 852);  // restore, for the sections below
       if (!tilt) return null;
       const b = tilt.getBoundingClientRect();
       const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
-      const t = performance.now();
+      // Read the DOM before the mark so inspection is outside the move window.
+      const reveal = document.querySelector('.pack-reveal');
+      const state = { count: document.querySelector('#packCount')?.textContent,
+        classes: reveal?.className, crate: !!reveal?.querySelector('.pack-crate'),
+        art: [...tilt.querySelectorAll('img')].map(im => ({ src: im.currentSrc,
+          decoded: im.complete && im.naturalWidth > 0 })) };
+      const t = performance.mark(`flick-${window.__flick.taps.length + 1}`).startTime;
+      window.__flick.taps.push({ t, ...state });
       tilt.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 31, clientX: cx, clientY: cy, bubbles: true }));
       tilt.dispatchEvent(new PointerEvent('pointerup', { pointerId: 31, clientX: cx, clientY: cy, bubbles: true }));
       return t;
@@ -844,6 +898,11 @@ await setWidth(page, 393, 852);  // restore, for the sections below
     await sleep(900);
   }
   const flick = await page.evaluate(() => window.__flick);
+  if (tracing) { await page.tracing.stop(); tracing = false; }
+  if (traceDir) writeFileSync(path.join(traceDir, `flick-${run}.samples.json`),
+    JSON.stringify({ run, viewport: { width: 393, height: 852 },
+      dpr: await page.evaluate(() => devicePixelRatio), moves, ...flick }, null, 2));
+  ok('FLICK CONTROL fresh session has no page errors', flickErrors.length === 0, JSON.stringify(flickErrors));
   const gaps = flick.raf.slice(1).map((t, i) => ({ t, d: t - flick.raf[i] }));
   /* CONTROL FIRST: a reveal that never advanced would render nothing, drop
      nothing, and pass the two rows below by doing no work at all. */
@@ -858,9 +917,9 @@ await setWidth(page, 393, 852);  // restore, for the sections below
     if (t0 == null) { ok(`${label} cadence`, false, 'no card to tap'); return; }
     const w = gaps.filter(g => g.t >= t0 && g.t <= t0 + 520);
     const m = { over20: w.filter(g => g.d > 20).length, over34: w.filter(g => g.d > 34).length,
-      worst: Math.round(Math.max(0, ...w.map(g => g.d))), frames: w.length,
+      worst: Math.round(Math.max(0, ...w.map(g => g.d))), rafSamples: w.length,
       // where the worst one landed, in ms after the tap: a hitch at 0 is the
-      // class swap, one at ~330 is the deck rebuild, one at ~480 the resume
+      // fling, one at ~330 is the deck rebuild; resume is >=330+480ms
       worstAt: w.length ? Math.round(w.reduce((a, b) => (b.d > a.d ? b : a)).t - t0) : null };
     const minFrames = Math.floor(520 / (1000 / 60)) - 6;
     ok(`${label} cadence: >=${minFrames} rAF samples and <=6 gaps over 20ms`,
@@ -874,9 +933,12 @@ await setWidth(page, 393, 852);  // restore, for the sections below
   const inMoves = flick.long.filter(l => moves.some(t0 => t0 != null && l.t + l.d >= t0 && l.t <= t0 + 520));
   const worstTask = Math.round(Math.max(0, ...inMoves.map(l => l.d)));
   ok('FLICK no long task over 200ms during either card move', worstTask <= 200, `worst longtask ${worstTask}ms of ${inMoves.length}`);
+  } finally {
+    try { if (tracing) await page.tracing.stop(); }
+    finally { await flickBrowser.close(); }
+  }
 }
 
-await browser.close();
 if (srv) srv.kill();
 const failed = results.filter(r => !r.pass).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);
