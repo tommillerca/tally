@@ -456,6 +456,15 @@ the upload path and its guards.
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
 
+## v519
+1. The pet balance retune. Tom's ruling: "do what you need to do to balance the pet if it needs to be 20% instead of 40% that's fine", so the cap was ours to move. Round 1 was REJECTED on review and the rejection is the point: it reported "stress peak 99.5% to 89.0%" and looked clean, while across the same 105 cells the MEDIAN had fallen 0.610 to 0.270. A flat `PET_DAMAGE_MULT = 0.5` cannot tell the level-6 pet winning 100% from a modest pet winning 20%, so it took the same half from both, and the problem only ever existed at the top of the range.
+
+2. PROOF: pet-stress-guard.mjs, fight-sim.mjs | REACH: the Pit's hard rungs with a trained pet. Measured, never reasoned from the code. Before: median 0.610, peak 0.995, 12 of 105 stress cells above 90%. After: median 0.475, peak 0.885, 0 cells above 90%. Held out on seeds the tuning never saw (s=201..600): median 0.470, peak 0.935, 3 cells above 90%. The no-pet control did not move, 0.110 to 0.105, which is the assertion that proves this lane did not leak into the no-pet game. The three remaining held-out cells above 90% are all the same pair, Crow Lord against dailyGlutton, one dish against the easiest foe, and that residual is accepted deliberately rather than chased: the held-out peak sitting above the tuning peak is an overfit signal and is recorded here as a known limit, not as a pass.
+
+3. PROOF: pet-stress-guard.mjs | REACH: fight anything in the Pit with no pet equipped. The no-pet game is untouched by this lane, and that is asserted rather than claimed: the per-cell no-pet control moved 0.110 to 0.105 across 105 stress cells, inside noise, on both the tuning and the held-out seed sets. If a future change to pet damage leaks into the no-pet path, this control is what goes red.
+
+4. PROOF: fight-sim.mjs | REACH: the Stable's breeding copy and the hunter's skewer in the Kitchen. Two player-facing claims were no longer true and were corrected rather than left standing. The v275 changelog entry promised breeding "+5% to every stat", which the combined rarity/shiny/lineage ceiling makes false. The `hunters-skewer` DISH_WORTH string claimed a measured effect whose 2000-seed comparison spans zero, so the claim was DELETED rather than restated: an unsupported "Measured:" line is worse than no line.
+
 ## v518
 1. Nine Codex lanes, reviewed and integrated in one train. Two of the nine shipped no product change on purpose: s2 (the blank Crew pet) could not establish a pre-fix failure in Node and refused to ship a speculative fix, and L7 concluded the existing static scan cannot be made trustworthy and documented why instead of narrowing it until it passed. Both outcomes are recorded rather than hidden.
 

@@ -200,6 +200,26 @@ export const SHINY_STAT_MULT = 1.08;
 export const PET_STAT_MULT_CAP = 1.5; // combined rarity, shiny and lineage budget
 export const PET_LINEAGE_STEP = 0.05; // +5% per lineage tier
 
+// Shared by combat stats and the Stable's capped bonus disclosure.
+export function petStatMultiplier(petId, shiny = false, lineage = 0) {
+  const rarity = PET_STATS[petId]?.mult || 1;
+  const lin = Math.max(0, Math.floor(lineage || 0));
+  return Math.min(PET_STAT_MULT_CAP, rarity * (shiny ? SHINY_STAT_MULT : 1) * (1 + lin * PET_LINEAGE_STEP));
+}
+export function petStatBonusText(petId, shiny = false, lineage = 0) {
+  const mult = petStatMultiplier(petId, shiny, lineage);
+  return `Combined rarity, shiny and lineage: ${Number(mult.toFixed(3))}x base stats${mult >= PET_STAT_MULT_CAP ? ' (cap reached)' : ` (cap ${PET_STAT_MULT_CAP}x)`}. Stats round individually.`;
+}
+export function petBreedGainText(petId, level, shiny, lineage) {
+  const before = petBattleStats(petId, level, shiny, Math.max(0, lineage - 1));
+  const after = petBattleStats(petId, level, shiny, lineage);
+  const gains = ['power', 'marrow', 'wind', 'reflex', 'hp']
+    .filter(key => after[key] > before[key])
+    .map(key => `+${after[key] - before[key]} ${key === 'hp' ? 'HP' : key}`);
+  return gains.length ? `This rank adds ${gains.join(', ')}.`
+    : 'This rank adds no combat stats. Lineage is still recorded.';
+}
+
 // The single source of truth for a battle-pet's intrinsic stat line (engine AND
 // UI read this). `hp` is the pet's own HP floor; makePetBody adds a slice of the
 // owner's Marrow on top. Commons at level 1 (lineage 0, no shiny) retain the
@@ -209,7 +229,7 @@ export function petBattleStats(petId, level = 1, shiny = false, lineage = 0) {
   const lin = Math.max(0, Math.floor(lineage || 0));
   const p = PET_STATS[petId] || { rarity: 'common', mult: 1, tilt: {} };
   const t = p.tilt || {};
-  const m = Math.min(PET_STAT_MULT_CAP, p.mult * (shiny ? SHINY_STAT_MULT : 1) * (1 + lin * PET_LINEAGE_STEP));
+  const m = petStatMultiplier(petId, shiny, lin);
   return {
     power:  Math.round((10 + L * 4) * m * (t.power  || 1)),
     marrow: Math.round(20            * m * (t.marrow || 1)),
@@ -437,12 +457,36 @@ export function petActionMeta(family) {
 // Resolve the pet's on-use ability. Pure: returns a list of intents the engine
 // applies (so the engine keeps its dealDamage/status authority). `self`/`foe`
 // are the fighters; `atkDamageBase` scales the hound bite off the owner's power.
+// T2 round 2: preserve specials until the owner leads by 15 percentage points
+// of remaining health. Beyond that, diminish damage and expose the pet to more
+// pressure. This uses live combat state, never species/encounter IDs or win odds.
+export function petCombatLead(self, foe) {
+  if (![self.hp, foe.hp, self.d.maxHp, foe.d.maxHp].every(Number.isFinite)
+    || self.d.maxHp <= 0 || foe.d.maxHp <= 0) return 0;
+  const health = fighter => Math.max(0, Math.min(1, fighter.hp / fighter.d.maxHp));
+  return Math.max(0, health(self) - health(foe) - 0.15);
+}
+export function petDamageMultiplier(self, foe) {
+  return 1 / (1 + 64 * petCombatLead(self, foe));
+}
+export function petTargetChance(self, foe, petLow) {
+  const base = petLow ? 0.45 : 0.18;
+  return base + (0.8 - base) * Math.min(1, 3 * petCombatLead(self, foe));
+}
 export function petAbilityEffect(pet, self, foe) {
   requirePetFamily(pet.family);
   const has = id => pet.picks.has(id);
   const lvl = pet.level;
   const sig = id => pet.signatureActive && pet.id === id; // species signature is lit
-  return PET_ABILITIES[pet.family]({ has, lvl, sig, self, foe });
+  const effect = PET_ABILITIES[pet.family]({ has, lvl, sig, self, foe });
+  // Opening burst also needs a ceiling before a health lead exists. Bites up
+  // to 16 are unchanged; excess damage approaches 8 more, before engine crits.
+  if (effect.damage > 16) effect.damage = 16 + 8 * (effect.damage - 16) / (8 + effect.damage - 16);
+  const mult = petDamageMultiplier(self, foe);
+  if (effect.damage) effect.damage = Math.round(effect.damage * mult);
+  if (effect.poison) effect.poison.per = Math.round(effect.poison.per * mult);
+  if (effect.burn) effect.burn.per = Math.round(effect.burn.per * mult);
+  return effect;
 }
 
 // A new family needs an explicit effect as well as actions and a tree.

@@ -67,7 +67,7 @@ import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, petColourName, petInstanceName, salvageInstance, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear, bestInstance } from './loot.js';
-import { buildBattlePet, legalPicks, isKnownPet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs, ownedCellCount } from './pets.js';
+import { buildBattlePet, legalPicks, isKnownPet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, petStatBonusText, petBreedGainText, PET_STAT_MULT_CAP, PET_LINEAGE_STEP, SHINY_STAT_MULT, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs, ownedCellCount } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
@@ -18313,7 +18313,7 @@ function petPanelHtml(petId, fighter) {
         <b>${esc(fam.name)}${lineage ? ` <span class="lin-tag">${ICONS.star(11)}${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(10)} SHINY</span>` : ''} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
         <small><span class="rar-lbl r-${rarity}">${(RARITIES[rarity] || {}).label || rarity}</span> · Pet level ${lvl}${lvl < PET_MAX_LEVEL ? ` · ${toNext.toLocaleString()} steps to Lv ${lvl + 1}` : ' · maxed'}</small>
         ${statLine}
-        <span class="note" style="font-size:11.5px">${esc(fam.blurb)} Passive: ${passives[fam.passive]}.${shiny ? ' Shiny: +8%.' : ''}${lineage ? ` Lineage ${lineage}: +${lineage * 5}% to all stats.` : ''}</span>
+        <span class="note" style="font-size:11.5px">${esc(fam.blurb)} Passive: ${passives[fam.passive]}. ${esc(petStatBonusText(petId, shiny, lineage))}</span>
       </div>
     </div>
     <div class="pet-tree">
@@ -19683,17 +19683,17 @@ function openPetsHelp() {
       </section>
       <section>
         <h3>Breeding</h3>
-        <p>Breeding feeds a <b>spare</b> pet into one you <b>keep</b>. The keeper gains a <b>lineage rank</b>, worth <b>+5% to every stat</b>, and keeps its own name, level and look. The spare is destroyed and does not come back.</p>
+        <p>Breeding feeds a <b>spare</b> pet into one you <b>keep</b>. The keeper gains a <b>lineage rank</b>, adding <b>${PET_LINEAGE_STEP * 100}% to the lineage multiplier before the combined ${PET_STAT_MULT_CAP}x stat cap</b>, and keeps its own name, level and look. The spare is destroyed and does not come back.</p>
         <p class="note">It costs nothing but walking: ${BREED_COOLDOWN_STEPS.toLocaleString()} steps between breeds.</p>
       </section>
       <section>
         <h3>When to stop</h3>
-        <p>Each rank is worth the same <b>+5%</b>. What they cost is your legs: every rank is another ${BREED_COOLDOWN_STEPS.toLocaleString()} steps, so a long bloodline is a walking record and nothing else.</p>
+        <p>Rarity, shiny and lineage share a <b>${PET_STAT_MULT_CAP}x base-stat cap</b>. At the cap, more lineage adds <b>no combat stats</b>. Check the stat gains before destroying a spare. Each rank still records another ${BREED_COOLDOWN_STEPS.toLocaleString()} steps walked.</p>
         <p>Two things never transfer: a fed-in pet's <b>levels</b> and its <b>bloodline</b>. Feed in plain spares, not the pet you have been walking.</p>
       </section>
       <section>
         <h3>Shinies</h3>
-        <p>About <b>1 in ${shinyOdds}</b> hatched pets is a shiny: a recoloured variant with <b>+8% stats</b> that follows your Bonehead. Its colour does <b>not</b> carry through breeding, so a shiny fed into another pet is gone for good.</p>
+        <p>About <b>1 in ${shinyOdds}</b> hatched pets is a shiny: a recoloured variant with <b>a ${Math.round((SHINY_STAT_MULT - 1) * 100)}% shiny multiplier before rounding, limited by the combined ${PET_STAT_MULT_CAP}x cap</b> that follows your Bonehead. Its colour does <b>not</b> carry through breeding, so a shiny fed into another pet is gone for good.</p>
       </section>
       <p class="note" style="margin-top:6px">Spare pets you do not want can be melted for Bone Dust instead, from the same row.</p>
     </div>`, { cls: 'full', name: 'pets_help' });
@@ -20230,7 +20230,7 @@ async function openStable(opts = {}) {
       const fam = familyOf(focused.sp);
       const rows = [['Level', lvl], ['Power', bs.power], ['Health', bs.hp], ['Reflex', bs.reflex]];
       if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next', toNext.toLocaleString()]);
-      if (focused.lineage) rows.push(['Lineage', `${focused.lineage} · +${Math.round(focused.lineage * 5)}% stats`]);
+      if (focused.lineage) rows.push(['Lineage', `${focused.lineage}. ${petStatBonusText(focused.sp, focused.shiny, focused.lineage)}`]);
       return `<div class="cf-cap">
           <b>${esc(petInstanceName(focused))}${focused.shiny ? ' ✦' : ''}${nickTag(focused.iid)}</b>
           <span class="role"><span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}</span>
@@ -20499,7 +20499,7 @@ async function openStable(opts = {}) {
           <span class="bw-say"><b>Now pick the second pet</b><small>Swipe across and tap BREED on it</small></span>
           <button class="btn ghost bw-cancel" id="breedCancel" type="button">Cancel</button>
         </div>` : ''}
-      ${pair ? '' : `<p class="note" style="margin:2px 2px 10px"><b>Breed</b> feeds a spare pet into one you keep: the <b>keeper gains a lineage rank</b> (+5% to every stat) and the spare is destroyed. <b>Destroy</b> trades a spare for Bone Dust instead.</p>`}
+      ${pair ? '' : `<p class="note" style="margin:2px 2px 10px"><b>Breed</b> feeds a spare pet into one you keep: the <b>keeper gains a lineage rank</b> (combat stats stop growing at the combined ${PET_STAT_MULT_CAP}x cap) and the spare is destroyed. <b>Destroy</b> trades a spare for Bone Dust instead.</p>`}
       ${roster.length ? `
         <div class="cf${cfWasPanelled ? ' panelled' : ''}" data-want="${openIid || pair ? 'panelled' : 'open'}">
           <!-- The SVG motion-blur filter that used to live here is gone: measured
@@ -20538,7 +20538,7 @@ async function openStable(opts = {}) {
           </div>
           <ul class="breed-facts">
             <li>You keep <b>${esc(petInstanceName(keeper, bank[keeper.iid] || 0))}</b>. Same pet, same name, <b>same level and look</b>.</li>
-            <li>It reaches <b>lineage ${offLineage}</b>: <b>+${Math.round(offLineage * 5)}% to every stat</b>.</li>
+            <li>It reaches <b>lineage ${offLineage}</b>: ${esc(petBreedGainText(keeper.sp, petLevel(bank[keeper.iid] || 0), keeper.shiny, offLineage))} ${esc(petStatBonusText(keeper.sp, keeper.shiny, offLineage))}</li>
             <li><b>${esc(petInstanceName(spare, bank[spare.iid] || 0))} is destroyed</b> and does not come back.</li>
           </ul>
           ${spareIsPrecious ? `<div class="breed-warn">
@@ -20938,7 +20938,7 @@ async function openStable(opts = {}) {
       if (cap) {
         const rows = [['Level', lvl], ['Power', bs.power], ['Health', bs.hp], ['Reflex', bs.reflex]];
         if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next', toNext.toLocaleString()]);
-        if (inst.lineage) rows.push(['Lineage', `${inst.lineage} · +${Math.round(inst.lineage * 5)}% stats`]);
+        if (inst.lineage) rows.push(['Lineage', `${inst.lineage}. ${petStatBonusText(inst.sp, inst.shiny, inst.lineage)}`]);
         $('b', cap).innerHTML = `${esc(petInstanceName(inst))}${inst.shiny ? ' ✦' : ''}${nickTag(inst.iid)}`;
         const role = $('.role', cap);
         if (role) role.innerHTML = `<span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}`;
@@ -21201,7 +21201,7 @@ async function openStable(opts = {}) {
       if (!res.ok) { toast(BREED_ERR[res.reason] || 'Could not breed those.'); render(); return; }
       sel = []; offSp = null; saveBreed();
       await render();                          // refresh the stable underneath
-      openPetBreedResult(res.offspring);       // reveal on top (Stable stays open, no race)
+      openPetBreedResult(res.offspring, petLevel(bank[res.offspring.iid] || 0));       // reveal on top (Stable stays open, no race)
     });
     $$('[data-petpick2]', body).forEach(btn => btn.addEventListener('click', async () => {
       const iid = btn.dataset.iid, tier = Number(btn.dataset.tier), node = btn.dataset.petpick2;
@@ -21329,7 +21329,7 @@ if (typeof window !== 'undefined' && navigator.webdriver) window.__openKennel = 
 
 // Breeding pay-off reveal, styled like the level-up: the offspring on a burst of
 // rays with its new lineage star.
-function openPetBreedResult(off) {
+function openPetBreedResult(off, level) {
   const it = BH_BY_ID[off.sp] || {};
   confettiRain(70); levelSound(S.sounds);
   const parents = (off.parents || []).slice(0, 2);
@@ -21338,11 +21338,11 @@ function openPetBreedResult(off) {
       <div class="grainy"></div>
       <div class="reveal-eyebrow">Bred in the Stable</div>
       <div class="reveal-stamp">Lineage ${off.lineage}</div>
-      <div class="reveal-sub">${esc(it.name || off.sp)} got stronger</div>
+      <div class="reveal-sub">${esc(it.name || off.sp)} gained a lineage rank</div>
       <div class="reveal-body">
         <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${it.rarity || 'common'} lin-${Math.min(off.lineage, 6)}${off.shiny ? ' is-shiny' : ''}">${petPortraitHtml(off.sp, 104, off.shiny, { thumb: true, morph: off.morph })}</div></div>
         <div class="reveal-sub" style="font-size:var(--fs-3)">${esc(it.name || off.sp)}${off.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
-        <div class="cele-bubble">A stronger bloodline: +${Math.round(off.lineage * 5)}% to every stat, and a brighter glow.</div>
+        <div class="cele-bubble">${esc(petBreedGainText(off.sp, level, off.shiny, off.lineage))} ${esc(petStatBonusText(off.sp, off.shiny, off.lineage))}</div>
         ${parents.length ? `<div class="fused">
           <div class="fused-row">
             <span class="gone-pet">${petPortraitHtml(parents[0].sp, 42, parents[0].shiny, { thumb: true, morph: parents[0].morph })}</span>
@@ -23941,7 +23941,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v518'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v519'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

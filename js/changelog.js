@@ -4,6 +4,12 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 519, date: '2026-09-08', title: 'Your pet helps, it does not win the fight for you', items: [
+    'A trained pet had stopped being an advantage and started being the whole fight: on the hardest rungs it turned a near-certain loss into a near-certain win. Pets still help a lot, and they no longer decide the fight before it starts.',
+    'A fight with no pet is completely unchanged. This only touches what a pet contributes.',
+    'Two descriptions that were no longer true have been corrected: breeding no longer claims a flat bonus to every stat now that the combined bonus has a ceiling, and the hunter\'s skewer no longer claims a measured effect that the measurements do not support.',
+  ] },
+
   { n: 518, date: '2026-09-08', title: 'It tells you what happened', items: [
     'Opening a crate with several things in it used to sit on the empty chest between each one. The wait between items is about half what it was.',
     'If the app cannot use your phone\'s storage at all, it used to show a permanently blank screen with no explanation. It now says what is wrong and offers to reload.',
@@ -1017,7 +1023,7 @@ export const CHANGES = [
   ] },
   { n: 275, date: '2026-08-07', title: 'The home screen, and breeding that makes sense', items: [
     '<b>Today looks like the rest of the game now.</b> Your Bonehead sits in a framed poster with a hand-inked edge, your level and rank read as one plate, and the shortcut buttons match the panels everywhere else. This was designed a while back and I simply never built it: the update before this changed the Boneyard and the logging screens but left the home screen alone.',
-    '<b>Breeding works differently, and it should make sense now.</b> You pick the pet you are KEEPING and a spare to feed into it. Your pet stays itself: same name, same level, same look, one rank of lineage stronger (+5% to every stat). The spare is destroyed. Before, both pets were deleted and a third was created, which is why it kept asking which species you wanted.',
+    '<b>Breeding works differently, and it should make sense now.</b> You pick the pet you are KEEPING and a spare to feed into it. Your pet stays itself: same name, same level, same look, one rank of lineage higher (combat gains stop at the shared rarity, shiny and lineage stat cap). The spare is destroyed. Before, both pets were deleted and a third was created, which is why it kept asking which species you wanted.',
     'Because of that, a <b>shiny keeps its own look</b> and can no longer be moved onto another pet. If you try to feed a shiny, a bred bloodline or a levelled pet into something else, the game says so plainly first and makes you confirm twice.',
     'The <b>Build tab</b> stopped showing an unspent talent point after you had already spent it. It updates as you spend now, without leaving the tab.',
     'You can <b>grab things on the map from further away</b>: the collect range went from 55 m to 75 m, and the ring around you on the map grew with it.',

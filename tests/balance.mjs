@@ -43,7 +43,9 @@ const petFixture = (id, { picks = [], food, state } = {}) => {
   if (state === 'over') fight.over = { winner: 'p' };
   if (state === 'foe') fight.active = 'f';
   if (state === 'body-kill') { fight.f.hp = 1; fight.f.stats.reflex = 0; }
-  if (state === 'pet-kill') { fight.f.hp = 1; fight.ap = 0; }
+  // A large health lead can round a special down to zero. Force the unchanged
+  // basic action so this remains a terminal pet-kill lifecycle fixture.
+  if (state === 'pet-kill') { fight.f.hp = 1; fight.ap = 0; fight.p.pet.specialCd = 1; }
   return fight;
 };
 const snapshot = fight => JSON.stringify(fight, (k, v) => k === 'owner' || typeof v === 'function' ? undefined : v instanceof Set ? [...v] : v);
@@ -167,7 +169,7 @@ ok('WAVE-EARNED level 10 and Signature still unlock at 82000 steps',
   PET_MAX_LEVEL === 10 && PET_LEVEL_STEPS[9] === 82000
   && Object.keys(PET_ASSIGN).every(id => buildBattlePet(id, 10).signatureActive));
 {
-  const self = { d: { powerMult: 1, maxHp: 100 } }, foe = { hp: 100, d: { maxHp: 100 } };
+  const self = { hp: 100, d: { powerMult: 1, maxHp: 100 } }, foe = { hp: 100, d: { maxHp: 100 } };
   const effect = (id, picks) => petAbilityEffect(buildBattlePet(id, 10, picks), self, foe);
   const poison = effect('C3', ['h-venom', 'h-rupture']);
   ok('WAVE-POISON stacked poison and Signature share an additive budget', poison.poison.per === 7 && poison.poison.stacks === 3,

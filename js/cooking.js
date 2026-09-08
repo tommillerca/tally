@@ -720,7 +720,7 @@ export const DISH_WORTH = {
   'hearty-hash': 'Measured: against an even fight it more than halves the fights you lose.',
   'necro-feast': 'Measured: against an even fight it more than halves the fights you lose.',
   'marrow-stew': 'Measured: it cuts the fights you lose against an even foe, less than the big dishes do.',
-  'hunters-skewer': 'Measured: with a trained hound at your side, recovering a turn sooner helps you lose fewer fights against an even foe.',
+  // T2: 2000-seed hound comparison spans zero; keep the recovery description only.
   'bonemeal-kibble': 'Measured: with a trained hound at your side, a tougher, harder-hitting pet helps you lose fewer fights against an even foe.',
 };
 export const dishWorth = recipeId => DISH_WORTH[recipeId] || '';
