@@ -25918,15 +25918,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
        node is safe: showGateIntro's finish() is idempotent and nobody awaits
        its promise on this path. */
     document.querySelectorAll('body > .gi').forEach(n => n.remove());
-    await consumeFightFoodBuffs(); // combat dish buffs are spent one fight at a time
     const won = fight.over.winner === 'p';
-    /* Resolve the staked-fight record the moment the outcome is known (see the
-       lifecycle above openFight). A win clears it HERE, not on the Done tap,
-       so killing the app on the victory screen can never read as a forfeit. A
-       non-win (loss or double KO) becomes phase:'lost' and stays until the
-       player sees the panel: acknowledged by closing this sheet (onClose), or
-       by the #pitDefeatAck button in the Pit if the app dies first. */
-    if (staked) await kvSet('pitFight', won ? null : { phase: 'lost', mode: foeCfg.mode, foe: foeCfg.name, at: Date.now() });
+    const pitRecovery = staked && won ? await import('./game.js') : null;
+    const pitPending = pitRecovery ? await pitRecovery.rememberPitWin(foeCfg, fightId, await foodCoinMult()) : null;
+    if (!pitPending) await consumeFightFoodBuffs(); // staked wins spent theirs with the durable intent
+    // A win's durable intent owns recovery until its whole payout lands.
+    // Losses retain the existing acknowledgement panel.
+    if (staked && !won) await kvSet('pitFight', { phase: 'lost', mode: foeCfg.mode, foe: foeCfg.name, at: Date.now() });
     // KO choreography
     const loserStage = fight.over.winner === 'p' ? el('foeStage') : fight.over.winner === 'f' ? el('youStage') : null;
     if (loserStage) loserStage.classList.add('ko');
@@ -25950,6 +25948,19 @@ async function openFight(pitWrap, fighter, foeCfg) {
         if (badges.length) queueCelebration({ newBadges: badges });
       }
     } else if (won) {
+      if (staked) {
+        const r = await pitRecovery.finishPitWin(pitPending);
+        coins = r?.coins || 0; xp = r?.xp || 0; extras = r?.extras || [];
+        if (foeCfg.mode === 'champ' && r?.first) extraCards.push(
+          { wear: CHAMP_PRIZE_ID, imgSrc: bhAsset(BH_BY_ID[CHAMP_PRIZE_ID]),
+            name: BH_BY_ID[CHAMP_PRIZE_ID].name, rarity: 'legendary', kind: 'CHAMPION COSMETIC',
+            stats: `No crate can roll it. Wear it in your Wardrobe, and carry the ${CHAMP_TITLE} title.` },
+          crateCard('golden'));
+        trackEvent('pit_win', { mode: foeCfg.mode });
+        window.__refreshWalletPill?.(); refreshLevelChip();
+        confettiRain(90); levelSound(S.sounds);
+        if (r?.badges.length) queueCelebration({ newBadges: r.badges });
+      } else {
       await awardCapped('fight', 'fight', 10, FIGHT_ROW_LABEL[foeCfg.mode] || 'Pit win', XP_DAILY_CAP.fight);
       trackEvent(foeCfg.mode === 'boss' ? 'boss_win' : foeCfg.mode === 'mini' ? 'mini_win' : 'pit_win', { mode: foeCfg.mode });
       xp += 10;
@@ -26127,44 +26138,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           toast(`You hold ${SPIRE_CAP} spires already. Let one go dormant to take another.`, 4000);
         }
       }
-      else if (foeCfg.mode === 'rung') {
-        if (!foeCfg.done) {
-          const g = await award(`pitrung-${foeCfg.rung}`, 'pitrung', foeCfg.xp, `Ladder: beat ${foeCfg.name}`);
-          if (g) { xp += g; coins = foeCfg.coins; } else coins = foeCfg.repeatCoins;
-        } else coins = foeCfg.repeatCoins;
-      } else if (foeCfg.mode === 'champ') {
-        if (!foeCfg.done) {
-          const g = await award('pitchamp', 'pitchamp', foeCfg.xp, `Champion: beat ${CHAMPION.name}`);
-          if (g) {
-            xp += g; coins = foeCfg.coins;
-            await grantCrate('golden', 'pit-champion');
-            /* THE CHAMPION'S PRIZE IS A LOOK AND A NAME, NOT A NUMBER (S0,
-               2026-08-25). This used to write a `kind:'weapon'` inv row for
-               Bonecrusher: the single strongest item in the game, invisible on
-               your character, handed out by the one fight everybody eventually
-               wins. Tom's call was that the weapon grant goes; the trophy still
-               has to feel like one, or the ladder loses its payoff.
-               So: the Moonlit Skull, the only piece in the game no crate can
-               roll (data/boneheadz.js `exclusive`), plus the Marrow King title
-               under your name wherever your crew can see it. Both are visible on
-               the Bonehead, which is the entire point of the change, and neither
-               moves a single point of damage.
-               The title needs no storage of its own: it is derived from the
-               `pit-champ` badge this same win already mints (championTitle). */
-            const skull = await grantCosmetic(CHAMP_PRIZE_ID, 'pit-champion');
-            extraCards.push(
-              { wear: CHAMP_PRIZE_ID, imgSrc: bhAsset(BH_BY_ID[CHAMP_PRIZE_ID]),
-                name: BH_BY_ID[CHAMP_PRIZE_ID].name, rarity: 'legendary', kind: 'CHAMPION COSMETIC',
-                stats: skull ? `No crate can roll it. Wear it in your Wardrobe, and carry the ${CHAMP_TITLE} title.`
-                             : `You already had it. The ${CHAMP_TITLE} title is yours from here.` },
-              crateCard('golden'));
-          } else coins = foeCfg.repeatCoins;
-        } else coins = foeCfg.repeatCoins;
-      } else if (foeCfg.mode === 'endless') {
-        // first clear of each rank pays XP + full coins; re-clears pay diminishing coins
-        const g = await award(`endless-${foeCfg.rank}`, 'endless', foeCfg.xp, `Gauntlet rank ${foeCfg.rank}: ${foeCfg.name}`);
-        if (g) { xp += g; coins = foeCfg.coins; } else coins = foeCfg.repeatCoins;
-      } else if (foeCfg.mode === 'mimic') {
+      else if (foeCfg.mode === 'mimic') {
         /* THE CHEST IS SPENT HERE AND NOWHERE ELSE.
            The key is the chest's OWN ledger key, `spawn-<date>-<id>`: the exact
            key collectSpawn would have claimed had it been an ordinary crate. So
@@ -26262,6 +26236,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       refreshLevelChip();
       confettiRain(90); levelSound(S.sounds);
       if (badges.length) queueCelebration({ newBadges: badges });
+      }
     } else if (fight.over.winner === 'f') {
       /* QA round 28 P4: a spar LOSS paid 5 coins unconditionally, with no charge
          spent and no cap, so losing on purpose was a coin tap. Spars now take the
