@@ -7059,11 +7059,12 @@ if (typeof window !== 'undefined' && navigator.webdriver) window.__openGlutton =
  * takeover and every repelled siege adds one.
  */
 async function openSpireInfoSheet(info, onAct = null) {
+  let stopClock = () => {};
   const { s, view, held, rival, dormant, besieged, siegeUntil, siegeName, lvl, heldSince } = info;
   /* THE KEEPER, LOUD AND PROUD. Tom, 2026-08-08: "when i click it i want it to
      show loud and proud the bonehead of whoever is keeping it."
-     A rival's tower already ships their full profile snapshot as `defender` (it
-     is what you fight), so their real fit is right there; your own towers null
+     A rival's tower ships combat and appearance fields as `defender`, so
+     their real fit is right there; your own towers null
      that field server-side, so for those it is your own equipped look. Only a
      tower nobody holds falls back to the tombstone. */
   const keeperFit = held ? await equipped() : (rival && rival.defender && rival.defender.outfit) || null;
@@ -7087,7 +7088,7 @@ async function openSpireInfoSheet(info, onAct = null) {
     held && view.tribute && view.tribute.coins ? { ico: ICONS.coin(20), big: String(view.tribute.coins), lab: 'TRIBUTE' } : null,
   ].filter(Boolean);
 
-  openSheet(`
+  const wrap = openSheet(`
     <div class="sheet-head">
       <div class="hd">
         <h2>${esc(s.name || 'Dark Spire')}</h2>
@@ -7114,7 +7115,7 @@ async function openSpireInfoSheet(info, onAct = null) {
           <small>${esc(standing)}</small>
         </div>
       </div>
-      ${besieged ? `<div class="sp-siege">${esc(siegeName || 'Someone')} is laying siege. It falls in ${esc(fmtCookTime(Math.max(0, siegeUntil - spireNow())))} unless you break it.</div>` : ''}
+      ${besieged ? `<div class="sp-siege">${esc(siegeName || 'Someone')} is laying siege. It falls in <span class="sp-siege-left">${esc(fmtCookTime(Math.max(0, siegeUntil - spireNow())))}</span> unless you break it.</div>` : ''}
       ${t1Sect('The tower')}
       <div class="den-pays">
         ${facts.map(f => `<div class="p"><span>${f.ico}</span><b>${esc(f.big)}</b><small>${f.lab}</small></div>`).join('')}
@@ -7133,7 +7134,8 @@ async function openSpireInfoSheet(info, onAct = null) {
       : rival ? `Take it from ${esc(rival.ownerName || 'them')}`
       : !held ? 'Take this tower'
       : view.tribute && view.tribute.days ? 'Collect the tribute'
-      : 'Tend it'}</button></div>` : ''}`, { cls: 't1', name: 'spire-sheet' });
+      : 'Tend it'}</button></div>` : ''}`, { cls: 't1', name: 'spire-sheet', onClose: () => stopClock() });
+  if (besieged) stopClock = startSiegeClock(wrap, siegeUntil);
   composeAvatars(document);
   // delegate to the existing in-range button rather than restating the rules of
   // taking, tending and sieges: that flow already owns energy, shields and adds
@@ -7328,10 +7330,22 @@ async function openSpireSheet(s, view, rival = null) {
    into on demand. */
 if (typeof window !== 'undefined' && navigator.webdriver) window.__spireFightSheet = (s, view, rival) => openSpireSheet(s, view, rival);
 
+// Both spire sheets read the deadline again while open and stop on close.
+function startSiegeClock(wrap, until) {
+  const tick = () => {
+    for (const clock of wrap.querySelectorAll('.sc-left, .sp-siege-left'))
+      clock.textContent = fmtCookTime(Math.max(0, until - spireNow()));
+  };
+  tick();
+  const timer = setInterval(tick, 1000);
+  return () => clearInterval(timer);
+}
+
 /* The defense. A named NPC is at the gate and the clock is real, so this sheet
    says who, how long, and what happens either way: winning levels the tower,
    losing nothing but the clock running out leaves it DORMANT, never lost. */
 function openSiegeSheet(s, view, siege) {
+  let stopClock = () => {};
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Under siege</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
@@ -7351,7 +7365,8 @@ function openSiegeSheet(s, view, siege) {
         <li>No other tower of yours can be besieged while this one is.</li>
       </ul>
       <button class="btn" id="siegeFight" style="width:100%">Break the siege</button>
-    </div>`, { cls: '', name: 'Siege' });
+    </div>`, { cls: '', name: 'Siege', onClose: () => stopClock() });
+  stopClock = startSiegeClock(wrap, siege.until);
   $('#siegeFight', wrap)?.addEventListener('click', async () => {
     const fighter = await buildFighter();
     const lvl = view.level || 1;
@@ -23725,7 +23740,10 @@ function drawGrantDelivery(r) {
     // always applied it to the ledger, but nothing here displayed it, so having
     // your spire taken was completely silent. It is the revenge-walk hook: it
     // gets a card of its own.
-    if (g.type === 'spire') { spireNews.push(p); continue; }
+    if (g.type === 'spire') {
+      spireNews.push({ ...p, title: g.key?.startsWith('siege-lost-') ? 'Spire Dormant' : 'Spire Lost' });
+      continue;
+    }
     coinsSum += p.coins || 0; xpSum += p.xp || 0;
     const kind = p.gift ? 'GIFT' : 'CREW DELIVERY';
     if (p.gift) giftInfos.push({ from: p.from, label: giftRewardLabel(p) });
@@ -23748,7 +23766,7 @@ function drawGrantDelivery(r) {
     notifyNow('Dark Spires', p.note || 'One of your towers no longer flies your name.', 'siege').catch(() => {});
     cards.push({
       iconHtml: `<img src="assets/brand/tomb.png" style="width:110px;height:110px;object-fit:contain;filter:grayscale(1) brightness(.75)">`,
-      name: 'Spire Lost', rarity: 'rare', kind: 'DARK SPIRE',
+      name: p.title, rarity: 'rare', kind: 'DARK SPIRE',
       stats: p.note || 'One of your towers no longer flies your name.',
     });
   }
