@@ -190,7 +190,7 @@ await check('exactly one lime next action follows selection, with no automatic p
   rejectsMutation(css, css.replace('.lab-room .lab-next { background: var(--accent)', '.lab-room .lab-next { background: var(--surface)'), h => assert.match(h, /\.lab-room \.lab-next \{ background: var\(--accent\); color: var\(--accent-ink\)/));
 });
 await check('recipe progression uses engine distributions and preserves certain Midnight', () => {
-  const snapshot = state({ species: { C1: { recipes: { 'base-base': { distribution: [{ morph: 'ember', weight: 22 }, { morph: 'frost', weight: 22 }], protection: 'none', shortage: 'Need another Base pet.' }, 'ember-frost': { distribution: [{ morph: 'toxic', weight: 10 }, { morph: 'rose', weight: 10 }], protection: 'none' } } } } });
+  const snapshot = state({ species: { C1: { recipes: { 'base-base': { distribution: [{ morph: 'ember', weight: 22 }, { morph: 'frost', weight: 22 }], protection: 'none' }, 'ember-frost': { distribution: [{ morph: 'toxic', weight: 10 }, { morph: 'rose', weight: 10 }], protection: 'none' } } } } });
   const html = ui.labRecipesHtml(snapshot, 'C1');
   const grade = h => {
     assert.ok(h.indexOf('data-recipe="base-base"') < h.indexOf('data-recipe="ember-frost"'));
@@ -199,10 +199,12 @@ await check('recipe progression uses engine distributions and preserves certain 
        "Missing colours come first", 75/25). Tom removed that protection so the
        first two recipes are always 50/50: "you could make 3 frost before you make
        1 ember thats the risk part". Keeping it would pin a superseded rule. */
-    for (const text of ['Make Ember or Frost', '50% Ember', '50% Frost', 'Always 50/50. Each coin flip can repeat a colour you already have.', 'Need another Base pet.', '50% Toxic', '50% Rose', 'Make Midnight. Guaranteed.', '100% Midnight']) assert.ok(h.includes(text), text);
+    for (const text of ['Make Ember or Frost', '50% Ember', '50% Frost', 'Always 50/50. Each coin flip can repeat a colour you already have.', '50% Toxic', '50% Rose', 'Make Midnight. Guaranteed.', '100% Midnight']) assert.ok(h.includes(text), text);
     assert.doesNotMatch(h, /Missing colours come first|Needed ingredients come first|100% Frost|roulette/);
   };
   rejectsMutation(html, html.replace('100% Midnight', '50% Midnight'), grade);
+  rejectsMutation(html, html.replace('50% Ember', '100% Ember'), grade);
+  rejectsMutation(html, html.replace('50% Toxic', '75% Toxic'), grade);
   assert.match(ui.labRecipesHtml(state(), ''), /Example odds. Choose a species to see your chances./);
   const counts = ui.labBenchHtml(state(), [null,null], 'C1');
   rejectsMutation(counts, counts.replace('Base 2. Need 2.', 'Base 0. Need 2.'), h => assert.match(h, /Spare pets: Base 2. Need 2./));
@@ -211,17 +213,17 @@ await check('recipe progression uses engine distributions and preserves certain 
 });
 await check('the two repeated sentences occur once in their applicable context', () => {
   const snapshot = state({ species: { C1: { count: 1, recipes: {
-    'base-base': { distribution: [{ morph: 'frost', weight: 1 }], protection: 'collection' },
-    'ember-frost': { distribution: [{ morph: 'toxic', weight: 1 }, { morph: 'rose', weight: 1 }], protection: 'collection' }
+    'base-base': { distribution: [{ morph: 'ember', weight: 22 }, { morph: 'frost', weight: 22 }], protection: 'none' },
+    'ember-frost': { distribution: [{ morph: 'toxic', weight: 10 }, { morph: 'rose', weight: 10 }], protection: 'none' }
   } } } });
   const html = ui.labBenchHtml(snapshot, [null,null], 'C1');
-  for (const sentence of ['Two pets in. One new pet out.', 'Missing colours come first.']) {
+  for (const sentence of ['Two pets in. One new pet out.', 'Always 50/50. Each coin flip can repeat a colour you already have.']) {
     const grade = h => assert.equal(h.split(sentence).length - 1, 1);
     rejectsMutation(html, html + sentence, grade);
     rejectsMutation(html, html.replace(sentence, ''), grade);
   }
-  assert.equal((html.match(/aria-describedby="labCollectionProtection"/g) || []).length, 2);
-  assert.doesNotMatch(html.slice(html.indexOf('data-recipe="toxic-rose"'), html.indexOf('<details id="labHelp"')), /Missing colours|labCollectionProtection/);
+  assert.equal((html.match(/aria-describedby="labCoinFlipOdds"/g) || []).length, 2);
+  assert.doesNotMatch(html.slice(html.indexOf('data-recipe="toxic-rose"'), html.indexOf('<details id="labHelp"')), /Missing colours|labCoinFlipOdds/);
   assert.doesNotMatch(ui.labRecipesHtml(state(), 'C1'), /Missing colours come first/);
 });
 await check('species change expands native choices and clears the exact pets and quote on selection', () => {
@@ -252,7 +254,7 @@ await check('compact supporting disclosures preserve help, recovery and the full
   const grade = h => {
     assert.ok(h.indexOf('data-lab-recover') < h.indexOf('class="lab-working"'));
     assert.ok(h.includes(ui.labBranchesHtml(quote())));
-    for (const text of ['Both inputs are permanently consumed.', 'Every experiment removes two pets to make one.', 'Both pets are consumed.', 'Spending last copies can leave cells empty.', 'Trained pets are allowed, but all their investment is lost.', '0/1 experiments used', '00:00, America/Vancouver', 'More pet actions']) assert.ok(h.includes(text), text);
+    for (const text of ['Both inputs are permanently consumed.', 'Every experiment removes two pets to make one.', 'Both pets are consumed.', 'Spending your last copy can remove a colour from your collection.', 'Trained pets are allowed, but all their investment is lost.', '0/1 experiments used', '00:00, America/Vancouver', 'More pet actions']) assert.ok(h.includes(text), text);
     assert.match(h, /<details id="labHelp" >/);
   };
   rejectsMutation(html, html.replace(ui.labBranchesHtml(quote()), ''), grade);
@@ -267,7 +269,7 @@ await check('compact supporting disclosures preserve help, recovery and the full
 await check('bench help discloses repeated coin flips without collection or stock promises', () => {
   const html = ui.labBenchHtml(state(), [null,null], '');
   const grade = h => {
-    for (const text of ['Base + Base always gives Ember 50% or Frost 50%', 'Ember + Frost always gives Toxic 50% or Rose 50%', 'can repeat a colour you already have', 'Three Frost before your first Ember is possible', 'Your collection, ingredient stock and previous results never change the odds']) assert.ok(h.includes(text), text);
+    for (const text of ['50% Ember', '50% Frost', '50% Toxic', '50% Rose', 'Always 50/50. Each coin flip can repeat a colour you already have.', 'Three Frost before your first Ember is possible', 'Your collection, spare pets and previous results never change the odds']) assert.ok(h.includes(text), text);
     assert.doesNotMatch(h, /missing colours come first|needed ingredients come first|One missing means 100%|only one below two means 100%/i);
   };
   rejectsMutation(html, html.replace('Three Frost before your first Ember is possible', 'Missing colours come first'), grade);
