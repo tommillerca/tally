@@ -273,6 +273,7 @@ PURE.push('guard-debts-audit.mjs'); // R45: node-only regression checks execute 
 PURE.push('submission-preflight-audit.mjs');   // 2026-09-07: drives native/submission-preflight.mjs for real and proves it refuses all three (a bundle without STORE_BUILD=1, a synced config that still has a server URL, a reachable TestFlight string) with a healthy control; node-only, <1s
 PURE.push('pet-state-audit.mjs'); // Lane A: real pet exports, migration, unsupported rows, instance talent clicks and the input to battle construction; Node-only.
 PURE.push('pet-family-audit.mjs'); // Lane D: refuses incomplete family kits, validates species/picks and tree unlocks, checks cooldown agreement and exhaustive frozen combat outputs; Node-only.
+PURE.push('crew-pet-audit.mjs'); // S1: Node-only production snapshot to Crew markup, friends-only accessories, C6 art and C4 tint layers at DPR 2/3; browser pixels remain in crew-fan-audit.
 PURE.push('coins-merge-tie-audit.mjs');   // R38-13: coinsRev bumps by magnitude, importAll keeps the higher balance on a tie, taken receipts; node-only (shipped unregistered in v485)
 PURE.unshift('no-debug-markers-lint.mjs');
 /* routine-race-audit is PURE for the same reason spawn-claim-atomic-audit is:

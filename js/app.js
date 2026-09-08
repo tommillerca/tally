@@ -12204,7 +12204,10 @@ function nameWithAlias(f) {
 function crewCardArtHtml(f) {
   const p = f.profile || {};
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
-  const pet = p.pet && p.pet.id ? `<div class="cfan-pet">${petPortraitHtml(p.pet.id, 58, !!p.pet.shiny, { mass: true, wear: p.pet.wear || null, thumb: true, morph: snapPetMorph(p.pet) })}</div>` : '';
+  // Same friends-only wardrobe as openFriendProfile. Older snapshots stay bare.
+  const yard = p.yard && Array.isArray(p.yard.pets) ? p.yard : null;
+  const yardWear = (yard && yard.wear) || null;
+  const pet = p.pet && p.pet.id ? `<div class="cfan-pet">${petPortraitHtml(p.pet.id, 58, !!p.pet.shiny, { mass: true, wear: yardWear, thumb: true, morph: snapPetMorph(p.pet) })}</div>` : '';
   return (eq.BG && BH_BY_ID[eq.BG] ? `<img class="cfan-bg" src="${bhThumb(bhAsset(BH_BY_ID[eq.BG]))}" alt="">` : '')
     + avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'], thumb: 384, foreign: true }) + pet;
 }
