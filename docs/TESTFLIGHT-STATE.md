@@ -38,3 +38,30 @@ Proposed completion after resolving the contradictory ASC instruction: run
 observation, and replace the unknown states with returned values. Do not run
 `distribute`, `check`, upload tooling or any relationship mutation for this task.
 The last ten builds may no longer be builds 11 through 20.
+
+## Verdict: `hotfix/register-429-wallet` is dead weight (2026-09-08)
+
+Asked whether that unmerged branch holds anything the shipped fix does not.
+Answer: no, and its version is strictly worse.
+
+`registerKey` on `origin/main` is byte-identical to the branch's version through
+the whole retry body (two attempts, 429 only, 600 ms backoff, `register-failed`
+with the status on the second failure), and main additionally carries a guard the
+branch lacks:
+
+```js
+const base = await apiBase();
+if (!base) return { ok: false, reason: 'no-api' };
+```
+
+Without it, the branch's version would build a request against an undefined base.
+
+QA round 43 independently confirmed the shipped behaviour live on v493: "v493 held
+coins at 50 across all 28 samples" against a rate-limited IP, and said so.
+
+So the branch can be deleted whenever Tom wants to. Nothing is lost. It is listed
+here rather than deleted because branch deletion is his call and this session has
+a standing rule against destructive remote operations.
+
+The sibling `hotfix/register-429-ship` should be checked the same way before it is
+deleted; it was not diffed here.
