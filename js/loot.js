@@ -2,11 +2,13 @@
 // Depends only on db + the generated cosmetics manifest, so the whole economy
 // stays portable (no DOM, no web-only APIs).
 
-import { db, kvGet, kvSet, kvBumpRevisioned, kvUpdate, kvUpdateMulti, newId, takeAndPay, payAtomic } from './db.js';
+import { db, kvGet, kvSet, kvBumpRevisioned, kvUpdate, kvUpdateMulti, newId, takeAndPay, payAtomic, dayDecision } from './db.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneheadz.js';
 import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SOLD, FOOTBALL_PETS, footballItemId, footballGrantIds, footballBundleIds, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { COMMON_INGREDIENT_IDS } from './cooking.js';
+import { dateKey } from './nutrition.js';
+import { LAB_RULES, LAB_PRICES, LAB_DEFAULTS, labPreview, labCapacity, labDayProjection, labEqual, labRefuse, resolveLabOutcome, validateLabSave } from './laboratory.js';
 import { isMorph, MORPH_LABEL, morphAsset, isKnownPet, legalPicks, petLevel } from './pets.js';
 
 // Use the same colour identity as the art. Shinies and CX never wear morph art.
@@ -1140,57 +1142,9 @@ export async function disenchantGear(gearId) {
 // Salvage an owned, EARNED pet into Bone Dust. Won't touch a default/base pet
 // (no inv row) and unequips it if it's your active companion.
 export async function salvagePet(petId) {
-  const item = BH_BY_ID[petId];
-  if (!item || item.slot !== 'C') return { ok: false, reason: 'not-a-pet' };
-  const list = await petInstances();     // migrates / heals a legacy save first
-  if (!speciesCount(list, petId)) return { ok: false, reason: 'not-owned' };
-  /* THE COPY IS THE RIGHT TO ONE DUST PAYOUT, so taking it has to be what
-     decides whether there is one. Reading the roster, removing a copy and
-     writing the whole list back left both of two overlapping salvages holding
-     the same pre-read: one removal survived, and BOTH were paid full dust.
-     removeWorstInstance is pure precisely so it can run inside the transaction.
-     Sacrifices the WORST copy first (keeps your best / shinies); a better copy
-     pays out more dust so salvaging a shiny or bred pet still feels fair. */
-  /* AND THE PAYOUT RIDES IN THAT SAME TRANSACTION (2026-09-06). The dust, and
-     when this was the last copy the 'cos' ownership row, its take receipt and
-     the legacy anchor, were separate writes after the take: a death between them
-     destroyed the pet and paid nothing, or left an owned species with zero
-     copies, which reclaimOwnedPets then MINTS BACK, so the same pet could be
-     salvaged again. The updater throws `refused` when the copy is already gone,
-     which aborts the lot (js/db.js payAtomic). Priced off the pre-read copy
-     removeWorstInstance will pick, and checked against it inside. */
-  const worst = removeWorstInstance(list, petId).removed;
-  const dust = petDustValue(item) + (worst && worst.shiny ? 15 : 0) + (worst ? (worst.lineage || 0) * 8 : 0);
-  const last = speciesCount(list, petId) === 1;
-  const cos = last ? (await db.all('inv')).find(r => r.kind === 'cos' && r.itemId === petId) : null;
-  const gone = () => Object.assign(new Error('not-owned'), { refused: true });
-  let remaining = 0;
-  try {
-    await payAtomic({
-      kv: {
-        petInst: raw => {
-          const r = removeWorstInstance(Array.isArray(raw) ? raw : list, petId);
-          if (!r.removed || r.removed.iid !== worst.iid) throw gone();
-          remaining = speciesCount(r.instances, petId);
-          if ((remaining === 0) !== last) throw gone();   // the roster moved under the plan: refuse, the retry re-plans
-          return r.instances;
-        },
-        petTaken: cur => [...new Set([...(cur || []), worst.iid])],
-        ...bumpPay('bonedust', 'dustRev', dust),
-        ...(last ? { pets: rec => { const p = { ...(rec || {}) }; delete p[petId]; return p; } } : {}),
-      },
-      dels: cos ? [{ store: 'inv', key: cos.id }] : [],   // R38-13: the 'invTaken' receipt is written by the primitive, same transaction
-    });
-  } catch (e) {
-    if (e && e.refused) return { ok: false, reason: 'not-owned' };
-    throw e;
-  }
-  if (remaining === 0) {
-    // last copy gone: unequip (a slot heal, not a payout; equippedPetIid repairs it too)
-    const eq = await equipped({ raw: true });
-    if (eq.C === petId) await equip('C', null);
-  }
-  return { ok: true, dust, name: item.name, remaining };
+  const item=BH_BY_ID[petId];
+  if(!item||item.slot!=='C')return {ok:false,reason:'not-a-pet'};
+  return salvageLivePet(null,petId);
 }
 
 /* THE BONE DUST SHOP IS CLOSED (S0 second half, 2026-08-25).
@@ -1244,7 +1198,9 @@ export const EGG_GOAL_STEPS = 8000;
 export const STEPS_PER_ACTIVE_MIN = 250;
 export const ACTIVE_MIN_DAILY_CAP = 60;
 export async function lifetimeStepsSum() {
-  const rows = await db.all('health');
+  return effectivePetSteps(await db.all('health'));
+}
+function effectivePetSteps(rows) {
   return rows.reduce((a, r) => a
     + (r.steps || 0)
     + Math.min(r.exerciseMin || 0, ACTIVE_MIN_DAILY_CAP) * STEPS_PER_ACTIVE_MIN, 0);
@@ -1496,70 +1452,28 @@ export async function breedStatus() {
 
 // Breed two instances by iid. offspringSp must be one of the two parents' species.
 export async function breedPets(keepIid, feedIid) {
-  if (!keepIid || !feedIid || keepIid === feedIid) return { ok: false, reason: 'pick-two' };
-  let list = await petInstances();
-  const keep0 = list.find(x => x.iid === keepIid);
-  const fed0 = list.find(x => x.iid === feedIid);
-  if (!keep0 || !fed0) return { ok: false, reason: 'gone' };
-  const lifetime = await lifetimeStepsSum();
-  const credit = await kvGet('petBreedCredit', null);
-  if (credit != null && lifetime - credit < BREED_COOLDOWN_STEPS) {
-    return { ok: false, reason: 'cooldown', stepsLeft: BREED_COOLDOWN_STEPS - (lifetime - credit) };
-  }
-  // lineage is EARNED per feeding, not transferred: feeding a high-lineage pet in
-  // does not vault the keeper up to it, so sacrificing a good pet is a waste
-  // rather than a strategy.
-  const consumed = breedParents(fed0);
-
-  /* THE PAIR STILL BEING THERE IS THE CLAIM (2026-09-04, claimed-row-audit): the
-     lineage bump and the removal used to be decided off this outer read and
-     written back whole, which could lose a concurrent salvagePet /
-     salvageInstance / reclaim on this row, or breed away a copy a concurrent
-     salvage had already taken. Both mutations happen in the one kvUpdate below,
-     re-read against the LIVE row, and it refuses (undefined) if either partner
-     is no longer there. */
-  let keep = null;
-  // The fed copy's receipt commits with the lineage it earns on the keeper.
-  const result = await kvUpdateMulti({ petInst: raw => {
-    const cur = Array.isArray(raw) ? raw : list;
-    if (!cur.some(x => selectablePetInstance(x) && x.iid === keepIid) || !cur.some(x => selectablePetInstance(x) && x.iid === feedIid)) return undefined;
-    const bumped = cur.map(x => selectablePetInstance(x) && x.iid === keepIid ? { ...x, lineage: (x.lineage || 0) + 1 } : x);
-    keep = bumped.find(x => selectablePetInstance(x) && x.iid === keepIid);
-    return bumped.filter(x => !selectablePetInstance(x) || x.iid !== feedIid);
-  }, petTaken: cur => keep ? [...new Set([...(cur || []), feedIid])] : undefined }, { petInst: list });
-  const next = result.petInst;
-  if (!next) return { ok: false, reason: 'gone' };
-  list = next;
-  await kvSet('petBreedCredit', lifetime);
-
-  // the keeper is the SAME pet, so its level bank is untouched. Only drop the
-  // bank entry for the pet that is gone.
-  const bank = await petLevelBank();
-  delete bank[feedIid];
-  await clearBond(feedIid);          // the fed pet's affection goes with it
-  await clearNick(feedIid);          // and its nickname, so the next pet minted cannot inherit it
-  await kvSet('petLvlSteps', bank);
-
-  // if you fed away the pet you had out, the keeper takes its place
-  const wasEquipped = (await kvGet('petEquipped', null));
-  if (wasEquipped === feedIid) { await kvSet('petEquipped', keep.iid); await equip('C', keep.sp); }
-
-  // the fed species may now be extinct: same cleanup as before
-  if (speciesCount(list, fed0.sp) === 0) {
-    const inv = await db.all('inv');
-    const row = inv.find(r => r.kind === 'cos' && r.itemId === fed0.sp);
-    if (row) await db.takeInv(row.id);   // R38-13, one transaction since 2026-09-06
-    const eqp = await equipped({ raw: true });
-    if (eqp.C === fed0.sp && keep.sp !== fed0.sp) await equip('C', keep.sp);
-    const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[fed0.sp]; await kvSet('pets', petsRec);
-  }
-  // No `cost` key: #203 made breeding free and deleted the variable, but left
-  // it in this return, so every breed threw "cost is not defined" and the
-  // result reveal never opened. No caller ever read it.
-  return { ok: true, offspring: { ...keep, parents: consumed, fedName: fed0.sp } };
+  if(!keepIid||!feedIid||keepIid===feedIid)return {ok:false,reason:'pick-two'};
+  await petInstances();await petLevelBank();await petTalentBank();
+  return labTry(()=>payAtomic({snapshot:{keys:[...LAB_KEYS,'petBreedCredit'] ,stores:['health','inv']},decide:(s,rows)=>{
+    const cur=s.petInst||[],keep0=cur.find(x=>selectablePetInstance(x)&&x.iid===keepIid),fed0=cur.find(x=>selectablePetInstance(x)&&x.iid===feedIid);
+    if(!keep0||!fed0)labRefuse('gone');
+    const lifetime=effectivePetSteps(rows.health),credit=s.petBreedCredit;
+    if(credit!=null&&lifetime-credit<BREED_COOLDOWN_STEPS)return {result:{ok:false,reason:'cooldown',stepsLeft:BREED_COOLDOWN_STEPS-(lifetime-credit)}};
+    const keep={...keep0,lineage:(keep0.lineage||0)+1};
+    const next=cur.filter(x=>x?.iid!==feedIid).map(x=>x?.iid===keepIid?keep:x);
+    const changes=petRemovalChanges(s,[feedIid],next,lifetime,keep);
+    changes.petBreedCredit=lifetime;
+    const extinct=speciesCount(next,fed0.sp)===0;
+    if(extinct){changes.pets={...s.pets};delete changes.pets[fed0.sp];}
+    return {kv:valuesPay(changes),dels:extinct?rows.inv.filter(r=>r.kind==='cos'&&r.itemId===fed0.sp).map(r=>({store:'inv',key:r.id})):[],
+      result:{ok:true,offspring:{...keep,parents:breedParents(fed0),fedName:fed0.sp}}};
+  }}));
 }
 
 let _iidSeq = 0;
+function freshPetInstance(iid, sp, morph, hatchedAtSteps, shiny = false) {
+  return {iid,sp,lineage:0,shiny,morph,hatchedAtSteps};
+}
 function newIid(sp) { _iidSeq += 1; return `p${Date.now().toString(36)}-${_iidSeq}-${sp}`; }
 
 // Persist unsupported rows verbatim. Only this view may reach pet consumers.
@@ -1656,29 +1570,23 @@ export async function petInstances() {
          when the live row no longer carries the dup this read saw (already
          healed, or raced away some other way), and there is then nothing new
          to copy onto the side stores below. */
-      const written = await kvUpdate('petInst', raw => {
-        const cur = Array.isArray(raw) ? raw : list;
-        const h = healDupIids(cur);
-        return h !== cur ? h : undefined;
-      }, list);
-      if (written) {
-        /* duplicate iids exist in the wild (mechanism unproven: every mint and
-           merge path here checks out, so the origin has to identify itself from
-           telemetry). COPY the pooled bond/level values onto the new ids, never
-           delete the original key: additive-DB rule, and the first row still
-           owns it. Raw kv reads, because petLevelBank() calls back into here. */
-        const bank = await kvGet('petLvlSteps', null);
-        const bonds = await kvGet('petBonds', null);
-        const nicks = await kvGet('petNick', null);
-        for (const row of written) {
-          if (!selectablePetInstance(row) || !row.healedFrom) continue;
-          if (bank && bank[row.healedFrom] != null && bank[row.iid] == null) bank[row.iid] = bank[row.healedFrom];
-          if (bonds && bonds[row.healedFrom] != null && bonds[row.iid] == null) bonds[row.iid] = bonds[row.healedFrom];
-          if (nicks && nicks[row.healedFrom] != null && nicks[row.iid] == null) nicks[row.iid] = nicks[row.healedFrom];
+      const written = await payAtomic({snapshot:{keys:['petInst','petTaken','petLvlSteps','petBonds','petNick']},decide:s=>{
+        const cur=Array.isArray(s.petInst)?s.petInst:list,h=healDupIids(cur);
+        if(h===cur)return {result:undefined};
+        const changes={petInst:h},taken=new Set(s.petTaken||[]);
+        // Copy pooled investments while the roster heal still holds the lock.
+        // A quote cannot observe new IIDs before their training and names exist.
+        for(const key of ['petLvlSteps','petBonds','petNick'])if(s[key]){
+          const map={...s[key]};
+          for(const row of h){
+            if(!selectablePetInstance(row)||!row.healedFrom||taken.has(row.iid))continue;
+            if(map[row.healedFrom]!=null&&map[row.iid]==null)map[row.iid]=map[row.healedFrom];
+          }
+          changes[key]=map;
         }
-        if (bank) await kvSet('petLvlSteps', bank);
-        if (bonds) await kvSet('petBonds', bonds);
-        if (nicks) await kvSet('petNick', nicks);
+        return {kv:valuesPay(changes),result:h};
+      }});
+      if (written) {
         const dupIids = written.filter(r => r && r.healedFrom).map(r => r.healedFrom);
         import('./analytics.js').then(a => a.track('pet_iid_heal', {
           n: dupIids.length,
@@ -1731,7 +1639,7 @@ async function petInstancePay(sp, { shiny = false, morph = 'base', hatchedAtStep
   // Shiny forces base (rule 0.1/1.2); an unknown morph value renders base too
   // (rule 0.6), so it is refused at the write rather than merely at render.
   const safeMorph = shiny ? 'base' : (isMorph(morph) ? morph : 'base');
-  const inst = { iid: newIid(sp), sp, lineage: 0, shiny: !!shiny, morph: safeMorph, hatchedAtSteps: anchor };
+  const inst = freshPetInstance(newIid(sp), sp, safeMorph, anchor, !!shiny);
   const owned = (await ownedCosmeticIds()).has(sp);
   const pay = {
     kv: {
@@ -1751,6 +1659,137 @@ async function petInstancePay(sp, { shiny = false, morph = 'base', hatchedAtStep
   return { inst, pay };
 }
 
+/* Laboratory service contract: quoteLaboratory([iid,iid]) returns a versioned
+   quote or {ok:false,reason}. animateLaboratory(quote,{acknowledgedRisk}) returns
+   {ok:true,receipt} after commit only. Risky quotes require the literal ANIMATE.
+   Receipts are replayable even when their result was subsequently consumed.
+   These services do not render, network, award XP, or grant an egg. */
+const LAB_KEYS = [...Object.keys(LAB_DEFAULTS), 'petInst','petTaken','pets','looks','petLvlSteps','petLvlV',
+  'petNick','petBonds','pettalents','petEquipped','equipped','petStepCredit','dayHighWater','dayWitnessOrd',
+  'coins','coinsRev','coinsHistory'];
+const labSnapshot = {keys:LAB_KEYS,stores:['health','inv']};
+const valuesPay = values => Object.fromEntries(Object.entries(values).map(([k,v])=>[k,()=>v]));
+const labTry = async run => {try{return await run();}catch(e){if(e?.refused)return {ok:false,reason:e.reason||e.message};throw e;}};
+const labZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'local';
+function labState(s) {
+  validateLabSave(s);
+  if(s.labV!==1)labRefuse('unsupported-laboratory');
+  for(const key of ['labExperiments','labDaily','labIncubators','labIntents'])if(!s[key]||typeof s[key]!=='object'||Array.isArray(s[key]))labRefuse('invalid-laboratory');
+  const daily=labDayProjection(s.labExperiments,s.labIncubators);
+  if(!labEqual(daily,s.labDaily))labRefuse('invalid-daily');
+  return daily;
+}
+export async function initLaboratory() {
+  await petInstances();
+  await petLevelBank();
+  await petTalentBank();
+  return payAtomic({snapshot:{keys:Object.keys(LAB_DEFAULTS)},decide:s=>{
+    if(s.labV!==undefined&&s.labV!==1)labRefuse('unsupported-laboratory');
+    return {kv:valuesPay(Object.fromEntries(Object.entries(LAB_DEFAULTS).filter(([k])=>s[k]===undefined))),result:true};
+  }});
+}
+function laboratoryQuote(s, rows, iids, opId) {
+  const daily=labState(s),day=dateKey(),zone=labZone();
+  const clock=dayDecision(day,s.dayHighWater,s.dayWitnessOrd,true);
+  if(!clock.fresh)labRefuse(clock.reason);
+  const capacity=labCapacity(s.labIncubators),occupancy=daily[day]||{slots:{},used:0};
+  if(occupancy.used>=capacity)labRefuse('daily-cap');
+  const preview=labPreview(s.petInst,iids,s);
+  if(!preview.ok)labRefuse(preview.reason);
+  if(iids.some(id=>(s.petTaken||[]).includes(id)))labRefuse('invalid-pair');
+  if(s.petLvlV!==2||s.pettalents?.__iidV!==2)labRefuse('needs-migration');
+  const meter=effectivePetSteps(rows.health);
+  if(!Number.isFinite(meter)||meter<0||s.petStepCredit!==meter)labRefuse('unsettled-training');
+  const sp=preview.species;
+  if(!s.pets?.[sp]||!s.looks?.includes(sp)||!rows.inv.some(r=>r.kind==='cos'&&r.itemId===sp))labRefuse('ownership-repair');
+  if(s.petEquipped){const equippedInst=s.petInst.find(x=>x?.iid===s.petEquipped);if(!equippedInst||s.equipped?.C!==equippedInst.sp)labRefuse('equipment-repair');}
+  // Pin investment, ownership, effective meter and species stock to the review.
+  // Keeping unrelated roster rows in context also prevents a changed whole-grid
+  // count from silently altering the branch consequences the player approved.
+  const context={roster:s.petInst,petTaken:s.petTaken||[],pets:s.pets,looks:s.looks,
+    petLvlSteps:s.petLvlSteps,petNick:s.petNick||{},petBonds:s.petBonds||{},pettalents:s.pettalents,
+    petEquipped:s.petEquipped??null,equipped:s.equipped||{},petStepCredit:s.petStepCredit,
+    ownership:rows.inv.filter(r=>r.kind==='cos'&&r.itemId===sp)};
+  return {...preview,format:1,opId,rules:LAB_RULES,iids:[...iids],day,zone,meter,capacity,used:occupancy.used,occupancy,context};
+}
+export async function quoteLaboratory(iids) {
+  return labTry(async()=>{
+    await initLaboratory();
+    await creditEquippedPetSteps();
+    return payAtomic({snapshot:labSnapshot,decide:(s,rows)=>({result:laboratoryQuote(s,rows,iids,crypto.randomUUID())})});
+  });
+}
+function validLabRequest(q) {
+  if(!q||q.format!==1||q.rules!==LAB_RULES||typeof q.opId!=='string'||!q.opId||q.opId.length>200||!Array.isArray(q.iids)||q.iids.length!==2)labRefuse('invalid-request');
+}
+export async function saveLabIntent(quote, {acknowledgedRisk} = {}) {
+  quote = structuredClone(quote);
+  return labTry(()=>payAtomic({snapshot:labSnapshot,decide:(s,rows)=>{
+    validLabRequest(quote);
+    if(!labEqual(quote,laboratoryQuote(s,rows,quote.iids,quote.opId)))labRefuse('stale-quote');
+    if(quote.risk&&acknowledgedRisk!=='ANIMATE')labRefuse('acknowledgement-required');
+    const prior=s.labIntents[quote.opId];
+    if(prior&&!labEqual(prior.quote,quote))labRefuse('op-conflict');
+    return {kv:valuesPay({labIntents:{...s.labIntents,[quote.opId]:prior||{format:1,quote,acknowledgedRisk,createdAt:Date.now()}}}),result:{ok:true}};
+  }}));
+}
+export async function animateLaboratory(quote, {acknowledgedRisk} = {}) {
+  quote = structuredClone(quote);
+  return labTry(()=>payAtomic({snapshot:labSnapshot,decide:(s,rows)=>{
+    validLabRequest(quote);
+    const existing=s.labExperiments?.[quote.opId];
+    if(existing){if(!labEqual(existing.request,quote))labRefuse('op-conflict');return {result:{ok:true,receipt:existing}};}
+    if(quote.day!==dateKey()||quote.zone!==labZone())labRefuse('stale-quote');
+    const live=laboratoryQuote(s,rows,quote.iids,quote.opId);
+    if(!labEqual(live,quote))labRefuse('stale-quote');
+    if(quote.risk&&acknowledgedRisk!=='ANIMATE')labRefuse('acknowledgement-required');
+    const intent=s.labIntents[quote.opId];if(intent&&!labEqual(intent.quote,quote))labRefuse('op-conflict');
+    const morph=resolveLabOutcome(live.distribution,()=>crypto.getRandomValues(new Uint32Array(1))[0]/2**32);
+    const taken=new Set(s.petTaken||[]), usedIds=new Set([...s.petInst.map(x=>x?.iid),...taken]);
+    let iid;do{iid=newIid(live.species);}while(usedIds.has(iid));
+    const result=freshPetInstance(iid,live.species,morph,live.meter);
+    const slot=Array.from({length:live.capacity},(_,i)=>i+1).find(i=>!live.occupancy.slots[i]);
+    const equippedBefore=s.petEquipped??null,equippedAfter=live.iids.includes(equippedBefore)?iid:equippedBefore;
+    const receipt={format:1,opId:quote.opId,rules:LAB_RULES,day:live.day,slot,committedAt:Date.now(),zone:live.zone,
+      recipe:live.recipe,species:live.species,inputs:live.inputs,distribution:live.distribution,protection:live.protection,
+      beforeCells:live.beforeCells,branches:live.branches,result,equippedBefore,equippedAfter,request:quote};
+    const cleaned=key=>Object.fromEntries(Object.entries(s[key]||{}).filter(([id])=>!live.iids.includes(id)));
+    const experiments={...s.labExperiments,[quote.opId]:receipt},intents={...s.labIntents};delete intents[quote.opId];
+    const changes={petInst:[...s.petInst.filter(x=>!live.iids.includes(x?.iid)),result],petTaken:[...new Set([...taken,...live.iids])],
+      petLvlSteps:{...cleaned('petLvlSteps'),[iid]:0},petNick:cleaned('petNick'),petBonds:cleaned('petBonds'),pettalents:cleaned('pettalents'),
+      labExperiments:experiments,labDaily:labDayProjection(experiments,s.labIncubators),labIntents:intents,
+      labUi:{...s.labUi,introRead:true,revision:s.labUi.revision+1},
+      ...dayDecision(live.day,s.dayHighWater,s.dayWitnessOrd,true).writes};
+    if(equippedBefore!==equippedAfter){changes.petEquipped=equippedAfter;changes.equipped={...s.equipped,C:live.species};}
+    return {kv:valuesPay(changes),result:{ok:true,receipt}};
+  }}));
+}
+export async function buyLabIncubator(request) {
+  return labTry(async()=>{
+    await initLaboratory();
+    return payAtomic({snapshot:labSnapshot,decide:s=>{
+      if(!request||request.format!==1||typeof request.opId!=='string'||!request.opId||request.opId.length>200||![2,3].includes(request.slot)||request.price!==LAB_PRICES[request.slot])labRefuse('invalid-purchase');
+      labState(s);
+      const {slot,opId,price}=request,prior=s.labIncubators[slot];
+      if(prior){if(prior.opId!==opId)labRefuse('already-owned');return {result:{ok:true,receipt:prior}};}
+      if(Object.values(s.labIncubators).some(x=>x.opId===opId))labRefuse('op-conflict');
+      if(!Object.keys(s.labExperiments).length)labRefuse('experiment-required');
+      if(slot===3&&!s.labIncubators['2'])labRefuse('prerequisite');
+      if(typeof s.coins!=='number'||!Number.isFinite(s.coins)||s.coins<price)labRefuse('insufficient-coins');
+      if(s.coinsRev!==undefined&&(typeof s.coinsRev!=='number'||!Number.isFinite(s.coinsRev)||s.coinsRev<0))labRefuse('invalid-coins');
+      const currencyReceipt=`lab-incubator:${opId}:coins`,receipt={format:1,slot,opId,price,purchasedAt:Date.now(),currencyReceipt};
+      return {kv:valuesPay({coins:s.coins-price,coinsRev:(s.coinsRev||0)+Math.max(1,price),labIncubators:{...s.labIncubators,[slot]:receipt}}),currencyReceipts:{coins:currencyReceipt},result:{ok:true,receipt}};
+    }});
+  });
+}
+export async function laboratoryResults() {return Object.values(await kvGet('labExperiments',{}));}
+export async function acknowledgeLabResult(opId) {
+  return payAtomic({snapshot:{keys:['labExperiments','labSeen']},decide:s=>{
+    if(!s.labExperiments?.[opId])labRefuse('unknown-experiment');
+    return {kv:valuesPay({labSeen:[...new Set([...(s.labSeen||[]),opId])]}),result:true};
+  }});
+}
+
 /* ---------- Paddock bonds (kv 'petBonds' = {iid: 0..5}) ----------
  * Per-copy affection for The Paddock. Same shape as petLvlSteps: its own kv
  * map keyed by instance id, ADDITIVE, never a new field on the instance rows,
@@ -1762,21 +1801,23 @@ export const BOND_MAX = 5;
 // pure: the only legal transition is +1, clamped into [0, BOND_MAX]
 export function bondAfter(cur) { return Math.min(BOND_MAX, Math.max(0, cur | 0) + 1); }
 export async function petBonds() { return (await kvGet('petBonds', {})) || {}; }
+// Serialize identity checks with the map update so a consumed IID cannot
+// acquire metadata again from an edit started before Animate.
+async function editLivePet(iid, keys, edit) {
+  await petInstances();
+  return payAtomic({snapshot:{keys:['petInst','petTaken',...keys]},decide:s=>{
+    const inst=(s.petInst||[]).find(x=>selectablePetInstance(x)&&x.iid===iid&&!(s.petTaken||[]).includes(iid));
+    return inst ? edit(s,inst) : {result:{ok:false,reason:'unknown'}};
+  }});
+}
 export async function bondUp(iid) {
-  // never bank affection for a ghost: the iid must be a live instance
-  const list = await petInstances();
-  if (!list.some(x => x.iid === iid)) return { ok: false, reason: 'unknown' };
-  const bonds = await petBonds();
-  const before = bonds[iid] | 0;
-  const after = bondAfter(before);
-  if (after === before) return { ok: true, bond: before, maxed: true, changed: false };
-  bonds[iid] = after;
-  await kvSet('petBonds', bonds);
-  return { ok: true, bond: after, maxed: after === BOND_MAX, changed: true };
+  return editLivePet(iid,['petBonds'],s=>{
+    const before=s.petBonds?.[iid]||0,after=bondAfter(before);
+    return {kv:valuesPay({petBonds:{...s.petBonds,[iid]:after}}),result:{ok:true,bond:after,maxed:after===BOND_MAX,changed:after!==before}};
+  });
 }
 async function clearBond(iid) {
-  const bonds = await petBonds();
-  if (iid in bonds) { delete bonds[iid]; await kvSet('petBonds', bonds); }
+  await kvUpdate('petBonds', raw=>{if(!raw||!Object.hasOwn(raw,iid))return;const next={...raw};delete next[iid];return next;});
 }
 
 /* ---------- Private pet nicknames (kv 'petNick' = {iid: 'GRAVY'}) ----------
@@ -1829,67 +1870,50 @@ export function nickProblem(s) {
 export function cleanNick(s) { return String(s ?? '').trim().replace(/\s+/g, ' '); }
 export async function petNicks() { return (await kvGet('petNick', {})) || {}; }
 export async function setPetNick(iid, nick) {
-  // never name a ghost: the iid must be a live instance (same guard as bondUp)
-  const list = await petInstances();
-  if (!list.some(x => x.iid === iid)) return { ok: false, reason: 'unknown' };
-  const problem = nickProblem(nick);
-  if (problem) return { ok: false, reason: 'invalid', message: problem };
-  const map = await petNicks();
-  const clean = cleanNick(nick);
-  if (clean) map[iid] = clean; else delete map[iid];
-  await kvSet('petNick', map);
-  return { ok: true, nick: clean };
+  const problem=nickProblem(nick);
+  if(problem)return {ok:false,reason:'invalid',message:problem};
+  return editLivePet(iid,['petNick'],s=>{
+    const map={...s.petNick},clean=cleanNick(nick);
+    if(clean)map[iid]=clean;else delete map[iid];
+    return {kv:valuesPay({petNick:map}),result:{ok:true,nick:clean}};
+  });
 }
 async function clearNick(iid) {
-  const map = await petNicks();
-  if (iid in map) { delete map[iid]; await kvSet('petNick', map); }
+  await kvUpdate('petNick',raw=>{if(!raw||!Object.hasOwn(raw,iid))return;const next={...raw};delete next[iid];return next;});
 }
 
 // Destroy ONE specific pet instance for Bone Dust (the Stable's "Destroy"). Drops
 // ownership + clears the legacy anchor when its species' last copy is gone, and
 // re-points the equipped pet if you just scrapped the one you had out.
+// Cleanup and equipment replacement share the consuming transaction. No late
+// bank/name write can resurrect a consumed input or erase a fresh result bank.
+function petRemovalChanges(s, iids, next, lifetime, replacement = null) {
+  const changes={petInst:next,petTaken:[...new Set([...(s.petTaken||[]),...iids])],petStepCredit:lifetime};
+  for(const key of ['petLvlSteps','petNick','petBonds','pettalents'])changes[key]=Object.fromEntries(Object.entries(s[key]||{}).filter(([id])=>!iids.includes(id)));
+  const old=(s.petInst||[]).find(x=>x?.iid===s.petEquipped),delta=Math.max(0,lifetime-(s.petStepCredit??lifetime));
+  if(old&&!iids.includes(old.iid)&&delta>0)changes.petLvlSteps=creditSteps(changes.petLvlSteps,old.iid,delta);
+  if(iids.includes(s.petEquipped)){
+    const repl=replacement||bestInstance(next,old?.sp)||next.find(selectablePetInstance)||null;
+    changes.petEquipped=repl?.iid||null;changes.equipped={...s.equipped,C:repl?.sp||null};
+  }
+  return changes;
+}
+async function salvageLivePet(iid, sp = null) {
+  await petInstances();await petLevelBank();await petTalentBank();
+  return labTry(()=>payAtomic({snapshot:{keys:[...LAB_KEYS,'bonedust','dustRev'],stores:['health','inv']},decide:(s,rows)=>{
+    const cur=s.petInst||[],inst=sp?removeWorstInstance(cur,sp).removed:cur.find(x=>selectablePetInstance(x)&&x.iid===iid);
+    if(!inst)labRefuse(sp?'not-owned':'gone');
+    const item=BH_BY_ID[inst.sp]||{},dust=petDustValue(item)+(inst.shiny?15:0)+(inst.lineage||0)*8;
+    const next=cur.filter(x=>x?.iid!==inst.iid),remaining=speciesCount(next,inst.sp);
+    const changes=petRemovalChanges(s,[inst.iid],next,effectivePetSteps(rows.health));
+    if(!remaining){changes.pets={...s.pets};delete changes.pets[inst.sp];}
+    return {kv:{...valuesPay(changes),...bumpPay('bonedust','dustRev',dust)},
+      dels:remaining?[]:rows.inv.filter(r=>r.kind==='cos'&&r.itemId===inst.sp).map(r=>({store:'inv',key:r.id})),
+      result:{ok:true,dust,name:item.name,remaining}};
+  }}));
+}
 export async function salvageInstance(iid) {
-  const list = await petInstances();     // migrates / heals a legacy save first
-  const inst = list.find(x => x.iid === iid);
-  if (!inst) return { ok: false, reason: 'gone' };
-  const item = BH_BY_ID[inst.sp] || {};
-  // salvagePet's fix, by instance id: the take decides the payout, not a stale read.
-  // And, as there (2026-09-06), the dust and the last-copy ownership teardown ride
-  // inside that same transaction; the side maps below are idempotent cleanup.
-  const dust = petDustValue(item) + (inst.shiny ? 15 : 0) + (inst.lineage || 0) * 8;
-  const last = speciesCount(list, inst.sp) === 1;
-  const cos = last ? (await db.all('inv')).find(r => r.kind === 'cos' && r.itemId === inst.sp) : null;
-  let next = null;
-  try {
-    await payAtomic({
-      kv: {
-        petInst: raw => {
-          const arr = Array.isArray(raw) ? raw : list;
-          if (!arr.some(x => selectablePetInstance(x) && x.iid === iid)) throw Object.assign(new Error('gone'), { refused: true });
-          next = arr.filter(x => !selectablePetInstance(x) || x.iid !== iid);
-          if ((speciesCount(next, inst.sp) === 0) !== last) throw Object.assign(new Error('gone'), { refused: true });   // roster moved under the plan
-          return next;
-        },
-        petTaken: cur => [...new Set([...(cur || []), iid])],
-        ...bumpPay('bonedust', 'dustRev', dust),
-        ...(last ? { pets: rec => { const p = { ...(rec || {}) }; delete p[inst.sp]; return p; } } : {}),
-      },
-      dels: cos ? [{ store: 'inv', key: cos.id }] : [],   // R38-13: the 'invTaken' receipt is written by the primitive, same transaction
-    });
-  } catch (e) {
-    if (e && e.refused) return { ok: false, reason: 'gone' };
-    throw e;
-  }
-  if (!next) return { ok: false, reason: 'gone' };
-  const bank = await petLevelBank(); delete bank[iid]; await kvSet('petLvlSteps', bank);
-  await clearBond(iid);              // a destroyed pet takes its affection with it
-  await clearNick(iid);              // and its nickname
-  if ((await kvGet('petEquipped', null)) === iid) {
-    const repl = bestInstance(next, inst.sp) || next[0] || null;
-    await kvSet('petEquipped', repl ? repl.iid : null);
-    if (repl) await equip('C', repl.sp); else await equip('C', null);
-  }
-  return { ok: true, dust, name: item.name, remaining: speciesCount(next, inst.sp) };
+  return salvageLivePet(iid);
 }
 
 // Is an owned pet the shiny variant? (any instance of the species is shiny)
@@ -2005,69 +2029,53 @@ export function creditSteps(bank, key, delta) {
 // that, from hatch anchors - so no pet loses its current level. Sets the credit
 // checkpoint so past steps aren't retroactively dumped onto the equipped pet.
 export async function petLevelBank() {
-  const ver = await kvGet('petLvlV', 0);
-  let bank = await kvGet('petLvlSteps', null);
+  const ver=await kvGet('petLvlV',0),bank=await kvGet('petLvlSteps',null);
   if (bank && ver >= 2) return bank;
-  const insts = await petInstances();
-  const lifetime = await lifetimeStepsSum();
-  const next = {};
-  if (bank && ver < 2) {
-    // v127 species-keyed -> iid-keyed: every copy inherits its species' banked level
-    for (const x of insts) next[x.iid] = Math.max(0, bank[x.sp] || 0);
-  } else {
-    // pre-bank / fresh: seed each instance from its hatch anchor (preserves level)
-    for (const x of insts) next[x.iid] = Math.max(0, lifetime - (x.hatchedAtSteps || 0));
-  }
-  await kvSet('petLvlSteps', next);
-  await kvSet('petLvlV', 2);
-  if ((await kvGet('petStepCredit', null)) == null) await kvSet('petStepCredit', lifetime);
-  return next;
+  await petInstances();
+  return payAtomic({snapshot:{keys:['petInst','petLvlV','petLvlSteps','petStepCredit'],stores:['health']},decide:(s,rows)=>{
+    if(s.petLvlSteps&&s.petLvlV>=2)return {result:s.petLvlSteps};
+    const lifetime=effectivePetSteps(rows.health),next={};
+    for(const x of s.petInst||[])if(selectablePetInstance(x))next[x.iid]=s.petLvlSteps&&s.petLvlV<2?Math.max(0,s.petLvlSteps[x.sp]||0):Math.max(0,lifetime-(x.hatchedAtSteps||0));
+    return {kv:valuesPay({petLvlSteps:next,petLvlV:2,...(s.petStepCredit==null?{petStepCredit:lifetime}:{})}),result:next};
+  }});
 }
 
 // The equipped instance's iid (the battle pet). Migrates from the old species-slot
 // equip (equipped.C) by picking the best instance of that species.
 export async function equippedPetIid() {
-  let iid = await kvGet('petEquipped', null);
-  // A future instance exists but this build cannot use it. Do not replace its
-  // saved selection with a known pet (or null) just because a screen opened.
-  const stored = await kvGet('petInst', null);
-  if (iid && Array.isArray(stored) && stored.some(x => x?.iid === iid && !selectablePetInstance(x))) return null;
-  const insts = await petInstances();
-  let inst = iid ? insts.find(x => x.iid === iid) : null;
-  if (!inst) {
-    // migrate / repair: fall back to the old paper-doll species, else the best pet owned
-    const oldSp = (await equipped({ raw: true })).C;
-    inst = (oldSp && bestInstance(insts, oldSp)) || bestInstance(insts, insts[0] && insts[0].sp) || insts[0] || null;
-    iid = inst ? inst.iid : null;
-    await kvSet('petEquipped', iid);
-  }
-  /* THE TWO RECORDS MUST AGREE (R39-1, 2026-09-06). This heal used to write
-     petEquipped alone, and only setEquippedPet ever wrote the paper-doll C slot,
-     so a first hatch left the Stable saying OUT WITH YOU (button disabled) while
-     Today, which draws equipped().C, showed no pet at all, and nothing on any
-     screen could repair it. Whatever this function answers is the pet that is
-     out, so the slot follows it, on every path and not only the heal. The same
-     read-then-kvSet equip() itself does, not equip('C'): the species is owned by
-     construction (every instance minter grants the cos row), and equip() scans
-     inv for its ownership check, which today-reads-lint A1 forbids on Today's
-     tick. Plain kvSet, like equip and equipGear (claimed-row-audit): two callers
-     racing this write the same slot value. */
-  if (inst) {
-    const eq = await equipped({ raw: true });
-    if (eq.C !== inst.sp) { eq.C = inst.sp; await kvSet('equipped', eq); }
-  }
-  return iid;
+  const iid=await kvGet('petEquipped',null),stored=await kvGet('petInst',null);
+  if(iid&&Array.isArray(stored)&&stored.some(x=>x?.iid===iid&&!selectablePetInstance(x)))return null;
+  const insts=await petInstances(),inst=insts.find(x=>x.iid===iid),eq=await equipped({raw:true});
+  if(inst&&eq.C===inst.sp)return iid;
+  await petLevelBank();
+  return payAtomic({snapshot:{keys:['petInst','petTaken','petEquipped','equipped','petLvlSteps','petStepCredit'],stores:['health']},decide:(s,rows)=>{
+    const saved=(s.petInst||[]).find(x=>x?.iid===s.petEquipped);
+    if(saved&&!selectablePetInstance(saved))return {result:null};
+    const live=(s.petInst||[]).filter(x=>selectablePetInstance(x)&&!(s.petTaken||[]).includes(x.iid));
+    const chosen=live.find(x=>x.iid===s.petEquipped)||bestInstance(live,s.equipped?.C)||bestInstance(live,live[0]?.sp)||live[0]||null;
+    const changes={petEquipped:chosen?.iid||null,equipped:{...s.equipped,C:chosen?.sp||null}};
+    if(s.petEquipped!==chosen?.iid){
+      const lifetime=effectivePetSteps(rows.health),delta=Math.max(0,lifetime-(s.petStepCredit??lifetime));
+      changes.petStepCredit=lifetime;
+      if(saved&&delta>0)changes.petLvlSteps=creditSteps(s.petLvlSteps,saved.iid,delta);
+    }
+    return {kv:valuesPay(changes),result:chosen?.iid||null};
+  }});
 }
+
 export async function setEquippedPet(iid) {
-  const insts = await petInstances();
-  const inst = insts.find(x => x.iid === iid);
-  if (!inst) return null;
-  await kvSet('petEquipped', iid);
-  // keep the legacy paper-doll slot pointed at the species so any species-keyed
-  // render (home companion) still resolves the right art
-  await equip('C', inst.sp);
-  return inst;
+  await petLevelBank();
+  const result=await payAtomic({snapshot:{keys:['petInst','petTaken','petEquipped','equipped','petLvlSteps','petStepCredit'],stores:['health']},decide:(s,rows)=>{
+    const inst=(s.petInst||[]).find(x=>selectablePetInstance(x)&&x.iid===iid&&!(s.petTaken||[]).includes(iid));
+    if(!inst)return {result:null};
+    const lifetime=effectivePetSteps(rows.health),delta=Math.max(0,lifetime-(s.petStepCredit??lifetime));
+    const old=(s.petInst||[]).find(x=>x?.iid===s.petEquipped&&!(s.petTaken||[]).includes(x.iid));
+    return {kv:valuesPay({petEquipped:iid,equipped:{...s.equipped,C:inst.sp},petStepCredit:lifetime,
+      ...(delta>0&&old?{petLvlSteps:creditSteps(s.petLvlSteps,old.iid,delta)}:{})}),result:inst};
+  }});
+  return result;
 }
+
 export async function equippedPetInstance() {
   const iid = await equippedPetIid();
   return (await petInstances()).find(x => x.iid === iid) || null;
@@ -2076,17 +2084,16 @@ export async function equippedPetInstance() {
 // Credit steps walked since the last checkpoint to the equipped INSTANCE only.
 // Idempotent: advancing the checkpoint means a second call adds nothing.
 export async function creditEquippedPetSteps() {
-  await petLevelBank(); // ensure migrated + checkpoint set
-  const lifetime = await lifetimeStepsSum();
-  const credit = await kvGet('petStepCredit', lifetime);
-  const delta = Math.max(0, lifetime - credit);
-  await kvSet('petStepCredit', lifetime);
-  const iid = await equippedPetIid();
-  if (delta > 0 && iid) {
-    const bank = creditSteps(await petLevelBank(), iid, delta);
-    await kvSet('petLvlSteps', bank);
-  }
-  return { delta, credited: delta > 0 ? iid : null };
+  await petLevelBank();
+  return payAtomic({snapshot:{keys:['petInst','petTaken','petEquipped','equipped','petLvlSteps','petStepCredit'],stores:['health']},decide:(s,rows)=>{
+    const lifetime=effectivePetSteps(rows.health),credit=s.petStepCredit??lifetime;
+    const delta=Math.max(0,lifetime-credit);
+    const inst=(s.petInst||[]).find(x=>selectablePetInstance(x)&&x.iid===s.petEquipped&&!(s.petTaken||[]).includes(x.iid));
+    const changes={};
+    if(credit!==lifetime||s.petStepCredit==null)changes.petStepCredit=lifetime;
+    if(delta>0&&inst)changes.petLvlSteps=creditSteps(s.petLvlSteps,inst.iid,delta);
+    return {kv:valuesPay(changes),result:{delta,credited:delta>0&&inst?inst.iid:null}};
+  }});
 }
 
 // Steps banked toward THIS instance's level. Only grows while it is equipped.
@@ -2100,19 +2107,17 @@ export async function petStepsForIid(iid) {
 async function petTalentBank() {
   const all = (await kvGet('pettalents', {})) || {};
   if (all.__iidV === 2) return all;
-  const insts = await petInstances();
-  const bank = await petLevelBank();
-  const migrated = await kvUpdate('pettalents', raw => {
-    const prior = raw || {};
-    if (prior.__iidV === 2) return undefined;
-    const next = { __iidV: 2, __legacy: prior };
-    for (const x of insts) {
-      const picks = Object.hasOwn(prior, x.iid) ? prior[x.iid] : prior[x.sp];
-      next[x.iid] = legalPicks(x.sp, petLevel(bank[x.iid] || 0), Array.isArray(picks) ? picks : []);
+  await petInstances();await petLevelBank();
+  return payAtomic({snapshot:{keys:['petInst','pettalents','petLvlSteps']},decide:s=>{
+    const prior=s.pettalents||{};
+    if(prior.__iidV===2)return {result:prior};
+    const next={__iidV:2,__legacy:prior};
+    for(const x of s.petInst||[])if(selectablePetInstance(x)){
+      const picks=Object.hasOwn(prior,x.iid)?prior[x.iid]:prior[x.sp];
+      next[x.iid]=legalPicks(x.sp,petLevel(s.petLvlSteps?.[x.iid]||0),Array.isArray(picks)?picks:[]);
     }
-    return next;
-  }, {});
-  return migrated || (await kvGet('pettalents', {}));
+    return {kv:valuesPay({pettalents:next}),result:next};
+  }});
 }
 
 // Species ids are deliberately not accepted: a species cannot identify which
@@ -2124,12 +2129,12 @@ export async function petPicks(iid) {
   return legalPicks(inst.sp, petLevel(await petStepsForIid(iid)), Array.isArray(all[iid]) ? all[iid] : []);
 }
 export async function setPetPick(iid, nodeId, picks) {
-  const inst = (await petInstances()).find(x => x.iid === iid);
-  if (!inst) return [];
   await petTalentBank();
-  const next = legalPicks(inst.sp, petLevel(await petStepsForIid(iid)), Array.isArray(picks) ? picks : []);
-  await kvUpdate('pettalents', all => ({ ...all, [iid]: next }), {});
-  return next;
+  const result=await editLivePet(iid,['pettalents','petLvlSteps'],(s,inst)=>{
+    const next=legalPicks(inst.sp,petLevel(s.petLvlSteps?.[iid]||0),Array.isArray(picks)?picks:[]);
+    return {kv:valuesPay({pettalents:{...s.pettalents,[iid]:next}}),result:next};
+  });
+  return Array.isArray(result)?result:[];
 }
 
 // Legacy: unopened egg-type crates become incubating eggs (idempotent sweep).
@@ -2145,7 +2150,9 @@ export async function migrateLegacyEggs() {
     /* AND THE EGG IS GRANTED IN THAT SAME TRANSACTION (2026-09-06): grantEgg
        used to follow the take, so a boot interrupted between them erased the
        legacy crate and left no egg. */
-    if (!await takeAndPay('inv', r.id, { puts: [{ store: 'inv', val: await eggRow(r.source || 'legacy') }] })) continue;
+    const egg = await eggRow(r.source || 'legacy');
+    if (isMorph(r.morph)) { egg.morph = r.morph; egg.morphPolicy = 'legacy-preserved'; }
+    if (!await takeAndPay('inv', r.id, { puts: [{ store: 'inv', val: egg }] })) continue;
     converted++;
   }
   return converted;

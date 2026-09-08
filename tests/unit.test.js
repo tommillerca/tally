@@ -3484,16 +3484,25 @@ test('bondAfter only ever steps +1 into [0, BOND_MAX]', async () => {
   assert.equal(bondAfter(-3), 1, 'garbage below zero clamps to a first pet');
   assert.equal(bondAfter(99), BOND_MAX, 'garbage above max clamps to max');
 });
-test('bond writes are guarded: ghost iids refused, removals clean up', () => {
-  const src = readFileSync(join(here, '../js/loot.js'), 'utf8');
-  const up = src.slice(src.indexOf('export async function bondUp'), src.indexOf('async function clearBond'));
-  assert.ok(up.indexOf('petInstances()') < up.indexOf("kvSet('petBonds'"),
-    'bondUp must confirm the iid is a live instance BEFORE writing');
-  // both instance-removal paths take the bond row with them
-  const salv = src.slice(src.indexOf('export async function salvageInstance'));
-  assert.ok(/clearBond\(iid\)/.test(salv), 'salvage leaves an orphaned bond row');
-  const breedRegion = src.slice(src.indexOf('delete bank[feedIid]'));
-  assert.ok(/clearBond\(feedIid\)/.test(breedRegion.slice(0, 200)), 'breed-consume leaves an orphaned bond row');
+test('bond writes are guarded: ghost iids refused, removals clean up', async () => {
+  await import('./mem-idb.mjs');
+  const D = await import('../js/db.js');
+  const L = await import('../js/loot.js?unit-bond-cleanup');
+  D.useDbName('unit-live-bond-cleanup');
+  const a = {iid:'bond-a',sp:'C1',lineage:0,shiny:false,hatchedAtSteps:0};
+  const b = {...a,iid:'bond-b'}, c = {...a,iid:'bond-c'};
+  await D.kvSet('petInst',[a,b,c]);
+  await D.kvSet('petLvlV',2);
+  await D.kvSet('petLvlSteps',{});
+  await D.kvSet('pettalents',{__iidV:2});
+  assert.equal((await L.bondUp('ghost')).ok,false);
+  assert.equal((await L.bondUp(a.iid)).bond,1,'CONTROL: a live pet receives a bond');
+  assert.equal((await L.salvageInstance(a.iid)).ok,true);
+  assert.ok(!Object.hasOwn(await L.petBonds(),a.iid),'salvage leaves no bond');
+  assert.equal((await L.bondUp(a.iid)).ok,false,'a consumed IID stays gone');
+  await L.bondUp(c.iid);
+  assert.equal((await L.breedPets(b.iid,c.iid)).ok,true);
+  assert.ok(!Object.hasOwn(await L.petBonds(),c.iid),'breeding leaves no bond');
 });
 test('paddock names are deterministic, collision-free, order-independent', async () => {
   const { assignNames, PADDOCK_NAMES, flavorFor } = await import('../js/paddock.js');
@@ -4018,21 +4027,20 @@ test('nickname: cleanNick trims and collapses runs of whitespace, and that is AL
   assert.equal(cleanNick('<img src=x>'), '<img src=x>',
     'cleanNick does not sanitise markup: escaping belongs to the render layer (esc() in js/app.js) and doing it in both places would double-encode');
 });
-test('nickname: it is stored in its OWN kv map, never on the instance row or in kv equipped', () => {
-  const loot = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
-  /* WHY THIS IS A TEST AND NOT A COMMENT. socialSnapshot() uploads
-     `outfit: eq`, and equipped() builds that with `{ ...base, ...saved }` over
-     kv 'equipped'. Any key written into that object ships itself to every
-     friend, the leaderboard and the step race with no code change at all. The
-     nickname is private, so its storage SHAPE is the guard, and a guard that
-     nothing checks is a comment. */
-  assert.match(loot, /kvSet\('petNick'/, 'the nickname must live in its own kv key');
-  const from = loot.indexOf('export async function setPetNick');
-  const to = loot.indexOf('async function clearNick');
-  assert.ok(from > 0 && to > from, 'found no setPetNick body to inspect: this check has drifted, it has not passed');
-  const setter = loot.slice(from, to);
-  assert.doesNotMatch(setter, /kvSet\('equipped'|kvSet\('petInst'/,
-    'setPetNick must not write into either object that is uploaded wholesale to other players');
+test('nickname: it is stored in its OWN kv map, never on the instance row or in kv equipped', async () => {
+  await import('./mem-idb.mjs');
+  const D = await import('../js/db.js');
+  const L = await import('../js/loot.js?unit-nickname-private');
+  D.useDbName('unit-nickname-private');
+  const pet = {iid:'private-pet',sp:'C1',lineage:0,shiny:false,hatchedAtSteps:0};
+  const outfit = {C:'C1',H:'public-hat'};
+  await D.kvSet('petInst',[pet]);
+  await D.kvSet('equipped',outfit);
+  assert.deepEqual(await L.setPetNick(pet.iid,'PRIVATE'),{ok:true,nick:'PRIVATE'},
+    'CONTROL: the real setter saved a nickname');
+  assert.deepEqual(await D.kvGet('petNick'),{[pet.iid]:'PRIVATE'});
+  assert.deepEqual(await D.kvGet('petInst'),[pet],'private names never enter instance rows');
+  assert.deepEqual(await D.kvGet('equipped'),outfit,'private names never enter public outfits');
 });
 
 /* THE APP-WIDE NO-SELECT RULE, AND THE TWO EXEMPTIONS THAT MAKE IT SAFE.
