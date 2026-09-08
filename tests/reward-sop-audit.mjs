@@ -274,7 +274,7 @@ const ACTIONS = [
    * either way and none of them hand out an un-keyed crate or egg the way the
    * welcome kit did.
    * ======================================================================== */
-  { id: 'js/game.js:onFoodLogged', sites: 7, undriven: 'a composite of award() calls, every one of them ledger-keyed and covered by the award driver; the entry has its own audit in tests/log-write-failure-audit.mjs' },
+  { id: 'js/game.js:finishFoodLogged', sites: 7, undriven: 'the shared live/recovery food reward path; all awards retain their ledger keys and capped entry-id refs. take-and-pay-audit.mjs drives interrupted writes, midnight recovery and overlapping opens; log-write-failure-audit.mjs owns the browser failure controls' },
   { id: 'js/game.js:onHealthSync', sites: 16, undriven: 'sixteen ledger-keyed milestone awards over a health payload; the shape is one award per (date, milestone) and the primitive is driven above. tests/health-intake-audit.mjs owns the payload end' },
   { id: 'js/game.js:onWeighIn', sites: 1, undriven: 'one award keyed weigh-<date>; the primitive is driven above' },
   { id: 'js/game.js:awardDayCloseIfDue', sites: 4, undriven: "runs at boot for YESTERDAY only, all four sites ledger-keyed on that date; not a control a player can press twice. Was 6 until 2026-09-05: the off-budget branch stopped granting its Common Crate (crate-frequency audit lever 2), leaving its award() call as the only payout, then 5 to 4 later the same day (offline crash seam OFF-2b): the on-budget branch's separate award()+grantCrate() calls (2 sites) became one awardOnce(...,{puts:[crateRow]}) call (1 site), the crate riding inside the claim's own transaction instead of a second untransacted write" },

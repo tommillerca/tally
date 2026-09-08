@@ -15836,6 +15836,11 @@ async function commitLogEntry(e, btn, via = null) {
   await rollDayIfNeeded();
   if (S.date !== dayBefore && e.date === dayBefore && !(await db.get('log', e.id))) e.date = S.date;
   try {
+    // L5: entitlement travels with the meal's first write. A copied row gets
+    // its own intent; a backdated edit cannot acquire a new reward entitlement.
+    const previous = await db.get('log', e.id);
+    e.foodXp = previous?.foodXp?.date === e.date ? previous.foodXp
+      : e.date >= dateKey() ? { id: e.id, date: e.date, via, targets: S.settings.targets } : null;
     await db.put('log', e);
   } catch (err) {
     /* A FAILED WRITE MUST NOT LOOK LIKE A SAVED MEAL.

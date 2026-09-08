@@ -365,26 +365,139 @@ for (const mode of ['rung', 'champ', 'endless']) {
     (await db.all('inv')).filter(r => r.kind === 'crate').length === 1 && !!await db.get('inv', 'cos:SK15') && (await kvGet('looks', [])).includes('SK15'));
 }
 
-useDbName('tap-meal');
+// L5: run the actual meal writer. Storage and XP are real; UI collaborators
+// expose the writer's return contract, not a claimed browser/pixel proof.
+const mealStart = app.indexOf('async function commitLogEntry(');
+const mealEnd = app.indexOf('\nfunction queueCelebration(', mealStart);
+if (mealStart < 0 || mealEnd < 0) throw new Error('log commit source missing');
+function mealWriter(entry, overrides = {}) {
+  const ctx = { db, dateKey, S: { date: dateKey(), settings: { targets: null } },
+    rollDayIfNeeded: async () => {}, refreshNotifSchedules: noop, recordMealUsed: async () => {},
+    onFoodLogged: game.onFoodLogged, entriesFor: async date => (await db.all('log')).filter(e => e.date === date),
+    trackEvent: noop, toast: noop, storageIsFull: err => err?.name === 'QuotaExceededError', ...overrides };
+  return new Function('ctx', `with (ctx) { return ${app.slice(mealStart, mealEnd)}; }`)(ctx);
+}
+const dinner = id => ({ id, date: dateKey(), ts: Date.now(), meal: 2, foodId: 'dinner', name: 'Dinner', kcal: 642, p: 20, c: 80, f: 20 });
+const foodXp = async () => (await db.all('xp')).filter(r => r.type === 'log' || r.type === 'firstlog').reduce((n, r) => n + r.xp, 0);
+// Separate module state represents a second opener, sharing the same database.
+const otherGame = await import('../js/game.js?l5-second-open');
+for (const seam of ['log', 'base', 'firstlog', 'scan', 'label', 'done']) {
+  useDbName(`tap-meal-${seam}`);
+  await kvSet('game-init', true);
+  const entry = dinner('l5-meal');
+  const via = seam === 'label' ? 'label' : 'scan';
+  const commit = mealWriter(entry);
+  dieAfter(e => seam === 'log' ? e.store === 'log' && e.key === entry.id
+    : seam === 'done' ? e.store === 'kv' && e.key === `foodXpDone:${entry.id}`
+    : e.store === 'xp' && e.v.type === (seam === 'base' ? 'log' : seam));
+  const result = await attempt(commit(entry, null, via));
+  ok(`SETUP meal ${seam}: kill armed after committed totals`, CRASH.armed);
+  reboot();
+  if (seam === 'log') ok('CONTROL meal: committed receipt failure returns zero XP',
+    result.ok && result.v.receiptFailed === true && result.v.xp === 0 && (await db.get('log', entry.id))?.kcal === 642);
+  await Promise.all([game.initGameIfNeeded(null), otherGame.initGameIfNeeded(null)]);
+  const xp = await foodXp();
+  ok(seam === 'log' ? 'REBOOT meal: saved 642-kcal dinner recovers 25 XP' : `REBOOT meal ${seam}: saved dinner recovers 25 XP`,
+    (await db.get('log', entry.id))?.kcal === 642 && xp === 25,
+    `kcal=${(await db.get('log', entry.id))?.kcal}, XP=${xp}`);
+  ok(`REBOOT meal ${seam}: original ${via} context survives`,
+    (await db.all('xp')).filter(r => r.type === via).reduce((n, r) => n + r.xp, 0) === (via === 'scan' ? 15 : 20));
+  const before = await game.totalXp();
+  await game.initGameIfNeeded(null);
+  await otherGame.initGameIfNeeded(null);
+  ok(`ONCE meal ${seam}: overlapping and repeated opens pay exactly once`,
+    xp === 25 && await foodXp() === 25 && await game.totalXp() === before &&
+    (await db.all('xp')).filter(r => r.type === 'log' && r.ref === entry.id).length === 1);
+}
+
+useDbName('tap-meal-midnight');
 {
   await kvSet('game-init', true);
-  const entry = { id: 'l1-meal', date: dateKey(), ts: Date.now(), meal: 2, name: 'Dinner', kcal: 642, p: 20, c: 80, f: 20 };
-  const start = app.indexOf('async function commitLogEntry(');
-  const end = app.indexOf('\nfunction queueCelebration(', start);
-  if (start < 0 || end < 0) throw new Error('log commit source missing');
-  const ctx = { db, S: { date: entry.date, settings: { targets: null } },
-    rollDayIfNeeded: async () => {}, refreshNotifSchedules: noop, recordMealUsed: async () => {},
-    onFoodLogged: game.onFoodLogged, entriesFor: async () => [entry], trackEvent: noop, toast: noop };
-  const commit = new Function('ctx', `with (ctx) { return ${app.slice(start, end)}; }`)(ctx);
+  const entry = dinner('l5-midnight');
   dieAfter(e => e.store === 'log' && e.key === entry.id);
-  await attempt(commit(entry, null));
-  ok('SETUP meal: kill armed after committed totals', CRASH.armed);
+  await attempt(mealWriter(entry)(entry, null, 'label'));
+  const armed = CRASH.armed;
   reboot();
+  const RealDate = globalThis.Date;
+  const tomorrow = new RealDate(); tomorrow.setDate(tomorrow.getDate() + 1);
+  globalThis.Date = class extends RealDate {
+    constructor(...args) { super(...(args.length ? args : [tomorrow.getTime()])); }
+    static now() { return tomorrow.getTime(); }
+  };
+  try {
+    // Reconstruct an old-day edit just as the portion form does, without
+    // copying private metadata. It must retain the pending original intent.
+    const edit = { ...entry, kcal: 650 }; delete edit.foodXp;
+    const edited = await mealWriter(edit)(edit, null);
+    ok('CONTROL meal: yesterday edit saves and returns zero XP', edited.xp === 0 && (await db.get('log', entry.id)).kcal === 650);
+    await game.initGameIfNeeded({ p: 1 });
+    await game.initGameIfNeeded({ p: 1 });
+    ok('REBOOT meal midnight: original date and label entitlement recover once', armed && await foodXp() === 25 &&
+      (await db.get('xp', `firstlog-${entry.date}`))?.xp === 15 &&
+      (await db.get('xp', 'label-dinner'))?.xp === 20 && !(await db.get('xp', `protein-${entry.date}`)));
+    const backdated = { ...entry, id: 'l5-backdated' }; // copied intent is not authority
+    const res = await mealWriter(backdated)(backdated, null, 'scan');
+    await game.initGameIfNeeded(null);
+    ok('CONTROL meal: backdated copies create no entitlement or XP', res.xp === 0 && await foodXp() === 25 &&
+      !(await db.get('log', backdated.id)).foodXp);
+  } finally { globalThis.Date = RealDate; }
+}
+
+for (const quota of [false, true]) {
+  useDbName(`tap-meal-write-failure-${quota}`);
+  const entry = dinner('l5-unsaved'), btn = { disabled: true }, messages = [], events = [];
+  let followed = false;
+  const err = new Error('injected log write failure');
+  if (quota) err.name = 'QuotaExceededError';
+  const result = await mealWriter(entry, {
+    db: { get: db.get, put: async () => { throw err; } },
+    toast: message => messages.push(message), trackEvent: event => events.push(event),
+    onFoodLogged: async () => { followed = true; },
+  })(entry, btn);
+  ok(`CONTROL meal: ${quota ? 'quota' : 'write'} failure keeps the entry available and reports failure`,
+    result === null && btn.disabled === false && entry.kcal === 642 && !followed &&
+    !(await db.get('log', entry.id)) && events.includes('log_write_failed') &&
+    messages.some(m => quota ? m.includes('out of storage') : m.includes('Could not save that meal')));
+}
+// Execute the production toast expressions for both Add forms with the actual
+// zero-XP receipt shape. Full sheet visibility still requires the browser audit.
+const toastLines = app.split('\n').filter(l => l.includes('toast(') && l.includes('game.receiptFailed'));
+ok('CONTROL meal: both Add forms report saved calories and missing XP', toastLines.length === 2 && toastLines.every(line => {
+  let message;
+  new Function('toast', 'editing', 'entry', 'n', 'kcal', 'game', line)(m => { message = m; }, false, null, { kcal: 642 }, 642, { xp: 0, receiptFailed: true });
+  return message === 'Added · 642 kcal · XP did not record';
+}));
+
+useDbName('tap-meal-cap');
+{
+  await kvSet('game-init', true);
+  for (let n = 0; n < 21; n++) {
+    const entry = dinner(`l5-cap-${n}`);
+    await mealWriter(entry, { onFoodLogged: async () => { throw new Error('XP unavailable'); } })(entry, null);
+  }
+  await Promise.all([game.initGameIfNeeded(null), otherGame.initGameIfNeeded(null)]);
   await game.initGameIfNeeded(null);
-  const xp = (await db.all('xp')).filter(r => r.type === 'log' || r.type === 'firstlog').reduce((n, r) => n + r.xp, 0);
-  ok('REBOOT meal: saved 642-kcal dinner recovers 25 XP',
-    (await db.get('log', entry.id))?.kcal === 642 && xp === 25,
-    `kcal=${(await db.get('log', entry.id))?.kcal}, XP=${xp}; measured loss: 25 XP per meal`);
+  ok('REBOOT meal: recovery retains the 20-log daily ceiling',
+    (await db.all('log')).length === 21 && await foodXp() === 215,
+    `meals=${(await db.all('log')).length}, XP=${await foodXp()}`);
+}
+
+useDbName('tap-meal-backfill');
+{
+  // A restore may contain an older row plus a new pending intent, without a
+  // completed game-init flag. Ordinal history replay must go first, so it and
+  // recovery agree on which entry owns each capped slot.
+  const legacy = dinner('a-legacy'), pending = dinner('b-pending');
+  await db.put('log', legacy);
+  await mealWriter(pending, { onFoodLogged: async () => { throw new Error('XP unavailable'); } })(pending, null);
+  await game.initGameIfNeeded(null);
+  const logs = (await db.all('xp')).filter(r => r.type === 'log');
+  ok('INIT meal: history backfill and recovery keep one receipt per entry',
+    logs.length === 2 && logs.filter(r => r.ref === legacy.id).length === 1 && logs.filter(r => r.ref === pending.id).length === 1,
+    `refs=${logs.map(r => r.ref).join(',')}`);
+  await game.onFoodLogged(legacy, { entriesForDate: [legacy, pending] });
+  await game.initGameIfNeeded(null);
+  ok('ONCE meal: restored history cannot acquire an extra slot on retry', await foodXp() === 35, `XP=${await foodXp()}`);
 }
 
 // These two seams are ALREADY repaired in this checkout. They must remain

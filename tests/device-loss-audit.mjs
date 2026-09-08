@@ -238,10 +238,13 @@ await check('R54-1 real DataError IOError shape fires the global out-of-storage 
   assert.match(c.messages[0], /out of storage/, c.messages[0]);
 });
 await check('R54-1 real DataError IOError shape fires Add out-of-storage message and preserves input', async () => {
-  const c = uiContext({ S: { date: '2026-09-01' }, rollDayIfNeeded: async () => {}, db: { put: async () => { throw io; } } });
+  let attempted = false;
+  const c = uiContext({ S: { date: '2026-09-01', settings: { targets: null } }, dateKey: () => '2026-09-01',
+    rollDayIfNeeded: async () => {}, db: { get: async () => undefined, put: async () => { attempted = true; throw io; } } });
   vm.runInContext(fn('commitLogEntry'), c);
   const btn = { disabled: true };
   assert.equal(await c.commitLogEntry({ id: 'meal', date: c.S.date }, btn), null);
+  assert.equal(attempted, true, 'the real IOError must come from the meal write');
   assert.equal(btn.disabled, false);
   assert.match(c.messages[0], /out of storage/);
 });

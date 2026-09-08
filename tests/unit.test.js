@@ -4280,7 +4280,7 @@ test('R25-M4 every UI log write routes through commitLogEntry, and its two outco
   const body = m[1];
   assert.ok(body.length > 300 && body.includes("db.put('log', e)"), `commitLogEntry body looks wrong (${body.length} chars)`);
   // outcome 1: NOT committed -> the button is re-armed and the caller gets null
-  const notCommitted = body.match(/try \{\s*await db\.put\('log', e\);\s*\} catch \(err\) \{([\s\S]*?)return null;/);
+  const notCommitted = body.match(/try \{(?:(?!\b(?:try|catch)\b)[\s\S])*?await db\.put\('log', e\);\s*\} catch \(err\) \{([\s\S]*?)return null;/);
   assert.ok(notCommitted, "db.put('log', e) is no longer in a try whose catch returns null (the not-committed outcome)");
   assert.ok(/btn\.disabled = false/.test(notCommitted[1]), 'the not-committed catch no longer re-arms the button');
   // outcome 2: committed, receipt failed -> a stub game object, the button stays as it was

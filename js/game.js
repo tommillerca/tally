@@ -682,6 +682,15 @@ export async function onFoodLogged(entry, { via = null, targets = null, entriesF
   if (entry.date < dateKey()) {
     return { xp: 0, total: await totalXp(), newBadges: [], streakMilestone: null, streak: 0, boosted: false, crates: 0 };
   }
+  return finishFoodLogged(entry, { via, targets, entriesForDate });
+}
+
+// The persisted meal is the authority. Its original entitlement may be retried
+// after midnight, while the public logging path still refuses backdated XP.
+// Every award below keeps its existing ledger key, including the capped log
+// award's entry.id ref. The completion marker is written LAST, never a claim
+// that could spend the reward before its XP lands.
+async function finishFoodLogged(entry, { via = null, targets = null, entriesForDate = [] } = {}) {
   let gained = 0;
   /* Capped and keyed by DATE, never by entry.id: see XP_DAILY_CAP.log. The
      date is the entry's own, so a backdated log spends that day's ceiling. */
@@ -733,7 +742,7 @@ export async function onFoodLogged(entry, { via = null, targets = null, entriesF
      through awardOnce, which reads a fresh total per award and compares the
      level either side of it. XP only ever grows, so a crossing over the sum is
      a crossing over one of the parts, and that part is the one that dispatches. */
-  return {
+  const result = {
     xp: gained,
     total: await totalXp(),
     newBadges,
@@ -744,6 +753,19 @@ export async function onFoodLogged(entry, { via = null, targets = null, entriesF
     // crossing's own owner (awardOnce -> grantLevelRewards).
     crates: sa.milestone ? 1 : 0,
   };
+  if (entry.foodXp?.id === entry.id) await kvSet(`foodXpDone:${entry.id}`, true);
+  return result;
+}
+
+async function recoverFoodLogs() {
+  const log = await db.all('log');
+  const done = new Set((await db.all('kv')).filter(r => r.k.startsWith('foodXpDone:') && r.v === true).map(r => r.k));
+  for (const entry of log) {
+    const intent = entry.foodXp;
+    if (!intent || intent.id !== entry.id || intent.date !== entry.date || done.has(`foodXpDone:${entry.id}`)) continue;
+    await finishFoodLogged(entry, { via: intent.via, targets: intent.targets,
+      entriesForDate: log.filter(e => e.date === intent.date) });
+  }
 }
 
 export async function onWeighIn(date) {
@@ -1123,7 +1145,7 @@ export function initGameIfNeeded(targets, { onProgress = null } = {}) {
 
 async function runInitBackfill(targets, onProgress) {
   await recoverPitWins();
-  if (await kvGet('game-init')) return null;
+  if (await kvGet('game-init')) { await recoverFoodLogs(); return null; }
   quietLevelups = true;
   try {
   const [log, weights] = await Promise.all([db.all('log'), db.all('weights')]);
@@ -1196,6 +1218,9 @@ async function runInitBackfill(targets, onProgress) {
   const streak = streakFrom(dates, today);
   await streakAwards(streak);
   await evaluateBadges();
+  // History owns its ordinal slots first. Pending intents then find their
+  // existing entry-id refs, rather than taking slots history will reassign.
+  await recoverFoodLogs();
   const xp = await totalXp();
   const lv = levelFor(xp);
   // baseline: levels reached before this feature never retro-drop rewards

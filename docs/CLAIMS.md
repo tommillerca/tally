@@ -3101,3 +3101,91 @@ audit.red.exit, audit.green.txt, audit.green.exit, unit.txt, unit.exit,
 reward-sop-static.green.txt and pure/results.json. The final changes and this
 report are advisory inputs to independent review. Meal recovery and therefore
 the frozen work order remain incomplete.
+
+## L5: durable meal XP recovery (2026-09-07)
+
+1. PROOF: take-and-pay-audit.mjs | REACH: The real commitLogEntry saves reward eligibility, original date, scan/label route and targets with the meal row. Game initialization retries unfinished eligible rows before its established-player early return. Existing awardCapped entry-id refs and awardOnce ledger keys prevent duplicate XP; a separate completion marker is written only after the reward path succeeds. The meal and XP remain separate transactions.
+2. PROOF: take-and-pay-audit.mjs | REACH: The agreed command passes 78 rows and prints all clean, exit 0. Coverage includes deaths after the meal write, base XP, first-log XP, scan XP, label XP and completion marker; independent module instances open concurrently against one database, then open again. Midnight recovery retains the original date and label context, while a backdated edit still returns zero XP. Recovery of 21 saved meals retains the existing 215-XP daily limit (20 times 10, plus one 15-XP first-log bonus).
+3. PROOF: unit.test.js, device-loss-audit.mjs, take-and-pay-audit.mjs | REACH: R24-L17 is unchanged and passes its real midnight roll/write test. Both write-failure outcomes remain intact: an unsuccessful meal save returns null, re-arms Add and reports the storage failure; a saved meal with failed rewards returns zero XP and receiptFailed. Both production Add-toast expressions still say Added, the calories, and XP did not record. The DataError IOError control proves the injected error reaches the actual meal write. These are Node source/transaction proofs, not browser sheet-visibility proofs.
+4. PROOF: release-gate.mjs | REACH: All 84 files in PURE were executed directly with Node and exit 0. No gate server was started. The existing take-and-pay registration remains in exactly one tier; its description now includes meal retry. No new audit file was introduced.
+5. PROOF: reward-sop-audit.mjs | REACH: The five Node source-census checks pass: 161 paying sites, 67 source actions, 72 registry entries with matching counts. The existing seven food reward call sites moved into finishFoodLogged, shared by normal logging and recovery; the registry names that owner. The full browser driver remains unrun.
+
+Advisory implementation report for independent review:
+
+| File changed | Change |
+| --- | --- |
+| js/app.js | Stage the row's reward intent inside the existing meal-write try/catch, after the unchanged day roll. Preserve a pending intent when an existing row is edited. |
+| js/game.js | Share the existing food reward path, record completion after success, and recover unfinished intents at initialization. |
+| tests/take-and-pay-audit.mjs | Extend the existing kill-boundary proof with partial writes, midnight, concurrent/repeated opens, caps, failure returns and actual toast expressions. |
+| tests/unit.test.js | Let R25-M4's structural check accept preparation statements inside the same write try/catch. It still requires the write's catch to return null and re-arm Add. R24-L17 is untouched. |
+| tests/device-loss-audit.mjs | Supply the new read/clock dependencies in the isolated writer fixture and assert the failing put was reached. Existing IOError and input-preservation assertions remain. |
+| tests/reward-sop-audit.mjs | Register the relocated food reward call sites under their actual owner. |
+| tests/release-gate.mjs | Update the existing audit's description only. |
+| docs/CLAIMS.md | Append this dated L5 section only. |
+
+The supplied plan file's SHA256 matched
+`bcd03869f61017bfdb50000382a263df05cfc85f76dc9b687f83a947a403679b`.
+The checkout's CLAUDE.md was read; no nested tally/CLAUDE.md exists here.
+All source paths were resolved in this checkout. The opening whole-worktree
+ownership instruction supersedes the plan's copied sibling-lane boilerplate.
+
+Red and green evidence:
+
+```text
+BASELINE FAIL REBOOT meal: saved 642-kcal dinner recovers 25 XP  kcal=642, XP=0; measured loss: 25 XP per meal
+BASELINE 1 FAIL (exit 1)
+REVERTED FAIL REBOOT meal: saved 642-kcal dinner recovers 25 XP  kcal=642, XP=0
+REVERTED 11 FAIL (exit 1)
+RESTORED ok   REBOOT meal: saved 642-kcal dinner recovers 25 XP  kcal=642, XP=25
+RESTORED all clean (exit 0)
+PASS R24-L17 commitLogEntry rolls the day before the row is written, and a fresh row follows it
+PASS R25-M4 every UI log write routes through commitLogEntry, and its two outcomes are honest
+365 passed, 0 failed
+84/84 PURE files exited 0
+```
+
+The expanded audit was held unchanged on a throwaway copy under
+/private/tmp/l5-meal-proof/red-tree. Restoring the saved pre-fix app.js and
+game.js reproduced the real defect; restoring the final sources returned it
+to green. A separate throwaway mutation replaced the write-failure return
+with a throw. The adapted R25-M4 guard failed with
+`db.put('log', e) is no longer in a try whose catch returns null (the not-committed outcome)`.
+The final guard passes. Final review also reproduced an interaction with an
+unfinished history backfill on a throwaway copy: `refs=b-pending,b-pending`
+and `XP=45` for two meals. Recovery now runs after history assigns its
+ordinal slots, producing `refs=a-legacy,b-pending` and `XP=35` even after retry.
+The two new guards were red on the earlier implementation and green after
+this ordering fix. Initial PURE execution found two fixture assumptions,
+then both corrected fixtures passed with their behavior assertions retained.
+Output and exit status were captured separately, never read through a pipe.
+
+Denied/blocked actions and deviations:
+
+- No command was denied by automatic approval review. Browser/server proofs
+  were explicitly prohibited and were not attempted. The crash model aborts
+  later mem-idb transactions after a committed boundary; it does not kill an
+  OS process. Independent review still needs the browser logging control and
+  failure modes in log-write-failure-audit.mjs, plus a real reload/double-tab
+  check. Expected results: saved calories persist, missing eligible XP lands
+  once, failed meal writes retain the open input, and receipt failures show
+  the honest saved-meal message without re-arming Add.
+- Legacy-data limitation and proposed deviation: replay uses durable intents
+  created by this fix. Unmarked pre-fix rows cannot reliably distinguish an
+  eligible meal from a backdated entry, and lack the original scan/label and
+  target context. They are not retroactively awarded by this recovery path.
+  Repairing those historical losses requires an explicit compensation policy;
+  no such policy or entitlement was invented. This limitation was disclosed
+  before implementation. The original history award phases remain intact and run before intent recovery on an unfinished initialization.
+- The quoted 25 XP is the first meal's existing 10 plus the day's one-time 15,
+  not a new 25-XP payment for every meal. Existing reward keys and caps remain.
+- The user's explicit instruction supersedes the plan's contradictory
+  commit-and-push sentence. No commit, push, PR, publication, deployment,
+  version stamp or changelog edit occurred. No original checkout, Worker,
+  App Store Connect, native/ASC-SUBMISSION.md or integ/day5 was modified.
+
+Evidence is under /private/tmp/l5-meal-proof: baseline-audit.txt and .exit,
+audit.red.txt and .exit, audit.green.txt and .exit, audit.restored.txt and .exit,
+selected-unit.txt and .exit, write-guard.red.txt and .exit, backfill.red.txt and .exit, backfill.green.txt and .exit, unit.txt and .exit,
+device-loss.txt and .exit, sop-static.txt and .exit, and pure/results.json
+with per-file output and exit status. This report is advisory and is not
+independent review or release authorization.
