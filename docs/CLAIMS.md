@@ -2337,3 +2337,11 @@ file ownership blockers and proposed deviations. No release is claimed.
 5. PROOF: orientation-audit.mjs | REACH: New browser guard checks real Intl/timezone state before and after reload, landscape lock visibility, full viewport coverage and hit interception, portrait release, and a real Settings click. Node grading controls reject an absent landscape cover and a stuck portrait cover. Browser and server execution are prohibited here, so no rendered green or browser mutation proof is claimed.
 
 The agreed unit command reported 362 passed and 1 failed at its embedded serveTree check. The standalone serve-tree identity proof was not run because it requires a server. Full evidence and pending reviewer commands are in tests/n1-report.md. No release is claimed.
+
+## M3 branch graveyard, 2026-09-07 (advisory)
+
+1. PROOF: branch-graveyard-audit.mjs | REACH: The read-only branch classifier uses head containment in recorded main or a merged PR, including release-train containment. It rejects name-only, reused-head, wrong-repository and incomplete evidence. Node fixtures pass; live GitHub evidence is unavailable in this sandbox.
+2. PROOF: branch-graveyard-audit.mjs | REACH: The frozen report reproduces all 953 captured branches: 147 integrated in recorded main, zero established genuinely unmerged, 806 uncertain. A throwaway reintroduction of the documented phantom-unmerged defect failed on origin/art/cauldron-swap; the restored classifier passed 21/21 guards.
+3. PROOF: branch-graveyard-audit.mjs | REACH: Deletion preview requires both explicit flags, protects main and suppresses candidates when inventory freshness is unverified. The captured preview retains all 953 branches. There is no deletion executor and no branch was deleted.
+
+Network failure prevents a current remote inventory and PR-backed classification. Registering this audit in PURE is pending because the existing release-gate file is outside M3 ownership. Exact proof output, the proposed registration, limitations and deviations are in docs/M3-REPORT.md. No commit, push, publication or release is claimed.
