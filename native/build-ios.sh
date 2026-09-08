@@ -11,6 +11,13 @@ esac
 NATIVE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$NATIVE"
 
+# Export needs this operator-supplied signing/distribution input. Refuse before
+# bundling, syncing, querying ASC or spending time archiving when it is absent.
+if [ ! -f "$NATIVE/build/exportOptions.plist" ]; then
+  echo "BUILD REFUSED: missing native/build/exportOptions.plist; supply reviewed export options before building" >&2
+  exit 1
+fi
+
 # Both channels are explicit. Internal builds keep the remote shell for testing.
 # Submission builds carry a content-bound marker and use separate artifact paths.
 # Validate the copied iOS resources and then the archive itself before export.
