@@ -8,8 +8,8 @@ import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOT
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { COMMON_INGREDIENT_IDS } from './cooking.js';
 import { dateKey } from './nutrition.js';
-import { LAB_RULES, LAB_PRICES, LAB_DEFAULTS, labPreview, labCapacity, labDayProjection, labEqual, labRefuse, resolveLabOutcome, validateLabSave } from './laboratory.js';
-import { isMorph, MORPH_LABEL, morphAsset, isKnownPet, legalPicks, petLevel } from './pets.js';
+import { LAB_RULES, LAB_PRICES, LAB_DEFAULTS, labInput, labMorph, labDistribution, labPreview, labCapacity, labDayProjection, labEqual, labRefuse, resolveLabOutcome, validateLabSave } from './laboratory.js';
+import { isMorph, MORPH_LABEL, morphAsset, isKnownPet, legalPicks, petLevel, MORPHS, PET_TREES } from './pets.js';
 
 // Use the same colour identity as the art. Shinies and CX never wear morph art.
 export function petColourName(inst) {
@@ -1688,12 +1688,19 @@ export async function initLaboratory() {
     return {kv:valuesPay(Object.fromEntries(Object.entries(LAB_DEFAULTS).filter(([k])=>s[k]===undefined))),result:true};
   }});
 }
+function labQuoteContext(s,rows,sp) {
+  return {roster:s.petInst,petTaken:s.petTaken||[],pets:s.pets,looks:s.looks,
+    petLvlSteps:s.petLvlSteps,petNick:s.petNick||{},petBonds:s.petBonds||{},pettalents:s.pettalents,
+    petEquipped:s.petEquipped??null,equipped:s.equipped||{},petStepCredit:s.petStepCredit,
+    ownership:rows.inv.filter(r=>r.kind==='cos'&&r.itemId===sp)};
+}
 function laboratoryQuote(s, rows, iids, opId) {
   const daily=labState(s),day=dateKey(),zone=labZone();
   const clock=dayDecision(day,s.dayHighWater,s.dayWitnessOrd,true);
   if(!clock.fresh)labRefuse(clock.reason);
   const capacity=labCapacity(s.labIncubators),occupancy=daily[day]||{slots:{},used:0};
   if(occupancy.used>=capacity)labRefuse('daily-cap');
+  labPending(s, opId);
   const preview=labPreview(s.petInst,iids,s);
   if(!preview.ok)labRefuse(preview.reason);
   if(iids.some(id=>(s.petTaken||[]).includes(id)))labRefuse('invalid-pair');
@@ -1706,10 +1713,7 @@ function laboratoryQuote(s, rows, iids, opId) {
   // Pin investment, ownership, effective meter and species stock to the review.
   // Keeping unrelated roster rows in context also prevents a changed whole-grid
   // count from silently altering the branch consequences the player approved.
-  const context={roster:s.petInst,petTaken:s.petTaken||[],pets:s.pets,looks:s.looks,
-    petLvlSteps:s.petLvlSteps,petNick:s.petNick||{},petBonds:s.petBonds||{},pettalents:s.pettalents,
-    petEquipped:s.petEquipped??null,equipped:s.equipped||{},petStepCredit:s.petStepCredit,
-    ownership:rows.inv.filter(r=>r.kind==='cos'&&r.itemId===sp)};
+  const context=labQuoteContext(s,rows,sp);
   return {...preview,format:1,opId,rules:LAB_RULES,iids:[...iids],day,zone,meter,capacity,used:occupancy.used,occupancy,context};
 }
 export async function quoteLaboratory(iids) {
@@ -1726,6 +1730,8 @@ export async function saveLabIntent(quote, {acknowledgedRisk} = {}) {
   quote = structuredClone(quote);
   return labTry(()=>payAtomic({snapshot:labSnapshot,decide:(s,rows)=>{
     validLabRequest(quote);
+    const existing=s.labExperiments?.[quote.opId];
+    if(existing){labState(s);if(!labEqual(existing.request,quote))labRefuse('op-conflict');return {result:{ok:true,receipt:existing}};}
     if(!labEqual(quote,laboratoryQuote(s,rows,quote.iids,quote.opId)))labRefuse('stale-quote');
     if(quote.risk&&acknowledgedRisk!=='ANIMATE')labRefuse('acknowledgement-required');
     const prior=s.labIntents[quote.opId];
@@ -1733,12 +1739,13 @@ export async function saveLabIntent(quote, {acknowledgedRisk} = {}) {
     return {kv:valuesPay({labIntents:{...s.labIntents,[quote.opId]:prior||{format:1,quote,acknowledgedRisk,createdAt:Date.now()}}}),result:{ok:true}};
   }}));
 }
-export async function animateLaboratory(quote, {acknowledgedRisk} = {}) {
+export async function animateLaboratory(quote, {acknowledgedRisk, requireIntent = false} = {}) {
   quote = structuredClone(quote);
   return labTry(()=>payAtomic({snapshot:labSnapshot,decide:(s,rows)=>{
     validLabRequest(quote);
     const existing=s.labExperiments?.[quote.opId];
-    if(existing){if(!labEqual(existing.request,quote))labRefuse('op-conflict');return {result:{ok:true,receipt:existing}};}
+    if(existing){labState(s);if(!labEqual(existing.request,quote))labRefuse('op-conflict');return {result:{ok:true,receipt:existing}};}
+    if(requireIntent&&!s.labIntents?.[quote.opId])labRefuse('stale-quote');
     if(quote.day!==dateKey()||quote.zone!==labZone())labRefuse('stale-quote');
     const live=laboratoryQuote(s,rows,quote.iids,quote.opId);
     if(!labEqual(live,quote))labRefuse('stale-quote');
@@ -1772,13 +1779,21 @@ export async function buyLabIncubator(request) {
       labState(s);
       const {slot,opId,price}=request,prior=s.labIncubators[slot];
       if(prior){if(prior.opId!==opId)labRefuse('already-owned');return {result:{ok:true,receipt:prior}};}
+      labPending(s, opId);
+      if(request.snapshotToken!==undefined){
+        if(!labEqual(request.snapshotToken,labPurchaseToken(s)))labRefuse('stale-quote');
+        if(!s.labIntents[opId]||!labEqual(s.labIntents[opId].quote,request))labRefuse('stale-quote');
+        const clock=dayDecision(dateKey(),s.dayHighWater,s.dayWitnessOrd,true);
+        if(!clock.fresh)labRefuse(clock.reason);
+      }
       if(Object.values(s.labIncubators).some(x=>x.opId===opId))labRefuse('op-conflict');
       if(!Object.keys(s.labExperiments).length)labRefuse('experiment-required');
       if(slot===3&&!s.labIncubators['2'])labRefuse('prerequisite');
       if(typeof s.coins!=='number'||!Number.isFinite(s.coins)||s.coins<price)labRefuse('insufficient-coins');
       if(s.coinsRev!==undefined&&(typeof s.coinsRev!=='number'||!Number.isFinite(s.coinsRev)||s.coinsRev<0))labRefuse('invalid-coins');
       const currencyReceipt=`lab-incubator:${opId}:coins`,receipt={format:1,slot,opId,price,purchasedAt:Date.now(),currencyReceipt};
-      return {kv:valuesPay({coins:s.coins-price,coinsRev:(s.coinsRev||0)+Math.max(1,price),labIncubators:{...s.labIncubators,[slot]:receipt}}),currencyReceipts:{coins:currencyReceipt},result:{ok:true,receipt}};
+      const intents={...s.labIntents};delete intents[opId];
+      return {kv:valuesPay({labIntents:intents,coins:s.coins-price,coinsRev:(s.coinsRev||0)+Math.max(1,price),labIncubators:{...s.labIncubators,[slot]:receipt}}),currencyReceipts:{coins:currencyReceipt},result:{ok:true,receipt}};
     }});
   });
 }
@@ -1789,6 +1804,251 @@ export async function acknowledgeLabResult(opId) {
     return {kv:valuesPay({labSeen:[...new Set([...(s.labSeen||[]),opId])]}),result:true};
   }});
 }
+
+/* Versioned UI adapter. Durable engine requests stay separate from display
+   annotations so exact live equality still protects the reviewed operation. */
+function labPending(s, ownId) {
+  if (Object.keys(s.labIntents || {}).some(id => id !== ownId)) labRefuse('unknown');
+}
+function labPurchaseToken(s) {
+  return { format: 1, day: dateKey(), zone: labZone(), coins: s.coins ?? 0,
+    coinsRev: s.coinsRev ?? 0, incubators: s.labIncubators,
+    experiments: s.labExperiments, daily: s.labDaily };
+}
+function labUiReason(reason) {
+  return ({'daily-cap':'cap-reached', backwards:'clock-backwards', unwitnessed:'unwitnessed-day',
+    'invalid-pair':'ineligible', 'unsettled-training':'stale-quote',
+    'laboratory-restore-conflict':'restore-conflict', 'conflicting-experiments':'restore-conflict',
+    'op-conflict':'restore-conflict'})[reason] || reason;
+}
+const labReply = result => result?.ok === false ? {...result, reason:labUiReason(result.reason)} : result;
+const labCellKey = p => /^C[1-6]$/.test(p?.sp) && labMorph(p.morph)
+  ? `${p.sp}|${p.shiny ? 'base' : labMorph(p.morph)}` : null;
+const labPlain = p => !p.bankedSteps && !p.nickname && !p.lineage && !p.bond && !p.talents.length && !p.equipped;
+const labTalentNames = p => p.talents.map(id => Object.values(PET_TREES).flatMap(t=>t.flatMap(r=>r.opts)).find(n=>n.id===id)?.name || id);
+function labNeededFor(sp, morph, roster, s) {
+  const owned = new Set(roster.map(labCellKey).filter(Boolean));
+  const has = m => owned.has(`${sp}|${m}`);
+  const count = m => roster.filter(p=>p?.sp===sp && labMorph(p.morph)===m && labInput(p,s)).length;
+  const v = !has('midnight');
+  const u = !has('toxic') || !has('rose') || (v && (count('toxic')<2 || count('rose')<2));
+  if (['ember','frost'].includes(morph) && u && count(morph)<2) return 'Ember + Frost';
+  if (['toxic','rose'].includes(morph) && v && count(morph)<2) return 'Toxic + Rose';
+  return undefined;
+}
+function labPetRows(roster, s) {
+  const ids = roster.map(p=>p?.iid), unique = new Set(ids).size === ids.length;
+  const counts = new Map();
+  for (const p of roster) { const key=labCellKey(p); if(key) counts.set(key,(counts.get(key)||0)+1); }
+  const keepers = new Set();
+  for (const key of counts.keys()) {
+    const candidates=roster.filter(p=>labCellKey(p)===key);
+    const keeper=candidates.find(p=>{const input=labInput(p,s);return !input||!labPlain(input);}) || candidates[0];
+    keepers.add(keeper);
+  }
+  return roster.map(row => {
+    const input=labInput(row,s), key=labCellKey(row);
+    const eligible=!!input && unique && !(s.petTaken||[]).includes(row?.iid);
+    const reason=eligible ? '' : row?.shiny ? 'Shiny pets cannot be used here.' : row?.sp==='CX' ? 'The Day One Lizard cannot be used here.'
+      : !/^C[1-6]$/.test(row?.sp) ? 'This species is not supported.' : !labMorph(row?.morph) ? 'This saved colour is not supported.'
+      : !unique ? 'Duplicate pet identities require repair and a fresh review.' : 'This saved pet has invalid or unavailable metadata.';
+    // Invalid rows stay visible but never receive eligible status or permissive values.
+    const p=input || {iid:row?.iid,sp:row?.sp,morph:labMorph(row?.morph)||String(row?.morph),shiny:!!row?.shiny,
+      lineage:0,bankedSteps:0,level:1,nickname:'',bond:0,talents:[],equipped:s.petEquipped===row?.iid};
+    return {...p, talents:labTalentNames(p), eligible, reason,
+      safeSurplus:eligible && labPlain(p) && !keepers.has(row), lastCopy:counts.get(key)===1,
+      neededFor:eligible ? labNeededFor(p.sp,p.morph,roster,s) : undefined};
+  });
+}
+function labPresentQuote(q) {
+  const roster=q.context.roster, s=q.context;
+  const pets=labPetRows(roster,s);
+  const survivors=roster.filter(p=>!q.iids.includes(p?.iid));
+  return {...q, request:q, inputs:q.iids.map(id=>pets.find(p=>p.iid===id)),
+    salvageDust:q.inputs.reduce((n,p)=>n+petDustValue(BH_BY_ID[p.sp])+p.lineage*8,0),
+    branches:q.branches.map(b=>({...b,
+      counts:[...new Set([...q.inputs.map(labCellKey),`${q.species}|${b.morph}`])].map(cell=>({cell,
+        before:roster.filter(p=>labCellKey(p)===cell).length,
+        after:survivors.filter(p=>labCellKey(p)===cell).length+Number(cell===`${q.species}|${b.morph}`)})),
+      neededFor:labNeededFor(q.species,b.morph,roster,s)}))};
+}
+function labReceipt(r, s) {
+  validLabRequest(r?.request);
+  for(const key of ['opId','rules','recipe','species','inputs','distribution','protection','beforeCells','branches']) {
+    if(!labEqual(r[key],r.request[key]))labRefuse('invalid-experiment');
+  }
+  const annotations=labPresentQuote(r.request);
+  const clock=dayDecision(dateKey(),s.dayHighWater,s.dayWitnessOrd,true);
+  return {...r, inputs:annotations.inputs, branches:annotations.branches,
+    resultPresent:(s.petInst||[]).some(p=>p?.iid===r.result.iid),
+    remaining:clock.fresh ? Math.max(0,labCapacity(s.labIncubators)-(s.labDaily[dateKey()]?.used||0)) : 0};
+}
+// Recovery shares the KV transaction lock with dispatch. Removing an adapter
+// intent fences a delayed dispatch (requireIntent), so readback cannot race a
+// subsequent spend of the same request. No recovery path draws or retries.
+function labRecover(s, rows) {
+  const intents={...s.labIntents}, recoveredOpIds=Object.keys(s.labExperiments);
+  for(const [id,intent] of Object.entries(intents)) {
+    const q=intent.quote;
+    const receipt=q.kind==='purchase' ? Object.values(s.labIncubators).find(r=>r.opId===id) : s.labExperiments[id];
+    let unchanged=false;
+    if(!receipt) {
+      if(q.kind==='purchase') {
+        const token=labPurchaseToken(s);
+        unchanged=labEqual(q.snapshotToken,{...token,day:q.snapshotToken?.day,zone:q.snapshotToken?.zone});
+      }
+      else {
+        try {
+          validLabRequest(q);
+          unchanged=labEqual(q.context,labQuoteContext(s,rows,q.species)) && q.meter===effectivePetSteps(rows.health)
+            && q.capacity===labCapacity(s.labIncubators) && labEqual(q.occupancy,s.labDaily[q.day]||{slots:{},used:0});
+        }
+        catch(e) { if(!e?.refused) throw e; }
+      }
+    }
+    if(receipt && (q.kind==='purchase' ? receipt.slot!==q.slot||receipt.price!==q.price : !labEqual(receipt.request,q)))labRefuse('laboratory-restore-conflict');
+    if(receipt || unchanged) { delete intents[id]; recoveredOpIds.push(id); }
+  }
+  recoveredOpIds.push(...Object.values(s.labIncubators).map(r=>r.opId));
+  return {intents,recoveredOpIds:[...new Set(recoveredOpIds)]};
+}
+function labPresentation(s, rows, recoveredOpIds=[]) {
+  const daily=labState(s), day=dateKey(), clock=dayDecision(day,s.dayHighWater,s.dayWitnessOrd,true);
+  const capacity=labCapacity(s.labIncubators), used=daily[day]?.used||0;
+  const roster=s.petInst||[], pets=labPetRows(roster,s);
+  const ownedCells=[...new Set(roster.map(labCellKey).filter(Boolean))].sort();
+  const species={}; let hasEligiblePair=false, hasSafePair=false, hasSafeUsefulPair=false;
+  for(let i=1;i<=6;i++) {
+    const sp=`C${i}`, local=pets.filter(p=>p.sp===sp), count=ownedCells.filter(k=>k.startsWith(`${sp}|`)).length;
+    const detail={count,complete:count===MORPHS.length,hasEligiblePair:false,
+      safeCounts:Object.fromEntries(MORPHS.map(m=>[m,local.filter(p=>p.morph===m&&p.safeSurplus).length])),recipes:{}};
+    for(const [recipe,morphs] of [['base-base',['base','base']],['ember-frost',['ember','frost']],['toxic-rose',['toxic','rose']]]) {
+      const odds=labDistribution(roster,recipe,sp,s);
+      const choose=plain=>{const pool=local.filter(p=>p.eligible&&(!plain||labPlain(p)));const a=pool.find(p=>p.morph===morphs[0]);const b=pool.find(p=>p!==a&&p.morph===morphs[1]);return a&&b?[a.iid,b.iid]:null;};
+      const pair=choose(false), safe=choose(true), preview=safe&&labPreview(roster,safe,s);
+      if(pair) {detail.hasEligiblePair=true;hasEligiblePair=true;}
+      if(preview?.ok&&!preview.risk) {
+        hasSafePair=true;
+        if(ownedCells.length<36 && preview.branches.some(b=>b.gained.length||labNeededFor(sp,b.morph,roster,s))) hasSafeUsefulPair=true;
+      }
+      detail.recipes[recipe]={...odds,explanation:odds.protection==='collection' ? 'Missing collection colours are protected.' : odds.protection==='ingredient' ? 'Needed ingredient stock is protected.' : 'No protection filter is active.',
+        shortage:pair ? '' : 'Hatch eggs or build the matching ingredients to supply this pair.'};
+    }
+    species[sp]=detail;
+  }
+  const meter=effectivePetSteps(rows.health);
+  const prepared=s.petLvlV===2&&s.pettalents?.__iidV===2&&s.petStepCredit===meter;
+  const status=Object.keys(s.labIntents).length ? 'unknown' : !clock.fresh ? labUiReason(clock.reason) : !prepared ? 'unavailable' : 'ready';
+  return {status,token:labPurchaseToken(s),used,capacity,remaining:status==='ready'?capacity-used:0,
+    resetTime:'00:00',zone:labZone(),coins:s.coins??0,incubators:s.labIncubators,ownedCells,
+    collectionCount:ownedCells.length,hasExperiment:Object.keys(s.labExperiments).length>0,
+    priorDay:rows.xp.some(r=>/^(dayclose|dayeffort)-\d{4}-\d{2}-\d{2}$/.test(r.key)&&r.key.slice(-10)<day),
+    hasEligiblePair,hasSafePair,hasSafeUsefulPair,pets,species,
+    eggs:rows.inv.filter(r=>r.kind==='egg').map(e=>{const p=eggProgress(e,meter);return {steps:p.walked,goal:p.goal,ready:p.ready};}),
+    ui:s.labUi,unseen:Object.values(s.labExperiments).filter(r=>!s.labSeen.includes(r.opId)).sort((a,b)=>a.committedAt-b.committedAt||a.opId.localeCompare(b.opId)).map(r=>labReceipt(r,s)),recoveredOpIds};
+}
+async function labRead(pre={}, recover=false) {
+  // Today provides these arrays. Do not rescan them or run migrations on its
+  // presentation-only path. A normal room read prepares before this snapshot.
+  const stores=['health','inv','log','xp'].filter(k=>!Array.isArray(pre[k]));
+  return payAtomic({snapshot:{keys:LAB_KEYS,stores},decide:(raw,readRows)=>{
+    const s={...raw},rows={...readRows};
+    for(const k of ['health','inv','log','xp'])if(Array.isArray(pre[k]))rows[k]=pre[k];
+    if(Object.keys(LAB_DEFAULTS).every(k=>s[k]===undefined))Object.assign(s,structuredClone(LAB_DEFAULTS));
+    labState(s);
+    if(pre.presentationOnly&&s.petLvlV===2) {
+      const meter=effectivePetSteps(rows.health),delta=Math.max(0,meter-(s.petStepCredit??meter));
+      if(delta>0&&s.petEquipped)s.petLvlSteps=creditSteps(s.petLvlSteps,s.petEquipped,delta);
+      s.petStepCredit=meter;
+    }
+    const recovery=recover ? labRecover(s,rows) : {intents:s.labIntents,recoveredOpIds:Object.keys(s.labExperiments)};
+    const changed=!labEqual(s.labIntents,recovery.intents);s.labIntents=recovery.intents;
+    return {kv:changed?valuesPay({labIntents:s.labIntents}):{},result:labPresentation(s,rows,recovery.recoveredOpIds)};
+  }});
+}
+async function labReleaseRefused(opId, request) {
+  return payAtomic({snapshot:labSnapshot,decide:s=>{
+    labState(s);
+    if(!labEqual(s.labIntents[opId]?.quote,request))return {result:false};
+    const intents={...s.labIntents};delete intents[opId];
+    return {kv:valuesPay({labIntents:intents}),result:true};
+  }});
+}
+async function labReadReceipt(opId) {
+  return payAtomic({snapshot:labSnapshot,decide:s=>{labState(s);return {result:labReceipt(s.labExperiments[opId],s)};}});
+}
+export const laboratory = Object.freeze({
+  version:1,
+  async snapshot(pre={}) {
+    if(pre.presentationOnly) return labRead(pre);
+    // Establish intent outcomes before preparation can change the quoted bank.
+    const recovered=Object.keys(await kvGet('labIntents',{})).length ? (await labRead({},true)).recoveredOpIds : [];
+    await initLaboratory(); await creditEquippedPetSteps();
+    const snapshot=await labRead(pre,true);
+    snapshot.recoveredOpIds=[...new Set([...recovered,...snapshot.recoveredOpIds])];
+    return snapshot;
+  },
+  async quote({iids}={}) {
+    const q=await quoteLaboratory(iids);
+    return q.ok ? {ok:true,quote:labPresentQuote(q)} : labReply(q);
+  },
+  async animate({quote,acknowledgedRisk}={}) {
+    const q=quote?.request;
+    if(!q || !labEqual(quote,labPresentQuote(q)))return {ok:false,reason:'stale-quote'};
+    if(acknowledgedRisk!==(q.risk?'ANIMATE':'reviewed'))return {ok:false,reason:'ineligible'};
+    const intent=await saveLabIntent(q,{acknowledgedRisk});
+    if(!intent.ok)return labReply(intent);
+    if(intent.receipt)return {ok:true,receipt:await labReadReceipt(q.opId)};
+    try {
+      const result=await animateLaboratory(q,{acknowledgedRisk,requireIntent:true});
+      if(result.ok)return {ok:true,receipt:await labReadReceipt(q.opId)};
+      await labReleaseRefused(q.opId,q);
+      return labReply(result);
+    } catch {
+      try {const snapshot=await labRead({},true);
+        if(snapshot.recoveredOpIds.includes(q.opId)) {
+          const saved=await kvGet('labExperiments',{});
+          if(saved[q.opId])return {ok:true,receipt:await labReadReceipt(q.opId)};
+          return {ok:false,reason:'confirmed-abort'};
+        }
+      } catch { /* Unreadable state retains the durable intent. */ }
+      return {ok:false,reason:'unknown'};
+    }
+  },
+  async purchase({slot,opId,snapshotToken}={}) {
+    const request={format:1,rules:LAB_RULES,kind:'purchase',slot,opId,price:LAB_PRICES[slot],snapshotToken};
+    const intent=await labTry(()=>payAtomic({snapshot:labSnapshot,decide:s=>{
+      labState(s);
+      if(![2,3].includes(slot)||typeof opId!=='string'||!opId||opId.length>200||!snapshotToken)labRefuse('invalid-purchase');
+      const prior=s.labIncubators[slot];
+      if(prior?.opId===opId)return {result:{ok:true,receipt:prior}};
+      labPending(s,opId);
+      if(!labEqual(snapshotToken,labPurchaseToken(s)))labRefuse('stale-quote');
+      if(s.labIntents[opId]&&!labEqual(s.labIntents[opId].quote,request))labRefuse('op-conflict');
+      if(!Object.keys(s.labExperiments).length)labRefuse('experiment-required');
+      if(slot===3&&!s.labIncubators['2'])labRefuse('prerequisite');
+      if(s.coins<request.price)labRefuse('insufficient-coins');
+      const clock=dayDecision(dateKey(),s.dayHighWater,s.dayWitnessOrd,true);if(!clock.fresh)labRefuse(clock.reason);
+      return {kv:valuesPay({labIntents:{...s.labIntents,[opId]:{format:1,quote:request,acknowledgedRisk:'reviewed',createdAt:Date.now()}}}),result:{ok:true}};
+    }}));
+    if(!intent.ok||intent.receipt)return labReply(intent);
+    try {const result=await buyLabIncubator(request);if(!result.ok)await labReleaseRefused(opId,request);return labReply(result);}
+    catch {try {const s=await labRead({},true);if(Object.values(s.incubators).some(r=>r.opId===opId))return {ok:true};
+      if(s.recoveredOpIds.includes(opId))return {ok:false,reason:'confirmed-abort'};} catch { /* Keep pending. */ }
+      return {ok:false,reason:'unknown'};}
+  },
+  async acknowledge(opId) { return labTry(async()=>{await acknowledgeLabResult(opId);return {ok:true};}); },
+  async setUi(patch) {
+    await initLaboratory();
+    return labTry(()=>payAtomic({snapshot:{keys:LAB_KEYS},decide:s=>{
+      labState(s);
+      if(!patch||typeof patch!=='object'||Array.isArray(patch)||Object.entries(patch).some(([k,v])=>!['introRead','todayHidden'].includes(k)||typeof v!=='boolean'))labRefuse('invalid-ui');
+      if(!Number.isSafeInteger(s.labUi.revision+1))labRefuse('invalid-ui');
+      const ui={...s.labUi,...patch,revision:s.labUi.revision+1};
+      return {kv:valuesPay({labUi:ui}),result:{ok:true,ui}};
+    }}));
+  }
+});
 
 /* ---------- Paddock bonds (kv 'petBonds' = {iid: 0..5}) ----------
  * Per-copy affection for The Paddock. Same shape as petLvlSteps: its own kv
