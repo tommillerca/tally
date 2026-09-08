@@ -1343,6 +1343,7 @@ function bindAppLifecycle() {
      every resume because a suspended WebView's pending timer is stale. */
   const midnight = armMidnightTimer(rollDayIfNeeded);
   onAppResume(async () => {
+    if (await guardSaveBeforeInit()) return;
     if (!NOSOCIAL) social.touchServerDay();
     /* AND THE GAP OPEN GETS THE SAME BOUNDED WAIT THE BOOT DOES. A native shell
        resumes after days without ever booting, so a 14-day return arrives here
@@ -1379,9 +1380,71 @@ function bindAppLifecycle() {
   refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
 }
 
+// In-memory evidence survives a store disappearing while this page stays open.
+// Never pay initialization rewards after a receipt we already read goes missing.
+let saveWitness = { settings: false, loot: false };
+let saveRecoveryActive = false;
+let saveRecoveryStatus = 'unknown';
+let newPlayerConfirmed = false;
+function storageIsFull(error) {
+  return !!error && /quota|IOError|Failed to write blobs/i.test(`${error.name || ''} ${error.message || ''}`);
+}
+async function guardSaveBeforeInit() {
+  const settings = await kvGet('settings', null);
+  const loot = await kvGet('loot-init', false);
+  if ((saveWitness.settings && !settings) || (saveWitness.loot && !loot)) {
+    newPlayerConfirmed = false;
+    renderAccountRecovery('known');
+    return true;
+  }
+  saveWitness.settings ||= !!settings;
+  saveWitness.loot ||= !!loot;
+  return saveRecoveryActive;
+}
+function renderAccountRecovery(status = saveRecoveryStatus) {
+  saveRecoveryActive = true;
+  saveRecoveryStatus = status;
+  const known = status !== 'unknown' || saveWitness.settings || saveWitness.loot;
+  const el = $('#screen');
+  el.classList.add('screen-in');
+  markBooted();
+  $('#tabbar').style.display = 'none';
+  const gear = $('#gearBtn'); if (gear) gear.hidden = true;
+  el.innerHTML = `<div class="onb onb-in"><div class="onb-scroll">
+    <h1>${known ? 'RECOVER YOUR BONES' : 'PLAYED BEFORE?'}</h1>
+    <p class="onb-sub">${known
+      ? 'Your saved progress is missing or could not be read. Restore your backup before continuing.'
+      : 'This phone has no saved progress. If you have played before, restore your account or a backup file.'}</p>
+    </div><div class="onb-foot">
+    <button class="btn" id="saveRestore">Restore an account or backup file</button>
+    ${known ? '<button class="btn ghost" id="saveRetry">Retry cloud recovery</button>'
+      : '<button class="btn ghost" id="saveNew">I am new. Start my Bonehead</button>'}
+    </div></div>`;
+  $('#saveRestore').addEventListener('click', () => openRestoreSheet());
+  $('#saveNew')?.addEventListener('click', async () => {
+    const saved = await kvGet('onbProgress', null);
+    newPlayerConfirmed = true;
+    saveRecoveryActive = false;
+    renderOnboarding(saved && Number.isInteger(saved.step) ? Math.min(2, Math.max(0, saved.step)) : 0,
+      saved && saved.pick ? { pick: saved.pick } : {});
+  });
+  $('#saveRetry')?.addEventListener('click', async () => {
+    const btn = $('#saveRetry'); btn.disabled = true;
+    try {
+      const r = await social.bootSync({ saveMissing: true });
+      if (r.restored) { location.reload(); return; }
+      toast(r.reason === 'decrypt' ? 'The backup exists but this key cannot unlock it. Use your recovery code or a backup file.'
+        : 'Recovery did not finish. Use your recovery code or a backup file, or try again when storage and connection are available.', 5200);
+    } finally { btn.disabled = false; }
+  });
+}
+
 async function boot() {
   if (S.demo) { useDbName('tally-demo'); document.body.insertAdjacentHTML('beforeend', '<div class="demo-badge">DEMO</div>'); }
+  saveWitness.settings ||= !!S.settings;
   S.settings = await kvGet('settings');
+  saveWitness.settings ||= !!S.settings;
+  saveWitness.loot ||= !!(await kvGet('loot-init', false));
   if (S.demo && !S.settings) { await seedDemo(); S.settings = await kvGet('settings'); }
   snapSettings();
   S.userFoods = await db.all('foods');
@@ -1465,8 +1528,7 @@ async function boot() {
      meal, weight, crate or coin row was still silent. This is the consumer, and
      it lives here because js/app.js is what owns the toast.
 
-     LOUD ONLY, and the classification is db.js's, not a second opinion invented
-     here: `quiet` is already true for ambient bookkeeping the app re-derives next
+     LOUD ONLY: db.js's `quiet` is true for ambient bookkeeping the app re-derives next
      launch, and false for anything the player did or earned and could name
      afterwards. A key nobody classified arrives LOUD, which is the right way
      round (anti-regression rule 8).
@@ -1481,7 +1543,9 @@ async function boot() {
      luck: track() queues by writing kv 'evq', so a quota failure makes that write
      fail too, and reportWriteFailure returns early for exactly `kv`/`evq` before
      it reaches any sink. Checked in js/db.js before this was written. */
-  onWriteFailure(({ store, key, op, quiet, quota }) => {
+  onWriteFailure(({ store, key, op, quiet, quota, error }) => {
+    // Some engines report a full disk as DataError: Failed to write blobs (IOError).
+    quota ||= storageIsFull(error);
     trackEvent('write_fail', { store, key, op, quiet, quota });
     if (quiet) return;
     const now = Date.now();
@@ -1514,7 +1578,7 @@ async function boot() {
   // DB, polluting the leaderboard). Real users never run with ?demo.
   const NOSOCIAL = S.demo || navigator.webdriver === true;
   await social.initFromQuery();
-  const cloudRestore = NOSOCIAL ? null : await social.bootSync().catch(() => null);
+  const cloudRestore = NOSOCIAL ? null : await social.bootSync({ saveMissing: !S.settings }).catch(() => null);
   /* THE REASONS THAT ARE NOT A FAILURE, so the boot toast stays silent for them.
      'none'/'empty' (no backup on the server) and 'already' (restored on an
      earlier boot) were always here. The other three were NOT, and each one made
@@ -1578,15 +1642,15 @@ async function boot() {
     /* the same definite-failure branch the toast speaks from, so the event and
        the player see the identical condition (launch visibility, 2026-08-30) */
     try { trackEvent('cloud_restore_failed', { reason: String(cloudRestore.reason).slice(0, 24) }); } catch { /* analytics never breaks the app */ }
-    setTimeout(() => toast('Could not reach your cloud backup just now. Nothing has been lost; we will try again next time you open the app.', 5200), 900);
+    setTimeout(() => toast('Could not reach your cloud backup just now. We will try again next time you open the app. You can also restore with your recovery code or a backup file.', 5200), 900);
   }
 
   if (!S.settings) {
-    const saved = await kvGet('onbProgress', null);
-    renderOnboarding(saved && Number.isInteger(saved.step) ? Math.min(2, Math.max(0, saved.step)) : 0,
-      saved && saved.pick ? { pick: saved.pick } : {});
+    const status = await social.recoveryStatus().catch(() => 'unreadable');
+    renderAccountRecovery(status);
     return;
   }
+  if (await guardSaveBeforeInit()) return;
 
   /* FIRST PAINT COMES BEFORE THE AWARDING WORK, NOT AFTER IT.
    *
@@ -1656,6 +1720,7 @@ async function boot() {
      player would otherwise be reading. Toasts queue, so the line stays on screen
      for the length of the run without any new chrome to go wrong. */
   let backfillSpoke = false;
+  if (await guardSaveBeforeInit()) return;
   const init = await initGameIfNeeded(S.settings.targets, {
     onProgress: ({ done, total, resumed, complete }) => {
       if (complete || !total) return;
@@ -1673,7 +1738,9 @@ async function boot() {
     setTimeout(() => toast(`Progress imported: Level ${init.level.level} · ${init.xp.toLocaleString()} XP`, 3200), 700);
     route({ keepScroll: true }); // the screen painted at their old level; show the real one
   }
+  if (await guardSaveBeforeInit()) return;
   const kit = await initLootIfNeeded();
+  saveWitness.loot = !!(await kvGet('loot-init', false));
   /* R38-21: this toast is the ONLY thing that fires on a fresh install (kit is
      always truthy the first time, so backfillStarterSeedsIfNeeded below never
      runs for a new player), and it used to stop at "ingredients in the
@@ -3455,6 +3522,7 @@ function routeFromHash() {
 
 let _dayRefreshPending = false;
 function route({ keepScroll = false } = {}) {
+  if (saveRecoveryActive) return renderAccountRecovery();
   const { dayRoll = false } = arguments[0] || {};
   // Midnight changes the diary date immediately, but must not destroy input.
   // The last sheet's close drains this repaint; an explicit navigation wins.
@@ -15022,6 +15090,7 @@ async function renderSettings(el) {
     const r = await social.adoptIdentity(other);
     if (!r.ok) return toast(r.reason || 'Could not switch to it.', 3600);
     S.settings = await kvGet('settings', S.settings);
+    if (r.restored) saveWitness = { settings: !!S.settings, loot: !!(await kvGet('loot-init', false)) };
     snapSettings();
     /* FOUR outcomes, not two. 'decrypt' means the save exists but this key
        cannot read it; 'none'/'empty' means there is genuinely nothing to pull;
@@ -15508,6 +15577,7 @@ function onbGwartHtml(step) {
   </div>`;
 }
 function renderOnboarding(step = 0, ctx = {}) {
+  if (!newPlayerConfirmed) return renderAccountRecovery();
   const el = $('#screen');
   /* THE CONTAINER HIDE IS OPT-OUT, AND THIS PATH NEVER OPTED OUT.
      app.css: `.screen:not(.screen-in) { opacity: 0 }`. Only route() adds
@@ -15661,6 +15731,7 @@ function renderOnboarding(step = 0, ctx = {}) {
 }
 
 async function saveInitialSettings(np) {
+  if (await guardSaveBeforeInit()) return;
   const profile = { sex: np.sex, age: np.age, heightCm: np.heightCm, weightKg: np.weightKg, activity: np.activity, goal: np.goal };
   S.settings = {
     profile,
@@ -15682,7 +15753,9 @@ async function saveInitialSettings(np) {
   // means the unread badge only ever counts news posted AFTER today, not the
   // whole backlog the account was never around for.
   await kvSet('newsSeen', NEWS.map(n => n.id));
+  if (await guardSaveBeforeInit()) return;
   const kit = await initLootIfNeeded();
+  saveWitness.loot = !!(await kvGet('loot-init', false));
   // R38-21: same instruction as boot()'s copy of this toast, see the comment there.
   if (kit) setTimeout(() => toast(`Welcome kit: ${kit.coins} coins, 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen: exactly one Bone Broth. Cook it.`, 4200), 1200);
   // The cloud account is created HERE, not at first boot: bootSync no longer
@@ -15700,6 +15773,8 @@ async function saveInitialSettings(np) {
    whoever ends onboarding owns the shell latch: without it a restored player gets
    Today with a hidden tab bar, unbound tabs and a dead hashchange. */
 function enterAppFromOnboarding() {
+  saveRecoveryActive = false;
+  saveWitness.settings = !!S.settings;
   kvSet('onbProgress', null).catch(() => {});   // onboarding is over; nothing to resume
   $('#tabbar').style.display = '';
   window.addEventListener('hashchange', routeFromHash);
@@ -15761,7 +15836,7 @@ async function commitLogEntry(e, btn, via = null) {
     await db.put('log', e);
   } catch (err) {
     /* A FAILED WRITE MUST NOT LOOK LIKE A SAVED MEAL.
-       Measured 2026-08-13: reject this put the way a full quota does and the
+       Measured 2026-08-13 with an injected write rejection: the
        meal vanished with NO error, while an unrelated toast ("New talent points
        ready") stayed on screen reading like success. 166 log rows before, 166
        after. Storage really does fill: measured growth is 3.6MB in the first
@@ -15772,7 +15847,7 @@ async function commitLogEntry(e, btn, via = null) {
        on screen so the user knows whats happening and that they have to make
        room on the storage of their device". */
     if (btn) btn.disabled = false;
-    const full = err && /quota/i.test(err.name + ' ' + err.message);
+    const full = storageIsFull(err);
     toast(full
       ? 'Could not save: this device is out of storage. Free up some space and tap Add again.'
       : 'Could not save that meal. Tap Add to try again.', 5200);
@@ -21515,7 +21590,7 @@ function importSummary(counts) {
    restore and is untouched. Lands the player on Today afterwards; a restore
    mid-onboarding also ends onboarding, exactly like a successful cloud restore. */
 async function importBackupFromFile(file) {
-  const wasOnb = !S.settings;   // onboarding is exactly "no settings yet"
+  const wasOnb = saveRecoveryActive || !S.settings;   // recovery also needs the shell rebound
   let counts;
   try {
     counts = await importAll(JSON.parse(await file.text()));
@@ -21530,7 +21605,8 @@ async function importBackupFromFile(file) {
       : 'Import failed: ' + err.message, 4200);
     return;
   }
-  S.settings = await kvGet('settings') || S.settings;
+  S.settings = await kvGet('settings') || (wasOnb ? null : S.settings);
+  saveWitness = { settings: !!S.settings, loot: !!(await kvGet('loot-init', false)) };
   snapSettings();
   S.userFoods = await db.all('foods');
   await hydrateGenericUse(); // L3: generic use + stars back onto GENERIC_FOODS
@@ -21575,12 +21651,13 @@ async function openRestoreSheet() {
     await importBackupFromFile(file);
   });
   $('#rsGo', wrap).addEventListener('click', async () => {
-    const wasOnb = !S.settings;   // this sheet is also onboarding's restore path
+    const wasOnb = saveRecoveryActive || !S.settings;   // this sheet is also onboarding's restore path
     const btn = $('#rsGo', wrap); btn.disabled = true; btn.textContent = 'Restoring...';
     const r = await social.restoreWithPhrase($('#rsCode', wrap).value, $('#rsPhrase', wrap).value);
     btn.disabled = false; btn.textContent = 'Restore my Bonehead';
     if (!r.ok) return err(r.reason || 'Could not restore.');
     S.settings = await kvGet('settings', S.settings);
+    if (r.restored) saveWitness = { settings: !!S.settings, loot: !!(await kvGet('loot-init', false)) };
     snapSettings();
     levelSound(S.sounds);
     closeAllSheetsViaHistory();
@@ -21602,6 +21679,7 @@ async function openRestoreSheet() {
        onboarding uses, and it routes. An account with no save to pull has no
        settings either: onboarding continues instead of routing into the gate. */
     if (wasOnb) {
+      if (saveRecoveryActive && !r.restored) return renderAccountRecovery();
       if (S.settings) { enterAppFromOnboarding(); return; }
       const saved = await kvGet('onbProgress', null);
       renderOnboarding(saved && Number.isInteger(saved.step) ? Math.min(2, Math.max(0, saved.step)) : 0,

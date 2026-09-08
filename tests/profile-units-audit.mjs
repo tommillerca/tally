@@ -84,6 +84,9 @@ async function freshPage(w = 390, h = 844) {
   await p.goto(base, { waitUntil: 'networkidle2' });   // NO ?demo: onboarding only exists on a virgin install
   await sleep(2600);
   masks.push(await p.evaluate(() => navigator.webdriver));
+  await p.waitForSelector('#saveNew', { visible: true });
+  await p.click('#saveNew');
+  await p.waitForSelector('#onbGo', { visible: true });
   return p;
 }
 const click = (p, id) => p.evaluate(i => document.getElementById(i)?.click(), id);
@@ -183,6 +186,9 @@ for (let i = 0; i < 5 && rolled === firstName; i++) {
   rolled = await p.evaluate(() => document.getElementById('onbName')?.textContent || '');
 }
 await p.reload({ waitUntil: 'networkidle2' }); await sleep(3000);
+await p.waitForSelector('#saveNew', { visible: true });
+await p.click('#saveNew');
+await p.waitForSelector('#onbName', { visible: true });
 const resumed = await p.evaluate(() => document.getElementById('onbName')?.textContent || '');
 await p.browserContext().close();
 ok('SETUP the reroll moved the name, so there is something to lose',

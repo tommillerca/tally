@@ -652,7 +652,7 @@ const REG_STATE = async page => page.evaluate(async () => {
 /* The real onboarding, clicked. No ?demo is possible here (it turns registration
    off), so this is a virgin profile every run and the gate is real. */
 async function passOnboarding(page) {
-  for (const id of ['#onbGo', '#onbMe', '#onbSkip']) {
+  for (const id of ['#saveNew', '#onbGo', '#onbMe', '#onbSkip']) {
     for (let i = 0; i < 40; i++) {
       const hit = await page.evaluate(sel => {
         const b = document.querySelector(sel);
