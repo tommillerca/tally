@@ -66,6 +66,82 @@ if (process.argv.includes('--capture-baseline')) {
   process.exit(0);
 }
 
+// WAVE 2026-09-07: deliberate rebaseline after measured tuning. Keep the original
+// fixture immutable. Counts/order remain frozen; only the new serialized output
+// hashes are replaced here, inside this lane's owned audit. No recapture-at-run.
+const tunedHashes = [
+  ["67e00ee6cf442efe1dd4b2c075943e57f488a5d5a1360b5b8d84d6a8f34cae43", "17930abf3bc69811cd831c1354dc6a43b861778b25826a06836c9be7695de862"], // C1 L1
+  ["a1a8a176813eb0727cba4810a9df332363dfb64b8f094781e343f44f493a2f4d", "760e5f7e1cacad466968fc8ab557c09aa94e79f8035aad25f184effdc439901c"], // C1 L2
+  ["23e8767d556afab85f1ea5552c990ebbfeea6b6c7e4b937d6be675a385f3c791", "760e5f7e1cacad466968fc8ab557c09aa94e79f8035aad25f184effdc439901c"], // C1 L3
+  ["1d13470f1a106121f79bd2f4b03ecd9643ac8e0b39c535d17e9fd1dca07aa142", "60d1787581bed9b36e3cbcc48c1c098670745b273635d7524a8df83695ab1aa4"], // C1 L4
+  ["d8eec3aec81d4b13757bd340d18bdbfb8068098f0b4089962bc5b120b2ce8578", "60d1787581bed9b36e3cbcc48c1c098670745b273635d7524a8df83695ab1aa4"], // C1 L5
+  ["d3fa49b023dcfe15f5503a4ddf9309d23d1a843720d0de4fee05cc48f0c9561c", "54cd68533a4f282a27dd89b4f1cfa6b54b04f16858d9b796107f313f8cb2ccbe"], // C1 L6
+  ["bbf2f202c4118ea086da0245756f857fb4a64f4514864643d35740aaf36d463c", "54cd68533a4f282a27dd89b4f1cfa6b54b04f16858d9b796107f313f8cb2ccbe"], // C1 L7
+  ["8b2a29ee913ad4f697b79488824886d288fec4ae50537bc0eb85e5aeed5b8292", "96aaf593b97b8bb98d421e91517fe873f4a2327ca55b5ceb9d06cd848402c910"], // C1 L8
+  ["01602a3650d65a971d749b8262da9881fc9726b77f608384686143d327df908c", "96aaf593b97b8bb98d421e91517fe873f4a2327ca55b5ceb9d06cd848402c910"], // C1 L9
+  ["fadbe43b38d24697f174de34572c2aee58bef6d35378b844db658c25831371d4", "a4bdecc55a5c17c2a70afac811527a4434318f7aa1c90d35e5b7922412e93e3a"], // C1 L10
+  ["e8680c12670aa41d2db11004af807d89a5a69171b453b5371ae9542bd777f634", "63fc477f69b5bf6e8951824e2048346e9b1cc69e3487c93fd5ccb9aea0297155"], // C2 L1
+  ["f886bb8cd5c29cb93706d6661d9b59cb7169ae261c7d77f979b4f245eacb1517", "935e2731a02ad806b301bcd18d994a5c5030bedb30909bd4c4a33aec66350c7d"], // C2 L2
+  ["7d836a392329b9735b7650b83e023c5be486496ee130bb69a26ab79727c707b9", "fab36903acefe153d84bbcca4a2c1f0f49f0bbdbb76265e7c40417b4ab412137"], // C2 L3
+  ["08cc9293dbb4433ecc331d7bf809a8a519c4444d6ce4c31af48eb5ca46c3d52a", "6f22b8b6425b6ff7b81df0bc22c45f33b4d358f760d94c6df9435d4265f6ddbf"], // C2 L4
+  ["3e48005d8a9a32aaf95f794e1c281c195b16552da14835d9ba40d1164e2636cf", "94552067ecd440ef32257ff5a1007c1f16b291beaea6a9c0477b22266fae2c9f"], // C2 L5
+  ["dac870595e2cc6ecc3082825cadd52d3176f190a1574b78975983c803f8c5e48", "5e55b1db1fb829c1d632fc2b90639cc3c64c214e90157abdbf773248c819368e"], // C2 L6
+  ["bb3fa6fb7f97c72b540bd167e5ec878a96a3cb1b3e4f09875155d5310775f9d6", "ca42d3fed471118fe3b0cdadc3b6abd6df0885b17dbd4ccf326f26c2619d957b"], // C2 L7
+  ["9701aa04572c96192767a2e2060574f0ed1938a4c3e6866429c54970329407c1", "8830e5e41439f5fa532121e14dd317964676518c8dd838919011d960fef27af6"], // C2 L8
+  ["6f9dc39fd16cc48d88136ef989a670e7769f21ef3236e953c773c66aaa8f7883", "3fe9f0fab1c810428f314b482c4e343e75de925758fa7f970c10ebc78f0c048c"], // C2 L9
+  ["1032023b59463694f9eaa06ce18de11b32e383ab0b79ba9753cf0ca5b4c95c13", "b2bc4b8ca7c2962c625c9aea2e36bb17cbec7447b73e9e4f5acb9c3648606f9f"], // C2 L10
+  ["987f324d9b2cd16ffacab2072d6e62ddcc5f1bc28ca590e7d489e908e9334357", "26a915f74e15cbbd752dd524d6bd2ca162e241cb076b819fa683b8ebef4e3470"], // C3 L1
+  ["31cc4a01c1c2bc944be82a041fbf53424d74758505720987e63f23025d539527", "94f17f65fbfe8d7a2cb2c1989ae02d970e7e50e56a3964314ccfd8281200a099"], // C3 L2
+  ["aff6e9b25a81f14d00c87a872563ecb4cfd7f1dd69a1407e254e747bf68be5c9", "b1f0876b23160726088f029b236d4bb1326e520e3c9c5ed56e6f01b511240fa5"], // C3 L3
+  ["b0f2cd6e17c17a87714e440fe6e0fbd1816e8854befe0848d70ce05d00728a73", "9d8b8a602a2ef19b9d3f2d4f6fb81da10d3501b4da69d6f07a55e6e7d6bb74dc"], // C3 L4
+  ["d7e1c6dad8541047222eaf342665d1354ecd597a2a3cc7461e777a09afdf2558", "d235c2b0875140601add845b302806a711a6940a36e98a867f8db05090644cf3"], // C3 L5
+  ["6568ca9c44400028ab4832b9bb0f74a7fc0065021a0ded758e9c55f2117b915c", "f3c6b2d82ff2fd7a79f149026d70f0ff0bb758a16ee422582769490ed346c2d2"], // C3 L6
+  ["fa41d00c0314374239787707093753f0716882a4c36b8e4fc01524354a0fcf46", "ca3b98260c562a8d3ffef3debe0a12744e872b18737228dbb0a10b766cdbcef7"], // C3 L7
+  ["6e2c868c07068cb8026c2f2f60965f08789f72146da0df6b47d497c098436039", "b26ee57f2f8a6cb271359ab30e0bae068bc075ddfa5b1e33d1dfd4bf6127cdfb"], // C3 L8
+  ["2782cd5aff8dc571a7cffe27a506549772f62c86593937ce8f00cd463f44eac0", "b93e285b50d72147d40b111a090f11f74ece1de79271ce7d13c73cc06a10e2a5"], // C3 L9
+  ["77a30077753d92b49a6b2b4f5ef75d97586dea9e5c935cb154f9f97b6bf5cc56", "88c0443a5c0baee00fb9c69282b5028e095b0c312a83786d71e3437344cbf337"], // C3 L10
+  ["95cbc48ddb2b8616a93808bbab6e309f2c997bdd9af1f7a27bfda296ed6dfb96", "26a915f74e15cbbd752dd524d6bd2ca162e241cb076b819fa683b8ebef4e3470"], // C4 L1
+  ["2a2e29270503d844ff7a7e17284d82d464201a22f9d23310089865bec8dc43ed", "94f17f65fbfe8d7a2cb2c1989ae02d970e7e50e56a3964314ccfd8281200a099"], // C4 L2
+  ["9d6d9d735266c92a7cadef78b52dfdc7d10b3d5aed1f4117289557e610663fd4", "b1f0876b23160726088f029b236d4bb1326e520e3c9c5ed56e6f01b511240fa5"], // C4 L3
+  ["53a11235fdb67a08ecc4bc4a4a07b110b6f8bac3692db8d29e1aedffe3194ca6", "9d8b8a602a2ef19b9d3f2d4f6fb81da10d3501b4da69d6f07a55e6e7d6bb74dc"], // C4 L4
+  ["f013fa67e693792ee0b65276610dd9d07bbaf30c4cb540dce9b915f86a9aff5d", "d235c2b0875140601add845b302806a711a6940a36e98a867f8db05090644cf3"], // C4 L5
+  ["a94043983a2ff779b2b2746e8c01cd5b88fb4a7af9b9eb5ecee26c9c6a1d6af3", "f3c6b2d82ff2fd7a79f149026d70f0ff0bb758a16ee422582769490ed346c2d2"], // C4 L6
+  ["f7c5755c5395f0c75e3d34c8070c0da9fd7a909f65c9307124988dd41fec57d9", "ca3b98260c562a8d3ffef3debe0a12744e872b18737228dbb0a10b766cdbcef7"], // C4 L7
+  ["7855855cce5eacd2ae81cc262840d44b2d5fc6452b5a4d14d187d2a9d501813c", "b26ee57f2f8a6cb271359ab30e0bae068bc075ddfa5b1e33d1dfd4bf6127cdfb"], // C4 L8
+  ["64d8797a5c7a28df65b29eba4ee58df6e592be514cb933426f817322b4c7d952", "b93e285b50d72147d40b111a090f11f74ece1de79271ce7d13c73cc06a10e2a5"], // C4 L9
+  ["767cdfa4669cc40f781fac11a1fdeaf691c127961a916f39af7b01f8133ec063", "d15f46dd0bd144f452cf10ccb66d07a0c2b0a00416c246d1df2696b03c7966a4"], // C4 L10
+  ["448273883273cbfd8367c868a9fd4e6d5519b466b6e21e3d5cdc57db3b7ffb1d", "63fc477f69b5bf6e8951824e2048346e9b1cc69e3487c93fd5ccb9aea0297155"], // C5 L1
+  ["153b717bb86f6e7dd31727adfb8adf3ff6cbf933dedac9470ea576319468f020", "935e2731a02ad806b301bcd18d994a5c5030bedb30909bd4c4a33aec66350c7d"], // C5 L2
+  ["bf7ea7c2b434b3b9ca76f53ac272f4e886403232fa92f9b19debafd387eef90f", "fab36903acefe153d84bbcca4a2c1f0f49f0bbdbb76265e7c40417b4ab412137"], // C5 L3
+  ["b9df1796c4b7a7a6ff4fe85075f36b1b9fd1f1a7544539507beb588c425b91d6", "6f22b8b6425b6ff7b81df0bc22c45f33b4d358f760d94c6df9435d4265f6ddbf"], // C5 L4
+  ["36a345a5886f8a74717ab3d2ff7a92e41d31ee572ef595a9e6528cb50dad8300", "94552067ecd440ef32257ff5a1007c1f16b291beaea6a9c0477b22266fae2c9f"], // C5 L5
+  ["ee379490c564df31b8a8adffaf01a4a94d5f8d180e5efa13bdaed855e6f28b2e", "5e55b1db1fb829c1d632fc2b90639cc3c64c214e90157abdbf773248c819368e"], // C5 L6
+  ["a160455f86c8723efd8ca79db4a24423f9e7738e7abbc8d933d7b4610bf62571", "ca42d3fed471118fe3b0cdadc3b6abd6df0885b17dbd4ccf326f26c2619d957b"], // C5 L7
+  ["e78bebf3729e6257b74e4f4d0272f7efac12a401e32628b2a3d702499e16715d", "8830e5e41439f5fa532121e14dd317964676518c8dd838919011d960fef27af6"], // C5 L8
+  ["d6f68ba6ec235c25c83e4efae16444e755fb6cdab8cb3f5e8c62619020cee696", "3fe9f0fab1c810428f314b482c4e343e75de925758fa7f970c10ebc78f0c048c"], // C5 L9
+  ["e2caeacac3b20c558941141414b748014e8c7becf3c43c464952d288f1b8de58", "4f9235a3ed59658804dcde646149ba10d270f773e9b1a1f4b6ad863423baf327"], // C5 L10
+  ["83e039a257819e5cdb4e38c0327e577cd1affb1c600c641f63304b504e49762a", "26a915f74e15cbbd752dd524d6bd2ca162e241cb076b819fa683b8ebef4e3470"], // C6 L1
+  ["39d5c154e336098f5a5a125f87a7f5b0c9db01dc11f3c02e11684bad6745128c", "94f17f65fbfe8d7a2cb2c1989ae02d970e7e50e56a3964314ccfd8281200a099"], // C6 L2
+  ["2aaa525b5c5fec2b2084cdefe75e6e36ca0c6d05f9bffb02df48843fe2d29ed4", "b1f0876b23160726088f029b236d4bb1326e520e3c9c5ed56e6f01b511240fa5"], // C6 L3
+  ["f41729a8cff697465fad58a013fd8a75521f2d8c85b4a4f1b6d3e74a3d65f78d", "9d8b8a602a2ef19b9d3f2d4f6fb81da10d3501b4da69d6f07a55e6e7d6bb74dc"], // C6 L4
+  ["6b7db7f66d254671a8c30058496ad96374f328d2758ef8abdb928e17b7fc7d47", "d235c2b0875140601add845b302806a711a6940a36e98a867f8db05090644cf3"], // C6 L5
+  ["03df0eff0a0132fc321cd654ff635882362cf1f01a339de5dcc9ea6274dbbcfd", "f3c6b2d82ff2fd7a79f149026d70f0ff0bb758a16ee422582769490ed346c2d2"], // C6 L6
+  ["c52b51d3c8bbf5ef336b9110ea042763c30c4bfade8fcde7718bf8ce2075a41e", "ca3b98260c562a8d3ffef3debe0a12744e872b18737228dbb0a10b766cdbcef7"], // C6 L7
+  ["68f5a97896ad19d5255a4d9bbb251d1331a39d857ede5f23e3f0dde714921aa9", "b26ee57f2f8a6cb271359ab30e0bae068bc075ddfa5b1e33d1dfd4bf6127cdfb"], // C6 L8
+  ["86c2bdbdb9063ba7187eab056b9e178790a185be5a4a48a7880776e2172b919a", "b93e285b50d72147d40b111a090f11f74ece1de79271ce7d13c73cc06a10e2a5"], // C6 L9
+  ["c6f69fdd917ff59c2cc037b46fc8c680feb59712d0de90cf11e2b0809e3000f0", "0fb97f41365e26e76d1da84e87c922e2639cc47387f23031b7b31fca0aad6fdb"], // C6 L10
+  ["4392ca457625d4debb78a56d4f6924c95fe12b337c451776f1b5782f5e117181", "26a915f74e15cbbd752dd524d6bd2ca162e241cb076b819fa683b8ebef4e3470"], // CX L1
+  ["255ef146d448d8f434118632a5673912ab6a564795a827b1f9716ae07033a383", "94f17f65fbfe8d7a2cb2c1989ae02d970e7e50e56a3964314ccfd8281200a099"], // CX L2
+  ["75156ee9b7427ae2c8725d424847c021eb9e9b5672ccba37271c04907b2e3895", "b1f0876b23160726088f029b236d4bb1326e520e3c9c5ed56e6f01b511240fa5"], // CX L3
+  ["9e7bc0f92a27bc2a3e4abad1428cb9f29a586e3fec5f5ae8abc41cfe0607d8ce", "9d8b8a602a2ef19b9d3f2d4f6fb81da10d3501b4da69d6f07a55e6e7d6bb74dc"], // CX L4
+  ["5ace3db75d2a48bae554c0c09646e76e946f4ab151daab8af2cc357ab4d05d54", "d235c2b0875140601add845b302806a711a6940a36e98a867f8db05090644cf3"], // CX L5
+  ["8a3d48b07fd6e0b94fdcc39de42379f2a5b1b1c916b3b4a82f0807b3469c38b1", "f3c6b2d82ff2fd7a79f149026d70f0ff0bb758a16ee422582769490ed346c2d2"], // CX L6
+  ["9b1a2e1d5e94799a9e0cdc62e386fabdd4cc69d7bad37540fa7a8864abc6a22a", "ca3b98260c562a8d3ffef3debe0a12744e872b18737228dbb0a10b766cdbcef7"], // CX L7
+  ["ef14542195e86448d7647ca2ed0c8264880b173382bb5095626ce79e82bfaaac", "b26ee57f2f8a6cb271359ab30e0bae068bc075ddfa5b1e33d1dfd4bf6127cdfb"], // CX L8
+  ["53d7a40f6ba05dcd0fa23a9fee14d7a66e3a91350e9834297e85c09766afce0d", "b93e285b50d72147d40b111a090f11f74ece1de79271ce7d13c73cc06a10e2a5"], // CX L9
+  ["fdc5fac769a080f78c28d5afa2dd908807ea493eeef389249aaf3ee36c7694fc", "450d01798afda8d7632592aef6d8f0cf8d0eb5c198fbace289fe4ef2364b6775"], // CX L10
+];
+
 let passed = 0, failed = 0;
 function test(name, fn) {
   try { fn(); passed++; console.log(`PASS ${name}`); }
@@ -164,11 +240,11 @@ test('TIERS derives new unlocks from the applicable family tree', () => {
 test('COOLDOWN family metadata agrees with the effective special action', () => {
   for (const family of Object.keys(pets.PET_FAMILIES)) {
     const special = pets.petActionMeta(family).find(a => a.kind === 'special');
-    assert.equal(special.cd, 2, `${family} effective cooldown must not change`);
+    assert.equal(special.cd, family === 'hound' ? 2 : 4, `${family} tuned cooldown`);
     assert.equal(pets.PET_FAMILIES[family].cooldown, special.cd, `${family} has conflicting cooldown metadata`);
   }
 });
-test('COOLDOWN-ENGINE specials set the same two-turn timer and reopen after two owner turns', () => {
+test('COOLDOWN-ENGINE specials reopen after the full family recovery', () => {
   const stats = { power: 30, marrow: 100, wind: 40, reflex: 30, hype: 0 };
   for (const [id, action, picks] of [['C3', 'bite', ['h-pack']], ['C2', 'shield', []], ['C1', 'hex', []]]) {
     const fight = createFight({
@@ -177,21 +253,36 @@ test('COOLDOWN-ENGINE specials set the same two-turn timer and reopen after two 
     });
     assert.ok(petActionsFor(fight).find(a => a.id === action).enabled);
     assert.ok(applyPetAction(fight, action).length > 0, `${id} actually acted`);
-    assert.equal(fight.p.pet.specialCd, 2, `${id} timer is 2, including Pack Tactics`);
+    const recovery = id === 'C3' ? 2 : 4;
+    assert.equal(fight.p.pet.specialCd, recovery, `${id} timer, including Pack Tactics`);
     assert.ok(!petActionsFor(fight).find(a => a.id === action).enabled);
-    for (let turn = 1; turn <= 2; turn++) {
+    for (let turn = 1; turn <= recovery; turn++) {
       endTurn(fight); endTurn(fight);
-      assert.equal(fight.p.pet.specialCd, 2 - turn);
-      assert.equal(petActionsFor(fight).find(a => a.id === action).enabled, turn === 2);
+      assert.equal(fight.p.pet.specialCd, recovery - turn);
+      assert.equal(petActionsFor(fight).find(a => a.id === action).enabled, turn === recovery);
     }
   }
 });
-test('NO-DRIFT full serialized builds and effects match the frozen baseline', () => {
+test('FAMILY-IDENTITY assignments, roles, passives, talent IDs/unlocks and Signature identities never drift', () => {
+  const identity = {
+    assign: pets.PET_ASSIGN,
+    families: Object.values(pets.PET_FAMILIES).map(({ key, name, role, passive }) => ({ key, name, role, passive })),
+    trees: Object.fromEntries(Object.entries(pets.PET_TREES).map(([key, rows]) =>
+      [key, rows.map(t => [t.tier, t.opts.map(o => [o.id, o.name])])])),
+    signatures: Object.entries(pets.PET_SIGNATURE).map(([id, sig]) => [id, sig.id, sig.name]),
+  };
+  // Captured from this checkout's original pets.js before any WAVE changes.
+  assert.equal(hash(JSON.stringify(identity)), '207c6ed91d984441179c1e942df3d9bf685ad03f194ddbb31ff67b60fe36dbe2');
+});
+test('NO-DRIFT full serialized builds and effects match the frozen WAVE baseline', () => {
   const baseline = JSON.parse(readFileSync(baselineURL));
   assert.equal(baseline.sourceSHA256, originalSHA);
   const actual = snapshot();
   assert.equal(actual.length, 70, 'all 7 species at all 10 levels');
-  for (let i = 0; i < actual.length; i++) assert.deepEqual(actual[i], baseline.rows[i], `${actual[i].id} level ${actual[i].level}`);
+  assert.equal(tunedHashes.length, baseline.rows.length);
+  for (let i = 0; i < actual.length; i++) assert.deepEqual(actual[i], {
+    ...baseline.rows[i], buildSHA256: tunedHashes[i][0], effectSHA256: tunedHashes[i][1],
+  }, `${actual[i].id} level ${actual[i].level}`);
   console.log(`  ${actual.reduce((n, r) => n + r.builds, 0)} builds and ${actual.reduce((n, r) => n + r.effects, 0)} effects byte-identical`);
 });
 console.log(`pet-family-audit: ${passed} passed, ${failed} failed`);

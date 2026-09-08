@@ -19,13 +19,13 @@ export const PET_FAMILIES = {
   warden: {
     key: 'warden', name: 'Warden', role: 'Support', color: '#8fd0ff',
     blurb: 'Shields and mends you.',
-    cooldown: 2,
+    cooldown: 4,
     passive: 'damageTaken',         // -X% damage you take
   },
   imp: {
     key: 'imp', name: 'Imp', role: 'Utility', color: '#c084fc',
     blurb: 'Curses the enemy to hit softer.',
-    cooldown: 2,
+    cooldown: 4,
     passive: 'hypeGain',            // +X% hype gain
   },
 };
@@ -116,7 +116,7 @@ export const PET_TREES = {
       { id: 'h-bloodscent', name: 'Bloodscent', desc: 'When the pet bites, you heal 6% of its damage.' } ] },
     { tier: 4, opts: [
       { id: 'h-pack', name: 'Pack Tactics', desc: 'The pet bites every turn instead of every other.' },
-      { id: 'h-venom', name: 'Venom', desc: 'Poison ticks 50% harder.' } ] },
+      { id: 'h-venom', name: 'Venom', desc: 'Poison gains 50% of its base tick.' } ] },
     { tier: 6, opts: [
       { id: 'h-frenzy', name: 'Frenzy', desc: 'Below 25% enemy HP, the pet bites twice.' },
       { id: 'h-maul', name: 'Maul', desc: 'Bites can crit for double.' } ] },
@@ -125,11 +125,11 @@ export const PET_TREES = {
       { id: 'h-gore', name: 'Gore', desc: 'Poison lasts 2 extra turns.' } ] },
     { tier: 10, opts: [
       { id: 'h-plague', name: 'Plague', desc: 'Every bite lands an extra poison stack.' },
-      { id: 'h-rupture', name: 'Rupture', desc: 'Poison ticks 50% harder (stacks with Venom).' } ] },
+      { id: 'h-rupture', name: 'Rupture', desc: 'Poison gains 50% of its base tick (adds to Venom).' } ] },
   ],
   warden: [
     { tier: 2, opts: [
-      { id: 'w-bulwark', name: 'Bulwark', desc: 'Shields are 60% larger.' },
+      { id: 'w-bulwark', name: 'Bulwark', desc: 'Shields gain 50% of their base size.' },
       { id: 'w-mend', name: 'Mend', desc: 'Also heals you 8% max HP when it shields.' } ] },
     { tier: 4, opts: [
       { id: 'w-cleanse', name: 'Cleanse', desc: 'Clears one bleed/burn/poison off you when it acts.' },
@@ -138,7 +138,7 @@ export const PET_TREES = {
       { id: 'w-laststand', name: 'Last Stand', desc: 'The first killing blow each fight is fully absorbed.' },
       { id: 'w-devotion', name: 'Devotion', desc: 'Shields also grant you +15 Stamina.' } ] },
     { tier: 8, opts: [
-      { id: 'w-fortify', name: 'Fortify', desc: 'Shields are a further 40% larger.' },
+      { id: 'w-fortify', name: 'Fortify', desc: 'Shields gain another 40% of their base size.' },
       { id: 'w-renew', name: 'Renew', desc: 'Shielding also heals you 8% max HP.' } ] },
     { tier: 10, opts: [
       { id: 'w-immortal', name: 'Immortal', desc: 'Your passive damage reduction is 50% stronger.' },
@@ -158,7 +158,7 @@ export const PET_TREES = {
       { id: 'i-deephex', name: 'Deep Hex', desc: 'Curse weakens the enemy 50% more.' },
       { id: 'i-drain', name: 'Soul Drain', desc: 'Curse drains 16 enemy Stamina.' } ] },
     { tier: 10, opts: [
-      { id: 'i-oblivion', name: 'Oblivion', desc: 'Curse lasts 2 extra turns.' },
+      { id: 'i-oblivion', name: 'Oblivion', desc: 'Curse lasts 1 extra turn.' },
       { id: 'i-havoc', name: 'Havoc', desc: 'Curse always staggers AND blinds the enemy.' } ] },
   ],
 };
@@ -196,26 +196,27 @@ export const PET_STATS = {
 // flat bump to every stat so a shiny pull is a genuine power upgrade, not a skin.
 export const SHINY_STAT_MULT = 1.08;
 // v128 breeding: each LINEAGE tier (bred by fusing two pets) adds a flat % to every
-// stat. Stackable forever — the endless "sink two pets to make a stronger one" chase.
+// stat. Lineage remains earned and recorded forever; combat has a finite budget.
+export const PET_STAT_MULT_CAP = 1.5; // combined rarity, shiny and lineage budget
 export const PET_LINEAGE_STEP = 0.05; // +5% per lineage tier
 
 // The single source of truth for a battle-pet's intrinsic stat line (engine AND
 // UI read this). `hp` is the pet's own HP floor; makePetBody adds a slice of the
-// owner's Marrow on top. Commons at level L (lineage 0, no shiny) reproduce the
-// pre-v124 generic line.
+// owner's Marrow on top. Commons at level 1 (lineage 0, no shiny) retain the
+// original hatch HP; subsequent HP growth is now +1 per level before multipliers.
 export function petBattleStats(petId, level = 1, shiny = false, lineage = 0) {
   const L = Math.max(1, level);
   const lin = Math.max(0, Math.floor(lineage || 0));
   const p = PET_STATS[petId] || { rarity: 'common', mult: 1, tilt: {} };
   const t = p.tilt || {};
-  const m = p.mult * (shiny ? SHINY_STAT_MULT : 1) * (1 + lin * PET_LINEAGE_STEP);
+  const m = Math.min(PET_STAT_MULT_CAP, p.mult * (shiny ? SHINY_STAT_MULT : 1) * (1 + lin * PET_LINEAGE_STEP));
   return {
     power:  Math.round((10 + L * 4) * m * (t.power  || 1)),
     marrow: Math.round(20            * m * (t.marrow || 1)),
     wind:   Math.round(30            * m * (t.wind   || 1)),
     reflex: Math.round((25 + L * 5)  * m * (t.reflex || 1)),
     hype: 0,
-    hp:     Math.round((40 + L * 8)  * m * (t.marrow || 1)),
+    hp:     Math.round((47 + L)  * m * (t.marrow || 1)),
     rarity: p.rarity,
     lineage: lin,
   };
@@ -258,10 +259,10 @@ export function unlockedTiers(level, petId) {
 // the Stable from the start so the depth is visible. ----
 export const PET_SIGNATURE = {
   C1: { id: 'sig-c1', name: 'Cosmic Storm', desc: 'Curse also calls down a burning storm on the enemy each turn, and weakens 20% harder.' },
-  C2: { id: 'sig-c2', name: 'Eternal Guard', desc: 'The first killing blow each fight is survived AND mends you to 40% HP.' },
-  C3: { id: 'sig-c3', name: 'Chum Slick', desc: 'Every bite floods the enemy to max poison, ticking 40% harder.' },
-  C4: { id: 'sig-c4', name: 'Apex Ambush', desc: 'Bites always crit and strike 50% harder.' },
-  C5: { id: 'sig-c5', name: 'Loyal Bulwark', desc: 'Shields are massive (+90%), refill your stamina and cleanse you.' },
+  C2: { id: 'sig-c2', name: 'Eternal Guard', desc: 'The first killing blow each fight is survived AND mends you to 20% HP.' },
+  C3: { id: 'sig-c3', name: 'Chum Slick', desc: 'Every bite floods the enemy to max poison, adding 40% of its base tick.' },
+  C4: { id: 'sig-c4', name: 'Apex Ambush', desc: 'Bites always crit and strike 25% harder.' },
+  C5: { id: 'sig-c5', name: 'Loyal Bulwark', desc: 'Shields gain 60% of their base size, restore 40 Stamina and cleanse you.' },
   CX: { id: 'sig-cx', name: 'Day One Grit', desc: 'Steady and loyal: bites strike a little harder (+15%).' },
 };
 export function petSignature(petId) { return PET_SIGNATURE[petId] || null; }
@@ -382,7 +383,7 @@ export function buildBattlePet(petId, level = 1, picks = [], opts = {}) {
   // Deprecated auto-companion field: retain the serialized battle-pet contract,
   // including Warden's historical 3. No engine reads it; manual specials use
   // PET_ACTIONS.cd, sourced from PET_FAMILIES. Remove only with a schema change.
-  const legacyCooldown = fam.key === 'warden' ? 3 : fam.cooldown;
+  const legacyCooldown = fam.key === 'warden' ? 3 : 2;
   return {
     id: petId,
     family: fam.key,
@@ -450,14 +451,15 @@ const PET_ABILITIES = {
     let base = Math.round((2 + lvl * 0.7) * self.d.powerMult * (has('h-savage') ? 1.35 : 1));
     const bites = (has('h-frenzy') && foe.hp <= foe.d.maxHp * 0.25) ? 2 : 1;
     let stacks = (has('h-rabid') ? 2 : 1) + (has('h-plague') ? 1 : 0);
-    let per = Math.round((1 + lvl * 0.35) * (has('h-venom') ? 1.5 : 1) * (has('h-rupture') ? 1.5 : 1));
+    const per = Math.round((1 + lvl * 0.20) * (1 + (has('h-venom') ? 0.5 : 0)
+      + (has('h-rupture') ? 0.5 : 0) + (sig('C3') ? 0.4 : 0)));
     // C4 Apex Ambush: guaranteed crit + harder bites. C3 Chum Slick: max poison,
     // harder ticks. CX Day One Grit: just a modest bite bump (deliberately mild so
     // the early-player pet is nice, not overpowered).
     const critAlways = sig('C4');
-    if (sig('C4')) base = Math.round(base * 1.5);
+    if (sig('C4')) base = Math.round(base * 1.25);
     else if (sig('CX')) base = Math.round(base * 1.15);
-    if (sig('C3')) { stacks = 3; per = Math.round(per * 1.4); }
+    if (sig('C3')) stacks = 3;
     return {
       kind: 'pethit', bites, damage: base, crit: has('h-maul'), critAlways,
       lifesteal: has('h-bloodscent') ? 0.06 : 0,
@@ -467,28 +469,28 @@ const PET_ABILITIES = {
   warden({ has, lvl, sig, self }) {
     // tuned down for the pet-as-body era: the pet already adds a soak layer, so
     // its support kit is lighter than the v34 companion version
-    let shield = Math.round((7 + lvl * 1.5) * (has('w-bulwark') ? 1.5 : 1) * (has('w-fortify') ? 1.4 : 1));
+    const shield = Math.round((7 + lvl * 1.5) * (1 + (has('w-bulwark') ? 0.5 : 0)
+      + (has('w-fortify') ? 0.4 : 0) + (sig('C5') ? 0.6 : 0)));
     // C5 Loyal Bulwark: massive shields + stamina + cleanse. C2 Eternal Guard: auto last-stand that heals big.
-    if (sig('C5')) shield = Math.round(shield * 1.9);
     return {
       kind: 'petshield', shield,
       heal: (has('w-mend') ? Math.round(self.d.maxHp * 0.06) : 0) + (has('w-renew') ? Math.round(self.d.maxHp * 0.08) : 0),
       cleanse: has('w-cleanse') || sig('C5'),
       stamina: (has('w-devotion') ? 15 : 0) + (has('w-bastion') ? 25 : 0) + (sig('C5') ? 40 : 0),
       armLastStand: sig('C2'),
-      lastStandHeal: sig('C2') ? 0.4 : 0,
+      lastStandHeal: sig('C2') ? 0.2 : 0,
     };
   },
   imp({ has, lvl, sig }) {
-    const pct = 0.12 * (has('i-doublehex') ? 1.5 : 1) * (has('i-deephex') ? 1.5 : 1) * (sig('C1') ? 1.2 : 1);
+    const pct = 0.08 * (has('i-doublehex') ? 1.5 : 1) * (has('i-deephex') ? 1.5 : 1) * (sig('C1') ? 1.2 : 1);
     return {
       kind: 'petdebuff', weakenPct: pct,
-      turns: (has('i-doublehex') ? 3 : 2) + (has('i-oblivion') ? 2 : 0),
+      turns: (has('i-doublehex') ? 3 : 2) + (has('i-oblivion') ? 1 : 0),
       blind: has('i-jinx') || has('i-havoc'),
       staminaDrain: has('i-drain') ? 16 : (has('i-siphon') ? 8 : 0),
       mark: has('i-mark'), stagger: has('i-trick') || has('i-havoc'),
       // C1 Cosmic Storm: the curse also lays a burning storm on the foe
-      burn: sig('C1') ? { per: 6 + lvl, turns: 3 } : null,
+      burn: sig('C1') ? { per: 3 + Math.round(lvl * 0.5), turns: 3 } : null,
     };
   },
 };
