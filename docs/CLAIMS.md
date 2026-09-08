@@ -2879,3 +2879,29 @@ bypass. The all-PURE-green criterion is pending reviewer proof, not certified.
 
 Evidence and reproduction scripts: `/private/tmp/k1-proof`. This section and the
 final changes are advisory inputs to the independent review.
+## 2026-09-07: L1 machine character and R45-5 correction
+
+This section supersedes the first-flick conclusion in the R45 guard-debts
+section and the earlier v500 cadence numbers. It leaves those historical
+sections intact. The supplied measurements establish the v500 mechanism:
+burst drawArrays calls during a move fell from 18 and 26 on v493 to zero on
+v509. Preserve that mechanism. The historical 47 to 59 frame claim was not
+reproducible even on the reporting machine under the stated conditions. A
+520ms hold contains about 31 frames at 60Hz, so 47 to 59 cannot describe that
+window at that refresh rate. rAF callbacks are cadence samples, not proof of
+compositor-presented frames.
+
+The work order supplies a v513 remeasurement from five fresh browser processes
+and profiles with FLICK_TRACE_DIR enabled: first samples 49, 46, 59, 58, 47;
+second samples 43, 57, 59, 58, 43; first over20 gaps 4, 4, 1, 1, 5 against the
+unchanged bound of 6. It reports 81/81 rows passed, exit 0. None of the five
+first flicks reproduced R45's <=20 samples, and three first flicks sampled more
+than their second. These are supplied observations, not a new browser proof
+from this lane; the referenced scratchpad evidence log is absent here. The
+trace adds profiling overhead. First-flick asymmetry is environment-specific
+pending reproduction. If Tom's QA rig still reproduces 12 to 20 frames, build
+and verify a fix there. Do not infer a universal defect or undo v500.
+
+1. PROOF: machine-character-audit.mjs | REACH: Every result row from the shared browser wrapper carries machine character: host CPU/load, Chromium/renderer, page identity, viewport, CPU throttle history, attached trace history and an observed baseline cadence with its sampling state. FLICK also samples the settled Crates tab before OPEN and after optional trace start. Empty, refused and timed-out baseline probes say UNAVAILABLE. The Node controls prove emitted receipts, trace overhead disclosure after stop, separate pages and bounded probe cleanup; they do not prove browser performance.
+2. PROOF: crate-reveal-audit.mjs | REACH: FIRST FLICK and SECOND FLICK retain the 520ms window, minimum 25 rAF samples, over20 <= 6, zero burst draw calls and 200ms long-task ceiling. The audit prints the environment-specific interpretation and QA-rig reproduction requirement. Browser/server proof is blocked by the work order and remains for independent review.
+3. PROOF: fx-audit.js | REACH: The FX cache load-time precondition prints machine character even though its legacy measurement line is not a PASS row. FX setup failures on stderr and its OK frame-life rows also carry the shared disclosure. No timing threshold changed.
