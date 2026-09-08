@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 521, date: '2026-09-08', title: 'The wheel settles instead of bouncing', items: [
+    'The prize card at the end of a wheel spin used to overshoot and snap back. It now settles the same way the wheel itself does.',
+  ] },
+
   { n: 520, date: '2026-09-08', title: 'The app notices when Apple Health stops', items: [
     'Apple Health could stop sending your steps and nothing would say so, which meant your walking quietly stopped counting. There was already a warning built for exactly this, and it could never fire: a failed read arrived looking like a real day of zero steps, so the app kept marking the connection healthy. It can tell the difference now.',
     'Breeding tells you why it is locked and how far off the unlock is, instead of just refusing.',
