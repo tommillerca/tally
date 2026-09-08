@@ -2,12 +2,12 @@
  * ?demo-seeded save. Capture only, no assertions; tests/today-container-audit.mjs
  * is the guard. Usage: node tests/today-d2-shots.mjs [baseUrl]
  */
-import { boot, serveTree, sleep } from './godmode.js';
+import { boot, serveTree, sleep, shotDir } from './godmode.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
-const out = join(repo, '_feedback_shots', 'today-d2');
+const out = shotDir('today-d2');
 const arg = process.argv[2];
 const srv = arg ? null : await serveTree(repo);
 const { browser, page } = await boot(arg || srv.url);

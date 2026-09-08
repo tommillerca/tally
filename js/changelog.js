@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 513, date: '2026-09-08', title: 'Your profile stops travelling', items: [
+    'Looking at a Spire told you far more about the player defending it than it should have: their week of steps, their whole pet roster, their full gear list. A rival is not a friend, and the app already said so in its own notes. Only what a rival needs is sent now.',
+    'The card shown after you lose a tower no longer contradicts itself, and the siege sheet\'s clock actually ticks.',
+  ] },
   { n: 512, date: '2026-09-08', title: 'The Wardrobe stops disappearing', items: [
     'Restoring a backup that mentioned a piece of gear this version does not recognise emptied your entire Wardrobe, with nothing on screen and nothing in the log to say why. It now skips what it cannot draw and shows you everything else.',
     'Searching for food now finds the meals you have logged before, which is the thing you most want when you are logging something for the second time.',

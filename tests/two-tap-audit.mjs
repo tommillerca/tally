@@ -6,7 +6,7 @@ import { boot, sleep } from './godmode.js';
    the URL as an argument (which is how the release gate invokes every suite) fell
    through to godmode's boot() default, https://tommillerca.github.io/tally/, and
    graded PRODUCTION while reading as coverage of the tree under test. */
-const { browser, page } = await boot(process.argv[2] || process.env.URL);
+const { browser, page } = await boot(process.argv[2] || process.env.URL, { locale: 'de-DE' });
 let bad = 0;
 const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
 const coins = () => page.evaluate(async () => (await import('./js/loot.js')).coins());
@@ -43,7 +43,8 @@ const armed = await page.evaluate(() => {
 });
 console.log(`cauldron: ${before} -> ${afterOne}`, JSON.stringify(armed));
 check('ONE tap on the cauldron spends NOTHING', afterOne === before, `${before} -> ${afterOne}`);
-check('it asks, naming the price', armed.armed === '1' && /Spend 1,000\?/.test(armed.text), armed.text);
+const expectedPrice = await page.evaluate(() => (1000).toLocaleString());
+check('it asks, naming the price', armed.armed === '1' && armed.text === `Spend ${expectedPrice}?`, armed.text);
 check('and it goes gold while it waits', armed.gold);
 await page.evaluate(() => document.getElementById('buyPot').click());
 await sleep(1600);

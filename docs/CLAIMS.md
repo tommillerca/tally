@@ -419,6 +419,13 @@ the upload path and its guards.
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
 
+## v513
+1. Round 48's harness and reporting work plus the remainder of round 47. Its dated sections are further down, folded here.
+
+2. PROOF: r47-rest-audit.mjs | REACH: open a Spire defended by another player. `GET /spires` returned the defender's profile with nine more fields than `/leaderboard` does, including `weekSteps`, the `yard` pet roster, the full `gear` list and `plat`. That falsified the app's own stated invariant: `socialSnapshot` carries a comment saying `yard` "reaches accepted friends and nobody else", and a rival is not an accepted friend. Scoped honestly by the round that found it: `privacy.html` does not promise friends-only, so this was a source-level invariant violation rather than a broken user-facing promise, and it is closed either way. The response now carries only what a rival needs, guarded so the field list cannot quietly grow back, which is how it got here.
+
+3. PROOF: r47-rest-audit.mjs | REACH: lose a tower, then open the siege sheet. The lost-tower card contradicted itself in two lines and the siege sheet's clock did not tick.
+
 ## v512
 1. Round 48's shipped defects plus round 46's logging lane, and the guard and submission work behind them. Its dated sections are further down, folded here. The pet balance re-tune was HELD OUT of this train: it conflicts with a shipped contract (Eternal Guard heals to 40%, the re-tune needs 20%) and that is Tom's ruling to make.
 
@@ -2296,3 +2303,37 @@ commands and native integration proposal are in tests/wave-guards-report.md.
 4. PROOF: r46-logging-audit.mjs | REACH: Add's budget uses the same sum of rounded diary rows as Today. Five 100.4 kcal rows display and budget as 500 kcal, leaving 1500 against 2000.
 
 R46-7 is deferred with a proposed common diary-date definition for Trends and the logging streak. R46-9, R46-10, R46-11 and R46-12 lack finding details in the frozen plans and checkout reports located in this review; no behavior change is claimed for those items. No release or deployment is claimed by this section.
+
+
+## 2026-09-07: N2 audit completion and dependency disclosure
+
+1. PROOF: audit-completion-audit.mjs | REACH: Tiered release-gate children preload a shared receipt that names interrupted runs, retains emitted failures, and refuses zero exits with incomplete declared row counts. Direct Godmode audits load the same receipt. Legacy counts are explicitly undeclared, not fabricated. A SIGKILL leaves START without END and the parent reports INCOMPLETE.
+2. PROOF: audit-completion-audit.mjs | REACH: Godmode browser pages disclose external responses, HTTP status, failures, cache use and intercepted fixtures. Required Boneyard probes disclose both available and unavailable measurements, check a tile beyond TileJSON with bounded fetches, and mark subsequent required-host failures UNPROVEN without erasing real assertion failures. RAF and icon capability refusals and Water's unanswered HOME sample return 97 in Node fixtures.
+3. PROOF: audit-completion-audit.mjs, guard-debts-audit.mjs | REACH: Mimic retains the earlier empty-frame grading fix and declares all 38 current rows (the original 37 plus its added zero-frame control). Its actual row helpers produce a complete 38/38 receipt or preserve the partial count and earlier failure on a throw. These are Node regression proofs, not new screencast or browser measurements.
+
+Browser/server proofs were prohibited in this lane. The PURE array currently has
+64 files: 62 exited 0; unit.test.js and serve-tree-identity-audit.mjs were not run
+because they require local servers. This is not a claim that all PURE files or
+all browser audits passed. The advisory evidence and deviations are recorded in
+tests/n2-report.md.
+## N3 dead paths and audit artifacts, 2026-09-07 (advisory)
+
+1. PROOF: n3-deadpaths-audit.mjs, today-container-audit.mjs | REACH: Today audit screenshots, the Today capture helper, the level-paid trace default and the figure decoder fixture resolve to temporary storage. Each original path was restored separately in a throwaway copy and failed the Node path guard; the restored fixes passed. Browser screenshot execution remains unproven. The sibling-owned serveTree still writes an identity marker into its served root, so this is not a claim that every audit is read-only.
+2. PROOF: race-audit.mjs, n3-deadpaths-audit.mjs | REACH: Today > News > The weekly step race now reads the equipped outfit before opening its poster. The browser row uses real controls after a masked reload and requires all seven decoded expected layers. Node execution of the real News callback through the real poster function to its renderer input failed on the original app.js with missing 5: H11-1 FW1 IL1-1 IR10-3 P1, then passed after restoration. Browser red/green remains pending independent review.
+3. PROOF: garden-closed-audit.mjs, hollow-beds-audit.mjs, hollow-backdrop-audit.mjs, figure-audit.mjs | REACH: UNREACHABLE. The Hollow's player doors were removed on 2026-08-18. Its feature code is retained for a product deletion decision; module probes are not player coverage. The figure register no longer cites the deleted hollow-audit.mjs as a live walkthrough.
+4. PROOF: mage-audit.mjs, reward-sop-audit.mjs | REACH: UNREACHABLE. The retired bestiaryBannerHtml probe now identifies itself in comments and printed row names. The reward register no longer claims a GROW door opens the Hollow and explicitly marks the Hollow payout as unreachable. Neither retired feature is reopened.
+
+The agreed unit command returned 362 passed, 1 failed at the socket-dependent
+serveTree lifetime check. Final PURE status is 62 of 64 exit 0; that unit failure
+and the prohibited serve-tree-identity server proof prevent an all-green claim.
+See docs/N3-REPORT.md for exact red/green output, the write-site sweep,
+file ownership blockers and proposed deviations. No release is claimed.
+## N1 harness environments, 2026-09-07 (advisory)
+
+1. PROOF: harness-environment-audit.mjs | REACH: Explicit boot options emulate timezone and Chrome Intl locale before navigation. Orientation selects 393x852 or 852x393 with mobile and touch flags. Unset options preserve the previous calls. Node doubles verify plumbing and negative controls; actual browser emulation remains unproven in this sandbox.
+2. PROOF: today-container-audit.mjs | REACH: This audit opts into Pacific/Kiritimati. Its SCROLL expectation subtracts a local calendar day without converting to UTC. The original expression fails the Node UTC+14 fixture; restoring the local expression passes. Browser SCROLL and its original scroll-reset mutation remain pending review.
+3. PROOF: two-tap-audit.mjs | REACH: This audit opts into de-DE and checks the exact price formatted in the page. The original comma-only predicate fails the German Node fixture. Browser taps remain pending review.
+4. PROOF: honest-surfaces-audit.mjs | REACH: The demo page opts into de-DE. Wallet toasts must contain the actual balance formatted in that page. The original comma-only predicate fails a correct German fixture. The separate cloud page retains its previous environment. Browser purchases remain pending review.
+5. PROOF: orientation-audit.mjs | REACH: New browser guard checks real Intl/timezone state before and after reload, landscape lock visibility, full viewport coverage and hit interception, portrait release, and a real Settings click. Node grading controls reject an absent landscape cover and a stuck portrait cover. Browser and server execution are prohibited here, so no rendered green or browser mutation proof is claimed.
+
+The agreed unit command reported 362 passed and 1 failed at its embedded serveTree check. The standalone serve-tree identity proof was not run because it requires a server. Full evidence and pending reviewer commands are in tests/n1-report.md. No release is claimed.

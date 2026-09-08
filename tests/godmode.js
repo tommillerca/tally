@@ -20,6 +20,8 @@
  *   await seed(page, { level: 12, coins: 900, beatRungs: [1, 2, 3] });
  *   await openPit(page);
  */
+import { discloseDependency } from './audit-lifecycle.mjs';
+import { observeDependencies, requireDependencyHosts, observePuppeteer } from './dependency-observer.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -172,7 +174,7 @@ export async function loadPuppeteer() {
     if (!inRepo) throw new Error(
       `puppeteer resolved OUTSIDE this repo despite ${repoPkg} existing:\n  ${entry}\n` +
       '  Refusing: an audit graded by a foreign puppeteer reports harness drift as app breakage.');
-    _pptr = (await import(pathToFileURL(entry).href)).default;
+    _pptr = observePuppeteer((await import(pathToFileURL(entry).href)).default);
     Object.assign(puppeteerOrigin, { via: 'repo node_modules', version: JSON.parse(fs.readFileSync(repoPkg, 'utf8')).version, entry });
     process.stderr.write(`[godmode] ${puppeteerOriginLine()}\n`);
     return _pptr;
@@ -189,7 +191,7 @@ export async function loadPuppeteer() {
       '  This is a SETUP failure, not a test failure. A three-major-old puppeteer does\n' +
       '  not fail loudly, it fails as a missing API inside an assertion, and that reads\n' +
       '  as the app being broken. onb-audit died on browser.createBrowserContext this way.');
-    _pptr = (await import(pathToFileURL(kitEntry).href)).default;
+    _pptr = observePuppeteer((await import(pathToFileURL(kitEntry).href)).default);
     Object.assign(puppeteerOrigin, { via: 'fallback kit', version: kitVer, entry: kitEntry });
     process.stderr.write(`[godmode] ${puppeteerOriginLine()}\n`);
     return _pptr;
@@ -291,14 +293,17 @@ export const unprovenRows = () => _unproven.slice();
 /* THE BANNER. Loud, by name, and printed from the measurement taken this run,
    so it cannot go stale: the moment the machine gains the missing property the
    banner stops being printed and the rows are graded for real. */
-export function unprovenReport(suite, cap) {
+export function unprovenReport(suite = path.basename(process.argv[1] || 'audit'), cap) {
   if (!_unproven.length) return;
   const bar = '='.repeat(78);
   console.log(`\n${bar}`);
   console.log(`UNPROVEN  ${suite} did not fully run on this machine.`);
   console.log(`UNPROVEN  ${_unproven.length} check(s) were NOT graded. This is not a pass.`);
   console.log(bar);
-  if (cap) {
+  if (cap && !Array.isArray(cap.checks)) {
+    console.log('  INVALID capability report: expected { checks: [...] }; measurement details unavailable.');
+  }
+  if (Array.isArray(cap?.checks)) {
     console.log('  MISSING, measured in this run:');
     for (const c of cap.checks.filter(c => !c.ok)) console.log(`    ${c.kind.padEnd(6)} ${c.detail}`);
     const present = cap.checks.filter(c => c.ok);
@@ -421,8 +426,9 @@ export function unclassifiedRows(fileUrl, groups, { after = null } = {}) {
  *   WEBGL  a real WebGL context that can compile and link a program and hand
  *          back the pixel it drew. Not `!!canvas.getContext('webgl2')`: a
  *          context object that cannot draw would pass that and fail the map.
- *   TILES  every remote URL the app's OWN map style names has to answer 2xx to
- *          a real CORS fetch, which is exactly the request MapLibre makes. A
+ *   TILES  a bounded CORS fetch of every remote URL the app's OWN map style names has to answer 2xx to
+ *          a real CORS fetch. TileJSON sources must also serve a nonempty tile.
+ *          This measures reachability, not tile decoding or every map region. A
  *          style that cannot load fires map.once('error'), and js/app.js
  *          replaces the whole Boneyard with "The Boneyard needs a network
  *          signal to draw the map" plus a Retry button. No canvas, no markers,
@@ -439,7 +445,12 @@ export function unclassifiedRows(fileUrl, groups, { after = null } = {}) {
  * a free pass on a machine that genuinely cannot draw the map.
  * --------------------------------------------------------------------- */
 export async function boneyardCapability(page) {
+  observeDependencies(page, page.url());
   const checks = [];
+  const report = () => {
+    for (const c of checks) discloseDependency(c.kind, c.ok, c.detail);
+    return { ok: checks.every(c => c.ok), checks };
+  };
 
   /* 1. WEBGL, end to end: link a program, draw one triangle, read the pixel
         back and require it to be the colour the fragment shader wrote. */
@@ -479,7 +490,7 @@ export async function boneyardCapability(page) {
   if (!stylePath) {
     checks.push({ kind: 'TILES', ok: false,
       detail: "js/map.js no longer declares `style: '...'`, so this probe cannot find the map style. Fix the probe; do not assume the map works." });
-    return { ok: false, checks };
+    return report();
   }
   /* "Failed to fetch" is what the page sees and it names no cause. Chrome's own
      net:: error text is the actionable half (ERR_CERT_AUTHORITY_INVALID reads
@@ -492,13 +503,14 @@ export async function boneyardCapability(page) {
     const styleUrl = new URL(sp, location.href).href;
     let style;
     try {
-      const r = await fetch(styleUrl);
+      const r = await fetch(styleUrl, { signal: AbortSignal.timeout(8000), cache: 'no-store' });
       if (!r.ok) return { fatal: `${styleUrl} answered HTTP ${r.status}` };
       style = await r.json();
     } catch (e) { return { fatal: `${styleUrl} could not be fetched: ${e.message}` }; }
     const urls = new Set();
+    const manifests = new Set();
     for (const s of Object.values(style.sources || {})) {
-      if (s.url) urls.add(s.url);
+      if (s.url) { urls.add(s.url); manifests.add(s.url); }
       for (const t of s.tiles || []) urls.add(t);
     }
     if (style.glyphs) urls.add(style.glyphs);
@@ -509,7 +521,28 @@ export async function boneyardCapability(page) {
     if (!remote.length) return { empty: true, styleUrl };
     const out = [];
     for (const u of remote) {
-      try { const r = await fetch(u); out.push({ u, ok: r.ok, status: r.status }); }
+      try {
+        const r = await fetch(u, { signal: AbortSignal.timeout(8000), cache: 'no-store' });
+        out.push({ u, ok: r.ok, status: r.status });
+        // A reachable TileJSON document does not prove its tile host answered.
+        if (r.ok && manifests.has(u)) {
+          const manifest = await r.json();
+          if (!manifest.tiles?.length) {
+            out.push({ u, ok: false, err: 'TileJSON names no tiles; dependency unmeasurable' });
+          } else {
+            const z = manifest.minzoom ?? 0;
+            for (const template of manifest.tiles) {
+              const tile = new URL(template.replace('{z}', z).replace('{x}', '0').replace('{y}', '0'), u).href;
+              try {
+                const answer = await fetch(tile, { signal: AbortSignal.timeout(8000), cache: 'no-store' });
+                const bytes = answer.ok ? (await answer.arrayBuffer()).byteLength : 0;
+                out.push({ u: tile, ok: answer.ok && bytes > 0, status: answer.status,
+                  err: answer.ok && !bytes ? 'empty tile response' : '' });
+              } catch (e) { out.push({ u: tile, ok: false, status: 0, err: e.message }); }
+            }
+          }
+        }
+      }
       catch (e) { out.push({ u, ok: false, status: 0, err: e.message }); }
     }
     return { results: out, styleUrl };
@@ -526,7 +559,8 @@ export async function boneyardCapability(page) {
         : `${r.u} is UNREACHABLE from this machine (${[why(r.u), r.err || (r.status ? 'HTTP ' + r.status : '')].filter(Boolean).join(', ')})` });
   }
 
-  return { ok: checks.every(c => c.ok), checks };
+  if (net.results?.length) requireDependencyHosts(page, net.results.map(r => r.u), discloseDependency);
+  return report();
 }
 
 /* AN AUDIT THAT MASKS webdriver STOPS TALKING TO THE REAL WORLD.
@@ -607,6 +641,29 @@ export async function maskWebdriver(page) {
   });
 }
 
+/* N1 environments are opt-in, with no suite-wide environment variable. Locale
+ * changes Chrome's Intl/Date formatting via CDP, not Node's locale or a number
+ * formatter stub. Call this before navigation for additional browser pages too.
+ * Existing audits keep their host timezone, locale and viewport byte for byte. */
+export async function emulateEnvironment(page, { timezone, locale, orientation } = {}) {
+  if (timezone != null) await page.emulateTimezone(timezone);
+  if (locale != null) {
+    const session = await page.createCDPSession();
+    await session.send('Emulation.setLocaleOverride', { locale });
+  }
+  if (orientation != null) await setOrientation(page, orientation);
+}
+
+// Phone dimensions in CSS pixels. Both mobile flags survive each rotation;
+// the boot DPR wrapper still owns any explicit physical-scale override.
+export async function setOrientation(page, orientation) {
+  if (orientation !== 'portrait' && orientation !== 'landscape')
+    throw new Error('orientation must be portrait or landscape');
+  const landscape = orientation === 'landscape';
+  await page.setViewport({ width: landscape ? 852 : 393, height: landscape ? 393 : 852,
+    deviceScaleFactor: 2, isMobile: true, hasTouch: true, isLandscape: landscape });
+}
+
 /* NO BASE MEANS THIS CHECKOUT, NEVER PRODUCTION. This default used to be the
    literal live URL, and that is a footgun that fired repeatedly.
 
@@ -635,7 +692,7 @@ export async function boot(base, opts = {}) {
   // R45-10: opt in per audit or across a suite with GODMODE_DPR=3.
   // Unset retains existing viewport defaults. An explicit run override also
   // applies to later setViewport calls, where legacy audits often hardcode 2.
-  const { deviceScaleFactor = process.env.GODMODE_DPR, ...launchOpts } = opts;
+  const { deviceScaleFactor = process.env.GODMODE_DPR, timezone, locale, orientation, ...launchOpts } = opts;
   const dpr = deviceScaleFactor == null ? null : Number(deviceScaleFactor);
   if (dpr != null && (!Number.isFinite(dpr) || dpr <= 0))
     throw new Error('GODMODE_DPR/deviceScaleFactor must be a positive finite number');
@@ -685,6 +742,7 @@ export async function boot(base, opts = {}) {
   _trackBrowser(browser);
   try {
     const page = await browser.newPage();
+    observeDependencies(page, base);
     if (dpr != null) {
       const setViewport = page.setViewport.bind(page);
       /* Puppeteer 24 removed the page.viewport() METHOD, so reading it threw
@@ -704,6 +762,9 @@ export async function boot(base, opts = {}) {
         isMobile: viewport?.isMobile ?? true, hasTouch: viewport?.hasTouch ?? true });
       console.log(`DPR OVERRIDE ${dpr} verified: boot and subsequent viewport changes`);
     }
+    // N1: explicit per-page opt-in only. Unchanged callers make no new calls.
+    if (timezone != null || locale != null || orientation != null)
+      await emulateEnvironment(page, { timezone, locale, orientation });
     /* COLLECTED, NOT JUST PRINTED, AND HOOKED BEFORE THE FIRST goto. A suite that
        attaches its own pageerror listener after boot() returns cannot see anything
        thrown during the very first load, which is exactly where a broken module

@@ -46,14 +46,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const { boot, sleep, serveTree } = await import(path.join(ROOT, 'tests/godmode.js'));
+const { boot, sleep, serveTree, shotDir } = await import(path.join(ROOT, 'tests/godmode.js'));
 
 const arg = (name, dflt) => {
   const i = process.argv.indexOf(name);
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : dflt;
 };
 const RUNS = Number(arg('--runs', 10));
-const OUT = path.resolve(arg('--out', path.join(ROOT, 'tests', 'levelpaid-trace-out')));
+const OUT = path.resolve(arg('--out', shotDir('levelpaid-trace-out')));
 fs.mkdirSync(OUT, { recursive: true });
 
 const DAYS = 365, PER_DAY = 5, THROTTLE = 6;

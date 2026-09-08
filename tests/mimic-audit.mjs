@@ -87,19 +87,23 @@
  *   node tests/mimic-audit.mjs          (self-serves this checkout)
  *   URL=https://... node tests/mimic-audit.mjs
  */
+import { declareAudit, recordAuditRow, completeAudit } from './audit-lifecycle.mjs';
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { boot, seed, openPit, sleep, settle, serveTree, dismissOverlays } from './godmode.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+declareAudit({ expectedRows: 38 }); // 37 original rows plus the R45 zero-frame control.
 let fails = 0;
 let unprovenRows = 0;
 const unproven = (label, detail) => {
+  recordAuditRow(label, 'UNPROVEN');
   unprovenRows++;
   console.log(`UNPROVEN  ${label}  | ${detail}`);
 };
 const ok = (label, pass, detail = '') => {
+  recordAuditRow(label, pass ? 'PASS' : 'FAIL');
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${label}${detail ? `  | ${detail}` : ''}`);
   if (!pass) fails = 1;
 };
@@ -775,5 +779,6 @@ try {
   await browser.close();
   if (srv) await srv.close();
 }
+completeAudit();
 console.log(`\nMIMIC AUDIT ${fails ? 'FAILED' : unprovenRows ? 'UNPROVEN' : 'VERIFIED'} (${unprovenRows} UNPROVEN rows)`);
 process.exit(fails ? 1 : unprovenRows ? 97 : 0);

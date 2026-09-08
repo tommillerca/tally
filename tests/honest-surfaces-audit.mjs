@@ -62,7 +62,7 @@ const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? ' 
 
 const srv = await serveTree(process.cwd());
 const HEADLESS = process.env.HEADLESS_MODE || 'shell';
-const { browser, page } = await boot(srv.url, { headless: HEADLESS });
+const { browser, page } = await boot(srv.url, { headless: HEADLESS, locale: 'de-DE' });
 
 /* ---- shared readers ---- */
 /* VISIBILITY, not presence: the effective opacity product up the whole ancestor
@@ -208,7 +208,11 @@ async function buyAndReadToast(coins) {
   await sleep(500);
   await page.evaluate(id => { const b = document.querySelector(`[data-buy="${id}"]`); b && b.click(); }, item);
   const t = await watchToast(page, 3000);
-  return { item, ...t };
+  const balance = await page.evaluate(async () => {
+    const coins = await (await import('/js/loot.js')).coins();
+    return { coins, formatted: coins.toLocaleString() };
+  });
+  return { item, balance, ...t };
 }
 const walletBig = await buyAndReadToast(1234567);
 const walletSmall = await buyAndReadToast(500);
@@ -217,13 +221,16 @@ ok('WALLET SAMPLE both purchases produced a visible toast (zero toasts means thi
   !!walletBig.best && !!walletSmall.best,
   `big=${walletBig.best ? `"${walletBig.best.text}"` : 'none'} small=${walletSmall.best ? `"${walletSmall.best.text}"` : 'none'}`);
 ok('WALLET a seven-digit balance renders GROUPED, matching the app\'s toLocaleString convention',
-  !!walletBig.best && /1,234,\d{3}/.test(walletBig.best.text),
+  !!walletBig.best && walletBig.balance.coins >= 1000000
+    && walletBig.best.text.includes(`${walletBig.balance.formatted} left`),
   walletBig.best ? `"${walletBig.best.text}"` : 'no toast');
 ok('WALLET the raw seven-digit run is gone from the rendered string',
   !!walletBig.best && !/\b\d{7}\b/.test(walletBig.best.text),
   walletBig.best ? `"${walletBig.best.text}"` : 'no toast');
 ok('WALLET CONTROL a small balance still renders its own honest number',
-  !!walletSmall.best && /\d/.test(walletSmall.best.text) && walletSmall.best.text !== (walletBig.best && walletBig.best.text),
+  !!walletSmall.best && walletSmall.balance.coins > 0 && walletSmall.balance.coins < 1000
+    && walletSmall.best.text.includes(`${walletSmall.balance.formatted} left`)
+    && walletSmall.best.text !== (walletBig.best && walletBig.best.text),
   walletSmall.best ? `"${walletSmall.best.text}"` : 'no toast');
 
 /* =================== 3. THE DAY GUARD'S THREE REFUSALS =================== */

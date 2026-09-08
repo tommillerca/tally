@@ -80,7 +80,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { boot, seed, sleep, serveTree} from './godmode.js';
+import { boot, seed, sleep, serveTree, shotDir} from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const results = [];
@@ -207,12 +207,12 @@ const SITES = [
   },
   {
     key: 'hollow-pet', claim: 'hlwPet', paired: false, undriven:
-      'the Hollow keeper is a FIXED gardening fit (HLW_FIT), not the player build, so a '
+      'UNREACHABLE: the Hollow lost its player doors on 2026-08-18. The keeper is a FIXED gardening fit (HLW_FIT), so a '
       + 'paired Bonehead-to-pet alignment check would be asserting against a costume '
       + 'rather than against the figure contract. The pet itself goes through '
       + 'petAsideHtml with shiny left UNDEFINED so S.shinyPets answers, which is the '
-      + 'STATIC rule below, and tests/hollow-audit.mjs drives the surface for real: it '
-      + 'asserts the pet is absent on a first visit and present afterwards.',
+      + 'STATIC rule below. The old hollow-audit.mjs was deleted; garden-closed-audit.mjs '
+      + 'guards the closed doors and uses __openHollow only as a control.',
   },
   /* NO ROW FOR THE NEWS PILL'S HERO BANNER, AND THAT IS A DECISION, 2026-09-03.
      A 'today-hype-banner' row sat here until that morning, registering the Today
@@ -451,7 +451,7 @@ try {
   for (const [x, y] of [[1, 1], [4, 3]]) {              // bbox by construction: 1,1 -> 5,4
     px[(y * W + x) * 4 + 0] = 200; px[(y * W + x) * 4 + 3] = 255;
   }
-  const tmp = path.join(ROOT, 'tests', '.figure-audit-gate.png');
+  const tmp = path.join(shotDir('figure-audit'), `gate-${process.pid}.png`);
   writeFileSync(tmp, synthPng(W, H, px, [0, 1, 2, 3, 4]));
   let got;
   try { got = pngAlphaBox(tmp); } finally { unlinkSync(tmp); }
