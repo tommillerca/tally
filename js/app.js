@@ -4119,10 +4119,21 @@ function dayGuardToast(reason) {
 /* Set the first time Today renders Gwart; see the note at its read site below. */
 let gwEntranceSeen = false;
 
+// Imported diary rows can predate account creation. Keep those reachable;
+// legacy saves without a creation date stop at their first row (or today).
+function firstDiaryDate(createdAt, log) {
+  const created = new Date(createdAt);
+  let first = createdAt != null && Number.isFinite(created.getTime()) ? dateKey(created) : dateKey();
+  for (const e of log) if (Number.isFinite(dayOrdinal(e.date)) && e.date < first) first = e.date;
+  return first > dateKey() ? dateKey() : first;
+}
+
 async function renderToday(el) {
   const entries = await entriesFor(S.date);
-  const yEntries = await entriesFor(addDays(S.date, -1));
+  const copySourceDate = addDays(S.date, -1);
+  const yEntries = await entriesFor(copySourceDate);
   const allLog = await db.all('log');
+  const firstDate = firstDiaryDate(S.settings.createdAt, allLog);
   const streak = streakFrom([...new Set(allLog.map(e => e.date))], dateKey());
   /* ONE READ PER STORE PER DRAW (QA round 28 G3). M13 stopped renderToday's own
      body re-reading log/xp/health, and tests/today-reads-lint.mjs graded that
@@ -4754,7 +4765,7 @@ async function renderToday(el) {
     <div class="day-title">
       <h1>${title}</h1><div class="sub">${sub}</div>
     </div>
-    <button class="icon-btn" id="prevDay" aria-label="Previous day"><svg viewBox="0 0 24 24"><path d="M14.5 5l-7 7 7 7"/></svg></button>
+    <button class="icon-btn" id="prevDay" aria-label="Previous day" ${S.date <= firstDate ? 'disabled' : ''}><svg viewBox="0 0 24 24"><path d="M14.5 5l-7 7 7 7"/></svg></button>
     <button class="icon-btn" id="nextDay" aria-label="Next day"><svg viewBox="0 0 24 24"><path d="M9.5 5l7 7-7 7"/></svg></button>
     <button class="icon-btn" id="todaySettings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke-width="2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2z" fill="none" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
   </div>
@@ -4802,7 +4813,7 @@ async function renderToday(el) {
   ${tsec('Activity', healthCardHtml(hk, isToday))}
 
   <section class="tsec tsec-meals"><div class="tsec-h">Meals</div>
-  ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i), Math.round(t.kcal * MEAL_SPLIT[i]))).join('')}
+  ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i), Math.round(t.kcal * MEAL_SPLIT[i]), isToday ? null : copySourceDate)).join('')}
   </section>
 
 
@@ -4873,7 +4884,7 @@ async function renderToday(el) {
   S.ui = { ringPct: pct, eatenShown: tot.kcal, macroPcts };
 
   $('#todaySettings', el)?.addEventListener('click', () => { location.hash = '#/settings'; });
-  $('#prevDay').addEventListener('click', () => { S.date = addDays(S.date, -1); refresh(); });
+  $('#prevDay').addEventListener('click', () => { if (S.date <= firstDate) return; S.date = addDays(S.date, -1); refresh(); });
   $('#nextDay').addEventListener('click', () => { S.date = addDays(S.date, 1); refresh(); });
   $('#lvlChip').addEventListener('click', () => { location.hash = '#/progress'; });
   $('#trendsBtn').addEventListener('click', () => { location.hash = '#/progress'; });
@@ -5244,7 +5255,7 @@ async function renderToday(el) {
     }
     confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 300, 14);
     popSound(S.sounds);
-    toast(`Copied ${src.length} item${src.length === 1 ? '' : 's'} from yesterday${gained ? ` · +${gained} XP` : ''}`);
+    toast(`Copied ${src.length} item${src.length === 1 ? '' : 's'} from ${copySourceDate === addDays(dateKey(), -1) ? 'yesterday' : copySourceDate}${gained ? ` · +${gained} XP` : ''}`);
     if (last) queueCelebration(last);
     refresh();
   }));
@@ -8676,6 +8687,7 @@ const EMPTY_MEAL_LINES = {
   ],
 };
 function emptyMealLine(name) {
+  if (S.date !== dateKey()) return `No ${name.toLowerCase()} recorded for this day.`;
   const pool = EMPTY_MEAL_LINES[name];
   if (!pool) return '';
   if (S.speechSalt == null) S.speechSalt = Math.floor(Math.random() * 1e6);
@@ -8691,6 +8703,9 @@ function emptyMealLine(name) {
  * Never a verdict on the food. The only thing being acknowledged is that the
  * player showed up and wrote it down. */
 function signOffLine(count, tot, targets) {
+  if (S.date !== dateKey()) return count
+    ? `${count} entr${count === 1 ? 'y' : 'ies'} recorded for this day. The ledger is honest.`
+    : 'No entries recorded for this day.';
   if (S.speechSalt == null) S.speechSalt = Math.floor(Math.random() * 1e6);
   const pick = arr => arr[(S.speechSalt + arr.length) % arr.length];
   if (!count) return pick([
@@ -8711,7 +8726,7 @@ function signOffLine(count, tot, targets) {
   ]);
 }
 
-function mealBlock(name, i, entries, yEntries, budget = 0) {
+function mealBlock(name, i, entries, yEntries, budget = 0, sourceDate = null) {
   const kcal = shownTotals(entries).kcal;   // already the sum of the rounded rows (L8)
   const over = budget > 0 && kcal > budget;
   return `<section class="meal">
@@ -8728,7 +8743,7 @@ function mealBlock(name, i, entries, yEntries, budget = 0) {
         <span class="kc">${Math.round(e.kcal)}</span>
       </button>`).join('')}
     ${!entries.length ? `<p class="meal-empty">${esc(emptyMealLine(name))}</p>` : ''}
-    ${!entries.length && yEntries.length ? `<button class="chip-btn" data-copymeal="${i}">↺ Copy yesterday's ${name} (${Math.round(dayTotals(yEntries).kcal)} kcal)</button>` : ''}
+    ${!entries.length && yEntries.length ? `<button class="chip-btn" data-copymeal="${i}">↺ Copy ${sourceDate ? `${name} from ${esc(sourceDate)}` : `yesterday's ${name}`} (${shownTotals(yEntries).kcal} kcal)</button>` : ''}
   </section>`;
 }
 
@@ -11074,7 +11089,8 @@ async function renderTrends(el) {
     const tot = dayTotals(byDate[dk] || []);
     const h = hByDate[dk] || {};
     days.push({
-      date: dk, kcal: tot.kcal, p: tot.p, logged: tot.kcal > 0,
+      // Logging is the presence of a diary row, as in streakFrom's callers.
+      date: dk, kcal: tot.kcal, p: tot.p, logged: (byDate[dk] || []).length > 0,
       steps: h.steps || 0, sleepHours: h.sleepHours ?? null,
       sleepMin: h.sleepMin ?? null, sleepDeepMin: h.sleepDeepMin ?? null,
       sleepRemMin: h.sleepRemMin ?? null, sleepCoreMin: h.sleepCoreMin ?? null,
