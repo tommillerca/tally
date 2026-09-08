@@ -195,8 +195,10 @@ await check('recipe progression uses engine distributions and preserves certain 
   const grade = h => {
     assert.ok(h.indexOf('data-recipe="base-base"') < h.indexOf('data-recipe="ember-frost"'));
     assert.ok(h.indexOf('data-recipe="ember-frost"') < h.indexOf('data-recipe="toxic-rose"'));
-    for (const text of ['Make Frost. Guaranteed.', '100% Frost', 'Missing colours come first.', '75% Toxic', '25% Rose', 'Make Midnight. Guaranteed.', '100% Midnight']) assert.ok(h.includes(text), text);
-    assert.doesNotMatch(h, /50%|roulette/);
+    /* REMOVED 2026-09-08: this row asserted the PROTECTED design (100% Frost,
+       "Missing colours come first", 75/25). Tom removed that protection so the
+       first two recipes are always 50/50: "you could make 3 frost before you make
+       1 ember thats the risk part". Keeping it would pin a superseded rule. */
     for (const text of ['Make Ember or Frost', '50% Ember', '50% Frost', 'Always 50/50. Each coin flip can repeat a colour you already have.', 'Need another Base pet.', '50% Toxic', '50% Rose', 'Make Midnight. Guaranteed.', '100% Midnight']) assert.ok(h.includes(text), text);
     assert.doesNotMatch(h, /Missing colours come first|Needed ingredients come first|100% Frost|roulette/);
   };

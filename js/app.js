@@ -21320,7 +21320,10 @@ function labSpeciesHtml(s, sp, expanded = false) {
   return `<fieldset class="lab-species"><legend>${sp ? 'Change species <button class="link" data-lab-keep-species>Cancel</button>' : '<button class="btn lab-next" data-lab-choose-species>Choose a species</button>'}</legend>${KENNEL_SPECIES.map(x => `<label class="lab-species-choice"><input type="radio" name="labSpecies" id="labSpecies-${x.id}" value="${x.id}" ${sp === x.id ? 'checked' : ''}><span class="lab-species-tile"><span class="lab-art" aria-hidden="true">${petPortraitHtml(x.id, 96, false, { morph: 'base', wear: null, thumb: true })}</span><b>${esc(x.name)}</b><small>${esc(labProgress(s, x.id))}</small>${sp === x.id ? '<span class="lab-selected">✓ Selected</span>' : ''}</span></label>`).join('')}</fieldset>`;
 }
 function labRecipesHtml(s, sp) {
-  const collectionRecipes = labRecipes.filter(r => r.id !== 'toxic-rose' && s.species[sp]?.recipes?.[r.id]?.protection === 'collection').map(r => r.id);
+  /* Protection is gone (Tom, 2026-09-08), so this list used to be derived from
+     a filter that never matches now and the odds note could never render.
+     The first two recipes are ALWAYS a coin flip, so they are the list. */
+  const collectionRecipes = labRecipes.filter(r => r.id !== 'toxic-rose').map(r => r.id);
   const tier = morphs => `<div class="lab-tier">${morphs.map(m => sp ? labSpecimenHtml(s, sp, m) : `<b>${esc(labColour(m))}${m === 'base' ? ' ×2' : ''}</b>`).join('')}</div>`;
   return `<section class="lab-path" aria-label="Recipe path"><header><h3>${sp ? esc(labSpecies(sp)) + ' colour path' : 'Colour path'}</h3>${sp ? `<small>Unmarked colours are still to collect.</small>` : ''}<p class="lab-repeat"><span aria-hidden="true">↶</span> Repeat to build a pair</p></header>${tier(['base'])}${labRecipes.map(r => {
     const detail = s.species[sp]?.recipes?.[r.id];
@@ -21333,7 +21336,7 @@ function labRecipesHtml(s, sp) {
        the first two recipes. "you could make 3 frost before you make 1 ember
        thats the risk part". Any copy promising an ordered outcome is a lie. */
     const protection = '';
-    return `<div class="lab-connection" data-recipe="${r.id}"${collectionRecipes.includes(r.id) ? ' aria-describedby="labCollectionProtection"' : ''}><p><span aria-hidden="true">↓</span> ${esc(use)} <b>${esc(promise)}</b></p><p class="lab-odds">${dist.map(d => `${Math.round(d.weight / weight * 100)}% ${esc(labColour(d.morph))}`).join(' · ')}</p>${r.id === 'toxic-rose' ? '<p>Midnight is the only output. Both pets are consumed.</p>' : detail ? protection : `<p>${sp ? 'Example odds. Your chances could not be read.' : 'Example odds. Choose a species to see your chances.'}</p>`}${collectionRecipes[0] === r.id ? '<p id="labCollectionProtection">A coin flip every time. It can repeat a colour you already have.</p>' : ''}</div>${tier(r.outputs)}`;
+    return `<div class="lab-connection" data-recipe="${r.id}"${collectionRecipes.includes(r.id) ? ' aria-describedby="labCollectionProtection"' : ''}><p><span aria-hidden="true">↓</span> ${esc(use)} <b>${esc(promise)}</b></p><p class="lab-odds">${dist.map(d => `${Math.round(d.weight / weight * 100)}% ${esc(labColour(d.morph))}`).join(' · ')}</p>${r.id === 'toxic-rose' ? '<p>Midnight is the only output. Both pets are consumed.</p>' : sp ? '' : `<p>Example odds. Choose a species to see your chances.</p>`}${collectionRecipes[0] === r.id ? '<p id="labCollectionProtection">Always 50/50. Each coin flip can repeat a colour you already have.</p>' : ''}</div>${tier(r.outputs)}`;
   }).join('')}</section>`;
 }
 function labIngredientCounts(s, sp, recipe) {
