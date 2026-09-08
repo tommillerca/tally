@@ -311,7 +311,9 @@ PURE.push('lookup-guard-lint.mjs'); // M5: bounded truth-only id/lookup scan, re
 // K1: lib/lookup-guard-scan.mjs is a helper imported by lookup-guard-lint.mjs.
 // It exports scanning functions and asserts nothing. Helpers under tests/lib
 // are outside the top-level runnable inventory; no top-level scanner exists.
+PURE.push('pet-a11y-audit.mjs'); // P2: production Kennel labels/clicks, swatch identity, relative pet-sheet type; Node-only, no pixel claim.
 const BROWSER = [
+  'pet-a11y-pixels-audit.mjs', // P2: screenshot dot contrast, deuteranopia dE76, keyboard identity and 200% pet-sheet text.
   'first-run-honesty-audit.mjs', // M5: real first-run disclosure/intro, capped toast dwell, returning daily reward and review screenshots.
   'orientation-audit.mjs', // N1: 393x852 -> 852x393 -> portrait, real rotateLock coverage and hit tests, plus Intl/timezone persistence on reload.
   'pet-C-browser-audit.mjs', // Lane C: real EQUIP return paths and nine surfaces, 31 decoded Kennel images at DPR 2/3 on five phone sizes. Browser proof pending reviewer.
