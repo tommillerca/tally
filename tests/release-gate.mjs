@@ -308,6 +308,9 @@ PURE.push('machine-character-audit.mjs'); // L1: Node controls drive browser obs
 PURE.push('n3-deadpaths-audit.mjs'); // N3: real artifact path expressions stay outside this checkout; real News callback delivers the current outfit to the poster renderer. Node-only, no pixel claim.
 PURE.push('m5-prove-red.mjs'); // M5: throws away seven real-source reversions; requires failing children and restored green guards, Node-only.
 PURE.push('lookup-guard-lint.mjs'); // M5: bounded truth-only id/lookup scan, reviewed-site ratchet and positive controls; Node-only.
+PURE.push('restore-state-audit.mjs'); // P3: real import/read/export checks for malformed kv, stale receipts and unsupported equipment; Node-only.
+PURE.push('restore-debt-edges-audit.mjs'); // Q1: removal receipts, legacy banks, potion revisions and opaque fight-buff preservation; Node-only.
+PURE.push('restore-debt-audit.mjs'); // Q1: stale restore must preserve pet ownership/levels, consumed potions and opaque future buffs; Node-only.
 // K1: lib/lookup-guard-scan.mjs is a helper imported by lookup-guard-lint.mjs.
 // It exports scanning functions and asserts nothing. Helpers under tests/lib
 // are outside the top-level runnable inventory; no top-level scanner exists.

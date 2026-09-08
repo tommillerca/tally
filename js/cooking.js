@@ -160,7 +160,10 @@ export async function grantPotion(id, n = 1) {
   /* QA round 26 O4: two Serve taps in one frame emptied both pots and banked ONE
      potion (6/6). This was the last read-modify-write granter in the file; one
      transaction, same as grantIngredient below. */
-  await kvUpdate('potions', inv => ({ ...(inv || {}), [id]: ((inv && inv[id]) || 0) + n }), {});
+  await kvUpdateMulti({
+    potions: inv => ({ ...(inv || {}), [id]: ((inv && inv[id]) || 0) + n }),
+    potionsRev: rev => ({ ...(rev || {}), [id]: (rev?.[id] || 0) + Math.max(1, Math.abs(n)) }),
+  });
 }
 /* THE SIP HAS TO BE THE CLAIM TOO (2026-09-04, claimed-row-audit): reading the
    satchel, decrementing in memory and writing the whole map back raced
@@ -169,13 +172,16 @@ export async function grantPotion(id, n = 1) {
    its potion via grantPotion between this read and this write, and the whole
    map this call then wrote back had no idea that potion existed. */
 export async function usePotion(id) {
-  const drunk = await kvUpdate('potions', cur => {
+  let taken = false;
+  // The sip and its revision are one transaction, including the last potion.
+  const drunk = await kvUpdateMulti({ potions: cur => {
     const next = { ...(cur || {}) };
     if (!(next[id] > 0)) return undefined;
     next[id] -= 1; if (next[id] <= 0) delete next[id];
+    taken = true;
     return next;
-  }, {});
-  return !!drunk;
+  }, potionsRev: rev => taken ? { ...(rev || {}), [id]: (rev?.[id] || 0) + 1 } : undefined });
+  return !!drunk.potions;
 }
 export function potionCount(inv) { return Object.values(inv || {}).reduce((a, n) => a + n, 0); }
 
@@ -620,12 +626,19 @@ async function addFoodBuff(recipe, now = Date.now()) {
   buffs.push(b);
   await kvSet('foodbuffs', buffs);
 }
-// prune spent/expired buffs; return the live list
+// Only understood lifetimes may be pruned or spent. Opaque future rows stay
+// byte-identical in storage and do not contribute effects in this build.
+function knownFoodBuff(b) {
+  return !!b && !Object.hasOwn(b, 'format') && ((b.kind === 'combat' && Number.isFinite(b.fightsLeft)) ||
+    (b.kind === 'coins' && Number.isFinite(b.untilMs)));
+}
+const keepFoodBuff = (b, now) => !knownFoodBuff(b) || (b.kind === 'combat' ? b.fightsLeft > 0 : b.untilMs > now);
+// prune spent/expired known buffs; return only understood live effects
 export async function activeFoodBuffs(now = Date.now()) {
   const buffs = await foodBuffs();
-  const live = buffs.filter(b => b.kind === 'combat' ? (b.fightsLeft > 0) : (b.untilMs > now));
+  const live = buffs.filter(b => keepFoodBuff(b, now));
   if (live.length !== buffs.length) await kvSet('foodbuffs', live);
-  return live;
+  return live.filter(knownFoodBuff);
 }
 // coin multiplier from active coin buffs (e.g. 1.25)
 export async function foodCoinMult(now = Date.now()) {
@@ -650,8 +663,8 @@ export async function foodCombatBuff(now = Date.now()) {
 export async function consumeFightFoodBuffs(now = Date.now()) {
   const buffs = await foodBuffs();
   let changed = false;
-  for (const b of buffs) if (b.kind === 'combat' && b.fightsLeft > 0) { b.fightsLeft -= 1; changed = true; }
-  const live = buffs.filter(b => b.kind === 'combat' ? b.fightsLeft > 0 : b.untilMs > now);
+  for (const b of buffs) if (knownFoodBuff(b) && b.kind === 'combat' && b.fightsLeft > 0) { b.fightsLeft -= 1; changed = true; }
+  const live = buffs.filter(b => keepFoodBuff(b, now));
   if (changed || live.length !== buffs.length) await kvSet('foodbuffs', live);
 }
 
