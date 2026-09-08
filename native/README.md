@@ -26,9 +26,19 @@ SUBMISSION=1 ./build-ios.sh
 
 This mode applies the store flag only to the copied `native/www/js/app.js`,
 temporarily replaces the Capacitor config with a generated local-bundle config,
-syncs iOS, and asserts both results before archiving. An EXIT trap restores the
-tracked config even when a later step fails. With `SUBMISSION` absent,
-`build-ios.sh` keeps the remote-shell internal/TestFlight path unchanged.
+syncs iOS, and checks the copied iOS resources before archiving, then checks the
+archive before exporting. Both checks require a submission marker matching the
+app.js SHA256, STORE_BUILD=true, no server key, and clean reachable store copy.
+An EXIT trap restores the tracked config even when a later step fails.
+`SUBMISSION=0 ./build-ios.sh` explicitly selects the internal/TestFlight path.
+An unset, empty or invalid SUBMISSION refuses before any build or network work.
+Archives and exports live under `ios/App/build/submission/` or
+`ios/App/build/internal/`. Old `ios/App/build/App.xcarchive` and `build/export/`
+artifacts are unclassified and must not be used for submission.
+
+The script still uploads and distributes when Tom runs it. It is not a local
+preview command. See [the submission checklist](../docs/SUBMISSION-CHECKLIST.md)
+for prerequisites and the unproven first-device acceptance steps.
 
 ### Submission prep: bundling www instead of the remote shell
 
@@ -41,7 +51,7 @@ cd native
 ./build-store.sh
 ```
 
-This runs `STORE_BUILD=1 ./build-www.sh` and writes
+This runs `STORE_BUILD=1 ./build-www.sh`, writes `www/submission.json`, and writes
 `native/capacitor.config.store.json`: a copy of `capacitor.config.json` with
 the `server` key removed, so Capacitor falls back to serving the local `www`
 bundle instead of the live site. Both `www/` and `capacitor.config.store.json`
