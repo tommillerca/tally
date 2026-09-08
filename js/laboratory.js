@@ -34,16 +34,9 @@ export function labRecipe(roster, iids, state = {}) {
 export function labDistribution(roster, recipe, sp, state = {}) {
   if(recipe==='toxic-rose')return {distribution:[{morph:'midnight',weight:4}],protection:'none'};
   if(!['base-base','ember-frost'].includes(recipe))labRefuse('invalid-pair');
-  const owned=ownedPairs(roster.filter(x=>x && species(x.sp)));
-  const has=m=>owned.has(`${sp}|${m}`);
-  const count=m=>roster.filter(x=>x?.sp===sp && labMorph(x.morph)===m && labInput(x,state)).length;
-  const V=!has('midnight');
-  const U=!has('toxic') || !has('rose') || (V && (count('toxic')<2 || count('rose')<2));
-  const [left,right,weight,active]=recipe==='base-base'?['ember','frost',22,U]:['toxic','rose',10,V];
-  let candidates=[left,right],protection='none';
-  if(!has(left)||!has(right)){candidates=candidates.filter(m=>!has(m));protection='collection';}
-  else if(active && (count(left)<2 || count(right)<2)){candidates=candidates.filter(m=>count(m)<2);protection='ingredient';}
-  return {distribution:candidates.map(morph=>({morph,weight})),protection};
+  const [left,right,weight]=recipe==='base-base'?['ember','frost',22]:['toxic','rose',10];
+  // Ownership and ingredient stock never alter either coin flip.
+  return {distribution:[left,right].map(morph=>({morph,weight})),protection:'none'};
 }
 function cells(roster) { return [...ownedPairs(roster.filter(x=>x && species(x.sp) && labMorph(x.morph)).map(x=>({...x,morph:labMorph(x.morph)})))].sort(); }
 export function labPreview(roster, iids, state = {}) {

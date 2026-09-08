@@ -21257,7 +21257,7 @@ const KENNEL_SPECIES = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6']
    thumb per roster species and one per grid cell (see the pixel-budget note in
    the plan; measured by tests/memory-census.mjs). */
 /* Laboratory UI boundary, 2026-09-08. The engine lane exports laboratory from
- * loot.js. See docs/LAB-UI-BOUNDARY.md. This layer never resolves protection,
+ * loot.js. See docs/LAB-UI-BOUNDARY.md. This layer never resolves odds,
  * draws an outcome, consumes an instance, or buys capacity itself. */
 function laboratoryEngine() {
   const engine = labLoot.laboratory;
@@ -21324,13 +21324,16 @@ function labRecipesHtml(s, sp) {
   const tier = morphs => `<div class="lab-tier">${morphs.map(m => sp ? labSpecimenHtml(s, sp, m) : `<b>${esc(labColour(m))}${m === 'base' ? ' ×2' : ''}</b>`).join('')}</div>`;
   return `<section class="lab-path" aria-label="Recipe path"><header><h3>${sp ? esc(labSpecies(sp)) + ' colour path' : 'Colour path'}</h3>${sp ? `<small>Unmarked colours are still to collect.</small>` : ''}<p class="lab-repeat"><span aria-hidden="true">↶</span> Repeat to build a pair</p></header>${tier(['base'])}${labRecipes.map(r => {
     const detail = s.species[sp]?.recipes?.[r.id];
-    // Missing engine details stay examples, never inferred protection or eligibility.
+    // Missing engine details stay examples, never inferred odds or eligibility.
     const dist = detail?.distribution || r.outputs.map(morph => ({ morph, weight: 1 }));
     const weight = dist.reduce((n, d) => n + d.weight, 0);
     const promise = `Make ${dist.map(d => labColour(d.morph)).join(' or ')}${dist.length === 1 ? '. Guaranteed.' : '.'}`;
     const use = r.id === 'base-base' ? 'Use two Base pets.' : `Use ${r.inputs.map(labColour).join(' and ')}.`;
-    const protection = detail?.protection === 'ingredient' ? '<p>Needed ingredients come first.</p>' : '';
-    return `<div class="lab-connection" data-recipe="${r.id}"${collectionRecipes.includes(r.id) ? ' aria-describedby="labCollectionProtection"' : ''}><p><span aria-hidden="true">↓</span> ${esc(use)} <b>${esc(promise)}</b></p><p class="lab-odds">${dist.map(d => `${Math.round(d.weight / weight * 100)}% ${esc(labColour(d.morph))}`).join(' · ')}</p>${r.id === 'toxic-rose' ? '<p>Midnight is the only output. Both pets are consumed.</p>' : detail ? protection : `<p>${sp ? 'Example odds. Your chances could not be read.' : 'Example odds. Choose a species to see your chances.'}</p>`}${collectionRecipes[0] === r.id ? '<p id="labCollectionProtection">Missing colours come first.</p>' : ''}</div>${tier(r.outputs)}`;
+    /* Tom, 2026-09-08: the missing-colour and ingredient filters are GONE from
+       the first two recipes. "you could make 3 frost before you make 1 ember
+       thats the risk part". Any copy promising an ordered outcome is a lie. */
+    const protection = '';
+    return `<div class="lab-connection" data-recipe="${r.id}"${collectionRecipes.includes(r.id) ? ' aria-describedby="labCollectionProtection"' : ''}><p><span aria-hidden="true">↓</span> ${esc(use)} <b>${esc(promise)}</b></p><p class="lab-odds">${dist.map(d => `${Math.round(d.weight / weight * 100)}% ${esc(labColour(d.morph))}`).join(' · ')}</p>${r.id === 'toxic-rose' ? '<p>Midnight is the only output. Both pets are consumed.</p>' : detail ? protection : `<p>${sp ? 'Example odds. Your chances could not be read.' : 'Example odds. Choose a species to see your chances.'}</p>`}${collectionRecipes[0] === r.id ? '<p id="labCollectionProtection">A coin flip every time. It can repeat a colour you already have.</p>' : ''}</div>${tier(r.outputs)}`;
   }).join('')}</section>`;
 }
 function labIngredientCounts(s, sp, recipe) {
@@ -21366,7 +21369,7 @@ function labConfirmationHtml(q) {
 function labRevealHtml(r) {
   const b = r.branches.find(x => x.morph === r.result.morph);
   const certain = r.distribution.length === 1;
-  return `<div class="lab-reveal ${certain ? 'lab-direct' : 'lab-surprise'}" data-outcomes="${r.distribution.length}"><div data-lab-result-art>${petSpriteHtml(r.species, 144, false, { morph: r.result.morph, shiny: false, wear: null, thumb: true })}</div><h3>${esc(labColour(r.result.morph))} ${esc(labSpecies(r.species))}</h3><p role="status">${b.gained.length ? `Added to your collection. ${b.afterCount}/${labTotal()}.` : `Another copy. ${b.neededFor ? `Needed for ${esc(b.neededFor)}.` : 'Optional extra copy.'}`}</p><p>${certain ? r.recipe === 'toxic-rose' ? 'Midnight was guaranteed by this recipe.' : `${esc(labColour(r.result.morph))} was guaranteed by protection.` : 'Your experiment is saved.'}</p><p>Level 1. 0 banked steps. Lineage 0. Non-shiny. No inherited name, bond or talents.</p><p>${Number.isInteger(r.remaining) ? `${r.remaining} experiment${r.remaining === 1 ? '' : 's'} available today.` : 'Back to Laboratory to check remaining experiments.'}</p>${r.resultPresent === false ? '<p>This saved pet has since left your Stable. Reviewing this receipt does not recreate it.</p>' : ''}</div>`;
+  return `<div class="lab-reveal ${certain ? 'lab-direct' : 'lab-surprise'}" data-outcomes="${r.distribution.length}"><div data-lab-result-art>${petSpriteHtml(r.species, 144, false, { morph: r.result.morph, shiny: false, wear: null, thumb: true })}</div><h3>${esc(labColour(r.result.morph))} ${esc(labSpecies(r.species))}</h3><p role="status">${b.gained.length ? `Added to your collection. ${b.afterCount}/${labTotal()}.` : `Another copy. ${b.neededFor ? `Needed for ${esc(b.neededFor)}.` : 'Optional extra copy.'}`}</p><p>${certain ? r.recipe === 'toxic-rose' ? 'Midnight was guaranteed by this recipe.' : 'This saved experiment had a guaranteed result.' : 'Your experiment is saved.'}</p><p>Level 1. 0 banked steps. Lineage 0. Non-shiny. No inherited name, bond or talents.</p><p>${Number.isInteger(r.remaining) ? `${r.remaining} experiment${r.remaining === 1 ? '' : 's'} available today.` : 'Back to Laboratory to check remaining experiments.'}</p>${r.resultPresent === false ? '<p>This saved pet has since left your Stable. Reviewing this receipt does not recreate it.</p>' : ''}</div>`;
 }
 function labTodayVisible(s, { current, priorDay, hidden }) {
   return current && priorDay && !hidden && s.status === 'ready' && s.remaining > 0 && s.hasSafeUsefulPair === true && s.collectionCount < labTotal();
@@ -21406,7 +21409,7 @@ function labBenchHtml(s, selected, sp, q = null, choosingSpecies = false) {
   const recovery = s.unseen?.length ? '<section class="lab-recovery"><p>Your last session ended before you saw your experiment. The result is saved. Open it to review.</p><button class="btn ghost" data-lab-recover>Review saved experiment</button></section>' : '';
   const noPair = !s.pets.length || !s.hasEligiblePair || (sp && s.species[sp]?.hasEligiblePair === false);
   return `${recovery}<p>Make a new colour from two pets of the same species.</p>${labSpeciesHtml(s, sp, choosingSpecies)}<section class="lab-availability">${s.status === 'ready' ? `<details class="lab-clock"><summary>${s.remaining > 0 ? available : 'Experiment use details'}</summary><p>${s.used}/${s.capacity} experiments used</p><p>Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p></details>` : ''}${status !== available ? `<p role="status">${esc(status)}</p>` : ''}${s.status === 'ready' && s.remaining === 0 && !status.includes('Experiments reset at') ? `<p>You've used ${s.used}/${s.capacity} experiments today. Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p>` : ''}${noPair ? '<nav class="lab-links" aria-label="Find a pair"><button class="btn ghost" data-lab-nav="eggs">Eggs</button>' + (sp ? '<button class="btn ghost" data-lab-change-species>Change species</button>' : '') + '</nav>' : ''}</section>${working}<p>Every experiment removes two pets to make one.</p>${labRecipesHtml(s, sp)}
-<details id="labHelp" ${s.ui?.introRead ? '' : 'open'}><summary>How the recipes work</summary><p>On the first two recipes, missing colours come first, then needed ingredients. Toxic + Rose guarantees Midnight. Both pets are consumed.</p><p>Keep one of each colour. Duplicate Ember/Frost and Toxic/Rose pets are needed ingredients for the next recipe. For collection building, both eligible ingredient counts target two before moving on.</p><p>On the first two recipes: both output colours missing means 50% each. One missing means 100% for that colour. When both are owned and ingredients are needed, both below two means 50% each; only one below two means 100% for that ingredient. Otherwise, 50% each. Ember/Frost stock is needed while Toxic or Rose is missing, or Midnight is missing and either Toxic or Rose has fewer than two eligible pets. Toxic/Rose stock is needed while Midnight is missing.</p><p>You can also choose to make extra copies. Those do not always add a collection colour or needed ingredient. Spending last copies can leave cells empty. Trained pets are allowed, but all their investment is lost.</p></details>
+<details id="labHelp" ${s.ui?.introRead ? '' : 'open'}><summary>How the recipes work</summary><p>Base and Base makes Ember or Frost, a straight coin flip. Ember and Frost makes Toxic or Rose, the same. Toxic and Rose always makes Midnight.</p><p>The flip does not care what you already own, so you can get the same colour twice in a row. Spare copies are not wasted: the next recipe up needs two of the colour below it.</p><p>Both pets are consumed every time. Trained pets are allowed, and all of their investment goes with them.</p></details>
 <button class="${sp && !canWork ? 'btn lab-next' : 'link lab-collection'}" data-lab-nav="collection">Your collection: ${s.collectionCount} of ${labTotal()} colours</button><details class="lab-more"><summary>More pet actions</summary>${s.status !== 'ready' ? '<p>One experiment each day is free. Permanent incubators can add two more.</p>' : ''}<div class="lab-eggs">${s.eggs.length ? s.eggs.map(e => `<p>Egg: ${e.ready ? 'Ready to hatch' : `${e.steps.toLocaleString()}/${e.goal.toLocaleString()} steps`}. Open eggs to ${e.ready ? 'hatch it' : 'check progress'}.</p>`).join('') : '<p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p>'}</div>${labSinksHtml()}${s.hasEligiblePair && s.status === 'ready' ? '<button class="link" data-lab-incubators>Incubators</button>' : ''}</details>`;
 }
 // LAB UI PURE END
@@ -21414,7 +21417,7 @@ function labBenchHtml(s, selected, sp, q = null, choosingSpecies = false) {
 async function labReadSnapshot(pre = null) {
   const engine = laboratoryEngine();
   if (engine) return engine.snapshot(pre || {});
-  // Read-only development overview. No substitute recipe/protection resolver.
+  // Read-only development overview. No substitute recipe/odds resolver.
   const [pets, bank, nicks, bonds, talents, active, inv, steps] = await Promise.all([
     kvGet('petInst', []), kvGet('petLvlSteps', {}), kvGet('petNick', {}), kvGet('petBonds', {}), kvGet('pettalents', {}), kvGet('petEquipped', null), inventory(), lifetimeStepsSum(),
   ]);

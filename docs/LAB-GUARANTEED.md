@@ -1,5 +1,7 @@
 # Laboratory pace with guaranteed Midnight
 
+Historical protected baseline. The current unprotected ruling and paired measurements are in [LAB-RISK.md](LAB-RISK.md). The executable appendix remains historical comparison evidence.
+
 **The guarantee removes the final-recipe failure tail, but right-species Base supply still binds.** At one slot, daily full completion is **192 / 223 days** and casual is **703 / 817** (median / P90). Incubators remain weak collection accelerators for these egg-fed starting profiles. Daily first colour passes the two-week target. Casual first colour still misses one month, and daily first complete species takes about four months rather than three. Full 36-cell completion is a long-term chase, not a failed short-term target.
 
 Measurement and proposed spec delta only, 2026-09-08. Frozen plan SHA256 verified: `33f310f2c8349f333daf4b5cf9e38dc189ce3d816a3b4e2277b8f82625bc0507`. Reference HEAD: `0342c68f7b523928590b33fc3bd5e5182f1bd744`. Sources resolve in this checkout. [LAB-SPEC.md](LAB-SPEC.md) and [PRIOR-PACE.md](PRIOR-PACE.md) remain historical inputs; the changes required in the spec are listed below. No feature implementation or pacing adjustment was made.
@@ -149,11 +151,11 @@ This is the change list for the future specification revision. The existing spec
 
 Suggested replacement copy, without feature implementation:
 
-- Bench help: **“Missing colours come first on the first two recipes, then needed ingredients. Toxic + Rose guarantees Midnight. Both pets are consumed.”**
+- Current bench help (supersedes this report's protected copy): **“The first two mixes are always 50/50 coin flips and can repeat a colour you already have. Toxic + Rose guarantees Midnight. Both pets are consumed.”**
 - Final confirmation: **“Midnight: 100%. Both selected pets are permanently consumed. The new Midnight starts at level 1.”** Show separate exact training and cell-loss warnings when applicable.
 - Final shortage: **“Keep one Toxic and one Rose. You need a spare of each to make Midnight.”**
 - Owned final output: **“You already own Midnight. This makes another copy and uses one experiment today.”**
-- Final reveal: **“Midnight was guaranteed by this recipe.”** Lower protected singleton: **“{Colour} was guaranteed by protection.”** Both show the saved pet directly.
+- Final reveal: **“Midnight was guaranteed by this recipe.”** Historical lower singleton receipt: **“This saved experiment had a guaranteed result.”** Both show the saved pet directly.
 - Certain last-cell loss: **“These cells become empty: {cells}. New cells: {gains or 'none'}. Collection after: {n}/36.”**
 
 ## Method, checks and limitations

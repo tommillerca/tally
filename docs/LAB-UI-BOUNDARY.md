@@ -99,7 +99,8 @@ unsupported rows visible with their specific reason. Trained and last-copy
 ordinary pets remain eligible. The UI sorts plain surplus first and selects
 nothing automatically.
 
-Species recipes contain the exact current distribution after protection. Without
+Species recipes contain the exact current distribution: flat 50/50 for both
+lower recipes regardless of ownership or stock, and guaranteed Midnight. Without
 a selected species, the UI shows the three baseline strips, including Midnight
 100%. It never offers a chosen-output control. A missing engine snapshot shows
 unknown safe-spare counts, not a fabricated zero.
@@ -123,7 +124,7 @@ Use the durable shapes in LAB-SPEC section 2, with presentation annotations:
 
 The UI rejects unsupported quote recipe support. Final quotes require exactly one
 Midnight output with weight 4 and protection `none`. The engine remains the
-protection and transaction authority. It must also validate saved receipts before
+odds and transaction authority. It must also validate saved receipts before
 returning them, including result membership in the frozen support and branch set.
 
 The preview and review list both original identities and their exact bank,

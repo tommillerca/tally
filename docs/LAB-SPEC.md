@@ -1,5 +1,7 @@
 # The Laboratory: build specification
 
+Current odds ruling, 2026-09-08: [LAB-RISK.md](LAB-RISK.md) supersedes the earlier protection and final-gamble rules. Both lower recipes are always 50/50; Toxic + Rose guarantees Midnight. Earlier pace and final-failure discussions below are historical, not current behavior.
+
 Specification only, 2026-09-08. Application implementation is outside this work order. Read in precedence order: the frozen final rulings, [V4](PRIOR-V4.md), [V3](PRIOR-V3.md), [V2](PRIOR-V2.md), [V1](PRIOR-V1.md). Historical recommendations lose to the final rulings. Source links below resolve within this checkout.
 
 Frozen work order SHA256 verified: `546e432e56cbc945839a5e935559f59b88b3ac5593cf77ce2c242744380d0670`.
@@ -8,7 +10,7 @@ Frozen work order SHA256 verified: `546e432e56cbc945839a5e935559f59b88b3ac5593cf
 
 The room is **The Laboratory**. Its destructive action is **Animate**. Every recipe consumes two distinct instances of the same species and creates one fresh instance of that species. Both originals are permanently destroyed, including on a Toxic result. There is no retained parent, hybrid, starter grant, one-input recipe or cheaper lower-tier exception.
 
-The six colours are Base, Ember, Frost, Toxic, Rose and Midnight, across C1-C6: 36 current collection cells. Colours are cosmetic. Trained ordinary pets remain eligible with escalating warnings. CX and shiny instances are never eligible. One daily experiment is free; permanent incubators add slots 2 and 3. The first two recipes have hard collection and ingredient protection. Toxic + Rose always has 5/7 Toxic and 2/7 Midnight, exempt from both filters, with no pity timer or bounded completion promise.
+The six colours are Base, Ember, Frost, Toxic, Rose and Midnight, across C1-C6: 36 current collection cells. Colours are cosmetic. Trained ordinary pets remain eligible with escalating warnings. CX and shiny instances are never eligible. One daily experiment is free; permanent incubators add slots 2 and 3. The first two recipes always roll 50/50, regardless of collection or ingredient stock. Toxic + Rose always returns Midnight. Repeated lower-tier colours are intentional; there is no pity timer.
 
 New eggs supply Base with the existing shiny exception. Egg faucets, species selection, incubation, salvage and breeding keep their existing rules. Week one introduces species discovery and the recipe path. It promises neither a colour nor a usable pair. Onboarding, Today discovery and room explanations ship with the bench.
 
@@ -86,43 +88,21 @@ Inputs normalize only absent, null or empty-string legacy morphs to Base for eli
 
 The new instance uses the existing IID scheme, must differ from both inputs and every existing/taken IID, and has same species, chosen morph, non-shiny, lineage 0, level-bank entry 0, no nickname, bond or instance talent selections. Its anchor is the quoted settled effective-step meter. No parental investment transfers. `petLvlV` and `pettalents.__iidV` retain their current migrated formats. Species wardrobe, cosmetic ownership, history and other instances' metadata remain owned. No XP, dust, coins, egg, buff, training or breed-credit award accompanies Animate.
 
-## 3. Recipes, protection and collection preview
+## 3. Recipes, odds and collection preview
 
 Only three of the 21 unordered same-species morph pairs are legal:
 
-| Pair, both consumed | Output before protection | Protection |
+| Pair, both consumed | Output, always | Protection |
 |---|---|---|
-| Base + Base | Ember 22/44, Frost 22/44 | Collection, then ingredient stock |
-| Ember + Frost | Toxic 10/20, Rose 10/20 | Collection, then ingredient stock |
-| Toxic + Rose | Toxic 10/14 (5/7), Midnight 4/14 (2/7) | Always exempt |
+| Base + Base | Ember 22/44, Frost 22/44 | None |
+| Ember + Frost | Toxic 10/20, Rose 10/20 | None |
+| Toxic + Rose | Midnight 4/4 | None; intrinsic certainty |
 
-Every other pair is invalid, including Toxic + Toxic and every Midnight input. Cross-species, repeated IID, shiny and CX pairs are invalid regardless of colours. There is no chosen-output control, no Base output and no shiny output. Use exact weights internally. Display 50%, 100%, 71.43% and 28.57% as applicable; label the final fractions in expanded help. A 100% output is certain and gets no fake gamble animation.
+Every other pair is invalid, including Toxic + Toxic and every Midnight input. Cross-species, repeated IID, shiny and CX pairs are invalid regardless of colours. There is no chosen-output control, no Base output and no shiny output. Use exact weights internally. Display 50% for each lower outcome and 100% Midnight. Midnight is certain and gets no fake gamble animation.
 
-For the selected species only, let `owned(m)` mean at least one current instance occupies that cell, and `eligible(m)` count eligible instances including trained ones. Shiny Base may be a collection keeper but cannot be counted as recipe feedstock. History of previously discovered colours is irrelevant to the filters.
+Collection ownership, ingredient stock, training, other species and prior results never filter either lower recipe. A player can roll three Frost before their first Ember. There is no ordered protection table. Keepers and spares remain useful advice for preserving collection cells, never an odds rule. Shiny Base may be a collection keeper but cannot be feedstock. Manual last-copy and trained inputs stay eligible with the same severe warnings.
 
-```text
-V = !owned(midnight)
-U = !owned(toxic) || !owned(rose)
-    || (V && (eligible(toxic) < 2 || eligible(rose) < 2))
-Base + Base: outputs Ember/Frost, stock active when U, targets 2/2.
-Ember + Frost: outputs Toxic/Rose, stock active when V, targets 2/2.
-```
-
-These are V3's consume-both thresholds. V4's one-Rose target is rejected with retention. Evaluate the following ordered table against live inventory:
-
-| First matching condition for the first two recipes | Left output | Right output |
-|---|---:|---:|
-| Both output cells missing | 50% | 50% |
-| Only left missing | 100% | 0% |
-| Only right missing | 0% | 100% |
-| Both owned; stock active; both eligible counts below 2 | 50% | 50% |
-| Both owned; stock active; only left below 2 | 100% | 0% |
-| Both owned; stock active; only right below 2 | 0% | 100% |
-| Otherwise | 50% | 50% |
-
-The first two recipes' inputs do not overlap their output sets, so subtracting their inputs does not change output ownership. Missing collection takes priority even when the other output lacks ingredient stock. Trained stock can affect odds, but the UI never recommends sacrificing it or promises a safe continuation through it. Hard protection cannot guarantee net collection growth if the player intentionally spends a last copy.
-
-For Toxic + Rose bypass the entire table. Midnight missing/owned, last-copy selections and every prior failure history all give exactly 5/7 Toxic and 2/7 Midnight. A miss destroys both inputs and creates a **new** Toxic. Rose must be rebuilt for another attempt. No pity counter, loss-based refund, increasing probability, fallback guarantee, paid reroll or automatic salvage.
+Toxic + Rose consumes both inputs and always creates a fresh level-1 Midnight, whether Midnight is missing or already owned. No outcome RNG draw is needed. No paid reroll, refund or automatic salvage is added.
 
 For every supported output with nonzero probability, calculate `after = liveRoster minus both selected IIDs plus one fresh output`; compare whole current cell sets. Display exact lost cells, newly gained cells, duplicate status, resulting total cells and affected cell counts. For two final Base copies, Base is lost in both branches. For a last Toxic plus last Rose, Toxic result loses Rose; Midnight result loses Toxic and Rose and gains Midnight if previously missing. The Toxic identity and training are lost even when its colour remains. No “last copy” check made separately on each input is sufficient.
 
@@ -249,9 +229,9 @@ Above them: “Clearing lots of spares? Melt them for Bone Dust. The Laboratory 
 
 ### Bench and picker
 
-Bench order: title and persistent back control; concise explanation; current `used/capacity` and correctly named reset; species/collection progress; all three recipe strips; two empty input positions; review action; links to Collection, eggs, Melt spares, Breed and the optional capacity panel. Show all recipe paths even with no ingredients. On each species, show current owned cells and safe available ingredient counts after reserving keepers. Before species selection show baseline odds and “Protection depends on the species you choose”; never use another species' odds as the quote.
+Bench order: title and persistent back control; concise explanation; current `used/capacity` and correctly named reset; species/collection progress; all three recipe strips; two empty input positions; review action; links to Collection, eggs, Melt spares, Breed and the optional capacity panel. Show all recipe paths even with no ingredients. On each species, show current owned cells and safe available ingredient counts after reserving keepers. Before species selection show baseline odds and “The first two mixes are always 50/50 and can repeat a colour you already have”; never use another species' odds as the quote.
 
-Bench explanation: **“Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.”** Below the recipes: “Missing colours come first on the first two recipes, then needed ingredients. Midnight is always a 28.57% chance. There is no guaranteed attempt.” Expanded help gives the ordered table, thresholds and final fractions from section 3. Help can collapse after first reading, but live odds and consume-both copy remain visible.
+Bench explanation: **“Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.”** Below the recipes: “The first two mixes are always 50/50 coin flips and can repeat a colour you already have. Toxic + Rose guarantees Midnight. Both pets are consumed.” Expanded help gives the three recipes and explains that collection, ingredient stock and previous results never change the odds. Help can collapse after first reading, but live odds and consume-both copy remain visible.
 
 Choosing a slot opens an instance picker with species and colour filters. Sort plain surplus first, then invested/last-copy eligible rows. Never auto-select either instance. Mark safe surplus, “Last collection copy”, “Trained”, “Named”, “Bonded”, “Lineage {n}”, “Equipped”, and “Needed as an ingredient” from real state. For the second slot restrict selectable candidates to supported same-species recipe partners, while explaining why unavailable rows cannot match. Keep shiny and CX visible but disabled with their specific exclusions. Last-copy and trained eligibility cannot be disabled as a safety shortcut. Pair-wide loss is recomputed after both selections.
 
@@ -287,14 +267,14 @@ Escalate if either pet has positive banked steps (including level 1), nickname, 
 | Incomplete/wrong pair | “Choose two pets of the same species that match a recipe.” Review disabled; no use spent. |
 | Ineligible | “Shiny pets cannot be used here.” / “The Day One Lizard cannot be used here.” / “This saved colour is not supported.” No override. |
 | Ready | “{remaining} experiment(s) available today.” Review pair with current odds and warnings. |
-| Outputs already owned | “You own both possible colours. This makes another copy and uses one experiment today.” Add “Needed for {recipe}” when stock protection is the reason. |
+| Outputs already owned | “You own both possible colours. This makes another copy and uses one experiment today.” Add “Needed for {recipe}” when that duplicate is useful feedstock; this never changes its odds. |
 | Cap reached | “You've used {used}/{capacity} experiments today. Experiments reset at {time}, {zone}.” Animate disabled; Collection and Melt spares remain exits. Optional eligible upgrade is not the only action. |
 | Incubator offer | “Incubator {n}: {price} coins. Adds one experiment each day. It supplies no pets and does not change the odds.” Show current and resulting capacity and today's remaining uses. |
 | Cannot afford | “Incubator {n} costs {price} coins. You have {balance}; {shortfall} more needed.” Buy disabled, Back to bench available. Describe the free slot according to its actual used state, never imply a fresh free use. |
 | Committing | “Saving your experiment...” Disable duplicate submission and await outcome. Closing/navigation cannot cancel a committed transaction. |
 | Reveal, new cell | “{Colour} {species}. Added to your collection. {n}/36.” Show the actual fresh pet and defaults; “View pet” and “Back to Laboratory”. |
 | Reveal, duplicate/Toxic miss | “{Colour} {species}. Another copy.” For final miss: “Both inputs were consumed. This is a new Toxic pet. A spare Rose is needed to try again.” Do not celebrate a missing Midnight as completion. |
-| Guaranteed reveal | Show the certain output directly, with “{Colour} was guaranteed by protection.” No fake two-outcome spin. |
+| Guaranteed reveal | Show the certain output directly, with “Midnight was guaranteed by this recipe.” No fake two-outcome spin. |
 | Complete | “All 36 colours owned. Animate copies, melt spares for Bone Dust, or breed to raise lineage.” Room stays available; Today promotion disappears. |
 | Stale quote | “Your pets or available experiments changed. Review the updated pair and odds.” No substituted inputs, automatic confirmation or silent purchase. |
 | Confirmed abort | “That experiment did not save. Both pets and your experiment are still available.” Only after readback establishes no receipt and unchanged affected state. Retry requires review. |
@@ -331,7 +311,7 @@ Row copy: **“The Laboratory. Two spare pets can make a colour. Both are consum
 
 Recompute after hatch, salvage, breed, Animate, purchase, restore, training/equipment/name/bond/talent changes, day/zone reset and resume. Share the pure predicate and current render snapshot instead of adding repeated whole-store reads to Today. Collapse irrelevant rows without replacing them with an upgrade advertisement. A hatch-result link reinforces discovery when live stock becomes safe and useful with capacity; avoid repeated prompts on ordinary ineligible hatches.
 
-First room visit teaches all three recipe strips, consume-both, severe losses, protection and the final exemption before selection. Keep help reopenable. Update egg copy: **“New eggs hatch Base pets, with the existing rare shiny chance. Colours are now made in The Laboratory. Your pets and the colours already stored in your eggs stay yours.”** Existing collectors see **“Six Rose colours added”**, not a suggestion that six owned cells disappeared. Discovery/read flags never alter odds, grant inputs or award capacity.
+First room visit teaches all three recipe strips, consume-both, severe losses, repeated lower-tier coin flips and guaranteed Midnight before selection. Keep help reopenable. Update egg copy: **“New eggs hatch Base pets, with the existing rare shiny chance. Colours are now made in The Laboratory. Your pets and the colours already stored in your eggs stay yours.”** Existing collectors see **“Six Rose colours added”**, not a suggestion that six owned cells disappeared. Discovery/read flags never alter odds, grant inputs or award capacity.
 
 ## 9. Required release guards
 
@@ -341,8 +321,8 @@ These are acceptance requirements for the future implementation, **not tests add
 |---|---|---|
 | LAB-01: morph/art contract | Exactly 6 species x 6 cells; all six approved Rose runtime files exist, decode, resolve via shared renderers and retain protected art pixels. No Rose-as-Base fallback. Check 32/48/64 px on Today green/dark with rarity glows, especially C6 vs Ember. | Existing Base and Ember decode at each footprint; every Rose species has a nonempty visible sample. Missing or swapped Rose must fail. |
 | LAB-02: eligibility matrix | Exhaust all 21 morph pairs per species: exactly three legal. Cross-species, repeated/missing IID, CX, shiny, malformed IID/morph and duplicate-IID ambiguity cannot spend. Legacy absent/null/empty normalize only as specified. | Both input orders of all three valid recipes succeed; manually selected trained ordinary pair remains eligible. |
-| LAB-03: protection vs exemption odds | Every ordered table row has exact support/weights, excluded outputs zero. Toxic + Rose remains 5/7 and 2/7 with Midnight missing/owned, last copies and any miss history. Test RNG interval endpoints and production resolver, not just a simulation adapter. | Forced samples reach both 50/50 branches and both final branches; the singleton lower-tier case always produces the required output. |
-| LAB-04: ingredient closure | Under U/V, 2/2 spare protection closes sibling starvation while retaining cells; no V4 2/1 Rose target. Other species' stock cannot affect the selected species. | Retained Toxic/Rose with only a spare Toxic forces Rose from an eligible middle recipe; inactive stock protection returns both outcomes. |
+| LAB-03: flat lower odds and final certainty | Both lower recipes have exact equal weights and both outputs across all ownership and stock states. Toxic + Rose supports only Midnight. Test production resolver endpoints. | Both lower outputs are reachable, three Frost before Ember remains possible, and reintroduced collection/stock filters fail the same guard. |
+| LAB-04: ingredients and ownership | Keepers and spares protect current cells under the safe selection policy, never by filtering odds. Other species and trained stock cannot change support. | Asymmetric missing colours and stock still give both outcomes at 50% each. |
 | LAB-05: atomicity and death | Inject abort/kill before dispatch, during each member write, before completion and after completion before UI response. Reopen: either full before-state or full after-state, never one parent, missing result, unmatched tombstones/metadata, or use without pet. | Ordinary experiment commits net minus one pet, exactly two tombstones, one result, complete cleanup and one occupied slot; each kill reaches its intended hook. |
 | LAB-06: replay/reveal | Same opId double tap, reload, next-day retry and reveal close return one saved IID/outcome with one use. A later-taken result is not recreated. No reveal-side grants. | A new request with fresh inputs and available owned slot creates a distinct result; stored receipt remains reviewable after its output is salvaged. |
 | LAB-07: daily cap race | Distinct pairs/opIds racing in two tabs of one DB commit at most 1/2/3 according to ownership. Rendering/refresh cannot rewind used slots. Stale count is refused/reviewed. | Sequential valid requests consume every owned slot exactly once; one extra request is refused with unchanged pets. |
@@ -369,7 +349,7 @@ Integrate relevant cases with the existing unit suite and [tests/pet-morph-audit
 
 1. **Internal foundation:** bring the approved Rose assets into this checkout; implement pure tables/resolver/preview, the atomic snapshot seam, records, migration/restore and sibling-writer safety. Add odds, transaction, cap and migration guards before any exposure. Keep new Base-only grants and UI behind a coordinated release gate so eggs cannot lose their colour route before the bench exists.
 2. **Internal feeling slice, soonest:** exercise Base + Base with a real stored pair, consume-both confirmation, atomic saved output and reveal, plus the visible full recipe path and onboarding draft. This is the shortest way to experience choosing, risking and meeting a new pet. Use explicit test fixtures, not a production starter grant. It is not a public partial bench and does not certify the upper recipes.
-3. **Smallest publicly shippable slice:** all three recipes with locked protection/exemption, six-species Rose integration, free daily use and both purchasable incubators, every state/warning/recovery path, migration, complete first-room explanation, permanent navigation, safe Today row and first-egg species/path introduction. Ship these together. Publicly shipping lower tiers alone, postponing onboarding, or flipping eggs early would violate the frozen order. Require the guards above and resolution of the applicable art/authority blockers first.
+3. **Smallest publicly shippable slice:** all three recipes with flat lower odds and guaranteed Midnight, six-species Rose integration, free daily use and both purchasable incubators, every state/warning/recovery path, migration, complete first-room explanation, permanent navigation, safe Today row and first-egg species/path introduction. Ship these together. Publicly shipping lower tiers alone, postponing onboarding, or flipping eggs early would violate the frozen order. Require the guards above and resolution of the applicable art/authority blockers first.
 
 Do not add vanity products, cross-species art, extra hatch rewards, new economy sources or alternate timers to this slice. The accepted chase is a collection project, and incubator revenue is not evidence that its safeguards or onboarding work.
 

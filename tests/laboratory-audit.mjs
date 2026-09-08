@@ -1,6 +1,7 @@
 // Laboratory engine guards. CONTROL paths mint real results through payAtomic.
 // IndexedDB interruption is simulated, not a browser-process kill proof.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import './mem-idb.mjs';
 import * as D from '../js/db.js';
 import * as L from '../js/loot.js';
@@ -38,21 +39,54 @@ await check('ODDS CONTROL: all three recipes, exact weights and 60000 draws', ()
     assert.equal(draws,outputs.length===1?0:20000);
   }
 });
-await check('PROTECTION CONTROL: every ordered branch for both lower recipes', () => {
-  assert.equal(typeof P.labPreview,'function');
-  for(const [inputs,outs] of [[['base','base'],['ember','frost']],[['ember','frost'],['toxic','rose']]]){
-    for(const [l,r,active,want,reason] of [[0,0,true,[0,1],'collection'],[0,1,true,[0],'collection'],[1,0,true,[1],'collection'],[1,1,true,[0,1],'ingredient'],[1,2,true,[0],'ingredient'],[2,1,true,[1],'ingredient'],[2,2,true,[0,1],'none'],[1,1,false,[0,1],'none']]){
-      const pair=inputs.map(m=>pet(m));const roster=[...pair,...Array.from({length:l},()=>pet(outs[0])),...Array.from({length:r},()=>pet(outs[1]))];
-      if(!active){roster.push(pet('midnight'));if(inputs[0]==='base')roster.push(pet('toxic'),pet('rose'));}
-      const p=P.labPreview(roster,pair.map(x=>x.iid));
-      assert.deepEqual(p.distribution.map(x=>x.morph),want.map(i=>outs[i]));assert.equal(p.protection,reason);
+function assertFlatOdds(preview) {
+  for (const [inputs,outs,weight] of [[['base','base'],['ember','frost'],22],[['ember','frost'],['toxic','rose'],10]]) {
+    for (const sp of ['C1','C2','C3','C4','C5','C6']) for (const l of [0,1,2,4]) for (const r of [0,1,2,4]) for (const active of [true,false]) {
+      const make = m => pet(m,undefined,{sp});
+      const pair=inputs.map(make);
+      const roster=[...pair,...Array.from({length:l},()=>make(outs[0])),...Array.from({length:r},()=>make(outs[1]))];
+      if(!active) { roster.push(make('midnight')); if(inputs[0]==='base')roster.push(make('toxic'),make('rose')); }
+      roster.push(pet(outs[0],undefined,{sp:sp==='C1'?'C2':'C1'}));
+      const state={petLvlSteps:Object.fromEntries(roster.map(x=>[x.iid,1000]))};
+      const p=preview(roster,pair.map(x=>x.iid),state);
+      assert.deepEqual(p.distribution,outs.map(morph=>({morph,weight})));
+      assert.equal(p.protection,'none');
+      assert.equal(P.resolveLabOutcome(p.distribution,()=>0),outs[0]);
+      assert.equal(P.resolveLabOutcome(p.distribution,()=>0.5-Number.EPSILON),outs[0]);
+      assert.equal(P.resolveLabOutcome(p.distribution,()=>0.5),outs[1]);
+      assert.equal(P.resolveLabOutcome(p.distribution,()=>1-Number.EPSILON),outs[1]);
     }
   }
-  assert.equal(P.resolveLabOutcome([{morph:'ember',weight:22},{morph:'frost',weight:22}],()=>0.5),'frost');
-  const basePair=[pet('base'),pet('base')],otherSpecies=[pet('ember',undefined,{sp:'C2'})];
-  assert.deepEqual(P.labPreview([...basePair,...otherSpecies],basePair.map(x=>x.iid)).distribution,[{morph:'ember',weight:22},{morph:'frost',weight:22}]);
+}
+await check('ODDS CONTROL: flat 50/50 across collection, stock, species and trained inputs', () => {
+  assertFlatOdds(P.labPreview);
+  // A real repeated-output sequence remains possible as ownership changes.
+  const roster=Array.from({length:8},()=>pet('base'));
+  for(let i=0;i<3;i++) {
+    const pair=roster.filter(x=>x.morph==='base').slice(0,2);
+    const p=P.labPreview(roster,pair.map(x=>x.iid));
+    const result=P.resolveLabOutcome(p.distribution,()=>0.75);
+    assert.equal(result,'frost');
+    for(const input of pair)roster.splice(roster.indexOf(input),1);
+    roster.push(pet(result));
+  }
+  assert.equal(roster.filter(x=>x.morph==='frost').length,3);
+  assert.equal(roster.some(x=>x.morph==='ember'),false);
   const pair=[pet('toxic'),pet('rose')];const p=P.labPreview(pair,pair.map(x=>x.iid));
   assert.deepEqual(p.branches[0].lost,['C1|rose','C1|toxic']);assert.deepEqual(p.branches[0].gained,['C1|midnight']);assert.equal(p.branches[0].afterCount,1);
+});
+await check('ODDS CONTROL: reintroduced collection and ingredient filters fail the same guard', async () => {
+  const source=readFileSync(new URL('../js/laboratory.js',import.meta.url),'utf8');
+  const needle="return {distribution:[left,right].map(morph=>({morph,weight})),protection:'none'};";
+  assert.equal(source.split(needle).length,2,'production mutation must land exactly once');
+  for(const threshold of [1,2]) {
+    // Threshold 1 restores missing-colour filtering; threshold 2 restores stock filtering.
+    const mutant=source.replace(needle,`const low=[left,right].filter(m=>roster.filter(x=>x.sp===sp && labMorph(x.morph)===m && labInput(x,state)).length<${threshold});
+      return {distribution:(low.length?low:[left,right]).map(morph=>({morph,weight})),protection:'none'};`)
+      .replace("'./pets.js'",JSON.stringify(new URL('../js/pets.js',import.meta.url).href));
+    const bad=await import('data:text/javascript;base64,'+Buffer.from(mutant).toString('base64'));
+    assert.throws(()=>assertFlatOdds(bad.labPreview),assert.AssertionError,`filter threshold ${threshold} must fail`);
+  }
 });
 await check('ATOMICITY CONTROL: successful Animate, interruption rollback and replay', async () => {
   assert.equal(typeof L.animateLaboratory,'function');

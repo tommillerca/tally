@@ -73,7 +73,7 @@ Keep three ordered recipe cards in a vertical path, with labelled ingredient por
 
 Use small labelled swatches from `morphSwatch()`: Base `--text`, Ember `#f0763a`, Frost `#5fb8ec`, Toxic `#8fd23c`, Rose `#e878a5`, Midnight `#6b4fc4`. These are the existing morph semantics, not new card background colours. Toxic green must not become another large lime-like action panel. Cream and ink hold the frame; the creature colours supply the variety.
 
-Read protection and shortages from the engine's species recipe details. Before species selection, say “Example odds. Choose a species to see your chances.” A protected single outcome gets “Guaranteed” only when the supplied distribution warrants it. Do not hard-code 50/50 into the redesign, add an outcome selector, or calculate safety from collection dots. Exact branch losses and gains remain visible at review.
+Read odds and shortages from the engine's species recipe details. The first two mixes are always 50/50 coin flips regardless of collection or ingredient stock. Each can repeat a colour already owned. Midnight is guaranteed. Before species selection, say “Example odds. Choose a species to see your chances.” Do not add an outcome selector or calculate safety from collection dots. Exact branch losses and gains remain visible at review.
 
 Show “Have” and “Need” ingredient counts beside names when the snapshot supplies them. Keep unknown counts unknown. Explain that extra copies are needed for later recipes and that each experiment removes both inputs to create one pet. The ladder must not imply that one Base pet simply levels through all six colours, or that Midnight is a higher combat rarity.
 
@@ -105,7 +105,7 @@ Use the same 2px ink outline and hard 4px 5px shadow on the local primary sticke
 
 **Location:** `labBenchHtml()`, `labStateCopy()`, `labPetDetails()`, `labConfirmationHtml()`, `labBranchesHtml()`, `#labHelp`, and `laboratoryEngine()`.
 
-Lead with “Make a new colour from two pets of the same species.” Keep “Both pets are permanently removed. The new pet starts at level 1.” adjacent to selection and review. Use “Choose first pet” and “Choose second pet” instead of “input”; introduce protection as “Missing colours come first.” Put the detailed rules beneath that sentence. Retain exact investment losses, typed ANIMATE when required, cancellation, stale-quote refusal and saved-result recovery. Dry and fond does not mean casual about losing a named pet.
+Lead with “Make a new colour from two pets of the same species.” Keep “Both pets are permanently removed. The new pet starts at level 1.” adjacent to selection and review. Use “Choose first pet” and “Choose second pet” instead of “input”; explain the risk as “The first two mixes are always 50/50 coin flips and can repeat a colour you already have.” Put the detailed rules beneath that sentence. Retain exact investment losses, typed ANIMATE when required, cancellation, stale-quote refusal and saved-result recovery. Dry and fond does not mean casual about losing a named pet.
 
 Remove “Six Rose colours added” from the permanent collection line. It is release-note language, not guidance. Use “Your collection: 2 of 36 colours”, then per-species labelled colour dots, with owned/not-collected text available to assistive technology. Use `--text-2` and tabular figures for counts, never lime for every owned cell. Keep the existing named problem and recovery in read-error and uncertain-save states.
 

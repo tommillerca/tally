@@ -190,13 +190,15 @@ await check('exactly one lime next action follows selection, with no automatic p
   rejectsMutation(css, css.replace('.lab-room .lab-next { background: var(--accent)', '.lab-room .lab-next { background: var(--surface)'), h => assert.match(h, /\.lab-room \.lab-next \{ background: var\(--accent\); color: var\(--accent-ink\)/));
 });
 await check('recipe progression uses engine distributions and preserves certain Midnight', () => {
-  const snapshot = state({ species: { C1: { recipes: { 'base-base': { distribution: [{ morph: 'frost', weight: 22 }], protection: 'collection', shortage: 'Need another Base pet.' }, 'ember-frost': { distribution: [{ morph: 'toxic', weight: 3 }, { morph: 'rose', weight: 1 }], protection: 'none' } } } } });
+  const snapshot = state({ species: { C1: { recipes: { 'base-base': { distribution: [{ morph: 'ember', weight: 22 }, { morph: 'frost', weight: 22 }], protection: 'none', shortage: 'Need another Base pet.' }, 'ember-frost': { distribution: [{ morph: 'toxic', weight: 10 }, { morph: 'rose', weight: 10 }], protection: 'none' } } } } });
   const html = ui.labRecipesHtml(snapshot, 'C1');
   const grade = h => {
     assert.ok(h.indexOf('data-recipe="base-base"') < h.indexOf('data-recipe="ember-frost"'));
     assert.ok(h.indexOf('data-recipe="ember-frost"') < h.indexOf('data-recipe="toxic-rose"'));
     for (const text of ['Make Frost. Guaranteed.', '100% Frost', 'Missing colours come first.', '75% Toxic', '25% Rose', 'Make Midnight. Guaranteed.', '100% Midnight']) assert.ok(h.includes(text), text);
     assert.doesNotMatch(h, /50%|roulette/);
+    for (const text of ['Make Ember or Frost', '50% Ember', '50% Frost', 'Always 50/50. Each coin flip can repeat a colour you already have.', 'Need another Base pet.', '50% Toxic', '50% Rose', 'Make Midnight. Guaranteed.', '100% Midnight']) assert.ok(h.includes(text), text);
+    assert.doesNotMatch(h, /Missing colours come first|Needed ingredients come first|100% Frost|roulette/);
   };
   rejectsMutation(html, html.replace('100% Midnight', '50% Midnight'), grade);
   assert.match(ui.labRecipesHtml(state(), ''), /Example odds. Choose a species to see your chances./);
@@ -260,6 +262,14 @@ await check('compact supporting disclosures preserve help, recovery and the full
   const picker = source.slice(source.indexOf('  function picker(slot)'), source.indexOf('  async function updatePreview()'));
   rejectsMutation(picker, picker.replace('<div id="labPickRows"></div>', ''), h => { assert.ok(h.indexOf('Both inputs will be destroyed.') < h.indexOf('id="labPickRows"')); assert.ok(h.indexOf('id="labPickRows"') < h.indexOf('${labSinksHtml()}')); });
 });
+await check('bench help discloses repeated coin flips without collection or stock promises', () => {
+  const html = ui.labBenchHtml(state(), [null,null], '');
+  const grade = h => {
+    for (const text of ['Base + Base always gives Ember 50% or Frost 50%', 'Ember + Frost always gives Toxic 50% or Rose 50%', 'can repeat a colour you already have', 'Three Frost before your first Ember is possible', 'Your collection, ingredient stock and previous results never change the odds']) assert.ok(h.includes(text), text);
+    assert.doesNotMatch(h, /missing colours come first|needed ingredients come first|One missing means 100%|only one below two means 100%/i);
+  };
+  rejectsMutation(html, html.replace('Three Frost before your first Ember is possible', 'Missing colours come first'), grade);
+});
 await check('all 36 preview files use the shipped morph resolver and suppress shiny and wear', () => {
   const helper = source.slice(source.indexOf('function petPortraitHtml('), source.indexOf('async function refreshShinyPets'));
   const portrait = Function('morphAsset', 'BH_BY_ID', 'bhAsset', 'croppedPetImg', `${helper}; return petPortraitHtml;`)(morphAsset, BH_BY_ID, p => `assets/bh/C/${p.id}.png`, (sp, px, ground, src, wear, thumb) => ({ sp, px, ground, src, wear, thumb }));
@@ -312,7 +322,7 @@ await check('every certain reveal is direct and only two-way outcomes get surpri
   const final = ui.labRevealHtml(quote());
   rejectsMutation(final,final.replace('lab-direct','lab-surprise'),h => { assert.match(h,/lab-direct/); assert.match(h,/Midnight was guaranteed by this recipe/); assert.match(h,/C1-midnight.png/); assert.doesNotMatch(h,/lab-surprise|roulette|gamble|50%/); });
   const singleton = ui.labRevealHtml(quote({ recipe: 'base-base', protection: 'collection', distribution: [{ morph: 'ember', weight: 22 }], result: { iid: 'new', morph: 'ember' }, branches: [{ morph: 'ember', lost: [], gained: ['C1|ember'], afterCount: 2 }] }));
-  assert.match(singleton,/Ember was guaranteed by protection/); assert.match(singleton,/lab-direct/);
+  assert.match(singleton,/This saved experiment had a guaranteed result/); assert.match(singleton,/lab-direct/);
   for (const [recipe, morphs] of [['base-base',['ember','frost']], ['ember-frost',['toxic','rose']]]) {
     const html = ui.labRevealHtml(quote({ recipe, distribution: morphs.map(morph=>({morph,weight:1})), result: { iid:'new',morph:morphs[0] }, branches:morphs.map(morph=>({morph,lost:[],gained:[`C1|${morph}`],afterCount:2})) }));
     assert.match(html,/lab-surprise/); assert.doesNotMatch(html,/guaranteed/);

@@ -1931,7 +1931,7 @@ function labPresentation(s, rows, recoveredOpIds=[]) {
         hasSafePair=true;
         if(ownedCells.length<36 && preview.branches.some(b=>b.gained.length||labNeededFor(sp,b.morph,roster,s))) hasSafeUsefulPair=true;
       }
-      detail.recipes[recipe]={...odds,explanation:odds.protection==='collection' ? 'Missing collection colours are protected.' : odds.protection==='ingredient' ? 'Needed ingredient stock is protected.' : 'No protection filter is active.',
+      detail.recipes[recipe]={...odds,explanation:recipe==='toxic-rose' ? 'Midnight is guaranteed.' : 'Always 50/50. Each coin flip can repeat a colour you already have.',
         shortage:pair ? '' : 'Hatch eggs or build the matching ingredients to supply this pair.'};
     }
     species[sp]=detail;
