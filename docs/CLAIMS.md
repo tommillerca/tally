@@ -1,5 +1,17 @@
 # What each patch note claims, and what backs it
 
+## WAVE: submission intent and store audit (2026-09-07)
+
+1. PROOF: submission-build-audit.mjs | REACH: GATED until Tom builds and installs the candidate. The scripted build now requires explicit SUBMISSION=1 or SUBMISSION=0, resolves its own checkout, separates artifacts, and refuses mismatched copied or archived submission content before export. Node-only fixture execution proves the branch outcomes and config restoration; six throwaway reversions went red. No native build or upload was run.
+2. PROOF: submission-preflight-audit.mjs | REACH: Both submission preflight calls require a content-bound submission marker, STORE_BUILD=true, no server key and clean reachable store strings. Internal markers are refused even with a correct digest.
+3. PROOF: store-copy-lint.mjs | REACH: Source store-copy proof passes. This does not establish bundled WKWebView operation, storage migration, signing, live backend compatibility or App Review readiness.
+
+Advisory evidence, changed files, red/green output, exclusions and deviations:
+[WAVE-STORE-PROOF.md](WAVE-STORE-PROOF.md). The current owner/status/evidence
+checklist and Tom's ordered tasks are in
+[SUBMISSION-CHECKLIST.md](SUBMISSION-CHECKLIST.md). No version, commit, push,
+publication, Worker or App Store Connect action was performed.
+
 ## Lane H: Today reads and guard integrity (2026-09-07)
 
 Advisory report for independent provider review. The supplied frozen plan SHA256
