@@ -240,7 +240,6 @@ const SEAM_ONLY_KNOWN = [
      explaining what went wrong. */
   'pack-sink-audit.mjs',
   'render-sink-lint.mjs',
-  'race-audit.mjs',
   'race-you.mjs',
   'speech-audit.mjs',
   'spire-phase3-audit.mjs',

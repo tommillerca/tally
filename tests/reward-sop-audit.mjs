@@ -441,8 +441,8 @@ const ACTIONS = [
   { id: 'js/app.js:renderBoneyard', sites: 2, undriven: 'the map: the tribute button and the spawn button, both delegating to collectTribute and collectSpawn, which are driven above. Was 5 until 2026-08-18: a collect also paid a garden seed, and with the Bone Garden off the player\'s path a seed cannot be planted, so that grant came out. Was 4 until 2026-09-04 (QA round 28 Y5): the two remaining sites were the collect\'s OWN ingredient and feast bonus, paid here, two writes past the ledger claim that had already spent the spawn. They moved inside the claim\'s transaction in js/hunt.js and this function now only names what was delivered' },
   { id: 'js/app.js:openKitchen', sites: 2, undriven: 'awardCapped on a served dish (driven above), plus a coin-priced forage' },
 
-  { id: 'js/app.js:openHollow', sites: 1, undriven: 'awardCapped on a harvested bed; harvestPlot is the authority and is driven above' },
-  { id: 'js/app.js:openGardenSheet', sites: 1, undriven: 'DEAD CODE: openGardenSheet has no caller anywhere in js/ (the GROW door opens openHollow). Registered so that if it is ever wired back up, the count moves and somebody has to look at it' },
+  { id: 'js/app.js:openHollow', sites: 1, undriven: 'UNREACHABLE: the Hollow lost its player doors on 2026-08-18. awardCapped on a harvested bed; harvestPlot is driven above as a module probe, not a player path' },
+  { id: 'js/app.js:openGardenSheet', sites: 1, undriven: 'DEAD CODE: openGardenSheet has no caller anywhere in js/ (the GROW door was deleted on 2026-08-18; openHollow is also unreachable to players). Registered so that if it is ever wired back up, the count moves and somebody has to look at it' },
   /* THE RACK. A SPEND rather than a payout, and it is registered here because
      the grant on the other side of it is one: coins or dust go out and a
      cosmetic comes in, so a second call that pays again is the same bug in the

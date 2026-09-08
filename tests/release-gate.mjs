@@ -298,6 +298,7 @@ PURE.push('serve-tree-identity-audit.mjs'); // serveTree refuses a fixed port th
 PURE.push('pet-C-node-guard.mjs'); // Lane C: level thresholds/cap, production EQUIP cache, DPR replay/harness, known-species roster.
 PURE.push('r48-state-audit.mjs'); // R48-A: restored unknown artwork, real error-stream assertions and production fight-chip refresh; Node-only.
 PURE.push('r46-logging-audit.mjs'); // R46: history nutrition/search, accents/counts, midnight input and commit order, displayed budget, and bulk-close relog/history races; Node functions and DOM doubles.
+PURE.push('n3-deadpaths-audit.mjs'); // N3: real artifact path expressions stay outside this checkout; real News callback delivers the current outfit to the poster renderer. Node-only, no pixel claim.
 const BROWSER = [
   'pet-C-browser-audit.mjs', // Lane C: real EQUIP return paths and nine surfaces, 31 decoded Kennel images at DPR 2/3 on five phone sizes. Browser proof pending reviewer.
 
