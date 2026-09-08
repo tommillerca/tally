@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 515, date: '2026-09-08', title: 'A restore keeps what you earned', items: [
+    'Four ways a restore could quietly take something off you are closed. A second copy of a pet you had earned could vanish. Steps you had walked into a pet could be rolled back. A potion you had already drunk could come back as though you still had it. And opening an older copy of the app after an update could delete things the newer one had saved.',
+    'The Kennel now says what a colour is called and shows you the colours you have not won yet, so it is possible to learn there are five of each rather than guessing.',
+  ] },
   { n: 514, date: '2026-09-08', title: 'A few things the app was telling you wrong', items: [
     'Gwart now says, on your very first screen, that he is keeping an anonymous account for you: no email, no password, no sign-up. The app was always doing that and never mentioned it.',
     'Trends and your streak used to disagree about what counted as a logged day, so the same question got two answers depending on where you asked it.',

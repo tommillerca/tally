@@ -428,6 +428,13 @@ the upload path and its guards.
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
 
+## v515
+1. The restore path hardened ahead of round 50, plus round 48's remainder and the pet-screen accessibility work. Its dated sections are further down, folded here.
+
+2. PROOF: restore-debt-audit.mjs, restore-state-audit.mjs | REACH: restore a backup, or open an older build after updating. Four ways a restore lost something the player had earned, each proven red on the shipped tree and green on the fix, with the app files reverted to origin/main to prove it: a stale petInst merge lost an earned duplicate (copies 2 to 1); a stale per-instance level bank erased banked steps (1000 to 10); a stale potion balance refunded a potion already drunk (spent count 0 to 1, the same merge bug pointed the other way); and an older cooking reader DELETED a future build's earned buff on open (rows 1 to 0), which is a forward-compatibility hole that fires on ordinary update behaviour rather than anything exotic. All four break this project's house rule that nothing earned is ever lost. The fixes reuse the shapes already in this codebase rather than inventing new ones: revision ranking, union merges so a consumed thing cannot revive, and single-transaction take-and-pay. `docs/P3-KV-CENSUS.md` records all 165 keys a restore can write with a payload-wins verdict for each, which had never been enumerated.
+
+3. PROOF: pet-a11y-audit.mjs, pet-a11y-pixels-audit.mjs | REACH: the Kennel grid with an incomplete collection. Every colour was hidden from anyone who had not already won it: column headers carried no swatch, unowned cells were greyed to near-black, and an unowned roster dot measured 1.19:1 against its own row, which is invisible, so nobody ever learned there are five slots per species. Pressing an unowned cell also replaced the row label with "Not hatched yet." and every locked cell carried that identical aria-label, so a zero-pet grid was 30 indistinguishable cells to a screen reader.
+
 ## v514
 1. The round-46 diary remainder, the first-run disclosure that had been finished and unmerged, the store-build update copy, and the machine-character disclosure. Its dated sections are further down, folded here.
 
