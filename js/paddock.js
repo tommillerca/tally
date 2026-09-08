@@ -148,21 +148,10 @@ export async function paddockEggs() {
  * spot). Both playtesters reported it as a clump on the mid-left with the
  * right half left to the props.
  *
- * So the geometry is DATA and there is one allocator over it:
- *   - ROWS ARE 58px APART, which is more than the 76px sprite minus the 20px
- *     the paid-for layout rule tolerates, so two figures on different rows can
- *     never break the rule vertically whatever their x. That is what makes a
- *     row's occupants the only figures its x-space has to share.
- *   - WITHIN A ROW starts are spaced (width - OVERLAP) apart and the leftover
- *     span is handed out as wander room, so two figures on the same row can
- *     never share more than OVERLAP px of x, wander included.
- *   - EACH ROW CARRIES ITS OWN x BOUNDS, measured against the props its sprite
- *     BOX actually touches rather than against its foot line: the graveyard
- *     (tombstone x16-42 and cross x62-78, both based at y330), the hay bale
- *     (x306-358, y316-346), the nest (x296-389, y334-388) and the keeper, who
- *     is the player's own bonehead standing in the bottom-left (x10-182,
- *     y316-488). A row whose feet land BELOW a prop's base passes in FRONT of
- *     it, which is correct perspective and stays allowed.
+ * All motion stays inside allocated space. Ground rows reserve room for the
+ * flop and trot; hover drift uses only the row's slack. Four flyers share one
+ * crossing clock, spaced around its 610px cycle, so none can catch another.
+ * The sky stays above the cloud row even at the bottom of the wing bob.
  * A figure that fits nowhere is left UNPLACED rather than stacked on somebody,
  * and the collection panel says how many are resting (paddock-cards.js
  * panelHtml) instead of the field quietly lying about the roster.
@@ -176,21 +165,13 @@ const CLOUD = 96;               // hoverers
 
 export const PDK_SCENE = {
   W: 390, PANEL_Y: 498,                 // feet must stay above the panel edge
-  FLY_LANES: [{ y: 112, w: 122, dur: 15 }, { y: 152, w: 102, dur: 19, phase: -12 }],
-  /* ONE sky row rather than three hand-placed spots. y260 is the only band
-     that clears BOTH the low fly lane above it (its box ends at y183, so 19px)
-     and the top ground row below it (that box starts at y242, so 18px), and it
-     keeps the design's "drift LOW over the fence line" (rails at y262/286). */
+  FLY_LANES: [{ y: 112, w: 122, dur: 15 }, { y: 132, w: 102, dur: 15 }],
   HOVER_ROW: { y: 260, xmin: 8, xmax: 382 },
   GROUND_ROWS: [
-    /* box y242-318: 2px into the hay's top edge and clear of the nest, so it
-       runs the full width; feet ABOVE the graveyard base means behind it */
-    { y: 318, xmin: 86, xmax: 382 },
-    /* box y300-376: 30px into the hay and 42px into the nest, so it stops at
-       the nest's left edge; left half is behind the keeper */
-    { y: 376, xmin: 152, xmax: 296 },
-    /* feet below the nest's base (y388): passes in FRONT of it */
-    { y: 434, xmin: 152, xmax: 382 },
+    // The first row stops before the hay and nest. Lower rows pass in front.
+    // 77px pitch reserves the sprite plus its small flop/trot movement.
+    { y: 338, xmin: 86, xmax: 296 },
+    { y: 415, xmin: 152, xmax: 382 },
     { y: 492, xmin: 152, xmax: 382 },
   ],
   /* the keeper is the PLAYER's bonehead, standing low in the bottom-left grass
@@ -256,46 +237,36 @@ export function rotHash(s) {
   return (h ^ h >>> 16) >>> 0;
 }
 
-/* PURE: the whole scene cast from a roster. Flyers keep their crossing lanes
- * (they are the one cast that is MEANT to travel the whole width, at their own
- * depth); everything else goes through assignRows.
- * `day` only seeds the walk rotation; any stable per-day string works. */
+/* Every motion class rotates daily when it exceeds its available space.
+ * Chosen instances go first so an equipped or breeding-armed copy is visible.
+ * Four flyers fit around the existing 610px crossing, even at maximum width. */
+export const FLY_CAP = 4;
 export function placePaddock(roster, scene = PDK_SCENE, day = new Date().toISOString().slice(0, 10)) {
-  const by = m => roster.filter(r => r.motion === m);
+  const priority = r => r.equipped || r.breeding ? 1 : 0;
+  const rank = (a, b) => priority(b) - priority(a) || rotHash(day + ':' + a.iid) - rotHash(day + ':' + b.iid);
+  const by = m => roster.filter(r => r.motion === m).sort(rank);
   const out = {};
-  by('fly').forEach((r, i) => {
+  const flyers = by('fly').slice(0, FLY_CAP);
+  flyers.forEach((r, i) => {
     const lane = scene.FLY_LANES[i % scene.FLY_LANES.length];
-    /* Tom, 2026-08-11: "most of my ducks are flying in a clump they should
-       stagger more." They clumped by construction: every duck on a lane got
-       the lane's dur and phase VERBATIM, so they held the same x forever, a
-       vertical stack sliding across the sky. Each duck now gets its own
-       phase offset (spreads them along the crossing) and a small iid-seeded
-       speed variance (so they drift apart over time instead of holding a
-       fixed formation). Deterministic: same herd, same sky. */
-    const drift = rotHash('fly:' + r.iid);
-    out[r.iid] = {
-      kind: 'fly',
-      y: lane.y + Math.floor(i / scene.FLY_LANES.length) * 26,
-      w: lane.w,
-      dur: lane.dur + (drift % 5),                                   // 0-4s slower
-      phase: (lane.phase || 0) - i * 5.5 - (drift % 100) / 25,       // spread along the lane
-    };
+    const dur = scene.FLY_LANES[0].dur;
+    out[r.iid] = { kind: 'fly', y: lane.y, w: lane.w, dur, phase: -i * dur / flyers.length };
   });
   for (const h of assignRows(by('hover').map(r => ({ iid: r.iid, w: CLOUD })), [scene.HOVER_ROW])) {
-    out[h.iid] = { kind: 'hover', x: h.x0, y: h.y, w: h.w };
+    out[h.iid] = { kind: 'hover', x: h.x0, y: h.y, w: h.w, range: h.x1 - h.x0 - h.w };
   }
   let walkers = by('walk');
   if (walkers.length > WALK_CAP) {
     walkers = [...walkers]
-      .sort((a, b) => rotHash(day + ':' + a.iid) - rotHash(day + ':' + b.iid))
+      .sort(rank)
       .slice(0, WALK_CAP);
   }
   /* floppers are dealt FIRST so the catfish are spread across the rows rather
      than filling whatever the walkers left over on one row */
   const ground = assignRows([
-    ...by('flop').map(r => ({ iid: r.iid, w: SPRITE, kind: 'flop' })),
-    ...walkers.map(r => ({ iid: r.iid, w: SPRITE, kind: 'walk' })),
-  ], scene.GROUND_ROWS);
+    ...by('flop').map(r => ({ ...r, w: SPRITE, kind: 'flop' })),
+    ...walkers.map(r => ({ ...r, w: SPRITE, kind: 'walk' })),
+  ].sort((a, b) => priority(b) - priority(a)), scene.GROUND_ROWS);
   for (const g of ground) {
     out[g.iid] = g.kind === 'walk'
       ? { kind: 'walk', y: g.y, x0: g.x0, x1: g.x1, w: g.w }

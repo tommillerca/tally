@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* IS EVERY COMMITTED THUMBNAIL STILL THE ART CAM DREW? 2026-08-24.
  *
  * assets/bh/thumb/{192,384} is GENERATED from the masters in assets/bh/<slot>/
@@ -122,12 +123,12 @@ ok('PARITY the generator builds exactly the slots js/app.js serves a tier for',
 /* A tree with GS1's master, IL9's thumbnail filed under GS1's name at 192, and
    nothing at all at 384. Both defects are plain file copies, so this control
    needs no image library of its own and cannot itself be subtly wrong. */
-const tmp = mkdtempSync(join(tmpdir(), 'thumbfresh-'));
+const tmp = mkdtempSync(auditOutputPath(join(tmpdir(), 'thumbfresh-')));
 try {
-  mkdirSync(join(tmp, 'assets', 'bh', 'G'), { recursive: true });
-  mkdirSync(join(tmp, 'assets', 'bh', 'thumb', '192', 'G'), { recursive: true });
-  copyFileSync(join(repo, 'assets/bh/G/GS1.png'), join(tmp, 'assets/bh/G/GS1.png'));
-  copyFileSync(join(repo, 'assets/bh/thumb/192/IL/IL9.png'), join(tmp, 'assets/bh/thumb/192/G/GS1.png'));
+  mkdirSync(auditOutputPath(join(tmp, 'assets', 'bh', 'G')), { recursive: true });
+  mkdirSync(auditOutputPath(join(tmp, 'assets', 'bh', 'thumb', '192', 'G')), { recursive: true });
+  copyFileSync(join(repo, 'assets/bh/G/GS1.png'), auditOutputPath(join(tmp, 'assets/bh/G/GS1.png')));
+  copyFileSync(join(repo, 'assets/bh/thumb/192/IL/IL9.png'), auditOutputPath(join(tmp, 'assets/bh/thumb/192/G/GS1.png')));
   const ctl = check('--root', tmp);
   ok('CONTROL the checker sees a thumbnail whose pixels are not its master\'s',
     ctl.code === 1 && /^STALE\s+thumb\/192\/G\/GS1\.png/m.test(ctl.out),
@@ -136,7 +137,7 @@ try {
     ctl.code === 1 && /^MISSING\s+thumb\/384\/G\/GS1\.png/m.test(ctl.out),
     (ctl.out.match(/^MISSING.*/m) || ['no MISSING row: C6\'s bug could ship again unseen'])[0]);
 } finally {
-  rmSync(tmp, { recursive: true, force: true });
+  rmSync(auditOutputPath(tmp), { recursive: true, force: true });
 }
 
 console.log(fails.length ? `\nthumb freshness: ${fails.length} FAILED` : '\nthumb freshness: clean');

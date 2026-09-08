@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* WHICH SHELF LEADS THE SHOP AND WHICH ONE IS SECOND, MEASURED AS BOXES ON A
  * SCREEN.
  *
@@ -81,7 +82,7 @@ const setup = (label, pass, detail = '') => {
 };
 const shotsAt = process.argv.indexOf('--shots');
 const SHOTS = shotsAt > 0 ? process.argv[shotsAt + 1] : null;
-if (SHOTS) mkdirSync(SHOTS, { recursive: true });
+if (SHOTS) mkdirSync(auditOutputPath(SHOTS), { recursive: true });
 
 /* The OFF half's module, built from the file this audit is about to SERVE rather
    than from a copy pasted in here, so a rename of the flag is a hard error and
@@ -203,7 +204,7 @@ try {
   await overrideFlag(false);
   await goShop();
   const off = await read();
-  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'shop-flag-off.png') });
+  if (SHOTS) await page.screenshot({ path: auditOutputPath(path.join(SHOTS, 'shop-flag-off.png')) });
   const flagOffInPage = await page.evaluate(async () => (await import('/data/football-teams.js')).FOOTBALL_KIT_LIVE);
   setup('SAMPLE the OFF half really is the OFF half: the override was served, the page reports the flag false, and the Shop has real content in it',
     hits > 0 && flagOffInPage === false && off.found && off.len > 5000 && off.kids.length > 4 && live(off.hero),
@@ -238,7 +239,7 @@ try {
   await sleep(500);
   await settle(page);
   const onPet = await read();
-  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'shop-flag-on.png') });
+  if (SHOTS) await page.screenshot({ path: auditOutputPath(path.join(SHOTS, 'shop-flag-on.png')) });
   /* THE SAMPLE ROW ASSERTS THE RUN HAPPENED, NEVER THE VERDICT. Its first draft
      required her hero to be live and in view, so the rejected first pass (her
      inside the collapsed supplies panel, hero 0x0) aborted the audit at SETUP

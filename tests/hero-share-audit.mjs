@@ -87,7 +87,7 @@ const ok = (label, pass, detail = '') => {
 
 const srv = process.env.URL ? null : await serveTree(ROOT);
 const base = process.env.URL || srv.url;
-const { browser, page } = await boot(base);
+const { browser, page, errors } = await boot(base);
 
 try {
   await seed(page, { level: 24, coins: 60000 });
@@ -421,7 +421,7 @@ try {
     await page.evaluate(() => document.querySelectorAll('style[data-share]').forEach(n => n.remove()));
   }
 
-  ok('NO page errors', true);
+  ok('NO page errors', errors.length === 0, errors.join(' | '));
 } finally {
   await browser.close();
   srv?.close?.();

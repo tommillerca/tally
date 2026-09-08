@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* The three small fixes, operated rather than eyeballed. */
 import { boot, sleep, shotDir } from './godmode.js';
 const DIR = shotDir('tally-shots');  // machine-local, see godmode shotDir
@@ -42,7 +43,7 @@ const fonts = await page.evaluate(() => {
 console.log('fonts:', JSON.stringify(fonts));
 check('the quests header matches the feature dropdowns', !!fonts.quests && !!fonts.display && fonts.quests === fonts.display, JSON.stringify(fonts));
 const el0 = await page.$('.q-collapse');
-if (el0) { await el0.screenshot({ path: `${DIR}/quests-font.png` }); console.log('shot quests-font'); }
+if (el0) { await el0.screenshot({ path: auditOutputPath(`${DIR}/quests-font.png`) }); console.log('shot quests-font'); }
 
 // 2 + 3. the melt list: stat lines, the junk sweep, and the richer dust values
 await page.evaluate(async () => {
@@ -106,7 +107,7 @@ console.log('dust on the rows:', JSON.stringify(dust));
 check('the good tiers melt for more than the junk', dust.good.length && dust.junk.length && Math.min(...dust.good) > Math.max(...dust.junk), JSON.stringify(dust));
 check('dust varies within a tier, so stat points matter', new Set(dust.good).size > 1 || new Set(dust.junk).size > 1, JSON.stringify(dust));
 const el = await page.$('.melt-fold');
-if (el) { await el.screenshot({ path: `${DIR}/melt-stats.png` }); console.log('shot melt-stats'); }
+if (el) { await el.screenshot({ path: auditOutputPath(`${DIR}/melt-stats.png`) }); console.log('shot melt-stats'); }
 await browser.close();
 console.log(bad ? `\n${bad} FAILED` : '\nSMALL FIXES VERIFIED');
 process.exit(bad ? 1 : 0);

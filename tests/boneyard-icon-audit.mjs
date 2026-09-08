@@ -113,7 +113,7 @@
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { boot, seed, sleep, serveTree, unproven, unprovenReport, exitFor } from './godmode.js';
+import { boot, seed, sleep, serveTree, boneyardCapability, unproven, unprovenReport, exitFor } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const STEPS = [16, 24, 48];
@@ -148,11 +148,11 @@ const VECTOR_OK = [];
 /* Cam's drawn art. Never pixel art, never counted as a pixel icon here. */
 const CAM = /assets\/(brand|bh)\//;
 
-const out = [];
 let fails = 0;
 const ok = (m, cond, detail = '') => {
-  if (cond) out.push(`ok   ${m}${detail ? '  ' + detail : ''}`);
-  else { fails++; out.push(`FAIL ${m}${detail ? '  ' + detail : ''}`); }
+  const row = `${cond ? 'ok  ' : 'FAIL'} ${m}${detail ? '  ' + detail : ''}`;
+  console.log(row); // Persist the row before later DOM reads can throw.
+  if (!cond) fails++;
 };
 
 const srv = process.argv[2] ? null : await serveTree(ROOT);
@@ -164,6 +164,14 @@ const { browser, page } = await boot(base, {
 });
 let s;
 try {
+  const cap = await boneyardCapability(page);
+  if (!cap.ok) {
+    unproven('Boneyard icon rows', 'required map capability unavailable; no icon comparisons were graded');
+    unprovenReport('boneyard-icon-audit.mjs', cap);
+    await browser.close();
+    srv?.close();
+    process.exit(exitFor(fails));
+  }
   await browser.defaultBrowserContext().overridePermissions(new URL(base).origin, ['geolocation']);
   await page.setViewport({ width: 440, height: 956, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await seed(page, {});
@@ -338,7 +346,7 @@ try {
       true, `stood on ${eggUsed.id} (${Math.round(eggUsed.was)}m from the fixed pin), `
         + `candidate ${eggTried} of ${eggSpots.length}`);
   } else {
-    out.push(`UNPRV CONTROL  no egg is drawn on the map: ${eggSpots.length} rare spawn(s) generated, `
+    console.log(`UNPRV CONTROL  no egg is drawn on the map: ${eggSpots.length} rare spawn(s) generated, `
       + 'all vetoed by placeWalkable. The Mystery Egg row is UNGRADED this run, not passed.');
   }
 
@@ -346,7 +354,7 @@ try {
   if (drawn.mini) {
     ok('CONTROL  the map drew mini-boss markers', s.minis.length > 0, `${s.minis.length} mini discs`);
   } else {
-    out.push('UNPRV CONTROL  the map drew no mini-boss marker anywhere the walk stood, so the three '
+    console.log('UNPRV CONTROL  the map drew no mini-boss marker anywhere the walk stood, so the three '
       + 'mini rows are UNGRADED this run, not passed.');
   }
   /* NINE -> ELEVEN, 2026-09-03. The key gained a Wanderer row and a Dark Spire
@@ -458,14 +466,8 @@ try {
 } finally {
   await browser.close().catch(() => {});
   if (srv) srv.close();
-  /* PRINT THE EVIDENCE EVEN WHEN THE RUN DIES. Every row is buffered into `out`
-     and printed at the end, and the CONTROL block throws BEFORE that print, so
-     the one failure mode that stops the suite was also the one that showed
-     nobody which row failed: triaging the 2026-09-01 red meant patching a copy
-     of this file just to see the line it had already written. Printing here
-     covers any throw, not only that one. */
-  console.log(out.join('\n'));
+
 }
 unprovenReport('boneyard-icon-audit.mjs', null);
-console.log(fails ? `\n${fails} FAILED` : '\nall good');
+console.log(fails ? `\n${fails} FAILED` : exitFor(fails) ? '\nUNPROVEN' : '\nall good');
 process.exit(exitFor(fails));

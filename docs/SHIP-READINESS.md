@@ -1,5 +1,9 @@
 # Ship Readiness: Boneheadz Gym Launch (2026-08-31 Afternoon Update)
 
+Current gate measurements and limits: [Release gate status, R3 (2026-09-07)](RELEASE-GATE-STATUS.md).
+Current TestFlight verification limits: [TestFlight state](TESTFLIGHT-STATE.md).
+The older readiness claims below are historical, not the current release verdict.
+
 **Executive Summary**
 
 Every engineering item on the critical path is done. What remains before a store

@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* Onboarding audit: the launch funnel, driven for real on a FRESH profile.
  *
  * WHY. Onboarding is the highest-leverage screen for going public (Tom's stated
@@ -66,7 +67,7 @@ async function freshPage() {
   await sleep(2400);
   return p;
 }
-const shot = async (p, n) => { if (sh) await p.screenshot({ path: path.join(sh, `onb-${n}.png`) }); };
+const shot = async (p, n) => { if (sh) await p.screenshot({ path: auditOutputPath(path.join(sh, `onb-${n}.png`)) }); };
 
 /* ---------- run 1: the full happy path ---------- */
 let p = await freshPage();
@@ -188,33 +189,26 @@ ok('HONEST-SKIP saved profile IS the stated body', skipped.saved && skipped.h ==
 ok('HONEST-SKIP the welcome kit still greets the skipper', /welcome kit/i.test(skipped.toast), skipped.toast.slice(0, 60));
 await p.browserContext().close();
 
-/* ---------- run 3: the first CTA takes the first tap (QA round 27 R14(a)) ----------
-   The #splash montage covered the onboarding for ~2.7s and a tap on it only
-   dismissed the splash, so a fresh install's first tap did nothing. ?splash=1
-   forces the montage past the webdriver skip, so this row exercises the real
-   gate (showSplash returns first when there is no profile). A REAL tap at the
-   CTA's coordinates, not element.click(): the bug was a layer eating the hit.
-   PROVE-RED: written 2026-09-04 in a lane that could not run a browser (static
-   only). Expected on origin/main v472: the tap lands on #splash, finish() runs,
-   #onbName never appears, this row FAILS. Expected on the fix: no splash is
-   built, the tap reaches #onbGo, step 2 renders. First run must confirm both. */
+/* M5 frozen order, 2026-09-07: the first run keeps its splash. The player
+   dismisses that intro, then the first onboarding CTA must receive the tap.
+   first-run-honesty-audit also watches a boot without the forced preview. */
 {
   const ctx = await browser.createBrowserContext();
   const p3 = await ctx.newPage();
   p3.on('pageerror', e => errors.push(e.message));
   await p3.goto(base + '?splash=1', { waitUntil: 'domcontentloaded' });
+  await p3.waitForSelector('#splash', { timeout: 15000 });
+  await p3.click('#splash');
+  await p3.waitForSelector('#splash', { hidden: true });
   await p3.waitForSelector('#onbGo', { timeout: 15000 });
-  await sleep(300);                                   // +300 ms after the CTA exists
   const covered = await p3.evaluate(() => {
-    const b = document.getElementById('onbGo').getBoundingClientRect();
-    const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
-    return { x: b.left + b.width / 2, y: b.top + b.height / 2, top: top ? `${top.tagName.toLowerCase()}#${top.id}` : 'none', splash: !!document.getElementById('splash') };
+    const el = document.getElementById('onbGo'), b = el.getBoundingClientRect();
+    return { x: b.left + b.width / 2, y: b.top + b.height / 2,
+      hit: el.contains(document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)) };
   });
   await p3.touchscreen.tap(covered.x, covered.y);
-  await sleep(600);
-  const advanced = await p3.evaluate(() => !!document.getElementById('onbName'));
-  ok('R14(a) the first CTA receives a tap at +300 ms on a fresh install',
-    advanced && !covered.splash, `hit=${covered.top} splash=${covered.splash} advanced=${advanced}`);
+  await p3.waitForSelector('#onbName', { timeout: 3000 });
+  ok('M5 first onboarding CTA receives the tap after the intro', covered.hit, `hit=${covered.hit}`);
   await ctx.close();
 }
 
@@ -371,7 +365,7 @@ for (const vp of [{ w: 375, h: 667 }, { w: 320, h: 568 }, { w: 393, h: 852 }]) {
     reached.length >= 3 && reached.every(r => r.self),
     reached.filter(r => !r.self).map(r => `${r.t} hits ${r.tag}`).join(', ') || `${reached.length}/${reached.length}`);
 
-  if (sh) await pv.screenshot({ path: path.join(sh, `onb-plan-${vp.w}x${vp.h}.png`) });
+  if (sh) await pv.screenshot({ path: auditOutputPath(path.join(sh, `onb-plan-${vp.w}x${vp.h}.png`)) });
   await ctx.close();
 }
 

@@ -1,3 +1,4 @@
+import { writeSinks } from './lib/audit-write-scan.mjs';
 /* GUARDS THAT PASS WHILE BLIND. 2026-08-19.
  *
  * In one day, FOUR separate guards in this repo reported green while unable to
@@ -80,6 +81,43 @@ ok(`CONTROL the number of audits with NO positive control does not rise above ${
     ? `NEW audits must carry a row that fails if the check is looking in the wrong place. Newest offenders: ${blind.slice(-3).join(', ')}`
     : 'ratchet holding'));
 
+/* LITERAL-TRUE, 2026-09-07: a success row with a constant verdict observes
+   nothing. Both ok and check are used by audits. These ten exact legacy rows
+   are reports reached only after a measured branch or a throwing prerequisite.
+   Excuse the row, never the file or a word like SETUP. A new row in an excused
+   file must still fail. This is a lexical shape check, not a control-flow proof. */
+const literalTrueExcuses = [
+  ['figure-audit.mjs', 'SETUP ink measurement works on this machine', 'decoder mismatch and empty real ink throw before this row'],
+  ['selector-audit.mjs', 'SETUP the sweep proves itself on known verdicts', 'failed fixtures exit 2 before this row'],
+  ['suite-rot-audit.mjs', 'SETUP audit-rot proves itself on known verdicts', 'failed fixtures call die before this row'],
+  ['xp-key-provenance-lint.mjs', 'PROVENANCE no award key resolves to a clock or a random source', 'if no unallowed tainted chain exists'],
+  ['xp-key-provenance-lint.mjs', 'ALLOWED ${r.file}:${r.line} ${r.key} reaches a clock through a persisted entity id', 'inside the resolved allowance branch'],
+  ['boneyard-icon-audit.mjs', 'CONTROL  an egg is DRAWN on the map to compare, so the MATCH row has a sample', 'inside if eggDrawn; else explicitly ungraded'],
+  ['boneyard-audit.mjs', 'BEATS the map drew a sample that could fail the grouping row (PREMISE)', 'else of seen below BEAT_MIN_SAMPLE'],
+  ['boneyard-audit.mjs', 'BEATS-SLOW the map drew a sample that could fail the grouping row (PREMISE)', 'else of slowed sample below BEAT_MIN_SAMPLE'],
+  ['wardrobe-family-grid-audit.mjs', 'SEED all ${seeded.want} ${SLOT}-slot pieces are granted and owned', 'empty or missing owned items call die first'],
+  ['dressing-room-audit.mjs', 'SEED the ${KIT_SLOT} kit is owned (${seeded.kitOwned}/${seeded.kit}) and ${GEAR_SLOTS.length} slots hold wearable gear at level ${seeded.lvl}', 'seed error, empty kit or missing ownership call die first'],
+];
+function literalTrueRows(text) {
+  return [...text.matchAll(/\b(?:ok|check)\(\s*(['"`])((?:\\.|(?!\1)[\s\S])*?)\1\s*,\s*true\s*[,)]/g)]
+    .map(m => ({ label: m[2], line: text.slice(0, m.index).split('\n').length }));
+}
+const constantRows = [...src].flatMap(([file, text]) => literalTrueRows(text).map(r => ({ file, ...r })));
+const isExcused = r => literalTrueExcuses.some(([file, label]) => file === r.file && label === r.label);
+const constants = constantRows.filter(r => !isExcused(r));
+ok('LITERAL-TRUE no audit asserts a constant success (including NO page errors)', !constants.length,
+  constants.length ? constants.map(r => `${r.file}:${r.line} ${r.label}`).join(' | ') : '0 offenders');
+const staleExcuses = literalTrueExcuses.filter(([file, label]) =>
+  constantRows.filter(r => r.file === file && r.label === label).length !== 1);
+ok('LITERAL-TRUE the ten justified reports are excused exactly once', !staleExcuses.length,
+  `${constantRows.filter(isExcused).length} excused; ${staleExcuses.length} stale or duplicated`);
+// CONTROL: compose source text so this fixture is not itself an assertion row.
+const constantFixture = (name, label) => name + '(' + JSON.stringify(label) + ', ' + 'true);';
+ok('CONTROL literal-true catches a new offender even inside an excused file',
+  literalTrueRows(constantFixture('ok', 'NEW page errors')).some(r => !isExcused({ file: 'figure-audit.mjs', ...r }))
+  && literalTrueRows(constantFixture('check', 'NEW multiline').replace(', ', ',\n')).length === 1
+  && literalTrueRows('ok("measured", errors.length === 0);').length === 0);
+
 /* ---- 3. NOT LINTED, AND HERE IS WHY --------------------------------------
    Failure 3 was a prove-red that edited a file without checking the edit landed,
    so "still green" was indistinguishable from "the replace matched nothing".
@@ -144,6 +182,11 @@ ok('PARSES every audit is something Node will actually execute',
    FIXED ONE? Delete its line. The row fails on a stale entry too, so the
    inventory cannot quietly rot into a list nobody maintains. */
 const SEAM_ONLY_KNOWN = [
+  /* R48-A, 2026-09-07: executes the production settlement body with webdriver
+     false and checks that the window alias is absent. It never calls the alias.
+     The lexical seam scan sees the absence check; browser arrival is separately
+     driven by dressing-room-audit. Node DOM adapters cannot prove browser taps. */
+  'r48-state-audit.mjs',
   /* dead-shell-audit's exposeFunction binding is an INSTRUMENT, not a stand-in
      for the feature. It kills a real shell and drives a real reload; the binding
      only COUNTS document loads from outside the page, which is the whole point
@@ -198,7 +241,6 @@ const SEAM_ONLY_KNOWN = [
      explaining what went wrong. */
   'pack-sink-audit.mjs',
   'render-sink-lint.mjs',
-  'race-audit.mjs',
   'race-you.mjs',
   'speech-audit.mjs',
   'spire-phase3-audit.mjs',
@@ -220,6 +262,35 @@ ok('SEAM no NEW audit proves a feature only through a test hook',
 ok('SEAM the seam-only inventory has no stale entries (fixed one? delete its line)',
   seamGone.length === 0,
   seamGone.length ? `${seamGone.length} no longer seam-only: ${seamGone.join(', ')}` : 'inventory matches');
+
+/* R3: every recognized filesystem destination and screenshot/trace path
+   is checked at the sink. Recurse into helpers and retired audits too.
+   Bounded lexical coverage, not an OS sandbox. See docs/RELEASE-GATE-STATUS.md. */
+const outputFiles = [];
+function scanOutput(dir) {
+  for (const ent of readdirSync(dir, { withFileTypes: true })) {
+    const file = join(dir, ent.name);
+    if (ent.isDirectory()) scanOutput(file);
+    else if (/\.(mjs|js)$/.test(ent.name)) outputFiles.push(file);
+  }
+}
+scanOutput(here);
+const outputViolations = [];
+let outputSinks = 0;
+for (const file of outputFiles) {
+  const text = readFileSync(file, 'utf8');
+  const sinks = writeSinks(text);
+  outputSinks += sinks.length;
+  const bound = /import\s*\{[^}]*\bauditOutputPath\b[^}]*\}\s*from\s*['"][^'"]*\/audit-output\.mjs['"]/.test(text);
+  for (const sink of sinks) if (!sink.guarded || !bound) {
+    outputViolations.push(`${file.slice(here.length + 1)}:${sink.line} ${sink.api}`);
+  }
+}
+ok('OUTPUT all recognized audit writes validate destinations outside the graded checkout',
+  outputViolations.length === 0, outputViolations.length ? outputViolations.join(' | ') : `${outputSinks} guarded sinks`);
+ok('CONTROL the output sweep is nonempty and rejects an unguarded checkout screenshot',
+  outputSinks > 100 && writeSinks('page.' + 'screenshot({path: join(repo, "probe.png")});').some(r => !r.guarded),
+  `${outputFiles.length} files scanned recursively`);
 
 console.log(`\nguard-hygiene: ${fails.length ? fails.length + ' FAILED' : 'clean'}`);
 process.exit(fails.length ? 1 : 0);

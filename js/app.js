@@ -59,13 +59,13 @@ import { talkBoxHtml, runTalkBox } from './talkbox.js';
 import { BED_BOX, hlwBedArt, hlwChipHtml, hlwPriceSignHtml, hlwGhostBedHtml } from './hollow-beds.js';
 import { hollowBackdropHtml } from './hollow-scene.js';
 import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor,
-  setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
+  setSpireLevel, boonBonusFor, spireNow, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
   SPIRE_RADIUS_M, SPIRE_CAP, SPIRE_SHIELD_MS, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
   BOON_PER_SPIRE, BOON_SPIRE_CAP, TRIBUTE_PER_DAY, TRIBUTE_DUST_PER_DAY } from './spires.js';
 import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
-import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear, bestInstance } from './loot.js';
+import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, petColourName, petInstanceName, salvageInstance, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear, bestInstance } from './loot.js';
 import { buildBattlePet, legalPicks, isKnownPet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs, ownedCellCount } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
@@ -106,8 +106,8 @@ import {
   lbToKg, kgToLb, ftInToCm, cmToFtIn, ACTIVITY_LEVELS, GOALS, kcalConsistent,
   activeCalorieBonus, assumedActiveBurn, manualTargets, gramsChipDefault,
 } from './nutrition.js';
-import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
-import { lookupBarcode, searchOnline } from './sources.js';
+import { GENERIC_FOODS } from '../data/generic-foods.js';
+import { lookupBarcode, searchOnline, searchLocalFoods, foodFromLog } from './sources.js';
 import { parseNutritionText } from './labelparse.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -1258,15 +1258,11 @@ function randomOutfit() {
 }
 
 async function showSplash(userEq) {
-  /* QA round 27 R14(a). On a fresh install this full-screen montage sat over
-     the onboarding for ~2.7s (measured: the first CTA refused taps for
-     2,676 ms) and a tap on it only dismissed the splash, so the player's first
-     tap did nothing visible. The onboarding IS the intro on a first run (FEED
-     THE BONES + poster + Gwart), so the montage adds nothing there and costs
-     the first tap. Returning players keep it. Checked before `forced` so the
-     onb-audit tap row can prove itself on the real gate. */
-  if (!S.settings) return;
+  // M5, 2026-09-07: first run keeps the intro; returning players go straight
+  // to their daily reward. The explicit preview remains available to both.
+  const returning = !!S.settings;
   const forced = location.search.includes('splash=1');
+  if (returning && !forced) return;
   if (navigator.webdriver && !forced) return;
   if (reducedMotion && !forced) return;
   if (sessionStorage.getItem('bhg-splash') && !forced) return;
@@ -1327,6 +1323,7 @@ function bindAppLifecycle() {
   setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
   // social: push the game snapshot + encrypted backup, pull server grants
   // (throttled, silent). initFromQuery + bootSync already ran above.
+  if (!NOSOCIAL) checkSieges();
   if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(cloudTroubleNotice).then(() => checkFriendRequests()).then(checkSieges);
   /* touchServerDay BEFORE rollDayIfNeeded: coming back to the app is exactly
      when a new day gets opened, and the day guard's ceiling (js/db.js rule 3)
@@ -1834,7 +1831,9 @@ async function rollDayIfNeeded() {
       await kvSet('lastOpenDay', today);
     }
     const closed = await awardDayCloseIfDue(S.settings.targets);
-    if (wasOnToday) route(); // a new day starts at the top, like a fresh open
+    // The router defers its repaint while inputs are open; the day and its
+    // close-out still roll before commitLogEntry writes a fresh row.
+    if (wasOnToday) route({ dayRoll: true });
     if (closed?.closed) setTimeout(() => toast(closed.gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned', 3400), 1400);
     else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts.' : "You logged yesterday. That counts.", 3600), 1400);
     else if (closed?.dayGuard) setTimeout(() => dayGuardToast(closed.dayGuard), 1400);   // QA round 26 O14
@@ -3445,7 +3444,25 @@ function routeFromHash() {
   route();
 }
 
+let _dayRefreshPending = false;
 function route({ keepScroll = false } = {}) {
+  const { dayRoll = false } = arguments[0] || {};
+  // Midnight changes the diary date immediately, but must not destroy input.
+  // The last sheet's close drains this repaint; an explicit navigation wins.
+  if (dayRoll && sheetStack.length) {
+    if (!_dayRefreshPending) {
+      const bottom = sheetStack[0], onClose = bottom.onClose;
+      bottom.onClose = () => {
+        try { onClose?.(); } finally {
+          setTimeout(() => { if (_dayRefreshPending && !sheetStack.length) route(); }, 0);
+        }
+      };
+    }
+    _dayRefreshPending = true;
+    toast('A new day started. New entries will be logged to today.', 3600);
+    return Promise.resolve();
+  }
+  _dayRefreshPending = false;
   // refresh() passes keepScroll: an in-place re-render, not a navigation
   const isNav = !keepScroll;
   /* AN UNCOMMITTED PREVIEW MUST NOT FOLLOW THE PLAYER OUT AND BACK IN (QA round
@@ -3692,7 +3709,7 @@ function fireDailyWheel() {
    OWN body (not just what runs synchronously in its render tick), so a
    closure defined in there reading xp counts as a second scan and that guard
    goes red (A1). Living out here, it is invisible to that walk. */
-window.__refreshLevelChip = async () => {
+async function refreshLevelChip() {
   const chip = $('#lvlChip'); if (!chip || !chip.isConnected) return;
   const lvl = levelFor(await totalXp());
   const row = $('.hero-lvrow', chip);
@@ -3700,7 +3717,8 @@ window.__refreshLevelChip = async () => {
   const xprow = $('.hero-xprow', chip);
   if (xprow) xprow.innerHTML = `<span class="hero-xpn">${lvl.into.toLocaleString()}/${lvl.need.toLocaleString()}</span>`
     + Array.from({ length: XP_PIPS }, (_, i) => `<i${i < Math.ceil(lvl.pct / (100 / XP_PIPS)) ? ' class="on"' : ''}></i>`).join('');
-};
+}
+if (navigator.webdriver) window.__refreshLevelChip = refreshLevelChip;
 /* set when a new service worker took over while a sheet was open, so the
    reload the toast promised happens the moment the last sheet closes */
 let updatePending = false;
@@ -4037,7 +4055,7 @@ async function dayBudget() {
   const bonus = activeCalorieBonus(S.settings.profile, hk?.activeKcal);
   const targets = S.settings.targets || {};
   const target = (targets.kcal || 0) + (bonus > 0 ? bonus : 0);
-  const tot = dayTotals(entries);
+  const tot = shownTotals(entries);
   return {
     target, used: tot.kcal, left: target - tot.kcal,
     p: tot.p, pTarget: targets.p || 0,
@@ -4097,10 +4115,21 @@ function dayGuardToast(reason) {
 /* Set the first time Today renders Gwart; see the note at its read site below. */
 let gwEntranceSeen = false;
 
+// Imported diary rows can predate account creation. Keep those reachable;
+// legacy saves without a creation date stop at their first row (or today).
+function firstDiaryDate(createdAt, log) {
+  const created = new Date(createdAt);
+  let first = createdAt != null && Number.isFinite(created.getTime()) ? dateKey(created) : dateKey();
+  for (const e of log) if (Number.isFinite(dayOrdinal(e.date)) && e.date < first) first = e.date;
+  return first > dateKey() ? dateKey() : first;
+}
+
 async function renderToday(el) {
   const entries = await entriesFor(S.date);
-  const yEntries = await entriesFor(addDays(S.date, -1));
+  const copySourceDate = addDays(S.date, -1);
+  const yEntries = await entriesFor(copySourceDate);
   const allLog = await db.all('log');
+  const firstDate = firstDiaryDate(S.settings.createdAt, allLog);
   const streak = streakFrom([...new Set(allLog.map(e => e.date))], dateKey());
   /* ONE READ PER STORE PER DRAW (QA round 28 G3). M13 stopped renderToday's own
      body re-reading log/xp/health, and tests/today-reads-lint.mjs graded that
@@ -4732,7 +4761,7 @@ async function renderToday(el) {
     <div class="day-title">
       <h1>${title}</h1><div class="sub">${sub}</div>
     </div>
-    <button class="icon-btn" id="prevDay" aria-label="Previous day"><svg viewBox="0 0 24 24"><path d="M14.5 5l-7 7 7 7"/></svg></button>
+    <button class="icon-btn" id="prevDay" aria-label="Previous day" ${S.date <= firstDate ? 'disabled' : ''}><svg viewBox="0 0 24 24"><path d="M14.5 5l-7 7 7 7"/></svg></button>
     <button class="icon-btn" id="nextDay" aria-label="Next day"><svg viewBox="0 0 24 24"><path d="M9.5 5l7 7-7 7"/></svg></button>
     <button class="icon-btn" id="todaySettings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke-width="2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2z" fill="none" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
   </div>
@@ -4780,7 +4809,7 @@ async function renderToday(el) {
   ${tsec('Activity', healthCardHtml(hk, isToday))}
 
   <section class="tsec tsec-meals"><div class="tsec-h">Meals</div>
-  ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i), Math.round(t.kcal * MEAL_SPLIT[i]))).join('')}
+  ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i), Math.round(t.kcal * MEAL_SPLIT[i]), isToday ? null : copySourceDate)).join('')}
   </section>
 
 
@@ -4851,7 +4880,7 @@ async function renderToday(el) {
   S.ui = { ringPct: pct, eatenShown: tot.kcal, macroPcts };
 
   $('#todaySettings', el)?.addEventListener('click', () => { location.hash = '#/settings'; });
-  $('#prevDay').addEventListener('click', () => { S.date = addDays(S.date, -1); refresh(); });
+  $('#prevDay').addEventListener('click', () => { if (S.date <= firstDate) return; S.date = addDays(S.date, -1); refresh(); });
   $('#nextDay').addEventListener('click', () => { S.date = addDays(S.date, 1); refresh(); });
   $('#lvlChip').addEventListener('click', () => { location.hash = '#/progress'; });
   $('#trendsBtn').addEventListener('click', () => { location.hash = '#/progress'; });
@@ -5222,7 +5251,7 @@ async function renderToday(el) {
     }
     confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 300, 14);
     popSound(S.sounds);
-    toast(`Copied ${src.length} item${src.length === 1 ? '' : 's'} from yesterday${gained ? ` · +${gained} XP` : ''}`);
+    toast(`Copied ${src.length} item${src.length === 1 ? '' : 's'} from ${copySourceDate === addDays(dateKey(), -1) ? 'yesterday' : copySourceDate}${gained ? ` · +${gained} XP` : ''}`);
     if (last) queueCelebration(last);
     refresh();
   }));
@@ -7037,11 +7066,12 @@ if (typeof window !== 'undefined' && navigator.webdriver) window.__openGlutton =
  * takeover and every repelled siege adds one.
  */
 async function openSpireInfoSheet(info, onAct = null) {
+  let stopClock = () => {};
   const { s, view, held, rival, dormant, besieged, siegeUntil, siegeName, lvl, heldSince } = info;
   /* THE KEEPER, LOUD AND PROUD. Tom, 2026-08-08: "when i click it i want it to
      show loud and proud the bonehead of whoever is keeping it."
-     A rival's tower already ships their full profile snapshot as `defender` (it
-     is what you fight), so their real fit is right there; your own towers null
+     A rival's tower ships combat and appearance fields as `defender`, so
+     their real fit is right there; your own towers null
      that field server-side, so for those it is your own equipped look. Only a
      tower nobody holds falls back to the tombstone. */
   const keeperFit = held ? await equipped() : (rival && rival.defender && rival.defender.outfit) || null;
@@ -7050,11 +7080,11 @@ async function openSpireInfoSheet(info, onAct = null) {
   const keeperPet = held
     ? petFrom(null, keeperFit && keeperFit.C)                       // yours: S.shinyPets knows
     : petFrom(rival && rival.defender && rival.defender.pet);       // theirs: the snapshot knows
-  const days = heldSince ? Math.floor((Date.now() - heldSince) / 86400000) : 0;
+  const days = heldSince ? Math.floor((spireNow() - heldSince) / 86400000) : 0;
   const wt = wardenTier(days);
   // The plate is a NAMEPLATE, so a tower you hold flies YOUR name, not "You hold it".
   const myName = held ? await social.displayName() : null;
-  const holder = held ? esc(myName || 'You') : rival ? esc(rival.ownerName || 'A rival') : dormant ? 'Gone dormant' : 'Nobody';
+  const holder = view.pending ? 'Ownership pending' : held ? esc(myName || 'You') : rival ? esc(rival.ownerName || 'A rival') : dormant ? 'Gone dormant' : 'Nobody';
   const standing = heldSince
     ? (days >= 1 ? `Standing ${days} day${days === 1 ? '' : 's'}` : 'Taken today')
     : 'Never been taken';
@@ -7065,11 +7095,11 @@ async function openSpireInfoSheet(info, onAct = null) {
     held && view.tribute && view.tribute.coins ? { ico: ICONS.coin(20), big: String(view.tribute.coins), lab: 'TRIBUTE' } : null,
   ].filter(Boolean);
 
-  openSheet(`
+  const wrap = openSheet(`
     <div class="sheet-head">
       <div class="hd">
         <h2>${esc(s.name || 'Dark Spire')}</h2>
-        <div class="sub">${besieged ? 'Under siege' : held ? 'Your tower' : dormant ? 'Yours, gone dormant' : rival ? 'Rival territory' : 'Unclaimed'}</div>
+        <div class="sub">${view.pending ? 'Ownership pending' : besieged ? 'Under siege' : held ? 'Your tower' : dormant ? 'Yours, gone dormant' : rival ? 'Rival territory' : 'Unclaimed'}</div>
       </div>
       <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Close">${ICONS.close(17)}</button></div>
     </div>
@@ -7092,7 +7122,7 @@ async function openSpireInfoSheet(info, onAct = null) {
           <small>${esc(standing)}</small>
         </div>
       </div>
-      ${besieged ? `<div class="sp-siege">${esc(siegeName || 'Someone')} is laying siege. It falls in ${esc(fmtCookTime(Math.max(0, siegeUntil - Date.now())))} unless you break it.</div>` : ''}
+      ${besieged ? `<div class="sp-siege">${esc(siegeName || 'Someone')} is laying siege. It falls in <span class="sp-siege-left">${esc(fmtCookTime(Math.max(0, siegeUntil - spireNow())))}</span> unless you break it.</div>` : ''}
       ${t1Sect('The tower')}
       <div class="den-pays">
         ${facts.map(f => `<div class="p"><span>${f.ico}</span><b>${esc(f.big)}</b><small>${f.lab}</small></div>`).join('')}
@@ -7107,11 +7137,12 @@ async function openSpireInfoSheet(info, onAct = null) {
         <div><div class="d">${s.dist != null ? esc(fmtDist(s.dist)) : 'Nearby'}</div><small>${inRange ? 'You are close enough' : `Get within ${SPIRE_RADIUS_M} m to act`}</small></div>
       </div>
     </div>
-    ${inRange && onAct ? `<div class="t1-foot"><button class="btn" id="spireAct">${besieged && held ? 'Break the siege'
+    ${inRange && onAct && !view.pending ? `<div class="t1-foot"><button class="btn" id="spireAct">${besieged && held ? 'Break the siege'
       : rival ? `Take it from ${esc(rival.ownerName || 'them')}`
       : !held ? 'Take this tower'
       : view.tribute && view.tribute.days ? 'Collect the tribute'
-      : 'Tend it'}</button></div>` : ''}`, { cls: 't1', name: 'spire-sheet' });
+      : 'Tend it'}</button></div>` : ''}`, { cls: 't1', name: 'spire-sheet', onClose: () => stopClock() });
+  if (besieged) stopClock = startSiegeClock(wrap, siegeUntil);
   composeAvatars(document);
   // delegate to the existing in-range button rather than restating the rules of
   // taking, tending and sieges: that flow already owns energy, shields and adds
@@ -7217,8 +7248,8 @@ async function openSpireSheet(s, view, rival = null) {
      shield that starts between the poll and the tap still gets through to the
      server refusal, and settle() hands the charge back there (foeCfg.charge). */
   const shieldUntil = rival && rival.claimedAt ? rival.claimedAt + SPIRE_SHIELD_MS : 0;
-  const shieldMins = Math.max(1, Math.ceil((shieldUntil - Date.now()) / 60000));
-  const shielded = shieldUntil > Date.now();
+  const shieldMins = Math.max(1, Math.ceil((shieldUntil - spireNow()) / 60000));
+  const shielded = shieldUntil > spireNow();
   /* This sheet is only ever opened for a tower you don't hold (js/app.js,
      the !view.held route into it), and settle() spends spireKey(...) on ANY
      outcome for that path (win, loss or draw), sieges and your own towers
@@ -7306,10 +7337,22 @@ async function openSpireSheet(s, view, rival = null) {
    into on demand. */
 if (typeof window !== 'undefined' && navigator.webdriver) window.__spireFightSheet = (s, view, rival) => openSpireSheet(s, view, rival);
 
+// Both spire sheets read the deadline again while open and stop on close.
+function startSiegeClock(wrap, until) {
+  const tick = () => {
+    for (const clock of wrap.querySelectorAll('.sc-left, .sp-siege-left'))
+      clock.textContent = fmtCookTime(Math.max(0, until - spireNow()));
+  };
+  tick();
+  const timer = setInterval(tick, 1000);
+  return () => clearInterval(timer);
+}
+
 /* The defense. A named NPC is at the gate and the clock is real, so this sheet
    says who, how long, and what happens either way: winning levels the tower,
    losing nothing but the clock running out leaves it DORMANT, never lost. */
 function openSiegeSheet(s, view, siege) {
+  let stopClock = () => {};
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Under siege</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
@@ -7320,7 +7363,7 @@ function openSiegeSheet(s, view, siege) {
       </div>
       <div class="siege-clock">
         <span class="sc-name">${esc(siege.name)}</span>
-        <b class="sc-left">${fmtCookTime(Math.max(0, siege.until - Date.now()))}</b>
+        <b class="sc-left">${fmtCookTime(Math.max(0, siege.until - spireNow()))}</b>
         <span class="sc-lab">left to break it</span>
       </div>
       <ul class="spire-terms">
@@ -7329,7 +7372,8 @@ function openSiegeSheet(s, view, siege) {
         <li>No other tower of yours can be besieged while this one is.</li>
       </ul>
       <button class="btn" id="siegeFight" style="width:100%">Break the siege</button>
-    </div>`, { cls: '', name: 'Siege' });
+    </div>`, { cls: '', name: 'Siege', onClose: () => stopClock() });
+  stopClock = startSiegeClock(wrap, siege.until);
   $('#siegeFight', wrap)?.addEventListener('click', async () => {
     const fighter = await buildFighter();
     const lvl = view.level || 1;
@@ -8639,6 +8683,7 @@ const EMPTY_MEAL_LINES = {
   ],
 };
 function emptyMealLine(name) {
+  if (S.date !== dateKey()) return `No ${name.toLowerCase()} recorded for this day.`;
   const pool = EMPTY_MEAL_LINES[name];
   if (!pool) return '';
   if (S.speechSalt == null) S.speechSalt = Math.floor(Math.random() * 1e6);
@@ -8654,6 +8699,9 @@ function emptyMealLine(name) {
  * Never a verdict on the food. The only thing being acknowledged is that the
  * player showed up and wrote it down. */
 function signOffLine(count, tot, targets) {
+  if (S.date !== dateKey()) return count
+    ? `${count} entr${count === 1 ? 'y' : 'ies'} recorded for this day. The ledger is honest.`
+    : 'No entries recorded for this day.';
   if (S.speechSalt == null) S.speechSalt = Math.floor(Math.random() * 1e6);
   const pick = arr => arr[(S.speechSalt + arr.length) % arr.length];
   if (!count) return pick([
@@ -8674,7 +8722,7 @@ function signOffLine(count, tot, targets) {
   ]);
 }
 
-function mealBlock(name, i, entries, yEntries, budget = 0) {
+function mealBlock(name, i, entries, yEntries, budget = 0, sourceDate = null) {
   const kcal = shownTotals(entries).kcal;   // already the sum of the rounded rows (L8)
   const over = budget > 0 && kcal > budget;
   return `<section class="meal">
@@ -8691,7 +8739,7 @@ function mealBlock(name, i, entries, yEntries, budget = 0) {
         <span class="kc">${Math.round(e.kcal)}</span>
       </button>`).join('')}
     ${!entries.length ? `<p class="meal-empty">${esc(emptyMealLine(name))}</p>` : ''}
-    ${!entries.length && yEntries.length ? `<button class="chip-btn" data-copymeal="${i}">↺ Copy yesterday's ${name} (${Math.round(dayTotals(yEntries).kcal)} kcal)</button>` : ''}
+    ${!entries.length && yEntries.length ? `<button class="chip-btn" data-copymeal="${i}">↺ Copy ${sourceDate ? `${name} from ${esc(sourceDate)}` : `yesterday's ${name}`} (${shownTotals(yEntries).kcal} kcal)</button>` : ''}
   </section>`;
 }
 
@@ -8767,7 +8815,8 @@ async function restoreAddDraft() {
   /* Only a food findFood still resolves (built-in or custom): an online result
      lived in S.onlineCache, which the reload emptied. The query is kept either
      way, so the search is one Enter from being back. */
-  const food = d.sheet === 'portion' && d.foodId ? findFood(d.foodId) : null;
+  const historyEntry = d.sheet === 'portion' && d.historyEntryId ? await db.get('log', d.historyEntryId) : null;
+  const food = historyEntry ? foodFromLog(historyEntry) : d.sheet === 'portion' && d.foodId ? findFood(d.foodId) : null;
   if (food) openPortion(food, { meal, sel: d.sel || null });
 }
 
@@ -8813,8 +8862,13 @@ function localResultsHtml(local, q) {
    one place both chip sets (#mealChips, #pMealChips) are drawn and setChipOn
    keeps aria-pressed in step with the .on class the two handlers already
    toggled. No visual change: .on still does the painting. */
-function resultsCountText(n, q) {
-  return q ? `${n} ${n === 1 ? 'match' : 'matches'} for ${q}` : `${n} recent ${n === 1 ? 'food' : 'foods'}`;
+function resultsCountText(n, q, shown = n) {
+  const text = q ? `${n} ${n === 1 ? 'match' : 'matches'} for ${q}` : `${n} recent ${n === 1 ? 'food' : 'foods'}`;
+  return shown < n ? `${text}. Showing first ${shown}; refine your search to see the rest.` : text;
+}
+
+async function localFoodSearch(q, limit) {
+  return searchLocalFoods(allSearchableFoods(), await db.all('log'), q, limit);
 }
 function mealChipsHtml(on) {
   return MEALS.map((m, i) => `<button class="${i === on ? 'on' : ''}" aria-pressed="${i === on}" data-meal="${i}">${m}</button>`).join('');
@@ -8842,6 +8896,7 @@ function openAdd(meal = 0, q0 = '') {
       </div>
       <div style="height:12px"></div>
       <div class="t1-search">${ICONS.searchIco()}<input id="q" type="search" placeholder="Search ${GENERIC_FOODS.length}+ foods" autocomplete="off" enterkeyhint="search"></div>
+      <div id="visibleResultsCount" class="note" aria-hidden="true"></div>
       <div id="resultsCount" class="sr-only" aria-live="polite"></div>
       <div id="results" role="region" aria-label="Results"></div>
     </div>`, { cls: 'full t1', onClose: () => { clearAddDraft(); window.removeEventListener('online', onOnline); } });
@@ -8879,8 +8934,13 @@ function openAdd(meal = 0, q0 = '') {
   const input = $('#q', wrap);
   const count = $('#resultsCount', wrap);   // M17: the live count line, never re-rendered
 
+  let resultVersion = 0;
+  let searchItems = [];
   async function showDefault() {
+    const version = ++resultVersion;
     const recents = await recentFoods(8, curMeal);   // L4: ranked for the chip that is on
+    if (version !== resultVersion || input.value.trim() || !wrap.isConnected) return;
+    searchItems = [];
     const favs = allSearchableFoods().filter(f => f.favorite).slice(0, 6);
     let html = '';
     if (recents.length) {
@@ -8891,16 +8951,16 @@ function openAdd(meal = 0, q0 = '') {
     if (favs.length) html += t1Sect('Favorites') + favs.map(foodRowHtml).join('');
     if (!html) html = `<p class="note" style="text-align:center;padding:26px 20px">Search ${GENERIC_FOODS.length}+ built-in foods, or scan a barcode to add packaged food in seconds.</p>`;
     results.innerHTML = html;
-    count.textContent = resultsCountText(recents.length, '');   // M17: "8 recent foods"
+    $('#visibleResultsCount', wrap).textContent = count.textContent = resultsCountText(recents.length, '');   // M17: "8 recent foods"
     bindRows();
   }
 
-  function bindRows() {
-    $$('[data-food]', results).forEach(b => b.addEventListener('click', () => {
-      const f = findFood(b.dataset.food) || onlineById(b.dataset.food);
+  function bindRows(scope = results) {
+    $$('[data-food]', scope).forEach(b => b.addEventListener('click', () => {
+      const f = searchItems.find(f => f.id === b.dataset.food) || findFood(b.dataset.food) || onlineById(b.dataset.food);
       if (f) openPortion(f, { meal: curMeal });
     }));
-    $$('[data-relog]', results).forEach(b => b.addEventListener('click', async (ev) => {
+    if (scope === results) $$('[data-relog]', results).forEach(b => b.addEventListener('click', async (ev) => {
       const rows = await db.all('log');
       const src = rows.find(r => r.id === b.dataset.relog);
       if (!src) return;
@@ -8916,10 +8976,10 @@ function openAdd(meal = 0, q0 = '') {
       history.back();
       setTimeout(refresh, 60);
     }));
-    bindOnline(results);
+    bindOnline(scope);
     // M18: the empty result's create control; prefill is passed for the form to
     // pick up the name (it reads only nutrient keys from prefill today).
-    $$('[data-create]', results).forEach(b => b.addEventListener('click', () => openFoodForm({ meal: curMeal, prefill: { name: b.dataset.create } })));
+    $$('[data-create]', scope).forEach(b => b.addEventListener('click', () => openFoodForm({ meal: curMeal, prefill: { name: b.dataset.create } })));
   }
   /* Scoped, not results-wide: bindRows rebinds every [data-food] in #results,
      so re-running it for one row would double-bind the local list. */
@@ -8953,8 +9013,9 @@ function openAdd(meal = 0, q0 = '') {
       if (!sect) return;
       sect.innerHTML = t1Sect('Online results') +
         (foods.length ? foods.map(foodRowHtml).join('') : '<p class="note" style="padding:8px 2px">Nothing found online. Try the barcode or label scanner.</p>');
-      bindRows();
+      bindRows(sect);
     } catch (e) {
+      if (input.value.trim() !== q || !wrap.isConnected) return;
       const sect = $('#onlineSect', results);
       /* 'unreachable' is thrown only when NEITHER database answered, so this is
          the no-signal case and it gets the no-signal words. Everything else
@@ -8974,16 +9035,19 @@ function openAdd(meal = 0, q0 = '') {
   input.addEventListener('input', () => {
     clearTimeout(debounce);
     const q = input.value.trim();
+    const version = ++resultVersion;
     stampAddDraft({ sheet: 'add', q });   // M16
     if (!q) { showDefault(); return; }
-    debounce = setTimeout(() => {
-      const local = searchFoods(allSearchableFoods(), q, 25);
+    debounce = setTimeout(async () => {
+      const { items: local, total } = await localFoodSearch(q, 25);
+      if (version !== resultVersion || !wrap.isConnected) return;
+      searchItems = local;
       /* M17: the render target is #results and ONLY #results. #q is its sibling
          in the sheet, so a keystroke never replaces the node focus sits in;
          re-rendering the sheet body here would throw activeElement to BODY. */
       results.innerHTML = localResultsHtml(local, q) +
         `<div id="onlineSect">${q.length >= 3 ? onlineRowHtml(q, { offline: navigator.onLine === false }) : ''}</div>`;
-      count.textContent = resultsCountText(local.length, q);   // M17: "11 matches for banana"
+      $('#visibleResultsCount', wrap).textContent = count.textContent = resultsCountText(total, q, local.length);   // M17: "11 matches for banana"
       bindRows();
     }, 120);
   });
@@ -9036,7 +9100,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
   if (sel.mode === 'serving' && (!food.servings || !food.servings[sel.idx])) { sel.idx = 0; }
   let curMeal = entry ? entry.meal : meal;
   const editing = !!entry;
-  const srcLabel = { generic: 'Built-in', off: 'Open Food Facts', fdc: 'USDA', custom: 'My food' }[food.source] || '';
+  const srcLabel = { generic: 'Built-in', off: 'Open Food Facts', fdc: 'USDA', custom: 'My food', history: 'Your history' }[food.source] || '';
 
   const wrap = openSheet(`
     <div class="sheet-head">
@@ -9045,7 +9109,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
         <div class="sub">${esc(food.brand || '')}${food.brand ? ' · ' : ''}<span class="t1-tag">${srcLabel}</span></div>
       </div>
       <div class="t1-tools">
-        <button id="favBtn" class="t1-icon-btn${food.favorite ? ' gold' : ''}" aria-label="Favorite">${ICONS.star(!!food.favorite)}</button>
+        <button id="favBtn" ${food.source === 'history' ? 'disabled title="Saved diary portion"' : ''} class="t1-icon-btn${food.favorite ? ' gold' : ''}" aria-label="Favorite">${ICONS.star(!!food.favorite)}</button>
         <button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button>
       </div>
     </div>
@@ -9078,7 +9142,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
     /* M16: Cancel drops back to the add sheet, so the draft drops back with it.
        No-op when the flow is not live (edit from Today, My foods) or already
        committed (commit clears before the sheets close). */
-    onClose: () => { if (addDraft && !editing) stampAddDraft({ sheet: 'add', foodId: null, sel: null }); },
+    onClose: () => { if (addDraft && !editing) stampAddDraft({ sheet: 'add', foodId: null, historyEntryId: null, sel: null }); },
   });
 
   /* THE PAYOFF. Every row is an award onFoodLogged already pays; none of it was
@@ -9211,7 +9275,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
     renderPayoff(n || { kcal: 0, p: 0, c: 0, f: 0 });
     // M16: preview() runs on open and on every portion or meal change, so it is
     // the one place the draft learns about this sheet
-    if (addDraft && !editing) stampAddDraft({ sheet: 'portion', foodId: food.id, sel: { ...sel }, meal: curMeal });
+    if (addDraft && !editing) stampAddDraft({ sheet: 'portion', foodId: food.id, historyEntryId: food.historyEntry?.id || null, sel: { ...sel }, meal: curMeal });
   }
 
   $$('#servChips button', wrap).forEach(c => c.addEventListener('click', () => {
@@ -9235,6 +9299,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
   }));
 
   $('#favBtn', wrap).addEventListener('click', async () => {
+    if (food.source === 'history') return;
     food.favorite = !food.favorite;
     $('#favBtn', wrap).innerHTML = ICONS.star(!!food.favorite);
     $('#favBtn', wrap).classList.toggle('gold', !!food.favorite);
@@ -9291,7 +9356,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
       date: editing ? entry.date : S.date,
       meal: curMeal,
       ts: editing ? entry.ts : Date.now(),
-      foodId: food.id,
+      foodId: food.source === 'history' ? null : food.id,
       name: food.name, brand: food.brand || null,
       portionLabel: portionLabel(food, sel),
       sel: { ...sel },
@@ -9315,7 +9380,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
     food.lastPortion = { ...sel };
     /* Bookkeeping on a committed row: a failure here is reported by db.js's
        sink and must not re-open the sheet or re-arm Add. */
-    await persistFoodUse(food).catch(() => {});
+    if (food.source !== 'history') await persistFoodUse(food).catch(() => {});
     if (!editing) trackEvent('food_log', { via: via || 'search' });
     if (!editing && btn && btn.isConnected) {
       const r = btn.getBoundingClientRect();
@@ -9379,7 +9444,13 @@ function openTextSheet({ title, value = '', placeholder = '', cta = 'Save', note
 
 function closeAllSheetsViaHistory() {
   const n = sheetStack.length;
-  if (n > 0) history.go(-n);
+  if (n > 0) {
+    // A multi-entry traversal emits ONE popstate. Retire the whole flow now:
+    // otherwise that event exposes Add's relog row beneath the portion sheet,
+    // and a second tap can log it and Back past the app before refresh runs.
+    closeAllSheets();
+    history.go(-n);
+  }
 }
 
 async function openEntryEdit(entryId) {
@@ -11014,7 +11085,8 @@ async function renderTrends(el) {
     const tot = dayTotals(byDate[dk] || []);
     const h = hByDate[dk] || {};
     days.push({
-      date: dk, kcal: tot.kcal, p: tot.p, logged: tot.kcal > 0,
+      // Logging is the presence of a diary row, as in streakFrom's callers.
+      date: dk, kcal: tot.kcal, p: tot.p, logged: (byDate[dk] || []).length > 0,
       steps: h.steps || 0, sleepHours: h.sleepHours ?? null,
       sleepMin: h.sleepMin ?? null, sleepDeepMin: h.sleepDeepMin ?? null,
       sleepRemMin: h.sleepRemMin ?? null, sleepCoreMin: h.sleepCoreMin ?? null,
@@ -11763,6 +11835,7 @@ function activityRecoveryHtml(days) {
    killswitch stamp: thirty bytes, never cached by any route (sw.js), so this is
    both the cheapest and the only honest question. 0 means offline or unreadable. */
 async function latestBuild() {
+  if (STORE_BUILD) return 0; // Bundled releases update through the App Store.
   try {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), 5000);
@@ -11787,6 +11860,7 @@ const runningBuild = () => parseInt(String(APP_BUILD).replace(/\D/g, ''), 10) ||
    activate is what deletes the old cache, and controllerchange reloads this
    page. Nothing is deleted before the new build has fully landed. */
 async function hardRefresh() {
+  if (STORE_BUILD) { toast('To update Boneheadz Gym, open the App Store and check for updates.', 4200); return; }
   if (!(await latestBuild())) { toast('No connection. Try again when you have signal', 3200); return; }
   toast('Getting the latest build...', 2200);
   try {
@@ -11880,10 +11954,15 @@ async function renderFoods(el) {
   el.innerHTML = `
   <h1 class="page-h1">Foods<span class="sub">${GENERIC_FOODS.length} built-in · ${customs.length} custom · ${scanned.length ? scanned.length + ' scanned' : 'none scanned yet'}</span></h1>
   <div class="search-wrap">${ICONS.search}<input id="fq" class="input" type="search" placeholder="Search all foods" autocomplete="off"></div>
+  <div id="fCount" class="note" aria-live="polite"></div>
   <div id="fList"></div>`;
 
   const list = $('#fList', el);
+  const count = $('#fCount', el);
+  let searchItems = [], resultVersion = 0;
   function base() {
+    searchItems = [];
+    count.textContent = '';
     let html = '<button class="btn ghost" id="newFood" style="margin:4px 0 6px">+ Create a food</button>';
     if (favs.length) html += '<div class="sect-h">Favorites</div>' + favs.map(foodRowHtml).join('');
     if (customs.length) {
@@ -11902,7 +11981,7 @@ async function renderFoods(el) {
   }
   function bindRows(root) {
     $$('[data-food]', root).forEach(b => b.addEventListener('click', async () => {
-      const f = findFood(b.dataset.food);
+      const f = searchItems.find(f => f.id === b.dataset.food) || findFood(b.dataset.food);
       // L10: the meal you picked on the add sheet, not the clock (mealDefault owns the precedence)
       if (f) openPortion(f, { meal: await mealDefault() });
     }));
@@ -11920,10 +11999,14 @@ async function renderFoods(el) {
       bindRows(mine);
     });
   }
-  $('#fq', el).addEventListener('input', e => {
+  $('#fq', el).addEventListener('input', async e => {
     const q = e.target.value.trim();
+    const version = ++resultVersion;
     if (!q) { base(); return; }
-    const res = searchFoods(allSearchableFoods(), q, 40);
+    const { items: res, total } = await localFoodSearch(q, 40);
+    if (version !== resultVersion || !list.isConnected) return;
+    searchItems = res;
+    count.textContent = resultsCountText(total, q, res.length);
     list.innerHTML = res.length ? res.map(foodRowHtml).join('') : '<p class="note" style="text-align:center;padding:20px">No matches.</p>';
     bind();
   });
@@ -14464,7 +14547,7 @@ const NEWS = [
        not a generic star (Tom: "doesn't have the right art in some of the drop
        downs") */
     thumb: eq => headshotHtml(eq, 52),
-    open: () => openRaceIntro() },
+    open: async () => { raceIntroFit = await equipped(); openRaceIntro(); } },
   { id: 'spire', date: 'Aug 6', title: 'Dark Spires',
     blurb: 'Take a tower and it pays you tribute for visiting.',
     thumb: () => `<img class="nw-img" src="assets/brand/tomb-192.png" alt="">`,
@@ -14882,7 +14965,7 @@ async function renderSettings(el) {
     <div class="settings-row"><div class="lab"><b>Privacy policy</b><span>What stays on this phone, what gets sent, and what nobody else can read</span></div><a class="btn small ghost" id="privacyBtn" href="privacy.html" target="_blank" rel="noopener" style="text-decoration:none">Read</a></div>
     ${surveyDone ? '' : `<div class="settings-row"><div class="lab"><b>Day One survey 💜</b><span>Share your thoughts, keep the exclusive Day One Lizard</span></div><button class="btn small" id="surveyBtn" style="background:#b96cf0;color:#1a0f26">Claim</button></div>`}
     <div class="settings-row"><div class="lab"><b>What's New</b><span>See what changed in recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</button></div>
-    <div class="settings-row"><div class="lab"><b>App version</b><span id="buildLine">Build ${APP_BUILD}${shellV} · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>
+    <div class="settings-row"><div class="lab"><b>App version</b><span id="buildLine">Build ${APP_BUILD}${shellV} · ${STORE_BUILD ? 'Updates are available through the App Store' : 'tap if the app looks out of date'}</span></div><button class="btn small ghost" id="updateBtn">${STORE_BUILD ? 'How to update' : 'Get latest'}</button></div>
     ${STORE_BUILD ? '' : `<div class="settings-row"><div class="lab"><b>Diagnostics</b><span id="diagLine">${esc(diag)}</span></div><button class="btn small ghost" id="copyDiag">Copy</button></div>`}
   </div>
 
@@ -15391,7 +15474,7 @@ function openProfileSheet() {
    (same art, same entrance, same stars) as a non-interactive span: the Guide
    it would open references screens a brand-new player has not seen yet. */
 const ONB_GWART = [
-  'New bones. I\'m Gwart. You eat, the skeleton earns.',
+  'New bones. I\'m Gwart. You eat, the skeleton earns. I keep an anonymous account for you. No email, password, or sign-up. The Privacy policy tells the long version.',
   null,
   'Four questions. The plan bends to your bones, not the other way round.',
 ];
@@ -16101,7 +16184,7 @@ function openHatchReveal(res, charWrap) {
     ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? `${sparkIco(24)} SHINY! ${sparkIco(24)}` : res.dupe ? 'ANOTHER ONE!' : esc(hatchName)}</div>
        <div class="hatch-prize r-${item.rarity}${res.shiny ? ' is-shiny' : ''}">
          <canvas class="hatch-art" width="512" height="512"></canvas>
-         <b>${esc(item.name)}${res.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</b>
+         <b>${esc(petInstanceName({ sp: item.id, morph: res.morph, shiny: res.shiny }))}${res.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</b>
          <small>${res.shiny ? 'Ultra-rare variant · follows your bonehead' : res.dupe ? 'A duplicate · joins your crew as breeding stock' : 'Pet · follows your bonehead'}</small>
          <span class="rar-chip" style="color:${res.shiny ? 'var(--gold)' : RARITIES[item.rarity].color}">${res.shiny ? 'SHINY' : RARITIES[item.rarity].label}</span>
        </div>`
@@ -16576,7 +16659,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
        otherwise the plain cosmetic actually equipped there. Everything below used
        to key off wornGear alone, so a slot holding a cosmetic showed no transmog
        panel at all, which is what Tom hit. */
-    const baseArtId = wornGear ? wornGear.artId : (rawEq[slot] || null);
+    // Resolve once at the Dressing Room boundary. Restored ids can be present
+    // but unknown to this build. Tiles, previews and controls share this baseline;
+    // keep the raw equipment intact so a newer build can still restore its art.
+    const ownArt = BH_BY_ID[wornGear ? wornGear.artId : rawEq[slot]];
+    const baseArtId = ownArt?.id || null;
     // a function, not a value: restageLook re-reads it after every look tap
     const previewEq = () => {
       const p = S.lookPreview;
@@ -16607,7 +16694,6 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const cost = (sel === '' || sel === TRANSMOG_HIDE) ? 0 : (lookPriceMap[sel] || 0);
       return { cur, sel, cost, afford: dustBal >= cost, changed: sel !== cur };
     };
-    const ownArt = BH_BY_ID[baseArtId];
     const nameOf = v => v === ''
       ? (wornGear ? `${wornGear.name}, its own look` : `${ownArt?.name || 'What you are wearing'}, as equipped`)
       : v === TRANSMOG_HIDE ? 'Nothing, slot hidden' : (BH_BY_ID[v]?.name || '');
@@ -19522,7 +19608,7 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
            their duration, so it is deterministic (a pet drifts the same way every
            visit) and needs no randomness. Negative, so the animation starts
            mid-stride instead of pausing first. */
-        : `left:${p.x}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px;--pdk-phase:-${[...r.iid].reduce((a, c) => a + c.charCodeAt(0), 0) % 9}s`;
+        : `left:${p.x}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px;--pdk-range:${p.range || 0}px;--pdk-phase:-${[...r.iid].reduce((a, c) => a + c.charCodeAt(0), 0) % 9}s`;
     /* THE SPRITE NAMES THE COPY, not just the species. `data-pdk` alone meant the field
        was a species picker: tapping the fourth Bulldog opened the slider on the first
        one, so the animal you pressed and the card you got were different animals. The
@@ -19531,6 +19617,7 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
        unchanged: it has no card to open. */
     return `<div class="pdk-pet pdk-${p.kind}${glow}" data-pdk="${r.sp}" data-iid="${r.iid}" style="${pos}">
       <span class="pdk-flip"><span class="pdk-bob">${art}</span></span>
+      ${r.equipped || r.breeding ? `<span class="pdk-state">${r.equipped ? '<span>OUT WITH YOU</span>' : ''}${r.breeding ? '<span class="pdk-breeding">BREEDING</span>' : ''}</span>` : ''}
       ${p.kind === 'walk' || p.kind === 'flop' ? '<span class="pdk-shadow"></span>' : ''}
     </div>`;
   };
@@ -19606,8 +19693,12 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
  * fork per screen. The hanging sign stays. */
 async function openPaddock() {
   const { paddockRoster, paddockEggs, placePaddock, PDK_SCENE, rotHash } = await import('./paddock.js');
-  const [roster, eggs, eqOwn, ownedIds, petTapped] = await Promise.all([
+  const eqIid = await equippedPetIid();
+  const [rows, eggs, eqOwn, ownedIds, petTapped] = await Promise.all([
     paddockRoster(), paddockEggs(), equipped(), ownedCosmeticIds(), kvGet('pdkPetTapped', false)]);
+  const breeding = (S.settings || {}).stableBreed || {};
+  const roster = rows.map(r => ({ ...r, equipped: r.iid === eqIid && r.sp === eqOwn.C,
+    breeding: Array.isArray(breeding.iids) && breeding.iids.includes(r.iid) }));
   /* THE HERD TURNS OVER WHEN THE PLAYER'S DAY DOES. placePaddock's rotation seed
      defaults to toISOString(), which is UTC, and calling it with no day meant a
      collection past the walk cap swapped its herd at 17:00 local here while
@@ -19653,7 +19744,7 @@ async function openPaddock() {
            as 'mapLpHint' and 'map-seen'. */''}
       ${paddockSceneHtml({ roster, places, eggCount: eggs.count, eq: eqOwn, keeper: K, lurkSp, coach: petTapped ? null : 'Tap a pet to say hi' })}
       <div class="pdk-panel" id="pdkPanel"><!-- Lane W mounts here (walt/paddock-ui) --></div>
-    </div>`, { cls: 'sheet-paddock' });
+    </div>`, { cls: 'sheet-paddock pet-a11y' });
 
   /* Lane W's collection panel is the screen's lower half, not a tap target, so it is
      mounted as the sheet opens rather than on first interaction. Failure degrades to
@@ -19727,7 +19818,7 @@ async function openFriendPaddock(f) {
         <b>${yard.n} PET${yard.n === 1 ? '' : 'S'}</b>
         ${out < yard.n ? `<p class="note">${out} out in the field right now</p>` : ''}
       </div>
-    </div>`, { cls: 'sheet-paddock' });
+    </div>`, { cls: 'sheet-paddock pet-a11y' });
 }
 
 let stableGhostWarned = false;   // R39-31: one warning per session, not one per render
@@ -19746,8 +19837,25 @@ async function choosePetTalent(iid, node) {
 }
 
 async function openStable(opts = {}) {
-  let sel = [];      // iids flagged for breeding
-  let offSp = null;
+  const savedBreed = (S.settings || {}).stableBreed || {};
+  let sel = Array.isArray(savedBreed.iids) ? [...new Set(savedBreed.iids)].slice(0, 2) : [];
+  let offSp = savedBreed.keep || null;
+  const saveBreed = () => {
+    S.settings = S.settings || {};
+    S.settings.stableBreed = { iids: [...sel], keep: offSp };
+    saveSettings();
+  };
+  const kinScroll = new Map();
+  const rememberKin = body => {
+    const kin = $('.cf-kin', body);
+    if (kin?.dataset.sp) kinScroll.set(kin.dataset.sp, kin.scrollLeft);
+  };
+  const restoreKin = (body, sp) => {
+    const kin = $('.cf-kin', body);
+    if (!kin || !sp) return;
+    kin.dataset.sp = sp;
+    kin.scrollLeft = kinScroll.get(sp) || 0;
+  };
   // which pet the carousel is parked on. Held by IID, not index, so it survives a
   // re-render that adds or removes a pet (breeding destroys one mid-session).
   let cfIid = opts.focusIid || null;
@@ -19785,7 +19893,7 @@ async function openStable(opts = {}) {
      handler and audit clicks. */
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Stable</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body" id="stableBody"></div>`, { cls: 'full', onClose: () => { if (currentTab() === 'today') refresh(); } });
+    <div class="sheet-body" id="stableBody"></div>`, { cls: 'full pet-a11y', onClose: () => { if (currentTab() === 'today') refresh(); } });
   async function render() {
     const body = $('#stableBody', wrap);
     if (!body) return;
@@ -19854,6 +19962,9 @@ async function openStable(opts = {}) {
     // offspring under the feed model: the keeper is the same pet all the way
     // through, so the old "which one does it become?" question had no answer.
     if (pair && offSp !== a.iid && offSp !== b.iid) offSp = a.iid;
+    if (!pair) offSp = null;
+    const saved = (S.settings || {}).stableBreed || {};
+    if (JSON.stringify(saved.iids || []) !== JSON.stringify(sel) || (saved.keep || null) !== offSp) saveBreed();
     const keeper = pair ? (offSp === b.iid ? b : a) : null;
     const spare = pair ? (offSp === b.iid ? a : b) : null;
     const offLineage = keeper ? (keeper.lineage || 0) + 1 : 0;
@@ -19898,7 +20009,7 @@ async function openStable(opts = {}) {
        off a species id), thumb: true so the tier follows the geometry. */
     const kinChips = inst => bySp[inst.sp].length < 2 ? '' : bySp[inst.sp].slice().sort(byBest).map(x => {
       const on = x.iid === inst.iid;
-      return `<button class="chip kin${on ? ' on' : ''}" type="button" data-kin="${x.iid}" role="option" aria-selected="${on}"><span class="kin-pic" aria-hidden="true">${petPortraitHtml(x.sp, 26, x.shiny, { thumb: true, morph: x.morph })}</span><span class="kin-tx">${nicks[x.iid] ? esc(nicks[x.iid]) + ' · ' : ''}Lv ${petLevel(bank[x.iid] || 0)}${x.shiny ? ' ✦' : ''}${x.iid === eqIid ? ' · out' : ''}${sel.includes(x.iid) ? ' · breeding' : ''}</span></button>`;
+      return `<button class="chip kin${on ? ' on' : ''}" type="button" data-kin="${x.iid}" role="option" aria-selected="${on}"><span class="kin-pic" aria-hidden="true">${petPortraitHtml(x.sp, 26, x.shiny, { thumb: true, morph: x.morph })}</span><span class="kin-tx">${nicks[x.iid] ? esc(nicks[x.iid]) + ' · ' : ''}${esc(petColourName(x))} · Lv ${petLevel(bank[x.iid] || 0)}${x.shiny ? ' ✦' : ''}${x.iid === eqIid ? ' · out' : ''}${sel.includes(x.iid) ? ' · breeding' : ''}</span></button>`;
     }).join('');
     const focusIdx = Math.max(0, roster.findIndex(x => x.iid === (cfIid || eqIid)));
     const focused = roster[focusIdx] || roster[0] || null;
@@ -19910,6 +20021,7 @@ async function openStable(opts = {}) {
       return `<div class="cf-card r-${it.rarity || 'common'}${x.shiny ? ' is-shiny' : ''}${isEq ? ' active' : ''}${inSel ? ' picked' : ''}"
           data-cfi="${i}" data-petsel="${x.iid}" data-sp="${x.sp}">
         <span class="cf-chip r-${it.rarity || 'common'}">${x.shiny ? `${sparkIco(9)} SHINY` : esc((RARITIES[it.rarity] || {}).label || it.rarity || '')}</span>
+        ${x.shiny ? '' : `<span class="cf-chip" style="top:38px">${esc(petColourName(x))}</span>`}
         <span class="cf-lv">LV ${lvl}</span>
         <!-- Tom, 2026-08-08: "you should have the animated versions of the pets we
              have animations for. That is the cloud, the orange liz and the purple
@@ -19938,7 +20050,7 @@ async function openStable(opts = {}) {
       if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next', toNext.toLocaleString()]);
       if (focused.lineage) rows.push(['Lineage', `${focused.lineage} · +${Math.round(focused.lineage * 5)}% stats`]);
       return `<div class="cf-cap">
-          <b>${esc(it.name || focused.sp)}${focused.shiny ? ' ✦' : ''}${nickTag(focused.iid)}</b>
+          <b>${esc(petInstanceName(focused))}${focused.shiny ? ' ✦' : ''}${nickTag(focused.iid)}</b>
           <span class="role"><span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}</span>
           <dl class="cf-meta">${rows.map(([k, v]) => `<div class="row"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
         </div>
@@ -20074,7 +20186,7 @@ async function openStable(opts = {}) {
        plus which side of the trade each chip currently sits on. */
     const spChips = pair ? [a, b]
       .map(x => {
-        const lbl = nicks[x.iid] || (BH_BY_ID[x.sp] || {}).name || x.sp;
+        const lbl = `${nicks[x.iid] ? nicks[x.iid] + ' · ' : ''}${petInstanceName(x)}`;
         const bits = [`Lv ${petLevel(bank[x.iid] || 0)}`];
         if (x.lineage) bits.push(`lineage ${x.lineage}`);
         return `<button class="chip ${offSp === x.iid ? 'on' : ''}" data-offsp="${x.iid}">${esc(lbl)}${x.shiny ? ' ✦' : ''} &middot; ${bits.join(' &middot; ')} &middot; <b>${offSp === x.iid ? 'KEPT' : 'FED'}</b></button>`;
@@ -20127,6 +20239,8 @@ async function openStable(opts = {}) {
     const kennelOwned = ownedPairs(insts);
     const kennelMorphs = new Set([...kennelOwned].map(k => k.split('|')[1]));
     const kennelFound = ownedCellCount(kennelOwned, KENNEL_SPECIES.map(x => x.id));
+    rememberKin(body);
+    const bodyScroll = body.scrollTop;
     body.innerHTML = `
       <button class="pdk-door" id="stableToPaddock" type="button">
         <span class="pdk-door-scene" aria-hidden="true">
@@ -20143,7 +20257,7 @@ async function openStable(opts = {}) {
         </span>
         <span class="pdk-door-tx">
           <b>THE PADDOCK</b>
-          <small>${insts.length} pet${insts.length === 1 ? '' : 's'} out in the field</small>
+          <small>${insts.length} pet${insts.length === 1 ? '' : 's'} in your collection</small>
         </span>
         <!-- the house disclosure arrow: a plain glyph in a span, as in .gbn-chev,
              .gd-arrow and .ul-chev. No ICONS ternary fallback here, per the note in
@@ -20170,13 +20284,13 @@ async function openStable(opts = {}) {
         <span class="kdoor-sw" aria-hidden="true">${MORPHS.map(m => `<i class="${kennelMorphs.has(m) ? 'on' : ''}" style="--kc:${morphSwatch(m)}"></i>`).join('')}</span>
         <span class="pdk-door-tx">
           <b>THE KENNEL</b>
-          <small>Every colour your pets come in &middot; ${kennelFound} of ${KENNEL_SPECIES.length * MORPHS.length}</small>
+          <small>${kennelFound} of ${KENNEL_SPECIES.length * MORPHS.length} species colourways &middot; founder excluded</small>
         </span>
         <span class="pdk-door-go" aria-hidden="true">›</span>
       </button>
       <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap">
         <span class="chip">${ICONS.dust(14)} ${st.dust.toLocaleString()}</span>
-        <span class="chip" style="font-size:11px">Only the active pet levels as you walk</span>
+        <span class="chip" style="font-size:.6875rem">Only the active pet levels as you walk</span>
         <!-- no ICONS.info exists; the ternary fallback shipped a bare "?" glyph
              and hid the missing icon from readers but not from t2-audit's
              ICONS-RESOLVE guard, which is exactly what that guard is for.
@@ -20241,9 +20355,9 @@ async function openStable(opts = {}) {
             </span>
           </div>
           <ul class="breed-facts">
-            <li>You keep <b>${esc((BH_BY_ID[keeper.sp] || {}).name || keeper.sp)}</b>. Same pet, same name, <b>same level and look</b>.</li>
+            <li>You keep <b>${esc(petInstanceName(keeper, bank[keeper.iid] || 0))}</b>. Same pet, same name, <b>same level and look</b>.</li>
             <li>It reaches <b>lineage ${offLineage}</b>: <b>+${Math.round(offLineage * 5)}% to every stat</b>.</li>
-            <li><b>${esc((BH_BY_ID[spare.sp] || {}).name || spare.sp)} is destroyed</b> and does not come back.</li>
+            <li><b>${esc(petInstanceName(spare, bank[spare.iid] || 0))} is destroyed</b> and does not come back.</li>
           </ul>
           ${spareIsPrecious ? `<div class="breed-warn">
             ${ICONS.warn(17)}
@@ -20253,8 +20367,11 @@ async function openStable(opts = {}) {
           </div>` : ''}
           <div class="breed-pick"><span class="note">Which one are you keeping?</span><div class="breed-sp">${spChips}</div></div>
           ${st.ready ? '' : `<p class="note">Walk ${st.cooldownLeft.toLocaleString()} more steps before breeding again.</p>`}
-          <button class="btn" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Feed ${esc((BH_BY_ID[spare.sp] || {}).name || spare.sp)} in</button>
+          <button class="btn" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Feed ${esc(petInstanceName(spare, bank[spare.iid] || 0))} in</button>
         </div>` : ''}`;
+
+    body.scrollTop = bodyScroll;
+    restoreKin(body, focused?.sp);
 
     /* Bring the pet we came here for onto the screen, once. Opening its tree is
        not enough when it is the fourth card down: the sheet still lands at the
@@ -20308,7 +20425,7 @@ async function openStable(opts = {}) {
       /* 8px of clearance, not zero: scrolling by exactly the overflow lands the
          tile's bottom border ON the fold, where sub-pixel rounding eats it. */
       const over = pwTile.getBoundingClientRect().bottom + 8 - view.bottom;
-      if (over > 0) body.scrollTop += Math.min(over, pwFrame.getBoundingClientRect().top - view.top);
+      if (bodyScroll === 0 && over > 0) body.scrollTop += Math.max(0, Math.min(over, pwFrame.getBoundingClientRect().top - view.top));
     }
     /* The ring. Painted straight to the DOM because sixty transform updates a
        second is not a job for a re-render: render() rebuilds this whole body, so
@@ -20640,7 +20757,7 @@ async function openStable(opts = {}) {
         const rows = [['Level', lvl], ['Power', bs.power], ['Health', bs.hp], ['Reflex', bs.reflex]];
         if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next', toNext.toLocaleString()]);
         if (inst.lineage) rows.push(['Lineage', `${inst.lineage} · +${Math.round(inst.lineage * 5)}% stats`]);
-        $('b', cap).innerHTML = `${esc(it.name || inst.sp)}${inst.shiny ? ' ✦' : ''}${nickTag(inst.iid)}`;
+        $('b', cap).innerHTML = `${esc(petInstanceName(inst))}${inst.shiny ? ' ✦' : ''}${nickTag(inst.iid)}`;
         const role = $('.role', cap);
         if (role) role.innerHTML = `<span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}`;
         const meta = $('.cf-meta', cap);
@@ -20657,12 +20774,17 @@ async function openStable(opts = {}) {
       if (eqB) { eqB.dataset.eq = inst.iid; eqB.textContent = isEq ? 'OUT WITH YOU' : 'EQUIP'; eqB.disabled = isEq; eqB.classList.toggle('ghost', isEq); }
       if (trB) { trB.dataset.pettree = inst.iid; trB.textContent = isOpen ? 'HIDE TALENTS' : 'TALENTS'; }
       if (brB) { brB.dataset.breedsel = inst.iid; brB.textContent = inSel ? 'BREEDING' : 'BREED'; brB.classList.toggle('on', inSel); }
-      if (dsB) { dsB.dataset.destroy = inst.iid; dsB.dataset.dust = dustVal; dsB.textContent = `DESTROY ${dustVal}`; }
+      if (dsB) { delete dsB.dataset.armed; dsB.dataset.destroy = inst.iid; dsB.dataset.dust = dustVal; dsB.textContent = `DESTROY ${dustVal}`; }
       // her wardrobe follows the ring: shown only while she is the pet in front
       $$('.pet-wear', body).forEach(pwB => { pwB.hidden = pwB.dataset.pwsp !== inst.sp; });   // Football kit, 2026-09-04
       centreRail();
       const kin = $('.cf-kin', body);
-      if (kin) { kin.innerHTML = kinChips(inst); kin.setAttribute('aria-label', `Your ${it.name || inst.sp}s`); }
+      if (kin) {
+        rememberKin(body);
+        kin.innerHTML = kinChips(inst);
+        kin.setAttribute('aria-label', `Your ${it.name || inst.sp}s`);
+        restoreKin(body, inst.sp);
+      }
     }
 
     // No card-click-to-open-talents any more: on a carousel a tap means "bring
@@ -20779,7 +20901,7 @@ async function openStable(opts = {}) {
       if (sel.includes(iid)) sel = sel.filter(x => x !== iid);
       else if (sel.length < 2) sel.push(iid);
       else sel = [sel[1], iid];
-      offSp = null; render();
+      offSp = null; saveBreed(); render();
     }));
     /* THE FIRST PICK NOW SAYS WHAT TO DO NEXT. Tom, 2026-08-10: "Tapping breed
        doesn't make it clear what to do next to find the next pet and also hit
@@ -20788,7 +20910,7 @@ async function openStable(opts = {}) {
        which does not exist until there ARE two. The waiting bar fills that gap in
        the same place the real one will appear, so the answer is already where you
        are about to look. */
-    $('#breedCancel', body)?.addEventListener('click', () => { sel = []; offSp = null; render(); });
+    $('#breedCancel', body)?.addEventListener('click', () => { sel = []; offSp = null; saveBreed(); render(); });
     $('#petsHelp', body)?.addEventListener('click', openPetsHelp);
     $('#stableToPaddock', body)?.addEventListener('click', () => openPaddock());
     $('#kennelBtn', body)?.addEventListener('click', () => openKennel());
@@ -20817,33 +20939,30 @@ async function openStable(opts = {}) {
     }
     $$('[data-destroy]', body).forEach(btn => btn.addEventListener('click', async () => {
       const inst = insts.find(x => x.iid === btn.dataset.destroy);
+      if (!inst) return;
+      const iid = inst.iid;
+      const steps = bank[iid] || 0;
+      const nm = petInstanceName(inst, steps);
       const isShiny = !!(inst && inst.shiny);
       const dustVal = btn.dataset.dust || '?';
       const doSalvage = async () => {
-        const res = await salvageInstance(btn.dataset.destroy);
+        const res = await salvageInstance(iid);
         if (!res.ok) { toast('Could not destroy that pet.'); return false; }
         popSound(S.sounds);
-        toast(`${res.name} salvaged into ${res.dust} Bone Dust.`, 2600);
+        toast(`${nm} salvaged into ${res.dust} Bone Dust.`, 2600);
         return true;
       };
-      /* THE LAST COPY OF A PREMIUM PET is not a dupe melt. The two-tap arm below
-         is sized for a spare that hatches again next week; a 50,000-coin shop pet
-         or a legendary the player owns exactly ONE of does not come back for 120
-         dust, so it gets the same typed-confirm the app already uses for Erase
-         and Delete account. A dupe of the same species keeps the light arm:
-         salvaging spares is routine and the heavier gate would just teach players
-         to type through it. */
-      const petIt = inst ? (BH_BY_ID[inst.sp] || {}) : {};
-      const lastCopy = !!inst && insts.filter(x => x.sp === inst.sp).length === 1;
-      if (lastCopy && (inst.sp === PET_SHOP.pet.id || petIt.rarity === 'legendary')) {
-        const nm = petIt.name || inst.sp;
+      // A colour's last copy or any investment needs a typed confirmation.
+      // Only an untrained, plain duplicate keeps the quick two-tap action.
+      const lastColour = insts.filter(x => x.sp === inst.sp && petColourName(x) === petColourName(inst)).length === 1;
+      if (lastColour || steps > 0 || isShiny || (inst.lineage || 0) > 0) {
         const wrap = openSheet(`
           <div class="sheet-head">
             <div class="hd"><h2>Destroy ${esc(nm)}?</h2><div class="sub">This cannot be undone</div></div>
             <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
           </div>
           <div class="sheet-body">
-            <p class="note" style="margin-bottom:12px">This is your <b>only ${esc(nm)}</b>${isShiny ? ', and it is SHINY' : ''}. Destroying it pays <span class="dust-ico">${ICONS.dust(13)}</span><b>${dustVal} Bone Dust</b> and it does not come back.</p>
+            <p class="note" style="margin-bottom:12px">${lastColour ? 'This is your last copy of this colour. ' : ''}<b>${esc(nm)}</b> has <b>${steps.toLocaleString()} banked steps</b>${inst.lineage ? ` and lineage ${inst.lineage}` : ''}. Its steps and lineage are lost. Destroying it pays <span class="dust-ico">${ICONS.dust(13)}</span><b>${dustVal} Bone Dust</b> and it does not come back.</p>
             <div class="t1-field"><label>Type ${esc(nm.toUpperCase())} or DESTROY to confirm</label><input id="pdIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="DESTROY"></div>
           </div>
           <div class="t1-foot"><button class="btn danger-ish" id="pdGo" disabled>Destroy it</button></div>`, { cls: 't1', name: 'DestroyPet' });
@@ -20859,11 +20978,16 @@ async function openStable(opts = {}) {
         });
         return;
       }
-      if (btn.dataset.armed !== '1') {
-        btn.dataset.armed = '1'; const t = btn.innerHTML;
-        btn.innerHTML = isShiny ? `SHINY! Melt for <span class="dust-ico">${ICONS.dust(13)}</span>${dustVal}?` : `Melt for <span class="dust-ico">${ICONS.dust(13)}</span>${dustVal}?`;
-        if (isShiny) toast(`⚠️ That's a SHINY pet, ultra-rare (~3% on hatch). Destroying it is permanent and only gives ${dustVal} Bone Dust. Tap again to confirm.`, 4600);
-        setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.innerHTML = t; } }, isShiny ? 4600 : 2800);
+      if (btn.dataset.armed !== iid) {
+        btn.dataset.armed = iid; const t = btn.innerHTML;
+        btn.innerHTML = `Melt ${esc(nm)} for <span class="dust-ico">${ICONS.dust(13)}</span>${dustVal}?`;
+        toast(`${nm} will be destroyed for ${dustVal} Bone Dust. This cannot be undone. Tap again to confirm.`, 4600);
+        setTimeout(() => {
+          if (btn.isConnected && btn.dataset.armed === iid) {
+            delete btn.dataset.armed;
+            if (btn.dataset.destroy === iid) btn.innerHTML = t;
+          }
+        }, 4600);
         return;
       }
       if (await doSalvage()) render();
@@ -20874,7 +20998,7 @@ async function openStable(opts = {}) {
       // colour carries to (and overtakes any common colour in) the offspring,
       // but the parent itself is gone. Arm-then-confirm.
       const spareInst = insts.find(x => x.iid === sel.find(y => y !== offSp)) || {};
-      const spareName = (BH_BY_ID[spareInst.sp] || {}).name || 'that pet';
+      const spareName = petInstanceName(spareInst, bank[spareInst.iid] || 0);
       const btn = e.currentTarget;
       /* ARM ON EVERY BREED. It permanently destroys a pet, and since v270 every
          irreversible spend takes two taps. A precious spare gets a louder line,
@@ -20893,7 +21017,7 @@ async function openStable(opts = {}) {
       const keepIid = offSp, feedIid = sel.find(x => x !== offSp);
       const res = await breedPets(keepIid, feedIid);
       if (!res.ok) { toast(BREED_ERR[res.reason] || 'Could not breed those.'); render(); return; }
-      sel = []; offSp = null;
+      sel = []; offSp = null; saveBreed();
       await render();                          // refresh the stable underneath
       openPetBreedResult(res.offspring);       // reveal on top (Stable stays open, no race)
     });
@@ -20928,31 +21052,33 @@ const KENNEL_SPECIES = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6']
 async function openKennel() {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Kennel</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body" id="kennelBody"></div>`, { cls: 'full' });
+    <div class="sheet-body" id="kennelBody"></div>`, { cls: 'full pet-a11y' });
   const body = $('#kennelBody', wrap);
   if (!body) return;
   const insts = await petInstances();
   const owned = ownedPairs(insts);   // Set of "sp|morph", pure (js/pets.js)
+  const found = ownedCellCount(owned, KENNEL_SPECIES.map(s => s.id));
+  const total = KENNEL_SPECIES.length * MORPHS.length;
+  const complete = found === total;
   const ownedSp = KENNEL_SPECIES.filter(s => insts.some(x => x.sp === s.id));
   // The roster's tile shows the HIGHEST-TIER owned morph for that species
   // (plan section 3), not merely "an" owned copy: MORPH_TIER orders midnight
   // above toxic above ember/frost above base, matching Phase C's fusion order.
   const bestMorphFor = sp => MORPHS.filter(m => owned.has(`${sp}|${m}`))
     .sort((a, b) => MORPH_TIER[b] - MORPH_TIER[a])[0] || 'base';
-  const dotLabel = (sp, m, name) => owned.has(`${sp}|${m}`)
-    ? `${MORPH_LABEL[m] ? MORPH_LABEL[m] + ' ' : ''}${name}`
-    : 'Not hatched yet.';
+  const dotLabel = (sp, m, name) =>
+    `${m === 'base' ? 'Base' : MORPH_LABEL[m]} ${name}${owned.has(`${sp}|${m}`) ? '' : '. Not hatched yet.'}`;
   const rosterRow = s => {
     const morph = bestMorphFor(s.id);
     // R39-11: the dots are indicators, not controls (the grid cells are).
-    const dots = MORPHS.map(m => `<i class="k-dot${owned.has(`${s.id}|${m}`) ? ' on' : ''}" style="--kc:${morphSwatch(m)}"></i>`).join('');
-    const morphNames = MORPHS.filter(m => owned.has(`${s.id}|${m}`) && m !== 'base').map(m => MORPH_LABEL[m]);
+    const dots = MORPHS.map(m => `<i data-morph="${esc(m)}" class="k-dot${owned.has(`${s.id}|${m}`) ? ' on' : ''}" style="--kc:${morphSwatch(m)}"></i>`).join('');
+    const morphNames = MORPHS.filter(m => owned.has(`${s.id}|${m}`)).map(m => m === 'base' ? 'Base' : MORPH_LABEL[m]);
     return `<div class="k-row">
       <span class="k-thumb">${croppedPetImg(s.id, 48, false, morphAsset(s.id, morph) || null, undefined, true)}</span>
       <div class="k-id">
         <b>${esc(s.name)}</b>
         <div class="k-dots" aria-hidden="true">${dots}</div>
-        <p class="k-cap" data-cap="${esc(s.id)}">${esc(morphNames.length ? `${morphNames.join(', ')} owned` : 'Base owned')}</p>
+        <p class="k-cap" data-cap="${esc(s.id)}">${esc(morphNames.length ? `${morphNames.join(', ')} owned` : 'No colourways owned')}</p>
       </div>
     </div>`;
   };
@@ -20986,7 +21112,7 @@ async function openKennel() {
   // one section-header idiom (.sect-h) so the grid reads as a table: which
   // colourway a column is, without repeating it 6 times per species.
   const morphColLabel = m => m === 'base' ? 'Base' : MORPH_LABEL[m];
-  const gridHead = `<div class="k-grid-head">${MORPHS.map(m => `<span class="k-grid-head-cell">${esc(morphColLabel(m))}</span>`).join('')}</div>`;
+  const gridHead = `<div class="k-grid-head">${MORPHS.map(m => `<span class="k-grid-head-cell"><i class="k-swatch" data-morph="${esc(m)}" style="--kc:${morphSwatch(m)}" aria-hidden="true"></i>${esc(morphColLabel(m))}</span>`).join('')}</div>`;
   /* GWART'S LINE SITS BELOW THE ROSTER, NOT ABOVE IT: the roster is the part
      that must fit one screen at 390x844 AND 320x568 with no scroll (up to six
      owned species, one row each), and a callout above it was budget the narrow
@@ -20998,13 +21124,14 @@ async function openKennel() {
     <p class="sect-h">Your pets</p>
     <div class="k-roster">${ownedSp.length ? ownedSp.map(rosterRow).join('') : '<p class="k-empty">Hatch an egg to start your collection.</p>'}</div>
     <p class="k-gwart"><b>Gwart says:</b> It's paint, not power. Ember, Frost, Toxic, Midnight, same skeleton underneath.</p>
-    <p class="sect-h">Collection &middot; ${ownedCellCount(owned, KENNEL_SPECIES.map(s => s.id))} / ${KENNEL_SPECIES.length * MORPHS.length}</p>
+    <p class="sect-h">Collection &middot; ${found} / ${total}</p>
+    ${complete ? '<p class="k-complete">Every colour, every pet. Your Kennel is complete.</p>' : ''}
     <!-- HOW TO READ THE GRID, one line, at the point of use (v500: "How to use
          the kennel not clear at all"). The same idiom the Paddock's "Tap a pet
          to say hi" and the Dressing Room's lead already use: a sentence where
          the thing is, never a tutorial screen. It says the rule the colours
          encode AND names the one control the screen has. -->
-    <p class="k-lead">In colour is one you've hatched. Greyed out with a lock is one you haven't. Tap any to name it.</p>
+    <p class="k-lead">${complete ? 'All five colourways of every pet are yours. Tap a cell to read its name.' : 'Five colourways per pet, in column order. Filled dots are hatched; hollow dots and locked cells are not. Tap a cell to read its name.'}</p>
     <div class="k-grid">${gridHead}${KENNEL_SPECIES.map(gridRow).join('')}</div>`;
   $$('.k-cell', body).forEach(c => c.addEventListener('click', () => {
     const { sp, morph: m } = c.dataset;
@@ -22724,7 +22851,7 @@ async function renderBoneyard(el) {
       // minute, immediately when the set of nearby spires changes, and always
       // right after a claim. Fails soft: no network means the local model drives.
       const key = near.map(s => s.id).join(',');
-      const stale = force || key !== spireFetchKey || Date.now() - spireFetchedAt > SPIRE_POLL_MS;
+      const stale = force || key !== spireFetchKey || spireNow() - spireFetchedAt > SPIRE_POLL_MS;
       if (stale && !spireFetching) {
         spireFetching = true;
         try {
@@ -22732,7 +22859,7 @@ async function renderBoneyard(el) {
           const rows = await social.fetchSpires(near.map(s => s.id)).catch(() => null);
           if (rows) {
             spireRemote = new Map(rows.map(r => [r.id, r]));
-            spireFetchedAt = Date.now(); spireFetchKey = key;
+            spireFetchedAt = spireNow(); spireFetchKey = key;
             // The server owns spire level. Mirror it onto my own records so the
             // pennant and the tribute multiplier agree with every other phone.
             for (const r of rows) if (r.mine && r.level) await setSpireLevel(r.id, r.level);
@@ -22750,7 +22877,8 @@ async function renderBoneyard(el) {
              before announcing. Both existed already; only the call site is new.
              Not awaited: this is a notification, and the marker refresh below
              must not wait on the network for it. */
-          if (!S.demo) checkSieges();
+          if (!S.demo) await checkSieges();
+          spireState_ = await spireState();
         } finally { spireFetching = false; }
       }
       const live = new Set(near.map(s => s.id));
@@ -22776,7 +22904,7 @@ async function renderBoneyard(el) {
         // back to the mirrored local copy between polls
         const siegeUntil = (remote && remote.siegeUntil) || (view.siege ? view.siege.until : 0);
         const siegeName = (remote && remote.siegeName) || (view.siege ? view.siege.name : '');
-        const besieged = !!(siegeUntil && siegeUntil > Date.now());
+        const besieged = !!(siegeUntil && siegeUntil > spireNow());
         // How long it has stood, from whoever's claim it is. A rival's tower shows
         // its age too, which is exactly the point: an old tower looks worth taking.
         // NOTE 2026-08-15: this used to gate on `held`, which flips false the
@@ -22786,7 +22914,7 @@ async function renderBoneyard(el) {
         // regardless of held. This preserves the app's own promise: "never lost,
         // just quiet".
         const heldSince = rival ? (rival.claimedAt || 0) : (spireState_[s.id]?.claimedAt || 0);
-        const ageTier = heldSince ? wardenTier(Math.floor((Date.now() - heldSince) / 86400000)).tier : 0;
+        const ageTier = heldSince ? wardenTier(Math.floor((spireNow() - heldSince) / 86400000)).tier : 0;
         rec.el.dataset.age = String(ageTier);
         rec.el.classList.toggle('besieged', besieged);
         rec.el.classList.toggle('mine', held);
@@ -22797,12 +22925,12 @@ async function renderBoneyard(el) {
         $('.spire-flag', rec.el).textContent = besieged ? 'UNDER SIEGE'
           : rival ? (rival.ownerName || 'RIVAL').toUpperCase()
           : held ? (myName ? myName.toUpperCase() : 'YOURS')
-          : dormant ? 'DORMANT' : 'UNCLAIMED';
+          : view.pending ? 'PENDING' : dormant ? 'DORMANT' : 'UNCLAIMED';
         // A tower's level is its history: every takeover and every repelled siege
         // adds one, and it pays more tribute. Worth reading from across the map.
         const lvl = rival ? (rival.level || 1) : (view.level || 1);
         rec.el.classList.toggle('levelled', lvl > 1);
-        const trib = besieged ? `⚔ ${fmtCookTime(siegeUntil - Date.now())}`
+        const trib = besieged ? `⚔ ${fmtCookTime(siegeUntil - spireNow())}`
           : held && view.tribute.coins ? `${ICONS.coin(16)} ${view.tribute.coins}` : '';
         $('.spire-lv', rec.el).textContent = lvl > 1 ? `LV ${lvl}` : '';
         $('.spire-tribute', rec.el).innerHTML = trib;
@@ -22822,9 +22950,9 @@ async function renderBoneyard(el) {
           // (breaking a siege), collecting tribute and tending are NOT gated:
           // they are not fights you can farm.
           const takeSpent = !view.held && spireSpentToday(s.id);
-          sb.disabled = takeSpent;
+          sb.disabled = takeSpent || view.pending;
           sb.classList.toggle('spent', takeSpent);
-          sb.textContent = siege && view.held ? `Break the siege at ${s.name}`
+          sb.textContent = view.pending ? `${s.name}: ownership pending` : siege && view.held ? `Break the siege at ${s.name}`
             : takeSpent ? `${s.name} holds you off until tomorrow`
             : rival ? `Take ${s.name} from ${rival.ownerName || 'them'}`
             : !view.held ? `Take ${s.name}`
@@ -23139,9 +23267,12 @@ async function renderBoneyard(el) {
     $('#mapSpire', body)?.addEventListener('click', async () => {   // same offline teardown as #mapCanvas above
       if (tooFastToAct()) return;
       if (!spireInRange) return;
+      await refreshSpires({ force: true });
+      if (!spireInRange) return;
       const { s, view, rival, siege } = spireInRange;
       // A SIEGE OUTRANKS EVERYTHING. There is a deadline on it, so a besieged tower
       // must never offer to be tended or milked instead of defended.
+      if (view.pending) { toast('Ownership pending. Reconnect to check this tower.'); return; }
       if (siege && view.held) return openSiegeSheet(s, view, siege);
       // belt as well as braces: the button is disabled, but a stale tap or a
       // second entry point must not get a free run at a tower again today.
@@ -23162,8 +23293,8 @@ async function renderBoneyard(el) {
         popSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.4, 16);
         toast(`${s.name} pays up: +${r.coins} coins, +${r.dust} Bone Dust.`, 3200);
       } else {
+        if (!await social.tendSpireRemote(s.id)) { toast('Reconnect to tend this tower.'); return; }
         await tendSpire(s.id);
-        social.tendSpireRemote(s.id).catch(() => {});
         toast(`${s.name} stands. Resolve restored.`, 2600);
       }
       await refreshSpires();
@@ -23625,10 +23756,25 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v510'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v516'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
-function presentGrantDelivery(r) {
+let grantDeliveryBusy = false;
+async function presentGrantDelivery(r) {
+  if (grantDeliveryBusy) return;
+  grantDeliveryBusy = true;
+  try {
+    const pending = await social.pendingGrantDelivery();
+    if (pending.applied) r = pending;
+    if (!r?.applied) return;
+    while (document.hidden || document.querySelector('#splash, .dw') || !document.documentElement.classList.contains('booted') || sheetStack.length) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    await drawGrantDelivery(r);
+    await social.acknowledgeGrantDelivery((r.appliedGrants || []).map(g => g.key));
+  } finally { grantDeliveryBusy = false; }
+}
+function drawGrantDelivery(r) {
   if (!r || !(r.applied > 0)) return;
   const cards = [];
   let coinsSum = 0, xpSum = 0;
@@ -23649,7 +23795,10 @@ function presentGrantDelivery(r) {
     // always applied it to the ledger, but nothing here displayed it, so having
     // your spire taken was completely silent. It is the revenge-walk hook: it
     // gets a card of its own.
-    if (g.type === 'spire') { spireNews.push(p); continue; }
+    if (g.type === 'spire') {
+      spireNews.push({ ...p, title: g.key?.startsWith('siege-lost-') ? 'Spire Dormant' : 'Spire Lost' });
+      continue;
+    }
     coinsSum += p.coins || 0; xpSum += p.xp || 0;
     const kind = p.gift ? 'GIFT' : 'CREW DELIVERY';
     if (p.gift) giftInfos.push({ from: p.from, label: giftRewardLabel(p) });
@@ -23669,9 +23818,10 @@ function presentGrantDelivery(r) {
     if (p.gift && !hadCard && p.coins) coinGifts.push(`${p.from || 'A friend'} sent you ${p.coins} coins!`);
   }
   for (const p of spireNews) {
+    notifyNow('Dark Spires', p.note || 'One of your towers no longer flies your name.', 'siege').catch(() => {});
     cards.push({
       iconHtml: `<img src="assets/brand/tomb.png" style="width:110px;height:110px;object-fit:contain;filter:grayscale(1) brightness(.75)">`,
-      name: 'Spire Lost', rarity: 'rare', kind: 'DARK SPIRE',
+      name: p.title, rarity: 'rare', kind: 'DARK SPIRE',
       stats: p.note || 'One of your towers no longer flies your name.',
     });
   }
@@ -23692,7 +23842,7 @@ function presentGrantDelivery(r) {
   // crew news: same staggered treatment, queued after the cheers so two kinds
   // of Crew toast never land on top of each other
   crewNews.forEach((n, i) => setTimeout(() => toast(n, 4200), (cheers.length + i) * 900));
-  if (cards.length) { openPackReveal(cards, { coins: coinsSum, footerNote: xpSum ? `+${xpSum} XP` : '' }).then(refresh); return; }
+  if (cards.length) return openPackReveal(cards, { coins: coinsSum, footerNote: xpSum ? `+${xpSum} XP` : '' }).then(refresh);
   if (coinGifts.length) { toast(coinGifts[0] + (coinGifts.length > 1 ? ` (+${coinGifts.length - 1} more)` : ''), 4200); bgRefresh(); return; }
   if (coinsSum || xpSum) { toast(`Crew delivery: ${[coinsSum ? `+${coinsSum} coins` : '', xpSum ? `+${xpSum} XP` : ''].filter(Boolean).join(' · ')}.`, 3600); bgRefresh(); return; }
   if (cheers.length || crewNews.length) { bgRefresh(); return; } // already toasted, nothing else to reveal
@@ -23895,30 +24045,83 @@ async function socialSnapshot() {
    discovery push names its kind to notifyNow, the reminder is gated inside
    scheduleSiegeReminder. The in-app toast below is not a push and is not gated,
    because the player is looking at the app when it appears. */
+let siegePoll = null, siegeChecking = false, siegeClockNotice = false;
+let siegeBannerRows = [];
+function mountSiegeBanner() {
+  const screen = document.querySelector('#screen');
+  if (!screen) return;
+  let banner = document.querySelector('#activeSiegeBanner');
+  if (!siegeBannerRows.length) { banner?.remove(); return; }
+  if (!banner) { banner = document.createElement('div'); banner.id = 'activeSiegeBanner'; banner.style.cssText = 'flex:none;max-height:40vh;overflow:auto;padding:env(safe-area-inset-top, 0px) 12px 0'; screen.before(banner); }
+  const rows = siegeBannerRows.map(s => ({ ...s, siege: { ...s.siege, msLeft: Math.max(0, s.siege.until - spireNow()) } }));
+  const html = spireBannerHtml(rows);
+  if (banner._html === html) return;
+  const open = banner.querySelector('details')?.open;
+  banner.innerHTML = html; banner._html = html;
+  if (open) banner.querySelector('details').open = true;
+  banner.querySelector('#spireToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
+}
 async function checkSieges() {
+  if (siegeChecking) return;
+  siegeChecking = true;
   try {
     if (navigator.webdriver && !window.__siegeForce) return;
+    if (!siegePoll) {
+      siegePoll = setInterval(() => {
+        if (document.hidden) return;
+        checkSieges();
+        social.pullGrants().then(presentGrantDelivery).catch(() => {});
+      }, 15000);
+      setInterval(() => { if (!document.hidden) mountSiegeBanner(); }, 1000);
+    }
+    const before = await spireState();
     const rows = await social.fetchMySpires();
-    if (!rows) return;                       // offline: keep whatever we knew
-    const fresh = await syncSieges(rows);
+    if (rows === null) {
+      const fail = await kvGet('spireFail', null);
+      if (fail?.reason === 'clock' && !siegeClockNotice) {
+        siegeClockNotice = true;
+        toast('Your device clock is out of sync. Set time automatically to check your sieges.', 6000);
+      }
+      return;
+    }
+    siegeClockNotice = false;
+    await syncSieges(rows);
+    const ids = new Set(rows.map(r => r.id));
+    const rejected = Object.keys(before).find(id => before[id].pending && !ids.has(id));
+    if (rejected) toast(`The server did not confirm your claim on ${before[rejected].meta?.name || 'that tower'}. It is not yours.`, 5200);
+    const lost = Object.keys(before).filter(id => !ids.has(id) && !before[id].pending);
+    if (lost.length) toast(`${before[lost[0]].meta?.name || 'Your tower'} no longer flies your name. Tribute and Boon have stopped.`, 5200);
+    const expired = rows.find(r => before[r.id]?.siege && before[r.id].siege.until <= spireNow() && !r.siegeUntil);
+    if (expired) {
+      const note = `The siege broke through at ${expired.name}. Your tower is dormant. Walk back to take it again.`;
+      toast(note, 5200);
+      notifyNow('Siege ended', note, 'siege').catch(() => {});
+    }
     const live = await besiegedSpires();
+    siegeBannerRows = live;
+    mountSiegeBanner();
     if (!live.length) { await cancelSiegeReminder(); return; }
     const top = live[0];
-    await scheduleSiegeReminder(top.siege.name, top.name || 'your spire', top.siege.until);
-    if (!fresh.length) return;
+    await scheduleSiegeReminder(top.siege.name, top.name || 'your spire', Date.now() + top.siege.msLeft);
     const seen = new Set((await kvGet('siegeSeen', [])) || []);
-    const announce = fresh.filter(f => !seen.has(`${f.id}:${f.until}`));
+    const announce = live.map(s => ({ id: s.id, name: s.name, until: s.siege.until, siegeName: s.siege.name }))
+      .filter(f => !seen.has(`${f.id}:${f.until}`));
     if (!announce.length) return;
     for (const f of announce) seen.add(`${f.id}:${f.until}`);
     // keep the ledger small; only recent keys matter
     await kvSet('siegeSeen', [...seen].slice(-40));
     const a = announce[0];
-    const hrs = Math.max(1, Math.round((a.until - Date.now()) / 3600000));
+    const hrs = Math.max(1, Math.round((a.until - spireNow()) / 3600000));
     notifyNow('Your spire is under siege', `${a.siegeName || 'A siege'} is at ${a.name}. ${hrs}h to walk out and break it.`, 'siege').catch(() => {});
     toast(`${a.siegeName || 'A siege'} is at ${a.name}. ${hrs}h to defend it.`, 5200);
-    refresh();
+    if (!sheetStack.length) refresh();
+    mountSiegeBanner();
   } catch { /* never let a siege check break a boot */ }
+  finally { siegeChecking = false; }
 }
+
+// The browser guard supplies a snapshot, then operates the real banner controls.
+if (typeof window !== 'undefined' && navigator.webdriver) window.__checkSieges = checkSieges;
 
 // so friends see new gear within seconds. No-op when offline.
 let _profilePushT = null;
@@ -25834,10 +26037,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
            NO-OP guard in tests/unit.test.js while fixing the spire re-take, which
            is the same bug on the neighbouring branch. */
         const res = await social.defendSpireRemote(foeCfg.spire.id).catch(() => ({ ok: false, reason: 'offline' }));
-        const noSiege = !!(res && res.ok === false && res.reason !== 'offline');
+        const noSiege = !res || res.ok !== true;
         if (noSiege) {
           coins = 25;   // nothing was broken, so nothing is owed
-          toast(`${foeCfg.spire.name} is not under siege any more.`, 3600);
+          toast(res?.reason === 'offline' ? 'Defense pending. Reconnect to check the siege.' : `${foeCfg.spire.name} is not under siege any more.`, 3600);
         } else {
           coins = 50;
           // a uniquely-keyed ledger row, so the Siegebreaker badge has something to
@@ -25860,10 +26063,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // REMOTE FIRST. This used to write the local record before asking the
         // server, so a refused claim (cap, or now a shield) left the client
         // believing it owned a tower until the next 60s poll corrected it.
-        // Offline is the one case we still trust locally: that is the fail-soft
-        // rule the whole social layer is built on.
+        // An offline result is pending, with no ownership or takeover reward.
         const remote = await social.claimSpireRemote(foeCfg.spire).catch(() => ({ ok: false, reason: 'offline' }));
-        const refused = remote && remote.ok === false && remote.reason !== 'offline';
+        const pending = !remote || remote.reason === 'offline';
+        const refused = !pending && remote.ok !== true;
         /* A REFUSED TAKEOVER HANDS THE CHARGE BACK (QA round 20, R20-P2).
            A 409 (shielded, or the attacker at SPIRE_CAP) changes nothing on the
            server, so the Pit fight this player spent at the tap bought a state
@@ -25892,7 +26095,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
            since v389, has never existed in this repo. */
         const already = !!(remote && remote.ok === true && remote.already === true);
         const r = (refused || already) ? { ok: false, reason: already ? 'already' : remote.reason } : await claimSpire(foeCfg.spire);
-        if (already) {
+        if (pending) {
+          coins = 0;
+          toast('Claim pending. Reconnect to confirm ownership. No tribute or Boon until confirmed.', 4600);
+          dispatchEvent(new CustomEvent('bh-spire-claimed'));
+        } else if (already) {
           coins = 25;   // it is already yours: pocket change, no re-farm
           toast(`${foeCfg.spire.name} already flies your name. Come back to collect its tribute.`, 3800);
         } else if (refused && remote.reason === 'shielded') {
@@ -25903,6 +26110,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
           coins = 40;
           toast(`You already hold ${SPIRE_CAP} spires. Let one go dormant to take another.`, 4200);
         } else if (r.ok) {
+          const owned = await social.fetchMySpires();
+          if (owned !== null) await syncSieges(owned);
           coins = 80;
           // the server owns the level; mirror what it just told us
           if (remote && remote.ok && remote.level) await setSpireLevel(foeCfg.spire.id, remote.level);
@@ -26050,7 +26259,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       xp += badges.length * BADGE_XP;
       /* R41-16: after evaluateBadges, so the xp store already carries every
          row this win minted (badges included; awardOnce writes on the spot). */
-      window.__refreshLevelChip?.();
+      refreshLevelChip();
       confettiRain(90); levelSound(S.sounds);
       if (badges.length) queueCelebration({ newBadges: badges });
     } else if (fight.over.winner === 'f') {
@@ -26061,7 +26270,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       coins = foeCfg.mode === 'spar' ? (await claimSpar(fightId, false)).coins : 5;
       if (coins) await coinsAdd(coins);
       window.__refreshWalletPill?.();
-      window.__refreshLevelChip?.();   // R41-16: no xp on a loss, but stays true to "like the wallet pill does"
+      refreshLevelChip();   // R41-16: no xp on a loss, but stays true to "like the wallet pill does"
     }
     /* Spend the day's attempt on this tower, whatever the outcome. Outside the
        win/lose branches on purpose: a loss and a draw have to consume it too, or

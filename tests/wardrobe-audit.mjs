@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* Two complaints: equipping flashes the whole page, and the chosen background moves
  * with the character. Both are measured, not eyeballed.
  *   FLASH  -> is unrelated DOM being destroyed on each tap? Stamp a marker and see
@@ -128,7 +129,7 @@ check('the character still has its layers', after.stageLayers > 0, `${after.stag
 check('and is NOT hidden mid-swap (no flash)', after.stageComposing === false);
 check('the backdrop stayed outside the animation', after.backdropStillOutside);
 const st = await page.$('.bh-stage.lg');
-await st.screenshot({ path: `${DIR}/wardrobe-stage.png` });
+await st.screenshot({ path: auditOutputPath(`${DIR}/wardrobe-stage.png`) });
 await browser.close();
 console.log(bad ? `\n${bad} FAILED` : '\nWARDROBE: NO FLASH, BACKDROP HELD STILL');
 process.exit(bad ? 1 : 0);

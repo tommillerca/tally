@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* A FRIEND'S PADDOCK, AND THE FIRST TIME PETS HAVE EVER LEFT THE DEVICE.
  *
  * Tom, 2026-08-22: "lets make it so when you click on a friend in the crew you
@@ -104,12 +105,12 @@ const setup = (label, pass, detail = '') => {
 };
 const shotsAt = process.argv.indexOf('--shots');
 const SHOTS = shotsAt > 0 ? process.argv[shotsAt + 1] : null;
-if (SHOTS) mkdirSync(SHOTS, { recursive: true });
+if (SHOTS) mkdirSync(auditOutputPath(SHOTS), { recursive: true });
 const shot = async (page, name) => {
   if (!SHOTS) return;
   await settle(page);
   const f = path.join(SHOTS, `${name}.png`);
-  await page.screenshot({ path: f });
+  await page.screenshot({ path: auditOutputPath(f) });
   console.log(`      shot: ${f}`);
 };
 

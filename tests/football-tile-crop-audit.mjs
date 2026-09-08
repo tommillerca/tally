@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* HOW A FOOTBALL GARMENT IS FRAMED IN A TILE.
  *
  * Tom annotated the Kit room's helmet tile, 2026-09-04: "too zoomed in". He was
@@ -91,7 +92,7 @@ const setup = (label, pass, detail = '') => {
 };
 const shotsAt = process.argv.indexOf('--shots');
 const SHOTS = shotsAt > 0 ? process.argv[shotsAt + 1] : null;
-if (SHOTS) mkdirSync(SHOTS, { recursive: true });
+if (SHOTS) mkdirSync(auditOutputPath(SHOTS), { recursive: true });
 
 const TEAM = 'boneyard-bruisers';
 /* Tom, 2026-09-04, on the Kit room's helmet tile: "too zoomed in", with the
@@ -244,7 +245,7 @@ try {
     const m = await measure();
     if (m.err || !m.n) { setup(`SAMPLE the ${g.key} tile has measurable art`, false, m.err || 'zero garment pixels: the isolation matched nothing'); }
     got[g.key] = { ...m, cls };
-    if (SHOTS && m.rect) await page.screenshot({ path: path.join(SHOTS, `crop-${g.key}.png`), clip: m.rect });
+    if (SHOTS && m.rect) await page.screenshot({ path: auditOutputPath(path.join(SHOTS, `crop-${g.key}.png`)), clip: m.rect });
   }
   setup('SAMPLE all three tiles were found on screen with a non-zero garment in them',
     GARMENTS.every(g => got[g.key].n > 200),

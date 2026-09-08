@@ -1865,6 +1865,25 @@ async function insertCappedGrant(env, { to, prefix, cap, type, payload, now, key
   return !!(r.meta && r.meta.changes);
 }
 
+/* Rivals need a fighter and its appearance, not the friend's profile blob.
+   The friends-only yard comment in socialSnapshot is the specification.
+   Allowlist nested fields too, so extending a snapshot cannot extend this API.
+   Read-time projection also protects defenders stored before this change. */
+function spireDefender(raw) {
+  let p;
+  try { p = JSON.parse(raw || 'null'); } catch { return null; }
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+  const pick = (value, keys, valid) => value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.fromEntries(keys.filter(k => Object.hasOwn(value, k) && valid(value[k])).map(k => [k, value[k]]))
+    : null;
+  return {
+    stats: pick(p.stats, ['power', 'marrow', 'wind', 'reflex', 'hype'], v => typeof v === 'number' && Number.isFinite(v)),
+    talents: Array.isArray(p.talents) ? p.talents.filter(v => typeof v === 'string') : [],
+    outfit: pick(p.outfit, ['BG', 'B', 'S', 'FW', 'U', 'P', 'T', 'SK', 'E', 'G', 'M', 'H', 'IL', 'IR', 'C'], v => v === null || typeof v === 'string'),
+    pet: pick(p.pet, ['id', 'shiny', 'morph'], v => typeof v === 'string' || typeof v === 'boolean'),
+  };
+}
+
 /* Expire any siege whose 48h has run out. NEVER destructive: the tower is not
    lost, it is backdated into DORMANT, which is the state the whole client already
    understands (and which frees a cap slot). Idempotent: the grant key carries the
@@ -2779,6 +2798,7 @@ export default {
           rows = rows.map(r => r.id === target.id ? { ...r, siege_until: until, siege_name: nm } : r);
         }
         return json({
+          serverNow: now,
           spires: rows.map(r => ({
             id: r.id, name: r.name, lat: r.lat, lng: r.lng, level: r.level || 1,
             claimedAt: r.claimed_at, tendedAt: r.tended_at,
@@ -2854,7 +2874,7 @@ export default {
               id: r.id, name: r.name, owner, ownerName: hide ? null : r.owner_name,
               siegeUntil: r.siege_until || null, siegeName: r.siege_name || null,
               mine: owner === auth.playerId,
-              defender: (hide || r.owner === auth.playerId) ? null : JSON.parse(r.defender || 'null'),
+              defender: (hide || r.owner === auth.playerId) ? null : spireDefender(r.defender),
               claimedAt: r.claimed_at,          // so a rival's tower can show its age
               tendedAt: r.tended_at, level: r.level,
             };

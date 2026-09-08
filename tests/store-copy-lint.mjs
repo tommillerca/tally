@@ -60,7 +60,7 @@ check(/SUBMISSION:-0/.test(ios), 'build-ios.sh has no explicit submission mode')
 check(/\.\/build-store\.sh/.test(ios), 'submission mode does not delegate the bundle to build-store.sh');
 check(/trap restore_config EXIT/.test(ios), 'submission mode does not restore capacitor.config.json on exit');
 check(/submission-preflight\.mjs/.test(ios), 'submission mode does not run the preflight before archiving');
-check(/else\n\s*echo "=== internal build/.test(ios), 'the default (non-submission) path was removed');
+check(/else\n\s*echo "=== internal build/.test(ios), 'the explicit internal path was removed');
 
 failures.push(...scanReachable(app, 'js/app.js'));
 

@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* THE WANDERER IN THE PIT: he looms, and nothing else moves.
  *
  * Tom, with a mockup: "make this work better than my crude mock up but he should
@@ -132,7 +133,7 @@ try {
     await sleep(500);
     await openFoe(WANDERER);
     seen[`${w}x${h}`] = await MEASURE();
-    if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/wanderer-arena-${w}x${h}.png` });
+    if (process.env.SHOT) await page.screenshot({ path: auditOutputPath(`${process.env.SHOT}/wanderer-arena-${w}x${h}.png`) });
     await closeFoe();
   }
 

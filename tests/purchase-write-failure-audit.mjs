@@ -44,7 +44,7 @@ const ok = (label, pass, detail = '') => {
 
 const srv = process.env.URL ? null : await serveTree(ROOT);
 const base = process.env.URL || srv.url;
-const { browser, page } = await boot(base);
+const { browser, page, errors } = await boot(base);
 
 try {
   await seed(page, { level: 20, coins: 20000 });
@@ -140,7 +140,7 @@ try {
     r.retry.ok === false && r.retry.reason === 'owned' && r.retry.recovered === true,
     JSON.stringify(r.retry));
 
-  ok('NO page errors', true);
+  ok('NO page errors', errors.length === 0, errors.join(' | '));
 } finally {
   await browser.close();
   srv?.close?.();

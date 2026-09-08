@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* The melt confirm bar overlapping list rows. A screenshot alone would not prove
  * it: the test is whether the bar is OPAQUE and whether a tap at a row's label
  * still reaches that row. */
@@ -352,7 +353,7 @@ else {
 }
 
 const el = await page.$('.melt-fold');
-if (el) await el.screenshot({ path: `${DIR}/melt-bar.png` });
+if (el) await el.screenshot({ path: auditOutputPath(`${DIR}/melt-bar.png`) });
 console.log('shot melt-bar');
 await browser.close();
 if (own) own.close();

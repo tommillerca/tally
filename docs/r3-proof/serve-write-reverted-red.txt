@@ -1,0 +1,12 @@
+PASS CONTROL external output is written and read back
+PASS CHECKOUT absolute, relative, traversal and URL destinations are refused
+PASS SYMLINK existing and nonexistent leaves cannot alias the checkout
+PASS DANGLING symlink fails closed
+PASS CONTROL sibling sharing checkout prefix remains outside
+PASS GRADED another served tree is also protected
+PASS CONTROL sink scan sees real writes, aliases and screenshot paths
+FAIL SERVE identity uses memory and cannot create a proof file in the tree: The expression evaluated to a falsy value:
+
+  assert.ok(body.includes('proof_token.encode()') && body.includes('protectAuditTree(root)'))
+
+audit-output: 7 passed, 1 failed

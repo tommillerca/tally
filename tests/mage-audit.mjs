@@ -273,6 +273,10 @@ const pitFight = await page.evaluate(async () => {
 });
 ok('a Gauntlet rung of his draws the illustration', pitFight.drawn && !pitFight.mirrored, JSON.stringify(pitFight));
 
+/* UNREACHABLE renderer probe: bestiaryBannerHtml is called only by the retired
+   outThereHtml. __todayRow mounts detached markup; this does not prove a Today
+   surface. Keep the renderer for a product decision, without reopening the card. */
+console.log('UNREACHABLE  bestiaryBannerHtml: retired Today row, __todayRow renderer probe only');
 const row = await page.evaluate(async () => {
   document.querySelector('.sheet-close')?.click();
   await new Promise(r => setTimeout(r, 600));
@@ -296,7 +300,7 @@ const row = await page.evaluate(async () => {
   holder.remove();
   return out;
 });
-ok("the Today row is him on his days", !row.none && row.isPlate && /live wire/i.test(row.title || ''),
+ok("UNREACHABLE renderer probe: the retired row uses his art on his days", !row.none && row.isPlate && /live wire/i.test(row.title || ''),
   JSON.stringify(row));
 /* THE SIZE FLOOR MOVED, ON TOM'S INSTRUCTION, AND THIS RECORDS WHY.
    2026-08-09 he rejected a 52px head next to a paragraph and asked for the
@@ -310,7 +314,7 @@ ok("the Today row is him on his days", !row.none && row.isPlate && /live wire/i.
    pinning it to the exact current value would fail on any harmless tweak. */
 // floor only; the SAME-SIZE-as-siblings rule lives in bestiary-audit, which has
 // the whole card in view
-ok('and it is drawn at a readable size', row.drawn && row.size >= 40, JSON.stringify(row));
+ok('UNREACHABLE renderer probe: its art is readable', row.drawn && row.size >= 40, JSON.stringify(row));
 
 /* ---- 9. HE FIGHTS LIKE HIMSELF, and his spells are on screen. The kit and the
    FX were designed with temp art on 2026-08-09 and then nearly shipped unused

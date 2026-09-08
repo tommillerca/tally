@@ -2,18 +2,25 @@
 set -e
 KEY=R6B586JNRN
 ISS=4e28ee87-e98d-4a22-baef-dcf3a1941e59
-NATIVE="/Users/tommiller/Documents/Hyperframes Editor/tally/native"
+# Fail before any build, config mutation, signing or network operation.
+case "${SUBMISSION:-}" in
+  1) CHANNEL=submission ;;
+  0) CHANNEL=internal ;;
+  *) echo "BUILD REFUSED: set SUBMISSION=1 for App Store or SUBMISSION=0 for internal/TestFlight" >&2; exit 2 ;;
+esac
+NATIVE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$NATIVE"
 
-# SUBMISSION=1 is the ONLY path that may be uploaded to the App Store, and it is
-# deliberately not the default: Tom ruled the remote shell stays wired for
-# internal/TestFlight builds because it makes testing fast
-# (docs/HANDOFF-CODEX-2026-09-05.md #6). Without the flag this script behaves
-# exactly as it always has.
-#
-# It delegates the bundle and the no-server config to build-store.sh rather than
-# repeating them, so the two cannot drift, then swaps the config in for the sync
-# and restores it on EXIT even if the archive fails.
+# Export needs this operator-supplied signing/distribution input. Refuse before
+# bundling, syncing, querying ASC or spending time archiving when it is absent.
+if [ ! -f "$NATIVE/build/exportOptions.plist" ]; then
+  echo "BUILD REFUSED: missing native/build/exportOptions.plist; supply reviewed export options before building" >&2
+  exit 1
+fi
+
+# Both channels are explicit. Internal builds keep the remote shell for testing.
+# Submission builds carry a content-bound marker and use separate artifact paths.
+# Validate the copied iOS resources and then the archive itself before export.
 if [ "${SUBMISSION:-0}" = "1" ]; then
   echo "=== SUBMISSION build: bundled www, beta surfaces off, no server URL ==="
   ./build-store.sh
@@ -25,7 +32,8 @@ if [ "${SUBMISSION:-0}" = "1" ]; then
   npx cap sync ios
   # Assert the bundle that is about to be archived, not the repo. Exits non-zero.
   node "$NATIVE/submission-preflight.mjs" \
-    "$NATIVE/www/js/app.js" "$NATIVE/ios/App/App/capacitor.config.json"
+    "$NATIVE/ios/App/App/public/js/app.js" "$NATIVE/ios/App/App/capacitor.config.json" \
+    "$NATIVE/ios/App/App/public/submission.json"
 else
   echo "=== internal build: remote shell, beta surfaces on ==="
   ./build-www.sh
@@ -44,19 +52,26 @@ if [ -z "$NEXT" ]; then echo "PREFLIGHT FAILED: could not reach App Store Connec
 echo "=== bump build $CUR (local) -> $NEXT (next free on App Store Connect) ==="
 sed -i '' "s/CURRENT_PROJECT_VERSION = $CUR;/CURRENT_PROJECT_VERSION = $NEXT;/g" App.xcodeproj/project.pbxproj
 
-rm -rf build/App.xcarchive build/export
+ARCHIVE="build/$CHANNEL/App.xcarchive"
+EXPORT="build/$CHANNEL/export"
+rm -rf "$ARCHIVE" "$EXPORT"
 echo "=== archive ==="
 xcodebuild -project App.xcodeproj -scheme App -configuration Release \
-  -archivePath build/App.xcarchive archive -allowProvisioningUpdates \
+  -archivePath "$ARCHIVE" archive -allowProvisioningUpdates \
   -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$KEY.p8 \
   -authenticationKeyID $KEY -authenticationKeyIssuerID $ISS
-echo "=== export ==="
-xcodebuild -exportArchive -archivePath build/App.xcarchive -exportPath build/export \
+if [ "$CHANNEL" = "submission" ]; then
+  APP="$ARCHIVE/Products/Applications/App.app"
+  node "$NATIVE/submission-preflight.mjs" \
+    "$APP/public/js/app.js" "$APP/capacitor.config.json" "$APP/public/submission.json"
+fi
+echo "=== export $CHANNEL ==="
+xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT" \
   -exportOptionsPlist "$NATIVE/build/exportOptions.plist" -allowProvisioningUpdates \
   -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$KEY.p8 \
   -authenticationKeyID $KEY -authenticationKeyIssuerID $ISS
 echo "=== upload to TestFlight ==="
-xcrun altool --upload-app -f build/export/*.ipa -t ios \
+xcrun altool --upload-app -f "$EXPORT"/*.ipa -t ios \
   --apiKey $KEY --apiIssuer $ISS
 
 # Uploading is NOT distributing. A build with no group is invisible in TestFlight,
@@ -71,4 +86,4 @@ python3 "$NATIVE/asc.py" list
 # again report a successful build over a release nobody can see.
 echo "=== postflight check ==="
 python3 "$NATIVE/asc.py" check
-echo "=== IOS BUILD $NEXT DONE ==="
+echo "=== IOS $CHANNEL BUILD $NEXT DONE: $EXPORT ==="

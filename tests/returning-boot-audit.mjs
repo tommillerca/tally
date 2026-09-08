@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* THE BOOT A LAPSED PLAYER ACTUALLY GETS.
  *
  * Round 43 measured three independent five-day players brought back after 10,
@@ -68,7 +69,7 @@ const argv = process.argv[2] || process.env.URL;
 const srvHandle = argv ? null : await serveTree(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
 const base = argv || srvHandle.url;
 const SHOTS = process.env.SHOT_DIR || shotDir('returning-boot');
-fs.mkdirSync(SHOTS, { recursive: true });   // shotDir() makes its own; an env override may not exist yet
+fs.mkdirSync(auditOutputPath(SHOTS), { recursive: true });   // shotDir() makes its own; an env override may not exist yet
 const fails = [];
 const ok = (name, pass, detail = '') => {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`);
@@ -206,7 +207,7 @@ if (shot) {
     }
     return { w: c.width, h: c.height, ratio: +(pill / total).toFixed(3), mean: sum.map(v => Math.round(v / total)) };
   }, shot);
-  fs.writeFileSync(path.join(SHOTS, 'toast-under-veil.png'), Buffer.from(shot, 'base64'));
+  fs.writeFileSync(auditOutputPath(path.join(SHOTS, 'toast-under-veil.png')), Buffer.from(shot, 'base64'));
   /* 0.25 is well under the ~0.6 a pill of type scores on this build and far over
      the 0.0 the veil's own near-black gradient can reach. An empty sample cannot
      reach it either. */
@@ -249,7 +250,7 @@ for (const cfg of CONFIGS) {
       vh: window.innerHeight,
     };
   });
-  fs.writeFileSync(path.join(SHOTS, `returning-${tag}.png`), await page.screenshot({ encoding: 'binary' }));
+  fs.writeFileSync(auditOutputPath(path.join(SHOTS, `returning-${tag}.png`)), await page.screenshot({ encoding: 'binary' }));
 
   ok(`SETUP ${tag} the return card really rendered (an empty sample is a failure)`,
     m.cardTop != null, m.cardTop != null ? `#wbCard top ${m.cardTop}` : 'no #wbCard on Today');

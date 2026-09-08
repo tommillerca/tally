@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* THE RELEASE GATE.
  *
  * Tom, 2026-08-10, after finding the News tab broken a day after it was fixed:
@@ -260,6 +261,15 @@ const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-ato
   'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs',
   'take-and-pay-audit.mjs'];   // 2026-09-06 lane 2: the take and its whole payout are one transaction; node-only, ~1s
 PURE.unshift('store-copy-lint.mjs');
+PURE.push('paddock-pack-audit.mjs');   // 2026-09-08 R44-12/20/25: the Paddock packer honours its own header contract at 200 pets (76 pairs overlapped >20px in both axes, worst 121x72, among the 50 drawn), a breeding-armed and an equipped pet are marked in the field, and the Stable copy row keeps its scroll position (2,160px lost per tap); node-only source and geometry proof, the real-render half is paddock-pack-browser-audit.mjs
+PURE.push('audit-output-audit.mjs'); // R3: Node filesystem refusal/control fixtures and serveTree identity source check; no browser or network.
+PURE.push('branch-graveyard-audit.mjs');   // 2026-09-08: the branch classifier only calls a branch shipped on merged-PR evidence and never on commit counts or three-dot diffs, both of which lie under squash-merge; node-only, no network
+PURE.push('store-runtime-audit.mjs'); // M4/K1: Node-only real web bundle, local paths, scheme condition, App Store refresh/background checks and web update controls.
+PURE.push('r47-rest-audit.mjs');   // 2026-09-08 round 47 remainder: GET /spires returns only what a rival needs (the profile blob carried nine more fields than /leaderboard, including yard, gear and plat, against the app's own friends-only comment), the lost-tower card stops contradicting itself, the siege clock ticks
+PURE.push('r47-economy-audit.mjs');   // 2026-09-08 round 47: a lost tower stops paying (measured 90 coins / 12 Bone Dust), an offline re-fight stays pending and cannot mint a rival's tower, a stale restore cannot resurrect the income, and a grant's receipt and payout commit together; mem-idb + the Worker source, no browser
+PURE.push('submission-build-audit.mjs'); // R45-9: PURE runs refusal/control fixtures. Explicit artifact paths require SUBMISSION=1, hash-bound build marker and native store-content preflight; native producer integration remains out of lane.
+PURE.push('harness-environment-audit.mjs'); // N1: Node execution of environment plumbing, default-call compatibility and timezone/locale grading controls.
+PURE.push('guard-debts-audit.mjs'); // R45: node-only regression checks execute the actual grading blocks on empty, undersampled and healthy controls, plus DPR plumbing.
 PURE.push('submission-preflight-audit.mjs');   // 2026-09-07: drives native/submission-preflight.mjs for real and proves it refuses all three (a bundle without STORE_BUILD=1, a synced config that still has a server URL, a reachable TestFlight string) with a healthy control; node-only, <1s
 PURE.push('pet-state-audit.mjs'); // Lane A: real pet exports, migration, unsupported rows, instance talent clicks and the input to battle construction; Node-only.
 PURE.push('pet-family-audit.mjs'); // Lane D: refuses incomplete family kits, validates species/picks and tree unlocks, checks cooldown agreement and exhaustive frozen combat outputs; Node-only.
@@ -291,9 +301,30 @@ PURE.push('dayone-topup-audit.mjs');
    Proved red three ways (a weak dish given the strong sentence, an unmeasurable
    dish given any sentence, a claim deleted), exits 1 each. */
 PURE.push('dish-worth-audit.mjs');
-PURE.push('serve-tree-identity-audit.mjs'); // serveTree refuses a fixed port that answers from another checkout; node-only
 PURE.push('pet-C-node-guard.mjs'); // Lane C: level thresholds/cap, production EQUIP cache, DPR replay/harness, known-species roster.
+PURE.push('r48-state-audit.mjs'); // R48-A: restored unknown artwork, real error-stream assertions and production fight-chip refresh; Node-only.
+PURE.push('r46-logging-audit.mjs'); // R46: history nutrition/search, accents/counts, midnight input and commit order, displayed budget, and bulk-close relog/history races; Node functions and DOM doubles.
+PURE.push('r46-diary-audit.mjs'); // M2: zero-calorie logged days, displayed budgets/copies, historical source dates and speech, and bounded Back control; real source functions in Node doubles, no browser claim.
+PURE.push('audit-completion-audit.mjs'); // N2: subprocess crash/row-count receipts, dependency disclosure, and real unavailable grading branches; no sockets.
+PURE.push('machine-character-audit.mjs'); // L1: Node controls drive browser observation, bounded cadence, trace history and per-row machine receipts; no browser or sockets.
+PURE.push('n3-deadpaths-audit.mjs'); // N3: real artifact path expressions stay outside this checkout; real News callback delivers the current outfit to the poster renderer. Node-only, no pixel claim.
+PURE.push('m5-prove-red.mjs'); // M5: throws away seven real-source reversions; requires failing children and restored green guards, Node-only.
+PURE.push('lookup-guard-lint.mjs'); // M5: bounded truth-only id/lookup scan, reviewed-site ratchet and positive controls; Node-only.
+PURE.push('restore-state-audit.mjs'); // P3: real import/read/export checks for malformed kv, stale receipts and unsupported equipment; Node-only.
+PURE.push('restore-debt-edges-audit.mjs'); // Q1: removal receipts, legacy banks, potion revisions and opaque fight-buff preservation; Node-only.
+PURE.push('restore-debt-audit.mjs'); // Q1: stale restore must preserve pet ownership/levels, consumed potions and opaque future buffs; Node-only.
+// K1: lib/lookup-guard-scan.mjs is a helper imported by lookup-guard-lint.mjs.
+// It exports scanning functions and asserts nothing. Helpers under tests/lib
+// are outside the top-level runnable inventory; no top-level scanner exists.
+PURE.push('p1-r48-rest-audit.mjs'); // P1: executes art coverage grading on empty-surface controls, checks Hollow probe disclosure and landed race/reward rows; Node-only.
+PURE.push('pet-a11y-audit.mjs'); // P2: production Kennel labels/clicks, swatch identity, relative pet-sheet type; Node-only, no pixel claim.
+PURE.push('kennel-copy-audit.mjs'); // R2: production Kennel/reveal/selection copy and destroy controls with real storage; Node-only, no browser or pixel claim.
 const BROWSER = [
+  'paddock-pack-browser-audit.mjs',
+  'kennel-copy-browser-audit.mjs', // R2: real copy/breed/destroy/Kennel controls, reveal dismissal, card-chip fit and hit tests; pending reviewer browser proof.
+  'pet-a11y-pixels-audit.mjs', // P2: screenshot dot contrast, deuteranopia dE76, keyboard identity and 200% pet-sheet text.
+  'first-run-honesty-audit.mjs', // M5: real first-run disclosure/intro, capped toast dwell, returning daily reward and review screenshots.
+  'orientation-audit.mjs', // N1: 393x852 -> 852x393 -> portrait, real rotateLock coverage and hit tests, plus Intl/timezone persistence on reload.
   'pet-C-browser-audit.mjs', // Lane C: real EQUIP return paths and nine surfaces, 31 decoded Kennel images at DPR 2/3 on five phone sizes. Browser proof pending reviewer.
 
   /* the raw-sink fix's STATE half. render-sink-lint pins the source, and this
@@ -477,11 +508,18 @@ BROWSER.push(
 function run(file, args) {
   return new Promise(res => {
     const t0 = Date.now();
-    const p = spawn(process.execPath, [join(here, file), ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const p = spawn(process.execPath, ['--import', join(here, 'audit-lifecycle.mjs'), join(here, file), ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
     p.stdout.on('data', d => { out += d; });
     p.stderr.on('data', d => { out += d; });
-    p.on('close', code => res({ file, code, out, secs: Math.round((Date.now() - t0) / 1000) }));
+    p.on('error', error => { out += `\nAUDIT INCOMPLETE ${file}: spawn failed: ${error.message}\n`; });
+    p.on('close', (code, signal) => {
+      if (!out.includes(`AUDIT END ${file}:`)) {
+        out += `\nAUDIT INCOMPLETE ${file}: no final receipt; signal=${signal || 'none'}, exit=${code}\n`;
+        if (code === 0) code = 97;
+      }
+      res({ file, code, out, secs: Math.round((Date.now() - t0) / 1000) });
+    });
   });
 }
 
@@ -563,6 +601,8 @@ function failLines(out) {
 const HELPERS = new Set([
   'release-gate.mjs',  // this file
   'store-copy-scan.mjs', // shared reachability scanner for store-copy-lint and native submission preflight; no assertions of its own
+  'audit-lifecycle.mjs', // shared process receipt, preloaded for every tier
+  'dependency-observer.mjs', // passive browser dependency disclosure
   'godmode.js',        // the harness: boot, seed, serveTree
   'fight-sim.mjs',     // a sim library balance.mjs drives; no assertions of its own
   'badge-centre-lib.mjs', // the badge measurement badge-centre-audit.mjs drives; no assertions of its own
@@ -608,6 +648,7 @@ const onDisk = (await readdir(here))
  * 1, in the gate itself. The complement cannot be computed AND have teeth. One line
  * per file is the price, and it puts each omission on the record as a decision. */
 const DECLARED = {
+  'serve-tree-identity-audit.mjs': ['full', 'R3: binds real Python/Node loopback sockets to prove wrong-tree refusal, read-only serving and child exit. Includes the server exit proof moved out of unit.test.js; cannot run in socket-denied PURE environments.'],
   'pet-talent-ui-audit.mjs': ['full', 'Lane A: operates Stable talent controls, rejects stale levels, reopens saved choices and checks the duplicate in a real fight.'],
   'boot-backfill-audit.mjs': ['full', "the first-v385-boot backfill is checkpointed, resumable and behind the paint: PAINT (#screen has content while the retroactive replay is still unfinished), RESUME (twice interrupted by a real page reload, the save still reaches the exact ledger and XP total of an uninterrupted run) and WORK (a resumed boot re-reads at most 75% of the xp store a cold one does). Seeds a 365-day diary and drives four throttled boots with reloads, several minutes, far too slow for the fast tier."],
   'xp-total-audit.mjs': ['full', "the XP running total: SHAPE (full scans of the xp store do not grow with row count across a burst of awards) plus TRUTH (the cached total equals a from-scratch recount after every award), at 900 / 5400 / 10950 rows. Seeds ~17k rows across three browser passes, about 40s, too slow for the fast tier."],
@@ -632,8 +673,8 @@ const DECLARED = {
   'coins-merge-tie-audit.mjs': ['fast', 'node-only: two devices that moved the ledger to the same coinsRev keep the HIGHER balance on merge, and spent consumables carry a taken receipt so a stale blob cannot revive them (R38-13). Red before: got 10, expected 25; the spent item reappears.'],
   'version-align-lint.mjs': ['fast', 'web versions (app.js APP_BUILD, sw.js VERSION, version.json) are consistent, and each native shell (iOS, Android) is marked with which web build it last wrapped via WRAPPED_WEB_BUILD comment. Node-only, sub-second. Pins version alignment so release notes and support can correlate tickets with the web version each native shell bundled.'],
   'garden-sim.mjs': ['skip', 'a balance MODEL, not a guard: 30 days x 60 seeded runs of the garden against the kitchen. It reports numbers for a decision and asserts nothing about the app. tests/garden-appetite-guard.mjs is the guard that pins the outcome.'],
-  'hollow-backdrop-audit.mjs': ['full', 'renders all three time bands and hit-tests an 800-point grid to prove the backdrop takes no taps. Slow by construction.'],
-  'hollow-beds-audit.mjs': ['full', 'renders every plot state and measures them apart by pixels. Slow by construction.'],
+  'hollow-backdrop-audit.mjs': ['full', 'UNREACHABLE module probe, zero player coverage; renders all three time bands and hit-tests an 800-point grid to prove the backdrop takes no taps. Slow by construction.'],
+  'hollow-beds-audit.mjs': ['full', 'UNREACHABLE module probe, zero player coverage; renders every plot state and measures them apart by pixels. Slow by construction.'],
   'arena-static-probe.mjs': ['skip', 'a PROBE by its own first line: it measures whether .arena shifts when the action tray changes button count, and prints the numbers. The guard for that behaviour is fight-layout-audit.mjs.'],
   'today-d2-shots.mjs': ['skip', "capture only: the four Today states at 390x844 dark, for review. tests/today-container-audit.mjs is the guard, and it is in FAST."],
   'badges-audit.mjs': ['skip', 'seeds the four Warden badges and shoots the wall for review; a screenshot script, not a regression guard.'],
@@ -1282,7 +1323,7 @@ async function writeLock(text) {
     const src = await readFile(lockPath, 'utf8');
     if (!LOCK_RE.test(src)) return false;
     const { writeFile } = await import('node:fs/promises');
-    await writeFile(lockPath, src.replace(LOCK_RE, (_m, head) => `${head}${text}`));
+    await writeFile(auditOutputPath(lockPath), src.replace(LOCK_RE, (_m, head) => `${head}${text}`));
     return true;
   } catch { return false; }
 }
@@ -1344,6 +1385,8 @@ const results = [];
 const verdict = r => (r.code === 0 ? 'PASS ' : r.code === UNPROVEN ? 'UNPRV' : 'FAIL ');
 function report(r) {
   console.log(`${verdict(r)} ${r.file.padEnd(24)} ${r.secs}s`);
+  for (const line of r.out.split('\n').filter(l => /^(AUDIT |DEPENDENCY |INTERRUPTED )/.test(l)))
+    console.log(`        ${line}`);
   if (r.code === UNPROVEN) {
     const u = unprovenLines(r.out);
     console.log(`        ${u.rows} check(s) DID NOT RUN on this machine. Not a pass.`);

@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* THE TALK BOX SAYS ITS LINE, AND THE PLAYER CAN HURRY IT ALONG.
  *
  * Tom, 2026-08-20: "i also want to create an old school dialogue style system
@@ -726,9 +727,9 @@ async function capture({ ms = 2600, every = 80 } = {}) {
 
 const dumpFrames = async (frames, tag) => {
   if (!framesDir) return;
-  await mkdir(framesDir, { recursive: true });
+  await mkdir(auditOutputPath(framesDir), { recursive: true });
   for (let i = 0; i < frames.length; i++) {
-    await writeFile(path.join(framesDir, `${tag}-${String(i).padStart(2, '0')}-len${frames[i].len}.png`), Buffer.from(frames[i].b64, 'base64'));
+    await writeFile(auditOutputPath(path.join(framesDir, `${tag}-${String(i).padStart(2, '0')}-len${frames[i].len}.png`)), Buffer.from(frames[i].b64, 'base64'));
   }
 };
 

@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* A KILLED AUDIT MUST NOT LEAVE A BROWSER BEHIND. 2026-08-27.
  *
  * Tom: "can you find a way to not just leave insane 1200% cpu loops melting my
@@ -69,7 +70,7 @@ const gone = async (pid, ms) => {
    gate's coverage scan on the next run. 2026-08-29: a SIGKILL left .leak-victim-30822.mjs
    in tests/, and the gate refused to start until it was manually removed. */
 const victimPath = path.join(os.tmpdir(), `bh-leak-victim-${process.pid}.mjs`);
-fs.writeFileSync(victimPath, `
+fs.writeFileSync(auditOutputPath(victimPath), `
 import { boot } from ${JSON.stringify(path.join(here, 'godmode.js'))};
 const { browser } = await boot(${JSON.stringify(BASE)} || undefined);
 console.log('CHROME_PID=' + browser.process().pid);
@@ -110,7 +111,7 @@ try {
 } finally {
   try { if (victim && victim.exitCode === null) victim.kill('SIGKILL'); } catch { /* gone */ }
   try { if (chromePid && alive(chromePid)) process.kill(chromePid, 'SIGKILL'); } catch { /* gone */ }
-  try { fs.unlinkSync(victimPath); } catch { /* gone */ }
+  try { fs.unlinkSync(auditOutputPath(victimPath)); } catch { /* gone */ }
 }
 
 /* THE BOUND ON ANYTHING THAT ESCAPES THE NANNY. A real orphan is made the same
@@ -118,7 +119,7 @@ try {
    to init. Then the sweep has to find it by shape, without being told its pid. */
 {
   const p2 = path.join(os.tmpdir(), `bh-leak-stray-${process.pid}.mjs`);
-  fs.writeFileSync(p2, `
+  fs.writeFileSync(auditOutputPath(p2), `
 import { boot } from ${JSON.stringify(path.join(here, 'godmode.js'))};
 const { browser } = await boot(${JSON.stringify(BASE)} || undefined);
 console.log('CHROME_PID=' + browser.process().pid);
@@ -161,7 +162,7 @@ await new Promise(() => {});
   } finally {
     try { if (v2 && v2.exitCode === null) v2.kill('SIGKILL'); } catch { /* gone */ }
     try { if (pid2 && alive(pid2)) process.kill(pid2, 'SIGKILL'); } catch { /* gone */ }
-    try { fs.unlinkSync(p2); } catch { /* gone */ }
+    try { fs.unlinkSync(auditOutputPath(p2)); } catch { /* gone */ }
   }
 }
 

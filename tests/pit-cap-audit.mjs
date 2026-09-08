@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* Hitting the Gauntlet ceiling must be OBVIOUS. Failure = the cap only readable in
  * body text, or the section summary still claiming a rank you cannot fight. */
 import { boot, sleep, shotDir } from './godmode.js';
@@ -126,7 +127,7 @@ await sleep(400);
 /* the shot used to query the dead `.pit-sect` and skip in silence, so a moved
    anchor cost the evidence too. */
 const el = await page.$('.t3-sect');
-if (el) await el.screenshot({ path: `${DIR}/pit-uncapped.png` });
+if (el) await el.screenshot({ path: auditOutputPath(`${DIR}/pit-uncapped.png`) });
 else { console.log('note: no .t3-sect to shoot'); }
 await browser.close();
 console.log(bad ? `\n${bad} FAILED` : '\nPIT CEILING IS UNMISSABLE');

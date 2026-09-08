@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* The daily haunted prize wheel. maybeShowDailyWheel in js/wheel.js:185 pops
  * once per real day, on first open, and PAYS COINS from the ledger. It has
  * five separate ways to silently retire itself, and one guard between a
@@ -429,7 +430,7 @@ for (const k of LANDINGS) {
   check(`UPRIGHT idx=${k}: every label + icon nets within -90..+90 at rest`, m.rows.length > 0 && down.length === 0,
     down.length ? down.map(r => `${r.kind}:${r.tag}@${r.net.toFixed(0)}deg`).join(' ') : `${m.rows.length} elements upright`);
   /* the human-eyeball frame: the worst landing (rest 180) on request */
-  if (k === 3 && process.env.WHEEL_SHOT) await page.screenshot({ path: process.env.WHEEL_SHOT });
+  if (k === 3 && process.env.WHEEL_SHOT) await page.screenshot({ path: auditOutputPath(process.env.WHEEL_SHOT) });
 }
 check('BAND    the driven set contained flip-band landings (the hazard was in the sample)', bandHits >= 2, `${bandHits} of ${LANDINGS.length}`);
 await page.evaluate(() => { delete window.__wheelIdx; document.querySelectorAll('.dw').forEach(n => n.remove()); });

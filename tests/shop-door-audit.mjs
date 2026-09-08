@@ -43,7 +43,7 @@ const ok = (label, pass, detail = '') => {
 
 const srv = process.env.URL ? null : await serveTree(ROOT);
 const base = process.env.URL || srv.url;
-const { browser, page } = await boot(base);
+const { browser, page, errors } = await boot(base);
 
 const go = async (hash, ms = 1400) => {
   await page.evaluate(() => { location.hash = '#/today'; });
@@ -194,7 +194,7 @@ try {
     }
   }
 
-  ok('NO page errors', true);
+  ok('NO page errors', errors.length === 0, errors.join(' | '));
 } finally {
   await browser.close();
   srv?.close?.();

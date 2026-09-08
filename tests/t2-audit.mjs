@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* Tier 2 audit: the six payoff moments, plus the breeding explanation.
  *
  * These are celebration beats, not routes, so each is PROVOKED for real (a crate
@@ -88,7 +89,7 @@ const ctx = browser.defaultBrowserContext();
 await ctx.overridePermissions(new URL(base).origin, ['geolocation']);
 await page.setGeolocation({ latitude: 49.2827, longitude: -123.1207, accuracy: 8 });
 
-const shot = async n => { if (sh) await page.screenshot({ path: path.join(sh, `t2-${n}.png`) }); };
+const shot = async n => { if (sh) await page.screenshot({ path: auditOutputPath(path.join(sh, `t2-${n}.png`)) }); };
 const closeAll = async () => { await page.evaluate(() => { const n = document.querySelectorAll('.sheet').length; if (n) history.go(-n); }); await sleep(800); };
 
 /* a reveal owns the screen: full-height sheet, its own painted ground, and no

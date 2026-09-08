@@ -68,7 +68,7 @@ const arg = process.argv[2] || process.env.URL;
 const server = arg ? null : await serveTree(ROOT);
 const BASE = (arg || server.url).replace(/\/?$/, '/');
 console.log(`grading ${BASE}`);
-const { browser, page } = await boot(BASE, { headless: process.env.HEADLESS_MODE || 'shell' });
+const { browser, page, errors } = await boot(BASE, { headless: process.env.HEADLESS_MODE || 'shell' });
 page.on('pageerror', e => console.log('PAGEERROR', String(e).slice(0, 400)));
 await setWidth(page, 393, 852);
 
@@ -278,6 +278,42 @@ for (const slot of GEAR_SLOTS) {
     stage.srcs?.length === 1 && stage.srcs[0] === want && st1.tm === null && st1.look === g.art && st1.lo === g.worn,
     `stage ${JSON.stringify(stage.srcs)}, ${JSON.stringify(st1)}`);
 }
+
+// R48-A: run the real import boundary, then operate the Wardrobe navigation.
+// The missing-id CONTROL is distinct from the unknown truthy id that used to
+// throw before #chContent received any markup. File and cloud restores share
+// importAll; exercise its replace and merge modes without a network peer.
+for (const replace of [true, false]) {
+  for (const id of [null, 'sp-unresolvable-r48']) {
+    const restored = await page.evaluate(async ({ replace, id }) => {
+      const db = await import('./js/db.js');
+      const loot = await import('./js/loot.js');
+      const backup = await db.exportAll();
+      backup.kv = backup.kv.filter(r => !['equipped', 'gearloadout', 'transmog'].includes(r.k));
+      backup.kv.push({ k: 'equipped', v: id ? { H: id } : {} },
+        { k: 'gearloadout', v: {} }, { k: 'transmog', v: {} });
+      await db.importAll(backup, { replace });
+      return (await loot.equipped({ raw: true })).H || null;
+    }, { replace, id });
+    check(`RESTORE SETUP ${replace ? 'replace' : 'merge'} writes the requested H`, restored === id, String(restored));
+    await openSlot('H');
+    const rendered = await page.evaluate(() => {
+      const c = document.querySelector('#chContent'), box = c?.getBoundingClientRect();
+      return { chars: c?.innerHTML.length || 0, visible: !!box && box.width > 0 && box.height > 0,
+        empty: !!c?.querySelector('.mog-empty'), controls: c?.querySelectorAll('[data-look], [data-look-apply], .mog-go').length || 0 };
+    });
+    check(`RESTORE ${id ? 'unknown truthy id' : 'CONTROL absent id'} keeps Wardrobe visible without Dressing Room controls (${replace ? 'replace' : 'merge'})`,
+      rendered.chars > 0 && rendered.visible && rendered.empty && rendered.controls === 0, JSON.stringify(rendered));
+  }
+}
+const placeholder = await page.evaluate(async () => {
+  const { bhAsset } = await import('./data/boneheadz.js');
+  const img = new Image(); img.src = bhAsset(undefined);
+  try { await img.decode(); return img.naturalWidth > 0 && img.naturalHeight > 0; } catch { return false; }
+});
+check('ASSET unresolved artwork placeholder decodes', placeholder);
+check('RESTORE no page errors', errors.length === 0, errors.join(' | '));
+
 
 await browser.close();
 if (server) server.close();

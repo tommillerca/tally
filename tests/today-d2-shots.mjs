@@ -1,13 +1,14 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* SHOTS OF THE SHIPPED TODAY, not of a mockup: four states at 390x844 dark on a
  * ?demo-seeded save. Capture only, no assertions; tests/today-container-audit.mjs
  * is the guard. Usage: node tests/today-d2-shots.mjs [baseUrl]
  */
-import { boot, serveTree, sleep } from './godmode.js';
+import { boot, serveTree, sleep, shotDir } from './godmode.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
-const out = join(repo, '_feedback_shots', 'today-d2');
+const out = shotDir('today-d2');
 const arg = process.argv[2];
 const srv = arg ? null : await serveTree(repo);
 const { browser, page } = await boot(arg || srv.url);
@@ -21,7 +22,7 @@ const settle = async () => {
   });
   await sleep(500);
 };
-const shot = async name => { await settle(); await page.screenshot({ path: join(out, name) }); console.log(name); };
+const shot = async name => { await settle(); await page.screenshot({ path: auditOutputPath(join(out, name)) }); console.log(name); };
 const scrollTo = y => page.evaluate(v => { document.getElementById('screen').scrollTop = v; }, y);
 
 await shot('d2-1-top.png');

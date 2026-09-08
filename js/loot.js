@@ -2,12 +2,23 @@
 // Depends only on db + the generated cosmetics manifest, so the whole economy
 // stays portable (no DOM, no web-only APIs).
 
-import { db, kvGet, kvSet, kvBumpRevisioned, kvUpdate, newId, takeAndPay, payAtomic } from './db.js';
+import { db, kvGet, kvSet, kvBumpRevisioned, kvUpdate, kvUpdateMulti, newId, takeAndPay, payAtomic } from './db.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneheadz.js';
 import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SOLD, FOOTBALL_PETS, footballItemId, footballGrantIds, footballBundleIds, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { COMMON_INGREDIENT_IDS } from './cooking.js';
-import { isMorph, rollMorph, ownedPairs, isKnownPet, legalPicks, petLevel } from './pets.js';
+import { isMorph, MORPH_LABEL, morphAsset, rollMorph, ownedPairs, isKnownPet, legalPicks, petLevel } from './pets.js';
+
+// Use the same colour identity as the art. Shinies and CX never wear morph art.
+export function petColourName(inst) {
+  if (inst.shiny) return 'Shiny';
+  return morphAsset(inst.sp, inst.morph) ? MORPH_LABEL[inst.morph] : 'Base';
+}
+
+export function petInstanceName(inst, steps) {
+  const name = `${petColourName(inst)} ${(BH_BY_ID[inst.sp] || {}).name || inst.sp}`;
+  return steps === undefined ? name : `${name} · Lv ${petLevel(steps)}`;
+}
 
 export const RARITIES = {
   common:    { label: 'Common',    color: '#9fac9f', w: 52, dupe: 10 },
@@ -1164,6 +1175,7 @@ export async function salvagePet(petId) {
           if ((remaining === 0) !== last) throw gone();   // the roster moved under the plan: refuse, the retry re-plans
           return r.instances;
         },
+        petTaken: cur => [...new Set([...(cur || []), worst.iid])],
         ...bumpPay('bonedust', 'dustRev', dust),
         ...(last ? { pets: rec => { const p = { ...(rec || {}) }; delete p[petId]; return p; } } : {}),
       },
@@ -1509,13 +1521,15 @@ export async function breedPets(keepIid, feedIid) {
      re-read against the LIVE row, and it refuses (undefined) if either partner
      is no longer there. */
   let keep = null;
-  const next = await kvUpdate('petInst', raw => {
+  // The fed copy's receipt commits with the lineage it earns on the keeper.
+  const result = await kvUpdateMulti({ petInst: raw => {
     const cur = Array.isArray(raw) ? raw : list;
     if (!cur.some(x => selectablePetInstance(x) && x.iid === keepIid) || !cur.some(x => selectablePetInstance(x) && x.iid === feedIid)) return undefined;
     const bumped = cur.map(x => selectablePetInstance(x) && x.iid === keepIid ? { ...x, lineage: (x.lineage || 0) + 1 } : x);
     keep = bumped.find(x => selectablePetInstance(x) && x.iid === keepIid);
     return bumped.filter(x => !selectablePetInstance(x) || x.iid !== feedIid);
-  }, list);
+  }, petTaken: cur => keep ? [...new Set([...(cur || []), feedIid])] : undefined }, { petInst: list });
+  const next = result.petInst;
   if (!next) return { ok: false, reason: 'gone' };
   list = next;
   await kvSet('petBreedCredit', lifetime);
@@ -1858,6 +1872,7 @@ export async function salvageInstance(iid) {
           if ((speciesCount(next, inst.sp) === 0) !== last) throw Object.assign(new Error('gone'), { refused: true });   // roster moved under the plan
           return next;
         },
+        petTaken: cur => [...new Set([...(cur || []), iid])],
         ...bumpPay('bonedust', 'dustRev', dust),
         ...(last ? { pets: rec => { const p = { ...(rec || {}) }; delete p[inst.sp]; return p; } } : {}),
       },
@@ -2015,6 +2030,10 @@ export async function petLevelBank() {
 // equip (equipped.C) by picking the best instance of that species.
 export async function equippedPetIid() {
   let iid = await kvGet('petEquipped', null);
+  // A future instance exists but this build cannot use it. Do not replace its
+  // saved selection with a known pet (or null) just because a screen opened.
+  const stored = await kvGet('petInst', null);
+  if (iid && Array.isArray(stored) && stored.some(x => x?.iid === iid && !selectablePetInstance(x))) return null;
   const insts = await petInstances();
   let inst = iid ? insts.find(x => x.iid === iid) : null;
   if (!inst) {
@@ -2856,10 +2875,18 @@ export async function equipped({ raw = false } = {}) {
   const base = {};
   for (const s of BH_SLOTS) if (s.default) base[s.code] = s.default;
   const saved = await kvGet('equipped', {});
-  const eq = { ...base, ...saved };
-  // Hide unsupported companions without rewriting their saved rows or slot.
-  if (eq.C && !isKnownPet(eq.C)) delete eq.C;
-  if (raw) return eq;
+  // The Dressing Room needs the true saved id to explain an unavailable look.
+  // Keep the raw contract, including the existing unsupported-pet exclusion.
+  if (raw) {
+    const eq = { ...base, ...saved };
+    if (eq.C && !isKnownPet(eq.C)) delete eq.C;
+    return eq;
+  }
+  const eq = { ...base };
+  for (const s of BH_SLOTS) {
+    const id = saved?.[s.code], item = BH_BY_ID[id];
+    if (item && item.slot === s.code && (s.code !== 'C' || isKnownPet(id))) eq[s.code] = id;
+  }
   const tm = (await kvGet('transmog', {})) || {};
   const slots = Object.keys(tm);
   if (!slots.length) return eq;
@@ -2873,13 +2900,15 @@ export async function equipped({ raw = false } = {}) {
        transmogPrice. */
     if (!lo[slot] && !eq[slot]) continue;
     if (tm[slot] === TRANSMOG_HIDE) delete eq[slot];
-    else if (BH_BY_ID[tm[slot]] && (slot !== 'C' || isKnownPet(tm[slot]))) eq[slot] = tm[slot];
+    else if (BH_BY_ID[tm[slot]]?.slot === slot && (slot !== 'C' || isKnownPet(tm[slot]))) eq[slot] = tm[slot];
   }
   return eq;
 }
 
 export async function equip(slot, itemId, { keepGear = false } = {}) {
-  const eq = await equipped({ raw: true });
+  // Readers project renderable slots. Writers edit the stored map so changing
+  // a hat does not erase a future companion or an unknown earned appearance.
+  const eq = { ...((await kvGet('equipped', {})) || {}) };
   if (itemId == null) {
     const def = BH_SLOTS.find(s => s.code === slot)?.default || null;
     if (def) eq[slot] = def; else delete eq[slot];
@@ -2936,7 +2965,7 @@ export async function equipGear(slot, gearId) {
   const unpaidLook = tm[slot] && tm[slot] !== TRANSMOG_HIDE && !(await paidLooks()).has(paidKey(slot, tm[slot]));
   lo[slot] = gearId;
   await kvSet('gearloadout', lo);
-  const eq = await equipped({ raw: true });
+  const eq = { ...((await kvGet('equipped', {})) || {}) };
   eq[slot] = g.artId;
   await kvSet('equipped', eq);
   if (unpaidLook) await dropTransmog(slot);

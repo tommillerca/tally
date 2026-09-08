@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* The FAQ has to be reachable, readable and TRUE. The failure that matters is not a
  * crash: it is copy that drifts from what the engine does, or a fold nobody can open. */
 import { boot, sleep, shotDir } from './godmode.js';
@@ -120,7 +121,7 @@ check('and does NOT still tell them to go buy one', !weapons.stillSelling);
 await guard('shooting the FAQ card', async () => {
   const el = await page.$('.faq-card');
   if (!el) throw new Error('no .faq-card to shoot');
-  await el.screenshot({ path: `${DIR}/build-faq.png` });
+  await el.screenshot({ path: auditOutputPath(`${DIR}/build-faq.png`) });
   console.log('shot build-faq');
 });
 await browser.close();

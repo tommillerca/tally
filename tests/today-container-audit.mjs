@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* THE DAY IS ONE CONTAINER, AND A PAST DAY IS NOT A STRIPPED ONE.
  *
  * Today is the app's default screen and its most regression-prone one: four of
@@ -81,7 +82,7 @@
  * Usage: node tests/today-container-audit.mjs [baseUrl]   (serves this repo if
  * omitted, so a bare run can never grade production).
  */
-import { boot, serveTree, sleep } from './godmode.js';
+import { boot, serveTree, sleep, shotDir } from './godmode.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -129,9 +130,9 @@ async function tapDay(page, id, want) {
   return landed;
 }
 
-const shotPath = name => join(repo, '_feedback_shots', 'today-d2', name);
+const shotPath = name => join(shotDir('today-d2'), name);
 
-const { browser, page, errors } = await boot(base);
+const { browser, page, errors } = await boot(base, { timezone: 'Pacific/Kiritimati' });
 
 /* THE LEDGER CONTROL'S SAMPLE MOVED ROUTES, 2026-09-03. It used to be read off
    Today itself: every `#screen .card` that was not inside `.dayblk`, which in
@@ -471,7 +472,8 @@ try {
   const yesterday = await page.evaluate(() => {
     const d = new Date(document.querySelector('.dayhdr').dataset.date + 'T12:00:00');
     d.setDate(d.getDate() - 1);
-    return d.toISOString().slice(0, 10);
+    // Match localDay in godmode.js. UTC+14 noon belongs to yesterday in UTC.
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
   const wentBack = await tapDay(page, 'prevDay', yesterday);
   ok('SCROLL the previous-day arrow really moved the day before anything was measured',
@@ -605,7 +607,7 @@ try {
   ok('READONLY and the header stops advertising things to claim', !ro.badge && !ro.accent,
     `badge ${ro.badge}, accent ${ro.accent}`);
   ok('READONLY one line says why, in the app’s own note idiom', /record of/i.test(ro.note || ''), String(ro.note));
-  await page.screenshot({ path: shotPath('d2-7-pastday-quests.png') });
+  await page.screenshot({ path: auditOutputPath(shotPath('d2-7-pastday-quests.png')) });
 
   await tapDay(page, 'nextDay', todayShape.pickDate);
   const openQuests = () => page.evaluate(() => {

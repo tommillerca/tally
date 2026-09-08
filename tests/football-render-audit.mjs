@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* THE FOOTBALL KIT, IN PIXELS. The half tests/football-kit-audit.mjs cannot reach.
  *
  * That file is PURE and it grades everything a number can answer: the palette,
@@ -114,7 +115,7 @@ const setup = (label, pass, detail = '') => {
 
 const shotsAt = process.argv.indexOf('--shots');
 const SHOTS = shotsAt > 0 ? process.argv[shotsAt + 1] : null;
-if (SHOTS) mkdirSync(SHOTS, { recursive: true });
+if (SHOTS) mkdirSync(auditOutputPath(SHOTS), { recursive: true });
 
 /* TWO TEAMS AT OPPOSITE ENDS OF THE GAMUT, so "the tint follows the team" is a
    question the mean colour can actually answer: a very dark navy and a bright
@@ -292,7 +293,7 @@ const shot = async (name, rect) => {
   if (!SHOTS) return;
   await settle(page);
   const f = path.join(SHOTS, `${name}.png`);
-  await page.screenshot({ path: f, ...(rect ? { clip: rect } : {}) });
+  await page.screenshot({ path: auditOutputPath(f), ...(rect ? { clip: rect } : {}) });
   console.log(`      shot: ${f}`);
 };
 

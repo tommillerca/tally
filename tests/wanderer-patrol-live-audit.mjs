@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* THE WANDERER'S TRIP WIRE, FIRED FOR REAL.
  *
  * tests/wanderer-boneyard-audit.mjs proves the derivation, the geometry, the
@@ -411,7 +412,7 @@ async function run(offsetDeg, label) {
         min: Math.min(...zoom.widths) } };
   });
   // kept for the eye, not asserted on: the rows above measure the DOM
-  if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/wanderer-${label}.png` });
+  if (process.env.SHOT) await page.screenshot({ path: auditOutputPath(`${process.env.SHOT}/wanderer-${label}.png`) });
   await browser.close();
   return { target, seenState, drive, stack };
 }

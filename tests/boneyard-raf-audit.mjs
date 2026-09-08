@@ -76,7 +76,7 @@ try {
   const cap = await boneyardCapability(page);
   if (!cap.ok) {
     unproven('boneyard-raf-audit', `this machine cannot run the map: ${cap.checks.filter(c => !c.ok).map(c => `${c.kind}: ${c.detail}`).join('; ')}`);
-    console.log(unprovenReport('boneyard-raf-audit', 1));
+    unprovenReport('boneyard-raf-audit', cap);
     await browser.close().catch(() => {});
     srv?.close?.();
     process.exit(UNPROVEN_EXIT);

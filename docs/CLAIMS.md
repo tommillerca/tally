@@ -1,5 +1,39 @@
 # What each patch note claims, and what backs it
 
+## R3: operational debt (2026-09-07)
+
+1. PROOF: unit.test.js | REACH: The hotfix registerKey/goOnline regions and strengthened R37-24 guard are byte-identical to locally available origin/main. The current unit suite checks the failed retry, welcome receipt and successful later signup. Branch left intact; no live-wallet measurement is claimed.
+2. PROOF: audit-output-audit.mjs, guard-hygiene-lint.mjs | REACH: Recognized audit write destinations reject the checkout, traversal and symlink aliases; the remaining serveTree proof file moved into memory. Three throwaway reversions went red and restored copies went green. This is bounded source/path evidence, not an OS-level guarantee for opaque subprocesses or a browser proof.
+3. PROOF: serve-tree-identity-audit.mjs | REACH: Real wrong-port, read-only directory and child-exit proofs remain pending on a socket-permitted machine. The socket-dependent checks now belong to FULL, preserving their assertions. Initial inherited PURE execution received listen EPERM and did not grade any row.
+
+Four verdicts, files, exact proof output, denials and deviations are recorded in
+[R3-REPORT.md](R3-REPORT.md). Current census/machine limits are in
+[RELEASE-GATE-STATUS.md](RELEASE-GATE-STATUS.md). [TESTFLIGHT-STATE.md](TESTFLIGHT-STATE.md)
+attributes the supplied snapshot and marks current remote verification blocked
+by the contradictory ASC instruction. No commit, push or publication occurred.
+
+
+## M5: first-run disclosure and lookup guards (2026-09-07)
+
+1. PROOF: unit.test.js | REACH: Gwart retains his introduction and gives the exact anonymous-account disclosure. First run retains its intro, returning players skip it unless explicitly previewing. The four-job toast backlog cap remains. The three focused Node guards pass; the full unit command has one socket-dependent failure.
+2. PROOF: first-run-honesty-audit.mjs | REACH: Browser operation and screenshots are PENDING sandbox-free review. Expected 8/8 passed and exit 0; no browser or screenshot proof is claimed here. The older onboarding audit now waits for the retained intro to be dismissed before grading its CTA.
+3. PROOF: lookup-guard-lint.mjs | REACH: A bounded scan reports all four current candidates across 54 source files: two unresolved peer-pet boundaries and two upstream-validated false positives (50% of this sample). Downstream fallbacks prevent these boundary findings from establishing a crash. New or duplicated sites fail. This does not claim complete coverage of the guard class.
+4. PROOF: m5-prove-red.mjs | REACH: Seven throwaway source reversions exit 1, including both known lookup guards; restored first-run guards and lint exit 0. Full red/green output, scope limits and deviations are recorded in tests/m5-review.md.
+
+The required remote merge is blocked: origin/codex/cx-firstrun is absent and GitHub DNS resolution failed. The only local branch is rejected-round WIP commit 3c782c65. The frozen corrections were implemented directly; the completed branch was not merged or verified. No commit, push or publication was performed.
+
+## WAVE: submission intent and store audit (2026-09-07)
+
+1. PROOF: submission-build-audit.mjs | REACH: GATED until Tom builds and installs the candidate. The scripted build now requires explicit SUBMISSION=1 or SUBMISSION=0, resolves its own checkout, separates artifacts, and refuses mismatched copied or archived submission content before export. Node-only fixture execution proves the branch outcomes and config restoration; six throwaway reversions went red. No native build or upload was run.
+2. PROOF: submission-preflight-audit.mjs | REACH: Both submission preflight calls require a content-bound submission marker, STORE_BUILD=true, no server key and clean reachable store strings. Internal markers are refused even with a correct digest.
+3. PROOF: store-copy-lint.mjs | REACH: Source store-copy proof passes. This does not establish bundled WKWebView operation, storage migration, signing, live backend compatibility or App Review readiness.
+
+Advisory evidence, changed files, red/green output, exclusions and deviations:
+[WAVE-STORE-PROOF.md](WAVE-STORE-PROOF.md). The current owner/status/evidence
+checklist and Tom's ordered tasks are in
+[SUBMISSION-CHECKLIST.md](SUBMISSION-CHECKLIST.md). No version, commit, push,
+publication, Worker or App Store Connect action was performed.
+
 ## Lane H: Today reads and guard integrity (2026-09-07)
 
 Advisory report for independent provider review. The supplied frozen plan SHA256
@@ -406,6 +440,71 @@ the upload path and its guards.
 
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
+
+## v516
+1. Round 44's Paddock geometry and Kennel naming backlog, plus the operational debt. Its dated sections are further down, folded here.
+
+   Not player-visible, so it carries no changelog item: `hotfix/register-429-wallet` is dead weight and can be deleted. Its `registerKey` is byte-identical to main's through the whole retry body, and main additionally guards `apiBase()` being absent, which the branch version does not. QA round 43 confirmed the shipped behaviour live on v493 at 28 of 28 samples. Recorded with the evidence in docs/TESTFLIGHT-STATE.md rather than acted on, because branch deletion is Tom's call.
+
+2. PROOF: paddock-pack-audit.mjs, paddock-pack-browser-audit.mjs | REACH: the Paddock with a large collection. At 200 pets the packer failed the contract stated in `js/paddock.js`'s own header: 76 pairs overlapped by more than 20px in both axes, worst 121x72, among the 50 actually drawn. A breeding-armed pet and the equipped pet were both completely unmarked in the field, which are two states the player chose. The Stable copy row also lost 2,160px of scroll position on every tap, and a breeding pick was silently dropped on leaving the sheet while the sibling team pick persisted, which is the tell that one of the two was re-rendering rather than refreshing.
+
+3. PROOF: kennel-copy-browser-audit.mjs | REACH: hatch a pet, then look for its colour anywhere. The reveal said "A Frost Bumbleseal!" and from that second the word Frost appeared on no screen in the game except one Kennel panel, while the Stable card for that exact animal printed rarity, level and four stats and no colour, with its own img pointing at the Frost art. The card already had a chip vocabulary for rarity, level and shiny, so the colourway was the only pet property with art and no chip. It is now named on the card, in the breed picker and in the destroy confirm, which are the three points where the choice is irreversible. The typed-confirm gate also keyed on species and never on colourway or level, so a Level 10 one-of-a-kind with 105,000 banked steps was destroyed by two taps inside 2,800 ms with no toast on arming.
+
+4. PROOF: paddock-pack-audit.mjs | REACH: the Stable copy row. It lost 2,160px of scroll position on every tap, and a breeding pick was silently dropped on leaving the sheet while the sibling team pick persisted. Two sibling controls behaving differently is what identified it: one path was re-rendering where the other refreshed.
+
+5. PROOF: kennel-copy-audit.mjs | REACH: melt a pet. The heavier typed-confirm gate keyed on species and never on colourway or level, so a Level 10 one-of-a-kind with 105,000 banked steps went to two taps inside a 2,800 ms window, with no toast on arming, a button reading "Melt for 60?" and a result toast naming only the species.
+
+## v515
+1. The restore path hardened ahead of round 50, plus round 48's remainder and the pet-screen accessibility work. Its dated sections are further down, folded here.
+
+2. PROOF: restore-debt-audit.mjs, restore-state-audit.mjs | REACH: restore a backup, or open an older build after updating. Four ways a restore lost something the player had earned, each proven red on the shipped tree and green on the fix, with the app files reverted to origin/main to prove it: a stale petInst merge lost an earned duplicate (copies 2 to 1); a stale per-instance level bank erased banked steps (1000 to 10); a stale potion balance refunded a potion already drunk (spent count 0 to 1, the same merge bug pointed the other way); and an older cooking reader DELETED a future build's earned buff on open (rows 1 to 0), which is a forward-compatibility hole that fires on ordinary update behaviour rather than anything exotic. All four break this project's house rule that nothing earned is ever lost. The fixes reuse the shapes already in this codebase rather than inventing new ones: revision ranking, union merges so a consumed thing cannot revive, and single-transaction take-and-pay. `docs/P3-KV-CENSUS.md` records all 165 keys a restore can write with a payload-wins verdict for each, which had never been enumerated.
+
+3. PROOF: pet-a11y-audit.mjs, pet-a11y-pixels-audit.mjs | REACH: the Kennel grid with an incomplete collection. Every colour was hidden from anyone who had not already won it: column headers carried no swatch, unowned cells were greyed to near-black, and an unowned roster dot measured 1.19:1 against its own row, which is invisible, so nobody ever learned there are five slots per species. Pressing an unowned cell also replaced the row label with "Not hatched yet." and every locked cell carried that identical aria-label, so a zero-pet grid was 30 indistinguishable cells to a screen reader.
+
+## v514
+1. The round-46 diary remainder, the first-run disclosure that had been finished and unmerged, the store-build update copy, and the machine-character disclosure. Its dated sections are further down, folded here.
+
+   Not player-visible, so it carries no changelog item: a store build no longer fetches `version.json` and no longer tells the player "No connection. Try again when you have signal" when an update is unavailable. An App Store build updates through the App Store, so that message was both wrong and the kind of thing a reviewer reads as a broken app. Gated on the existing STORE_BUILD flag; the web build's behaviour is byte-identical, because it genuinely does update over the web. PROOF: store-runtime-audit.mjs.
+
+   Also not player-visible: timing rows now disclose the machine they ran on. PROOF: flick-disclosure guard in crate-reveal-audit.mjs. R45-5 reported the first crate flick running at half rate in 4 of 5 runs, 12 to 20 frames. Re-measured here on v513 across five fresh browser processes: first flick 49, 46, 59, 58, 47 rAF samples against second flick 43, 57, 59, 58, 43, with ZERO of five runs at or below the 20-frame ceiling and the first flick sampling MORE frames than the second in 3 of 5. 81/81 rows passed. Both reports are honest and the machines differ, which is the third instance of this class after boneyard-audit gave rounds 43, 45 and 48 three different correct verdicts. No first-flick fix was built, because a fix without a reproduction is a guess; v500's mechanism stays (burst draw calls 0 on v509 against 18 and 26 on v493) and the audit now records that the fix belongs on whichever machine reproduces it.
+
+2. PROOF: first-run-honesty-audit.mjs | REACH: the first screen of onboarding. An anonymous account is created at first run and the only disclosure was inside the optional survey, so a player who skipped it was never told. Gwart now says it in his own voice while keeping his introduction, and points at the permanent Privacy policy row v505 shipped. Three earlier attempts were rejected and their corrections hold: the splash is gated on RETURNING only so a new player keeps the intro, the toast backlog cap survives, and Gwart's introduction is intact.
+
+3. PROOF: r46-diary-audit.mjs | REACH: Trends against the streak pill. The two surfaces disagreed about what counts as a logged day, so the same question returned two answers depending where it was asked.
+
+4. PROOF: r46-diary-audit.mjs | REACH: the copy-yesterday chip, and a day more than a week old. The chip promised one number and delivered another, and old empty days spoke as though they were today.
+
+5. PROOF: r46-diary-audit.mjs | REACH: the day arrow at the start of an account's history. It walked off the end of the account's own history.
+
+## v513
+1. Round 48's harness and reporting work plus the remainder of round 47. Its dated sections are further down, folded here.
+
+2. PROOF: r47-rest-audit.mjs | REACH: open a Spire defended by another player. `GET /spires` returned the defender's profile with nine more fields than `/leaderboard` does, including `weekSteps`, the `yard` pet roster, the full `gear` list and `plat`. That falsified the app's own stated invariant: `socialSnapshot` carries a comment saying `yard` "reaches accepted friends and nobody else", and a rival is not an accepted friend. Scoped honestly by the round that found it: `privacy.html` does not promise friends-only, so this was a source-level invariant violation rather than a broken user-facing promise, and it is closed either way. The response now carries only what a rival needs, guarded so the field list cannot quietly grow back, which is how it got here.
+
+3. PROOF: r47-rest-audit.mjs | REACH: lose a tower, then open the siege sheet. The lost-tower card contradicted itself in two lines and the siege sheet's clock did not tick.
+
+## v512
+1. Round 48's shipped defects plus round 46's logging lane, and the guard and submission work behind them. Its dated sections are further down, folded here. The pet balance re-tune was HELD OUT of this train: it conflicts with a shipped contract (Eternal Guard heals to 40%, the re-tune needs 20%) and that is Tom's ruling to make.
+
+2. PROOF: r48-state-audit.mjs, unit.test.js | REACH: restore a backup carrying an equipped gear id this build cannot resolve. A guard tested whether the equipped art id was MISSING; the case that occurs is an id that is present but unresolvable, which is truthy, so it walked through, reached `bhAsset(undefined)`, and `data/boneheadz.js` dereferenced `item.file`. Measured: a missing id renders 14,074 characters, an unresolvable one renders 0, and there is NO page error, so nothing in the console marks it. This is the seventh instance of one class in this project, and the round-48 ticket named the wrong guard: `js/app.js:16583` protects `previewEq()`, which never calls `bhAsset`, so repairing it would have been a no-op. A plan review caught that and the real four-hop path was verified before any code was written.
+
+3. PROOF: r46-logging-audit.mjs | REACH: the Add sheet and the Foods screen. Search could not see the player's own history (0 of 3: "Dinner out", present as 2 rows in their own log, returned 2 unrelated built-in foods), truncated silently while announcing a false total to a screen reader ("25 matches" for 93), and could not match an unaccented query against an accented food (3 of 3: creme, brulee, Cafe all returned 0). 
+
+
+5. PROOF: r46-logging-audit.mjs | REACH: tap Add twice quickly. Driven 5 times: 0 of 5 duplicated the intended entry, so the obvious defect was absent, but 1 of 5 logged an unintended item at 105 kcal and left the app on about:blank. Putting food in a diary the player did not choose, on a page they cannot read, is worse than a duplicate, so the fix is at the selection rather than a debounce over it.
+
+4. PROOF: unit.test.js | REACH: after any fight. `window.__refreshLevelChip` shipped in the production bundle, which round 48 filed as a test seam to gate behind the webdriver check. Gating it would have been a bug: production fight settlement calls it after both a win and a loss through optional chaining, so the calls would have silently done nothing and left the level and XP stale. A plan review caught this too. It is now a real production function called directly from both sites, with only the window alias gated.
+
+## v511
+1. Round 47's economy and siege lane. The server half needs a Worker deploy, which Tom runs; the client half is live on merge. Its dated section is further down, folded here.
+
+2. PROOF: r47-economy-audit.mjs | REACH: lose a Spire to another player. Nothing in `js/spires.js` deleted a local spire record, so after B took A's tower A kept a phantom Keeper's Boon worth up to +15% on every quest payout for up to 7 days AND could collect real tribute from a tower B owned: measured through the real map button while offline, 90 coins and 12 Bone Dust, pennant still reading `mine`, button still offering to defend it. Tom ruled the fix shape on 2026-09-07: an offline fight's claim on a shared tower stays PENDING until the server confirms, granting no ownership, tribute or Boon. That was the ruling rather than a plain delete because the fight handler treats an `offline` response as permission to call `claimSpire`, so deleting the record alone would have let a loser fight offline and recreate a paying tower while the rival still owned it server-side. Proven red on the shipped tree at the measured 90 coins, at the offline re-fight minting a tower, and at a stale file restore resurrecting the income.
+
+3. PROOF: r47-economy-audit.mjs | REACH: receive any server-delivered reward. `applyPayload` committed `awardOnce` before separately adding coins, dust and inventory, so terminating in between left the receipt written and the reward unpaid, and the next pull found the receipt and skipped it permanently. Routed through `claimAndPay` via `awardOnce`'s pay argument, the same shape this project already uses for crates, eggs and salvage. Guarded for an interrupted application and a concurrent delivery.
+
+4. PROOF: r47-economy-audit.mjs | REACH: hold a Spire through a takeover. Losing the tower was silent in session: 0 toasts and 0 pushes across 30 samples in the 150s after zero, and for the first 30 seconds, 7 of 7 samples, the tower read as normally held with a Tend button, a state already untrue on the server.
+
+5. PROOF: r47-economy-audit.mjs | REACH: a siege deadline with a skewed device clock. Countdowns were device time against a server deadline, so inside the Worker's plus or minus 5 minute tolerance a connected player saw "48h 4m" for a 48 hour window, and beyond it the poll 401s, `fetchMySpires` returns null and the player was never told a siege existed at all, with no skew notice on that path although `leaderboard()` has one.
 
 ## v510
 1. The pet train: seven lanes off v509, closing round 45's two open debts and round 44's state and render defects. Its dated sections are further down, folded here.
@@ -2225,3 +2324,647 @@ note in a later build if he confirms it, and more work if he does not.
   and, on the second pass, still missing the route: the crew deck is a carousel
   and one tap only centres the card. Now written as two taps, with the empty state
   named.
+
+
+## 2026-09-07: R45 guard debts
+
+This section supersedes the crate performance numbers in the earlier v500
+crate-flick claim without changing that historical section. R45 measurements
+supplied with the work order show burst drawArrays calls during the move fell
+from 18 and 26 on v493 to zero on v509. That mechanism improvement stands.
+The reported dropped-frame counts were 2 to 10, and six of ten moves exceeded
+the audit's existing over20 <= 6 bound. The first flick still ran at half rate
+in four of five runs (12 to 20 frames); the second ran full rate in every run.
+A 520ms window contains about 31 frames at 60Hz, so 47 to 59 cannot describe
+that window at 60Hz. These are supplied R45 results, not new browser measurements.
+The first-flick app fix remains with the app lane.
+
+1. PROOF: mimic-audit.mjs | REACH: A zero-frame reveal now prints a named CONTROL failure, marks the three dependent pixel rows UNPROVEN, and continues through the remaining DOM, timing and arena checks to a verdict. Missing ground capture also continues. The Node regression exercises the actual grading block; the full browser audit was not executable in this lane.
+2. PROOF: boneyard-audit.mjs | REACH: ARRIVAL-SLOW requires the same ten-marker reveal-time sample as FAST. R45's one-marker sample is UNPROVEN, never a pass. Both laps explicitly force SwiftShader; their latency budget is now 400ms, stated in output as the 220ms fade plus 180ms software-compositor sampling slack, justified by R45's 260ms and 362ms readings. The 1200ms hold and missing visibility still fail. No phone timing claim is made.
+3. PROOF: guard-debts-audit.mjs | REACH: GODMODE_DPR=3 or boot(base, { deviceScaleFactor: 3 }) opts into DPR 3. The override applies to boot and later viewport changes on the returned page, even legacy explicit DPR 2 calls, and asserts window.devicePixelRatio after each change. Unset retains DPR 2 at boot; setWidth preserves the page's current DPR. Node checks use a stub browser, not rendered art proof.
+4. PROOF: crate-reveal-audit.mjs | REACH: FIRST FLICK 1->2 and SECOND FLICK 2->3 have independent cadence and burst-pause rows. Each 520ms window requires at least 25 rAF samples and retains over20 <= 6. A burst-draw control must see the actual canvas before the first tap; each move must record zero burst drawArrays calls. rAF samples are cadence evidence, not a count of compositor-rendered frames. Browser results remain unproven here.
+5. PROOF: submission-build-audit.mjs | REACH: Explicit artifact inspection requires SUBMISSION=1, a schema-1 submission marker matching both artifact SHA256 hashes, and the existing native store-content preflight. No-argument execution runs labeled synthetic self-tests in PURE and certifies no build. Creating the marker during sync and enforcing inspection before submission require native integration outside this lane; manual builds can still bypass an unintegrated test. Unmarked artifacts cannot pass this guard.
+6. PROOF: guard-debts-audit.mjs | REACH: Node-only regression checks execute the actual audit grading blocks with empty, undersampled and healthy fixtures. The pre-change grading code was restored on a throwaway copy and failed; restoring the changes passed. This does not substitute for the prohibited browser/server red-green runs.
+
+R45-7, R45-8 and R45-11 remain unspecified: neither this checkout's Markdown
+nor the frozen work order defines their defects. Proposed next step: recover
+the three finding bodies and their reproductions, assign any app/native fixes
+to their owners, then add guards against those observed states. No defect or
+fix has been invented from an issue number. Detailed evidence, pending browser
+commands and native integration proposal are in tests/wave-guards-report.md.
+## R46 logging lane, 2026-09-07 (round two, advisory)
+
+1. PROOF: r46-logging-audit.mjs | REACH: Add and Foods search include saved diary portions, fold accents for comparison, and disclose the true match total with the visible limit. Selecting history keeps its saved nutrition; a restored portion draft resolves the original diary row. Proven with real source functions and Node DOM doubles, not a browser reload or screen-reader session.
+2. PROOF: r46-logging-audit.mjs, unit.test.js | REACH: Midnight advances the diary date and closes the prior day before a fresh row is written; edits retain their original date. Open sheet inputs survive because the router postpones teardown until the last sheet closes. R24-L17 is unchanged and passes. The complete unit command remains blocked by the local socket restriction in its serveTree check.
+3. PROOF: r46-logging-audit.mjs | REACH: Online completion binds only its own rows; late recents cannot replace a newer search. Completing Add retires every sheet before bulk history traversal, so the lower relog control cannot accept the next tap during that traversal. A Node model running the real close functions and relog handler reproduced Banana at 105 kcal and history index zero before the fix. Physical tap targeting and actual about:blank navigation still require browser review.
+4. PROOF: r46-logging-audit.mjs | REACH: Add's budget uses the same sum of rounded diary rows as Today. Five 100.4 kcal rows display and budget as 500 kcal, leaving 1500 against 2000.
+
+R46-7 is deferred with a proposed common diary-date definition for Trends and the logging streak. R46-9, R46-10, R46-11 and R46-12 lack finding details in the frozen plans and checkout reports located in this review; no behavior change is claimed for those items. No release or deployment is claimed by this section.
+
+
+## 2026-09-07: N2 audit completion and dependency disclosure
+
+1. PROOF: audit-completion-audit.mjs | REACH: Tiered release-gate children preload a shared receipt that names interrupted runs, retains emitted failures, and refuses zero exits with incomplete declared row counts. Direct Godmode audits load the same receipt. Legacy counts are explicitly undeclared, not fabricated. A SIGKILL leaves START without END and the parent reports INCOMPLETE.
+2. PROOF: audit-completion-audit.mjs | REACH: Godmode browser pages disclose external responses, HTTP status, failures, cache use and intercepted fixtures. Required Boneyard probes disclose both available and unavailable measurements, check a tile beyond TileJSON with bounded fetches, and mark subsequent required-host failures UNPROVEN without erasing real assertion failures. RAF and icon capability refusals and Water's unanswered HOME sample return 97 in Node fixtures.
+3. PROOF: audit-completion-audit.mjs, guard-debts-audit.mjs | REACH: Mimic retains the earlier empty-frame grading fix and declares all 38 current rows (the original 37 plus its added zero-frame control). Its actual row helpers produce a complete 38/38 receipt or preserve the partial count and earlier failure on a throw. These are Node regression proofs, not new screencast or browser measurements.
+
+Browser/server proofs were prohibited in this lane. The PURE array currently has
+64 files: 62 exited 0; unit.test.js and serve-tree-identity-audit.mjs were not run
+because they require local servers. This is not a claim that all PURE files or
+all browser audits passed. The advisory evidence and deviations are recorded in
+tests/n2-report.md.
+## N3 dead paths and audit artifacts, 2026-09-07 (advisory)
+
+1. PROOF: n3-deadpaths-audit.mjs, today-container-audit.mjs | REACH: Today audit screenshots, the Today capture helper, the level-paid trace default and the figure decoder fixture resolve to temporary storage. Each original path was restored separately in a throwaway copy and failed the Node path guard; the restored fixes passed. Browser screenshot execution remains unproven. The sibling-owned serveTree still writes an identity marker into its served root, so this is not a claim that every audit is read-only.
+2. PROOF: race-audit.mjs, n3-deadpaths-audit.mjs | REACH: Today > News > The weekly step race now reads the equipped outfit before opening its poster. The browser row uses real controls after a masked reload and requires all seven decoded expected layers. Node execution of the real News callback through the real poster function to its renderer input failed on the original app.js with missing 5: H11-1 FW1 IL1-1 IR10-3 P1, then passed after restoration. Browser red/green remains pending independent review.
+3. PROOF: garden-closed-audit.mjs, hollow-beds-audit.mjs, hollow-backdrop-audit.mjs, figure-audit.mjs | REACH: UNREACHABLE. The Hollow's player doors were removed on 2026-08-18. Its feature code is retained for a product deletion decision; module probes are not player coverage. The figure register no longer cites the deleted hollow-audit.mjs as a live walkthrough.
+4. PROOF: mage-audit.mjs, reward-sop-audit.mjs | REACH: UNREACHABLE. The retired bestiaryBannerHtml probe now identifies itself in comments and printed row names. The reward register no longer claims a GROW door opens the Hollow and explicitly marks the Hollow payout as unreachable. Neither retired feature is reopened.
+
+The agreed unit command returned 362 passed, 1 failed at the socket-dependent
+serveTree lifetime check. Final PURE status is 62 of 64 exit 0; that unit failure
+and the prohibited serve-tree-identity server proof prevent an all-green claim.
+See docs/N3-REPORT.md for exact red/green output, the write-site sweep,
+file ownership blockers and proposed deviations. No release is claimed.
+## N1 harness environments, 2026-09-07 (advisory)
+
+1. PROOF: harness-environment-audit.mjs | REACH: Explicit boot options emulate timezone and Chrome Intl locale before navigation. Orientation selects 393x852 or 852x393 with mobile and touch flags. Unset options preserve the previous calls. Node doubles verify plumbing and negative controls; actual browser emulation remains unproven in this sandbox.
+2. PROOF: today-container-audit.mjs | REACH: This audit opts into Pacific/Kiritimati. Its SCROLL expectation subtracts a local calendar day without converting to UTC. The original expression fails the Node UTC+14 fixture; restoring the local expression passes. Browser SCROLL and its original scroll-reset mutation remain pending review.
+3. PROOF: two-tap-audit.mjs | REACH: This audit opts into de-DE and checks the exact price formatted in the page. The original comma-only predicate fails the German Node fixture. Browser taps remain pending review.
+4. PROOF: honest-surfaces-audit.mjs | REACH: The demo page opts into de-DE. Wallet toasts must contain the actual balance formatted in that page. The original comma-only predicate fails a correct German fixture. The separate cloud page retains its previous environment. Browser purchases remain pending review.
+5. PROOF: orientation-audit.mjs | REACH: New browser guard checks real Intl/timezone state before and after reload, landscape lock visibility, full viewport coverage and hit interception, portrait release, and a real Settings click. Node grading controls reject an absent landscape cover and a stuck portrait cover. Browser and server execution are prohibited here, so no rendered green or browser mutation proof is claimed.
+
+The agreed unit command reported 362 passed and 1 failed at its embedded serveTree check. The standalone serve-tree identity proof was not run because it requires a server. Full evidence and pending reviewer commands are in tests/n1-report.md. No release is claimed.
+
+## M3 branch graveyard, 2026-09-07 (advisory)
+
+1. PROOF: branch-graveyard-audit.mjs | REACH: The read-only branch classifier uses head containment in recorded main or a merged PR, including release-train containment. It rejects name-only, reused-head, wrong-repository and incomplete evidence. Node fixtures pass; live GitHub evidence is unavailable in this sandbox.
+2. PROOF: branch-graveyard-audit.mjs | REACH: The frozen report reproduces all 953 captured branches: 147 integrated in recorded main, zero established genuinely unmerged, 806 uncertain. A throwaway reintroduction of the documented phantom-unmerged defect failed on origin/art/cauldron-swap; the restored classifier passed 21/21 guards.
+3. PROOF: branch-graveyard-audit.mjs | REACH: Deletion preview requires both explicit flags, protects main and suppresses candidates when inventory freshness is unverified. The captured preview retains all 953 branches. There is no deletion executor and no branch was deleted.
+
+Network failure prevents a current remote inventory and PR-backed classification. Registering this audit in PURE is pending because the existing release-gate file is outside M3 ownership. Exact proof output, the proposed registration, limitations and deviations are in docs/M3-REPORT.md. No commit, push, publication or release is claimed.
+## M4 App Store surface, 2026-09-07 (advisory)
+
+1. PROOF: submission-build-audit.mjs | REACH: Both native build channels refuse missing export options before bundling, sync, ASC lookup or archive. The original script was restored in a throwaway copy and failed both new rows; restoring the check passed. Platform and ASC executables were fixtures only. File presence does not validate signing or plist contents.
+2. PROOF: store-runtime-audit.mjs | REACH: The real web producer in a temporary checkout copies 54 application/data modules and resolves 180 literal entry, CSS and import references. Its service-worker condition skips capacitor and admits the HTTPS control. These are Node checks, not native launch or pixel proof.
+3. PROOF: store-runtime-audit.mjs | REACH: BLOCKED. The actual bundled hardRefresh requests missing version.json and displays a false no-connection message. The final checkout exits 1 with 4/5 rows passing. An App Store explanation guard proposed only in a throwaway copy passes 5/5, fails when reverted to the actual defect, and passes when restored. The app.js owner must implement and operate the real control; no application fix is claimed here.
+4. PROOF: store-copy-lint.mjs, submission-preflight-audit.mjs | REACH: Existing store-copy and submission-preflight checks pass in this checkout. They do not establish an installed or submittable binary. Current metadata sources, remaining Tom actions, evidence and limitations are in docs/SUBMISSION-CHECKLIST.md and docs/M4-REPORT.md.
+## M2 diary consistency, 2026-09-07 (advisory)
+
+1. PROOF: r46-diary-audit.mjs | REACH: Progress counts a zero-calorie diary row as a logged day, including in the intake averages. The existing activity streak can also count a day with 3000 steps; that distinct rule and all rewards remain unchanged. Node executes the actual recap markup on a gapped ledger and after deleting the zero-calorie row.
+2. PROOF: r46-diary-audit.mjs | REACH: Add already uses Today's sum of rounded diary rows in this checkout. The existing fix is retained and verified with 872 displayed kcal and 1668 left. Copy chips now use that same displayed total while committed nutrition remains unrounded. Historical chips and completion toasts identify the actual source date. Node operates the real copy callback through commitLogEntry into storage doubles and renders the resulting meal.
+3. PROOF: r46-diary-audit.mjs | REACH: Historical empty meals and sign-offs describe the displayed day without today's time promises. Today's existing speech is retained. Every speech selector value is exercised in Node.
+4. PROOF: r46-diary-audit.mjs | REACH: Today's Back button disables and its callback stops at account creation, or an older imported diary row. Missing or invalid creation dates fall back to the first diary row or today. Node operates the actual arrow callback and evaluates its actual markup; browser hit testing remains unproven.
+
+R46-13 remains a design ruling for Tom: whether a meal started before midnight
+should retain that start date, warn, offer a move, or keep commit-time dating.
+No ruling, version stamp or release is made here. Browser/server proofs are
+prohibited; the advisory report records Node results and outstanding proofs.
+
+
+**Scope and files changed.** `js/app.js` (logging, Trends and day-arrow sites),
+`tests/r46-diary-audit.mjs` (new Node guard), `tests/release-gate.mjs` (one PURE
+registration with a description), and `docs/CLAIMS.md` (this single dated section).
+`js/nutrition.js` and `js/sources.js` needed no changes. Supporting guard,
+registration and CLAIMS edits implement the work order's explicit instructions;
+no sibling-owned runtime site was changed.
+
+The supplied plan file's SHA256 matched
+`eb17611b3c57e16bf553254eb5bbeba93f91782fb90133bb26de5a99b03cd346`.
+The checkout's root `CLAUDE.md` and round 46's full handoff text were read.
+`tally/CLAUDE.md` is absent in this checkout; the available root contract was
+used. Source edits and historical source reads used this checkout only. The
+external handoff was read, never edited.
+
+**Diagnosis and implementation choices.** A logged food day means at least one
+diary row, because the logging streak uses row dates and a zero-calorie drink
+is still a recorded entry. Trends' separate activity streak also counts walked
+days. That existing rule remains, so an activity streak is not a count of food
+logging alone. Copying on a historical date continues to copy the displayed
+date's preceding day, with that source date now named explicitly. The first
+navigable date is the earlier of creation and existing diary history, preserving
+older imports. Missing or invalid creation metadata falls back to the earliest
+row or today. These choices add no migration or reward change.
+
+**Red/green evidence.** The guard executes actual source functions, rendered
+HTML expressions and registered click callbacks. Database and DOM dependencies
+are Node doubles, not IndexedDB durability or browser interaction proof. Each
+run's exit status was saved directly to an `.exit` file, without a pipe.
+
+The unmodified starting `js/app.js` was copied into a throwaway tree, the new
+audit was run against it, and the fixed source was restored there and rerun.
+Original-source output: `1/6 guards passed`, exit 1. The sole green case was
+R46-8, already fixed before this work. Restored output: `6/6 guards passed`,
+exit 0. Exact failure excerpts:
+
+| Finding | Original-source failure |
+| --- | --- |
+| R46-7 | `zero-calorie day omitted from rendered 6/7 recap` |
+| R46-9 | `chip promises 722 kcal but copied meal displays 723` |
+| R46-10 | `historical chip must name 2026-08-28: ↺ Copy yesterday's Breakfast (722 kcal)` |
+| R46-11 | `historical Breakfast still uses today's empty copy: Nothing yet. The day is young and so are you, relatively.` |
+| R46-12 | `back arrow walked past account history to 2026-08-13` (expected `2026-08-28`) |
+
+Additional isolated reversions all exited 1, then exited 0 after restoring the
+fix on the same throwaway copy:
+
+- R46-8: restored `dayBudget`'s actual v511 (`fadb5cf7`) expression,
+  `const tot = dayTotals(entries);`. Failure: `Add used 870 instead of Today's 872`.
+  The corresponding displayed remaining budget is 1670 instead of 1668.
+- R46-10 completion toast alone: `historical toast must name 2026-08-28: Copied 3 items from yesterday`.
+- R46-11 sign-off alone: `The input did not match the regular expression /recorded for this day/. Input:` followed by `'Nothing written down yet. I will be here.'`.
+- R46-12 disabled markup alone: `The input did not match the regular expression /\sdisabled[\s>]/. Input:` followed by the original `prevDay` button without `disabled`.
+
+Final `node tests/r46-diary-audit.mjs` output, exit 0:
+
+```text
+PASS R46-7 zero-calorie row counts: 6/7 logged, streak 9; deletion gives 5/7 and 5
+PASS R46-8 Add and Today both show 1668 left after 872 displayed kcal
+PASS R46-9 copy chip and callback agree on source date, 723 kcal and stored meal
+PASS R46-10 copy chip and callback agree on source date, 723 kcal and stored meal
+PASS R46-11 past empty meals and sign-offs never speak as today, across every speech choice
+PASS R46-12 actual back-arrow callback stops at creation and marks its button disabled
+6/6 guards passed
+```
+
+The nine-day streak fixture has no entry today and a zero-calorie row six days
+back. Deleting that row leaves five prior consecutive logged days. It is an
+independent deterministic fixture of the reported disagreement, not a claim to
+have recreated the original browser save or its exact post-delete streak of 6.
+
+**Agreed proof.** `node tests/unit.test.js` was run without skips or weakened
+assertions. Exit 1, output:
+
+```text
+FAIL serveTree does not hold the event loop open after the script ends
+  serveTree kept node alive, so a self-serving audit can never exit: Command failed: /Users/tommiller/.nvm/versions/node/v22.22.2/bin/node --input-type=module -e import { serveTree } from "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/m2-r46rest/tests/godmode.js";
+    const own = await serveTree("/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/m2-r46rest");
+    process.once('exit', () => own.close());
+
+362 passed, 1 failed
+```
+
+The failure is in the embedded socket-dependent `serveTree` check. Its child
+stderr is suppressed by the existing unit test, so this run does not provide a
+more specific operating-system error. No all-green unit result is claimed.
+
+**Release proofs.** The actual PURE array, including its push/unshift entries,
+contains 68 files. Each permitted file was invoked directly with Node, with
+stdout/stderr and exit status saved separately. Results: 66 exit 0, the unit
+command above exit 1, and `serve-tree-identity-audit.mjs` not run because it
+requires local servers. The all-PURE-exit-0 success criterion is therefore
+unmet in this sandbox. `node tests/release-gate.mjs --coverage-only` exited 0:
+
+```text
+coverage: 311 audits on disk, 115 fast, 128 full, 68 skipped
+```
+
+PURE files that exited 0:
+
+```text
+version-align-lint.mjs  0
+no-debug-markers-lint.mjs  0
+store-copy-lint.mjs  0
+transmog-receipt-audit.mjs  0
+today-reads-lint.mjs  0
+kitchen-atomic-audit.mjs  0
+backup-encoder-audit.mjs  0
+backup-key-audit.mjs  0
+backup-version-audit.mjs  0
+backup-conflict-audit.mjs  0
+log-xp-farm-audit.mjs  0
+drip-badge-audit.mjs  0
+xp-key-provenance-lint.mjs  0
+facegate-audit.mjs  0
+garden-appetite-guard.mjs  0
+pit.test.js  0
+quest-daymore-audit.mjs  0
+quest-pick-audit.mjs  0
+first-fight-audit.mjs  0
+stat-source-audit.mjs  0
+bastions-rep-sim.mjs  0
+analytics-tag-audit.mjs  0
+icon-inventory-audit.mjs  0
+version-stamp-audit.mjs  0
+boneyard-supply-audit.mjs  0
+loot-fallback-audit.mjs  0
+guard-hygiene-lint.mjs  0
+guard-provenance-lint.mjs  0
+feedback-status-lint.mjs  0
+rack-theme-lint.mjs  0
+rack-rotate-audit.mjs  0
+pet-accessory-lint.mjs  0
+pet-pool-audit.mjs  0
+manifest-exports-audit.mjs  0
+xp-curve-audit.mjs  0
+live-api-register-lint.mjs  0
+claim-evidence-lint.mjs  0
+thumb-freshness-lint.mjs  0
+render-sink-lint.mjs  0
+lapse-witness-audit.mjs  0
+spawn-claim-atomic-audit.mjs  0
+wardrobe-family-audit.mjs  0
+football-kit-audit.mjs  0
+restore-latch-audit.mjs  0
+first-pet-audit.mjs  0
+currency-revision-lint.mjs  0
+inv-tombstone-audit.mjs  0
+take-and-pay-audit.mjs  0
+r47-rest-audit.mjs  0
+r47-economy-audit.mjs  0
+submission-build-audit.mjs  0
+harness-environment-audit.mjs  0
+guard-debts-audit.mjs  0
+submission-preflight-audit.mjs  0
+pet-state-audit.mjs  0
+pet-family-audit.mjs  0
+coins-merge-tie-audit.mjs  0
+routine-race-audit.mjs  0
+dayone-topup-audit.mjs  0
+dish-worth-audit.mjs  0
+pet-C-node-guard.mjs  0
+r48-state-audit.mjs  0
+r46-logging-audit.mjs  0
+r46-diary-audit.mjs  0
+audit-completion-audit.mjs  0
+n3-deadpaths-audit.mjs  0
+```
+
+**Blocked actions and deviations.** No commit, push, PR, publication, deployment,
+version stamp, changelog edit, native change, App Store Connect call or Worker
+operation was performed. The user's no-commit/no-push instruction overrides the
+plan's contradictory commit-and-push line. No automatic approval rejection was
+received. Browser/server proofs were prohibited by the work order and sandbox;
+no browser or standalone server proof was attempted. The explicitly requested
+unit command nevertheless contains the server check reported above.
+
+R46-8 required verification of an existing fix rather than another source edit.
+The missing nested contract and unachievable all-PURE-green criterion are
+reported above, not silently replaced. Proposed verification deviation: accept
+these Node results provisionally and have the independent reviewer run the
+remaining proofs in a socket-capable environment. No guard was weakened to
+make that criterion appear satisfied.
+
+Pending reviewer proofs, with expected results rather than measured passes:
+
+- `node tests/unit.test.js`: `363 passed, 0 failed`, exit 0, once its local server can start.
+- `node tests/serve-tree-identity-audit.mjs`: `PASS  WRONG-TREE`, exit 0.
+- Load `tests/ui-audit.js` in the running local app and call `await uiAudit()`:
+  expected `pass: true` and an empty `problems` array. Operate Back at creation,
+  an older imported date, and one date after each bound; confirm disabled
+  appearance, focus behavior and hit testing. Browser results remain unproven.
+- In the local app, seed a gapped ledger containing a zero-calorie row and
+  fractional portions. Read Progress before/after deleting the zero row,
+  operate historical Copy, and inspect stored rows and resulting meal after
+  reload. Expected chip total equals the rendered meal, source date equals the
+  named preceding date, and past empty-day text has no today-only promise.
+
+Raw logs and throwaway copies are in `/private/tmp/m2-r46-proof`. This report is
+advisory for independent review and is not release approval.
+
+
+## K1, 2026-09-07: App Store updates and guard controls
+
+Advisory implementation report for independent review. No release approval is
+claimed. Frozen plan SHA256 verified as
+`5e902dada55d0406102247336752c9ed6d7dc00e0df9507e11e3d6986c465aa4`.
+All source paths were resolved against this checkout. The root `CLAUDE.md` was
+read before editing; `tally/CLAUDE.md` does not exist here.
+
+1. PROOF: store-runtime-audit.mjs | REACH: Store Settings > App version > How to update explains App Store updates. Background checks in Settings, Today and Progress return without a web version fetch. Browser/device operation is pending.
+2. PROOF: guard-hygiene-lint.mjs, branch-graveyard-audit.mjs | REACH: Node-only real controls observe web updater effects and a shipped head from the same captured branch inventory. The existing ceiling remains 49.
+3. PROOF: submission-preflight-audit.mjs | REACH: The gate recognizes all current top-level runnables and refuses an injected unregistered one. The lookup scanner is an imported helper under tests/lib.
+4. PROOF: lookup-guard-lint.mjs, m5-prove-red.mjs | REACH: A bounded source scan reports four reviewed candidates and rejects real species/equipped-art regression mutations. It does not cover the entire defect class.
+
+**Files changed (7).**
+
+- `js/app.js`: two STORE_BUILD early returns, App Store Settings explanation and button label. Existing web updater bodies are byte-identical after removing those two returns; the web Settings row renders identical bytes.
+- `tests/store-runtime-audit.mjs`: retained bundle/config/path checks, added real web positive controls, store background checks, Settings copy and handler reach assertions. The same extracted functions and instruments observe web fetches, banner binding, worker update and reload.
+- `tests/branch-graveyard-audit.mjs`: added a nonempty, reachable non-main head control from the captured snapshot, checked against the same classified rows. It fails if the classifier stops recognizing shipped heads.
+- `tests/release-gate.mjs`: documented the existing scanner helper location and updated the store audit description. No tier, allowance, threshold or executable registration changed.
+- `tests/lookup-guard-lint.mjs`: made true-positive/false-positive counts explicit and corrected its review-document reference. No scanner rule or reviewed-site allowance changed.
+- `docs/lookup-guard-review.md`: added the missing precision/coverage review, including evidence for each candidate.
+- `docs/CLAIMS.md`: appended only this dated K1 section.
+
+**Three named guards.**
+
+| Guard | Baseline | Final | Fixed the change or the guard? |
+| --- | --- | --- | --- |
+| store-runtime-audit.mjs | Exit 1, 4/5 | Exit 0, 13/13 | Fixed the app defect; also strengthened the guard with controls and background coverage. |
+| guard-hygiene-lint.mjs | Exit 1, 51 of 297 lack controls | Exit 0, 49 of 297 lack controls | Fixed the two audits' missing controls. The hygiene lint and its ceiling were not edited. |
+| submission-preflight-audit.mjs | Exit 0 | Exit 0 | Already resolved in this checkout. Documented the actual helper layout, with no guard weakening or duplicate registration. |
+
+`first-run-honesty-audit.mjs` already has a meaningful positive premise: it
+observes one real first-run splash insertion using the same instrument that
+requires zero returning-user insertions. It did not cause this ratchet failure.
+Its browser proof was not run. `m5-prove-red.mjs` already emits measured CONTROL
+rows requiring exact replacement counts, expected child exits and failure text.
+It passed all seven mutations and restored-green runs. It needs no exception;
+its filename is also outside the hygiene lint's audit filename pattern.
+
+**Agreed proof command.**
+
+`node tests/guard-hygiene-lint.mjs && node tests/store-runtime-audit.mjs`
+
+Executed unchanged, exit 0. Output:
+
+```text
+ok    SETUP the lint found test files to scan  333 files
+ok    RUNNER no case is registered after the runner has already drained  none
+ok    SETUP the audit scan is not vacuous  297 audits
+ok    CONTROL the number of audits with NO positive control does not rise above 49  49 of 297 carry no CONTROL/PREMISE/SETUP/REACH/SAMPLE row. ratchet holding
+ok    LITERAL-TRUE no audit asserts a constant success (including NO page errors)  0 offenders
+ok    LITERAL-TRUE the ten justified reports are excused exactly once  10 excused; 0 stale or duplicated
+ok    CONTROL literal-true catches a new offender even inside an excused file
+ok    PARSES every audit is something Node will actually execute  333 files parse
+ok    SEAM no NEW audit proves a feature only through a test hook  29 known seam-only, 0 new
+ok    SEAM the seam-only inventory has no stale entries (fixed one? delete its line)  inventory matches
+
+guard-hygiene: clean
+PASS real web bundle producer completes in throwaway checkout
+PASS generated store config is local and bundled flag is true
+PASS bundle paths: 54 modules, 180 literal entry/CSS/import references, missing=[], root-absolute=[]
+PASS real service-worker condition skips capacitor and admits HTTPS control
+PASS CONTROL web Settings update row retains identical rendered bytes
+PASS store Settings names the update channel before the player taps
+PASS REACH Settings update button is bound to the audited handler
+PASS store refresh must explain App Store updates without web fetch/reload: calls=[], messages=["To update Boneheadz Gym, open the App Store and check for updates."]
+PASS store background update checks never fetch or show a web banner: calls=[]
+PASS CONTROL web stale banner observes the live version and binds its update button
+PASS CONTROL web banner click updates the waiting worker without a premature reload
+PASS CONTROL web refresh without a worker fetches and reloads
+PASS CONTROL offline web refresh retains its connection message without reloading
+LIMIT: literal path inventory and VM functions only; dynamic assets, WKWebView APIs and rendered controls require device proof.
+store runtime: 13/13 passed
+```
+
+Submission proof, exit 0:
+
+```text
+PASS  COVERAGE registered helper  exit 0 (want 0)  coverage: 316 audits on disk, 116 fast, 128 full, 72 skipped
+PASS  COVERAGE unregistered runnable refused  exit 1 (want 1)  FAIL  coverage: 1 declared audit file(s) belong to no running tier:
+        unregistered-store-fixture.mjs
+submission preflight: refuses marker, flag, server and copy defects; passes the control
+```
+
+The `FAIL` inside that second coverage row is the expected child negative
+control. The parent audit exited 0.
+
+**Red/restored-green evidence.**
+
+Every mutation was made on a throwaway copy under `/private/tmp/k1-proof`,
+with exact-once replacements asserted. The original app was saved before any
+edit, restored on the throwaway tree, and tested with the strengthened guard.
+Each child output and exit status was saved separately; no exit code was read
+through a pipe. The working source was never reverted.
+
+Baseline actual bundled-path failure, exit 1:
+
+```text
+FAIL store refresh must explain App Store updates without web fetch/reload: calls=["version.json"], messages=["No connection. Try again when you have signal"]
+store runtime: 4/5 passed
+```
+
+Strengthened audit on the original app, exit 1 (its instrument supplies a newer
+web version, proving the incorrect store update/reload path too):
+
+```text
+FAIL store Settings names the update channel before the player taps
+FAIL store refresh must explain App Store updates without web fetch/reload: calls=["version.json","reload"], messages=["Getting the latest build..."]
+store runtime: 10/13 passed
+```
+
+Remove only the background gate, exit 1:
+
+```text
+FAIL store background update checks never fetch or show a web banner: calls=["version.json","version.json"]
+store runtime: 12/13 passed
+```
+
+Disconnect the web fetch, exit 1:
+
+```text
+FAIL CONTROL web stale banner observes the live version and binds its update button
+FAIL CONTROL web banner click updates the waiting worker without a premature reload
+FAIL CONTROL web refresh without a worker fetches and reloads
+FAIL CONTROL offline web refresh retains its connection message without reloading
+store runtime: 9/13 passed
+```
+
+Misclassify reachable heads, exit 1:
+
+```text
+FAIL CONTROL captured reachable head is shipped and appears in the same classified rows: Expected values to be strictly equal:
+Branch graveyard audit: 18/22 passed.
+```
+
+Restore the two pre-K1 audits on the throwaway tree, exit 1:
+
+```text
+FAIL  CONTROL the number of audits with NO positive control does not rise above 49  51 of 297 carry no CONTROL/PREMISE/SETUP/REACH/SAMPLE row.
+guard-hygiene: 1 FAILED
+```
+
+Restore fixed sources and controls, all exit 0:
+
+```text
+store runtime: 13/13 passed
+Branch graveyard audit: 22/22 passed.
+guard-hygiene: clean
+PASS existing latestBuild, hardRefresh and checkForUpdate bytes identical after removing the two store-only early returns.
+```
+
+The existing M5 runner also proved both lookup regressions red and then green:
+
+```text
+PASS CONTROL red-pet-species: exit 1, expected 1
+FAIL NEW unresolved lookup guard: js/app.js:19886 x.sp
+PASS CONTROL red-equipped-art: exit 1, expected 1
+FAIL NEW unresolved lookup guard: js/app.js:16973 baseArtId
+PASS CONTROL restored-lint: exit 0, expected 0
+lookup-guard: PASS
+m5-prove-red: PASS
+```
+
+**Lookup precision and limits.**
+
+Measured 54 source modules and 4 candidates: **2 true positives for missing
+boundary validation, 2 false positives, 0 unreviewed, 0 proven crashes**. Both
+true positives pass a merely-present peer pet id into a renderer. One false
+positive misses the catalogue filter upstream of `lurkSp`; the other misses the
+same-expression catalogue check for `petArtId`. Boundary precision is 50%.
+
+The scan is useful as a narrow reviewed-candidate ratchet. Cheap lexical matching
+cannot reliably cover the full absent-versus-unresolvable class. Broader coverage
+needs validated data boundaries, runtime tests using unknown ids at the final
+consumer, and an AST/control-flow approach if a static guarantee is required.
+The seven historical incidents are not seven measured detections. See
+`docs/lookup-guard-review.md` for the complete site review and limitations.
+
+**PURE enumeration and measured results.**
+
+The runner evaluated the actual `const PURE` initialization and every subsequent
+push/unshift through `const BROWSER` in `tests/release-gate.mjs`, without executing
+the release gate or starting its server. It asserted a nonempty, unique inventory.
+All 72 entries are listed below in their derived order. **70 passed, 0 executed
+entries failed, 2 were blocked and not run.** Each executed entry has separate
+stdout/stderr and exit files under `/private/tmp/k1-proof/pure`.
+
+```text
+version-align-lint.mjs  0
+no-debug-markers-lint.mjs  0
+store-copy-lint.mjs  0
+transmog-receipt-audit.mjs  0
+today-reads-lint.mjs  0
+kitchen-atomic-audit.mjs  0
+backup-encoder-audit.mjs  0
+backup-key-audit.mjs  0
+backup-version-audit.mjs  0
+backup-conflict-audit.mjs  0
+unit.test.js  BLOCKED, NOT RUN: local server required
+log-xp-farm-audit.mjs  0
+drip-badge-audit.mjs  0
+xp-key-provenance-lint.mjs  0
+facegate-audit.mjs  0
+garden-appetite-guard.mjs  0
+pit.test.js  0
+quest-daymore-audit.mjs  0
+quest-pick-audit.mjs  0
+first-fight-audit.mjs  0
+stat-source-audit.mjs  0
+bastions-rep-sim.mjs  0
+analytics-tag-audit.mjs  0
+icon-inventory-audit.mjs  0
+version-stamp-audit.mjs  0
+boneyard-supply-audit.mjs  0
+loot-fallback-audit.mjs  0
+guard-hygiene-lint.mjs  0
+guard-provenance-lint.mjs  0
+feedback-status-lint.mjs  0
+rack-theme-lint.mjs  0
+rack-rotate-audit.mjs  0
+pet-accessory-lint.mjs  0
+pet-pool-audit.mjs  0
+manifest-exports-audit.mjs  0
+xp-curve-audit.mjs  0
+live-api-register-lint.mjs  0
+claim-evidence-lint.mjs  0
+thumb-freshness-lint.mjs  0
+render-sink-lint.mjs  0
+lapse-witness-audit.mjs  0
+spawn-claim-atomic-audit.mjs  0
+wardrobe-family-audit.mjs  0
+football-kit-audit.mjs  0
+restore-latch-audit.mjs  0
+first-pet-audit.mjs  0
+currency-revision-lint.mjs  0
+inv-tombstone-audit.mjs  0
+take-and-pay-audit.mjs  0
+branch-graveyard-audit.mjs  0
+store-runtime-audit.mjs  0
+r47-rest-audit.mjs  0
+r47-economy-audit.mjs  0
+submission-build-audit.mjs  0
+harness-environment-audit.mjs  0
+guard-debts-audit.mjs  0
+submission-preflight-audit.mjs  0
+pet-state-audit.mjs  0
+pet-family-audit.mjs  0
+coins-merge-tie-audit.mjs  0
+routine-race-audit.mjs  0
+dayone-topup-audit.mjs  0
+dish-worth-audit.mjs  0
+serve-tree-identity-audit.mjs  BLOCKED, NOT RUN: local server required
+pet-C-node-guard.mjs  0
+r48-state-audit.mjs  0
+r46-logging-audit.mjs  0
+r46-diary-audit.mjs  0
+audit-completion-audit.mjs  0
+n3-deadpaths-audit.mjs  0
+m5-prove-red.mjs  0
+lookup-guard-lint.mjs  0
+
+```
+
+**Blocked actions and deviations.**
+
+The success criterion requiring every PURE entry to exit 0 remains unmet.
+`unit.test.js` starts a server for its serveTree process-lifetime test, and
+`serve-tree-identity-audit.mjs` requires real local sockets. The work order
+explicitly prohibits server/browser proofs. Neither whole file was run or
+silently modified to pass. Proposed verification deviation: the independent
+reviewer runs these two files in a socket-capable environment. Expected, not
+measured here: `363 passed, 0 failed` for unit.test.js and `PASS WRONG-TREE` for
+serve-tree-identity-audit.mjs, both exit 0. The M5 runner did separately execute
+its three extracted unit test bodies; this is not a full unit-suite pass.
+
+Browser/device verification remains pending. In a real store bundle, open
+Settings, operate How to update, and visit Today and Progress. Expected: the
+App Store explanation, zero version.json requests, no web update banner or
+reload. Run first-run-honesty-audit.mjs in the reviewer environment; expected
+8/8, not measured here. UI audit, hit testing and WKWebView behavior were not
+claimed from Node VM/source checks.
+
+The plan names `tests/lookup-guard-scan.mjs`, but this checkout already places it
+at `tests/lib/lookup-guard-scan.mjs` and registers the actual runnable lint once
+in PURE. The helper was declared in the gate comments instead of adding a
+nonexistent top-level runnable or a redundant tier entry. Preflight was already
+green at baseline. The two audits actually missing recognized positive controls
+were store-runtime and branch-graveyard. No m5-prove-red exception was needed.
+
+The opening K1 ownership grant (all merged lanes, no siblings running) was used
+over the stale boilerplate about three sibling lanes and unspecified ownership
+lists. The user's no-commit/no-push instruction overrode the plan's contradictory
+commit-and-push line. No version stamp, changelog edit, PR, commit, push,
+publication, deployment, App Store Connect or Worker operation was performed.
+No tracked native file, native/ASC-SUBMISSION.md, or integ/day5 file was edited.
+No original checkout was edited. Dependency packages were read through this
+checkout's existing node_modules symlink only.
+
+No automatic approval rejection or permission-denied tool action occurred.
+Missing tally/CLAUDE.md and the plan's missing scanner path are explicitly
+reported above. The browser/server prohibition was honored without an attempted
+bypass. The all-PURE-green criterion is pending reviewer proof, not certified.
+
+Evidence and reproduction scripts: `/private/tmp/k1-proof`. This section and the
+final changes are advisory inputs to the independent review.
+## 2026-09-07: L1 machine character and R45-5 correction
+
+This section supersedes the first-flick conclusion in the R45 guard-debts
+section and the earlier v500 cadence numbers. It leaves those historical
+sections intact. The supplied measurements establish the v500 mechanism:
+burst drawArrays calls during a move fell from 18 and 26 on v493 to zero on
+v509. Preserve that mechanism. The historical 47 to 59 frame claim was not
+reproducible even on the reporting machine under the stated conditions. A
+520ms hold contains about 31 frames at 60Hz, so 47 to 59 cannot describe that
+window at that refresh rate. rAF callbacks are cadence samples, not proof of
+compositor-presented frames.
+
+The work order supplies a v513 remeasurement from five fresh browser processes
+and profiles with FLICK_TRACE_DIR enabled: first samples 49, 46, 59, 58, 47;
+second samples 43, 57, 59, 58, 43; first over20 gaps 4, 4, 1, 1, 5 against the
+unchanged bound of 6. It reports 81/81 rows passed, exit 0. None of the five
+first flicks reproduced R45's <=20 samples, and three first flicks sampled more
+than their second. These are supplied observations, not a new browser proof
+from this lane; the referenced scratchpad evidence log is absent here. The
+trace adds profiling overhead. First-flick asymmetry is environment-specific
+pending reproduction. If Tom's QA rig still reproduces 12 to 20 frames, build
+and verify a fix there. Do not infer a universal defect or undo v500.
+
+1. PROOF: machine-character-audit.mjs | REACH: Every result row from the shared browser wrapper carries machine character: host CPU/load, Chromium/renderer, page identity, viewport, CPU throttle history, attached trace history and an observed baseline cadence with its sampling state. FLICK also samples the settled Crates tab before OPEN and after optional trace start. Empty, refused and timed-out baseline probes say UNAVAILABLE. The Node controls prove emitted receipts, trace overhead disclosure after stop, separate pages and bounded probe cleanup; they do not prove browser performance.
+2. PROOF: crate-reveal-audit.mjs | REACH: FIRST FLICK and SECOND FLICK retain the 520ms window, minimum 25 rAF samples, over20 <= 6, zero burst draw calls and 200ms long-task ceiling. The audit prints the environment-specific interpretation and QA-rig reproduction requirement. Browser/server proof is blocked by the work order and remains for independent review.
+3. PROOF: fx-audit.js | REACH: The FX cache load-time precondition prints machine character even though its legacy measurement line is not a PASS row. FX setup failures on stderr and its OK frame-life rows also carry the shared disclosure. No timing threshold changed.
+
+## P1 round 48 remainder, 2026-09-07
+
+1. PROOF: p1-r48-rest-audit.mjs, art-resolution-audit.mjs | REACH: Audit-only change. Every declared art surface must contribute decoded layers; Crew receives a friend fixture and is sampled in its own fan. Missing inputs fail SETUP and cannot certify RESOLUTION or SMOOTH. The original five-screen and four-screen predicates were reproduced red in Node; populated browser rendering remains unrun.
+2. PROOF: p1-r48-rest-audit.mjs, hollow-beds-audit.mjs, hollow-backdrop-audit.mjs, garden-closed-audit.mjs | REACH: UNREACHABLE. Retain closed-door and module guards pending Tom's product decision. Both dedicated module probes now print zero player coverage. No Hollow feature was deleted or reopened. Product choices and Node red/green evidence are in docs/P1-R48-REPORT.md.
+3. PROOF: p1-r48-rest-audit.mjs, n3-deadpaths-audit.mjs, race-audit.mjs, reward-sop-audit.mjs | REACH: Existing corrections confirmed. The race ANNOUNCE row uses masked real News controls and the reward register identifies the deleted GROW door. Reintroducing the original News callback in a throwaway copy fails with missing 5: H11-1 FW1 IL1-1 IR10-3 P1; restoration passes. Browser proof remains pending.
+## 2026-09-07: P3 restore hardening and unresolved debt
+
+Advisory lane evidence, not a release certification. The frozen work order hash
+matched. Changes are confined to js/db.js, js/loot.js, tests and the explicitly
+requested docs. No version stamp, changelog, commit, push or publication.
+
+1. PROOF: restore-state-audit.mjs | REACH: Settings file import and cloud merge reach production importAll, followed by actual equipment, receipt and export readers. Invalid known containers, duplicate kv keys and unsupported pet bank formats refuse before store writes. Receipt unions preserve both sides on merges. Unsupported equipment is hidden from the normal look reader without erasing its stored selection during loot equip calls. The raw Dressing Room contract is retained. Throwaway original-source reversion reports 2 passed, 19 failed; restored code reports 21 passed, 0 failed.
+2. PROOF: restore-debt-audit.mjs | REACH: Explicitly unresolved, not green. An old blob erases an earned pet duplicate (2 to 1), lowers its banked steps (1000 to 10), and refunds a spent potion (0 to 1). A future same-schema food buff is deleted when the cooking reader opens it (1 to 0). All four desired invariants remain failing assertions in PURE. The coordinated fixes and file ownership boundaries are in docs/P3-KV-CENSUS.md.
+3. PROOF: unit.test.js | REACH: The agreed command ran and reported 364 passed, 1 failed, exit 1. The same serveTree subprocess failure occurs on the unmodified baseline. The standalone serve-tree-identity PURE entry requires prohibited local sockets and was not run. Browser/server results are not certified. Full per-file Node results, measured red/green output, blockers and deviations are in docs/P3-RESTORE-REPORT.md.

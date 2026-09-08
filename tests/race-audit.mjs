@@ -18,9 +18,8 @@
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { boot, seed, sleep, serveTree} from './godmode.js';
+import { boot, seed, sleep, serveTree, maskWebdriver, dismissOverlays} from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const results = [];
@@ -78,7 +77,7 @@ ok('RULES FILTER the board refuses totals counted under older rules',
 
 /* ---------- START: the race begins on its epoch, not a calendar Monday ---------- */
 let srv = null, srvHandle = null;
-let base = process.env.URL;
+let base = process.argv[2] || process.env.URL;
 if (!base) {
   /* serveTree: a free port from the OS, and a HARD ERROR if python never
      bound. The hard-coded port with stdio:'ignore' meant a stranded server
@@ -144,25 +143,53 @@ if (periods) {
     `d7=${periods.d7} d8=${periods.d8}`);
 }
 
-/* ---------- ANNOUNCE: the poster renders, and quotes the shipped purse ---------- */
-const poster = await page.evaluate(async () => {
-  if (!window.__raceIntro) return null;
-  await window.__raceIntro();
-  await new Promise(r => setTimeout(r, 600));
+/* ANNOUNCE grades the real News control after a cold, masked reload. The old
+   __raceIntro seam populated raceIntroFit itself and hid the production defect.
+   Expected pre-fix failure: missing 5: H11-1 FW1 IL1-1 IR10-3 P1.
+   Browser red/green is pending review: this lane cannot run browser/server proofs. */
+const outfit = { B: 'B0-1', SK: 'SK0-1', H: 'H11-1', FW: 'FW1', IL: 'IL1-1', IR: 'IR10-3', P: 'P1' };
+await page.evaluate(async fit => {
+  const { kvSet } = await import('./js/db.js');
+  await kvSet('equipped', fit);
+  await kvSet('transmog', {});
+  location.hash = '#/today';
+}, outfit);
+await maskWebdriver(page);
+await page.reload({ waitUntil: 'networkidle2' });
+await dismissOverlays(page);
+const seamFree = await page.evaluate(() => navigator.webdriver === false && typeof window.__raceIntro === 'undefined');
+ok('ANNOUNCE CONTROL cold player document has no race seam', seamFree);
+await page.waitForSelector('#newsBanner > summary', { visible: true });
+await page.$eval('#newsBanner > summary', el => el.scrollIntoView({ block: 'center' }));
+await page.click('#newsBanner > summary');
+await page.waitForSelector('#newsBanner [data-news="race"]', { visible: true });
+await page.$eval('#newsBanner [data-news="race"]', el => el.scrollIntoView({ block: 'center' }));
+await page.click('#newsBanner [data-news="race"]');
+const opened = await page.waitForSelector('.race-veil', { visible: true, timeout: 10000 }).then(() => true).catch(() => false);
+const poster = opened ? await page.evaluate(async () => {
   const v = document.querySelector('.race-veil');
   if (!v) return { open: false };
+  const imgs = [...v.querySelectorAll('.race-intro-art img')];
+  await Promise.all(imgs.map(i => i.decode().catch(() => {})));
   return {
     open: true,
     eyebrow: v.querySelector('.drop-eyebrow')?.textContent.trim(),
     title: (v.querySelector('.drop-title')?.textContent || '').replace(/\s+/g, ' ').trim(),
     terms: [...v.querySelectorAll('.spire-terms li')].map(l => l.textContent.replace(/\s+/g, ' ').trim()),
-    artLayers: v.querySelectorAll('.race-intro-art img').length,
+    art: imgs.map(i => ({ id: new URL(i.currentSrc || i.src).pathname.split('/').pop().replace(/\.png$/, ''),
+      decoded: i.naturalWidth > 0 && i.getBoundingClientRect().width > 0 })),
     cta: v.querySelector('.drop-cta')?.textContent.trim(),
   };
-});
+}) : { open: false };
+const expected = Object.values(outfit);
+const drawn = (poster.art || []).filter(i => i.decoded).map(i => i.id);
+const missing = expected.filter(id => !drawn.includes(id));
+const extra = drawn.filter(id => !expected.includes(id));
+ok('ANNOUNCE the player News control draws the complete equipped bonehead',
+  seamFree && missing.length === 0 && extra.length === 0 && drawn.length === expected.length,
+  `missing ${missing.length}: ${missing.join(' ')}; extra ${extra.length}: ${extra.join(' ')}; decoded ${drawn.length}/${expected.length}`);
 ok('ANNOUNCE the poster opens', poster && poster.open, JSON.stringify(poster && poster.title));
 if (poster && poster.open) {
-  ok('ANNOUNCE it draws the player\'s own bonehead (an empty stage is a FAILURE)', poster.artLayers > 0, `${poster.artLayers} layers`);
   ok('ANNOUNCE it says the race starts today, not on a Monday',
     /today/i.test(poster.eyebrow || '') && poster.terms.some(t => /from today/i.test(t)),
     `${poster.eyebrow} | ${poster.terms[0]}`);
@@ -173,6 +200,8 @@ if (poster && poster.open) {
   ok('ANNOUNCE it says everyone gets paid down to fifth',
     poster.terms.some(t => new RegExp(`top ${cliPlaces.length}`, 'i').test(t)), poster.terms.join(' / ').slice(0, 160));
 }
+
+if (poster.open) await page.click('#raceIntroLater');
 
 /* ---------- NEVER DEFAULT TO HIDDEN (anti-regression rule 8) ----------
  * The banner used to bail whenever the race fetch came back empty, which is

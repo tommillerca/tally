@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 // Node-only lane D contract audit. The baseline is captured BEFORE editing pets.js.
 // CONTROL: --source /tmp/pets-before.mjs runs these same guards on a throwaway
 // copy of the original module. No mocks replace the missing production helpers.
@@ -58,9 +59,12 @@ function snapshot() {
 
 if (process.argv.includes('--capture-baseline')) {
   assert.equal(hash(readFileSync(sourceURL)), originalSHA, 'baseline must come from the unmodified source');
-  assert.ok(!existsSync(baselineURL), 'never overwrite a frozen baseline');
+  const outputIndex = process.argv.indexOf('--baseline-output');
+  assert.ok(outputIndex >= 0 && process.argv[outputIndex + 1], 'capture requires --baseline-output outside the checkout');
+  const baselineOutput = auditOutputPath(resolve(process.argv[outputIndex + 1]));
+  assert.ok(!existsSync(baselineOutput), 'never overwrite a frozen baseline');
   const rows = snapshot();
-  writeFileSync(baselineURL, JSON.stringify({ sourceSHA256: originalSHA,
+  writeFileSync(auditOutputPath(baselineOutput), JSON.stringify({ sourceSHA256: originalSHA,
     sourceCommit: '45b4989ba45624c1cbc05934116df8cd06c4b54b', rows }, null, 2) + '\n');
   console.log(`CAPTURED baseline: ${rows.reduce((n, r) => n + r.builds, 0)} builds, ${rows.reduce((n, r) => n + r.effects, 0)} effects`);
   process.exit(0);

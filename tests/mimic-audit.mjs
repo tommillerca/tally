@@ -87,14 +87,23 @@
  *   node tests/mimic-audit.mjs          (self-serves this checkout)
  *   URL=https://... node tests/mimic-audit.mjs
  */
+import { declareAudit, recordAuditRow, completeAudit } from './audit-lifecycle.mjs';
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { boot, seed, openPit, sleep, settle, serveTree, dismissOverlays } from './godmode.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+declareAudit({ expectedRows: 38 }); // 37 original rows plus the R45 zero-frame control.
 let fails = 0;
+let unprovenRows = 0;
+const unproven = (label, detail) => {
+  recordAuditRow(label, 'UNPROVEN');
+  unprovenRows++;
+  console.log(`UNPROVEN  ${label}  | ${detail}`);
+};
 const ok = (label, pass, detail = '') => {
+  recordAuditRow(label, pass ? 'PASS' : 'FAIL');
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${label}${detail ? `  | ${detail}` : ''}`);
   if (!pass) fails = 1;
 };
@@ -346,8 +355,8 @@ try {
      zero frames, frames[-1] is undefined, and this file died on a TypeError
      mid-gate three times in one evening before anyone read the stack. So the
      ground shot is EARNED: nudge one invisible pixel to force a compositor
-     frame, and if the encoder still hands us nothing, say UNPROVEN by name
-     (exit 97) instead of crashing into a red that reads like a Mimic bug. */
+     frame. Missing ground or reveal frames now get named CONTROL failures
+     and UNPROVEN pixel rows; DOM, timing and arena rows continue to the verdict. */
   await page.evaluate(() => {
     const d = document.createElement('div');
     d.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;background:rgba(255,255,255,0.02);z-index:99999';
@@ -355,16 +364,6 @@ try {
     requestAnimationFrame(() => d.remove());
   });
   await sleep(700);
-  if (!frames.length) {
-    console.log('UNPROVEN: the screencast delivered zero frames for the ground shot (still screen, no damage events); the reveal pacing rows cannot be graded on this run');
-    await cdp.send('Page.stopScreencast').catch(() => {});
-    await browser.close(); srv?.stop?.();
-    /* A REAL DEFECT OUTRANKS AN UNPROVEN ROW, which is godmode exitFor()'s own
-       rule. This exited 97 unconditionally, so a red already printed by the roll
-       or the money section above would have left the gate as "could not run"
-       rather than "the Mimic is broken". */
-    process.exit(fails ? 1 : 97);
-  }
   const groundFrame = frames[frames.length - 1];
 
   const rev = await startReveal();
@@ -409,7 +408,7 @@ try {
 
   /* Decoded AFTER the fact: the sampler must not be doing arithmetic while the
      thing it is sampling is on screen. */
-  const ground = await lum(groundFrame.data, GROUND);
+  const ground = groundFrame ? await lum(groundFrame.data, GROUND) : null;
   const trace = [];
   for (const f of frames) {
     if (f.t < tRev) continue;
@@ -419,9 +418,17 @@ try {
   console.log(`      reveal luminance trace (${trace.length} frames, whole frame / the screen behind):`);
   for (const s of trace) console.log(`        ${String(s.ms).padStart(5)}ms  full ${String(s.full).padStart(6)}   behind ${String(s.mean).padStart(6)} (std ${s.std})`);
 
+  ok('CONTROL REVEAL TRACE has captured frames', trace.length > 0,
+    trace.length ? `${trace.length} frames` : 'ZERO-FRAME TRACE: reveal pixels unavailable; remaining rows still run');
+  const pixelReady = trace.length >= 20 && ground && ground.mean > 20 && ground.std > 12;
+  const pixelRow = (label, grade) => {
+    if (!pixelReady) unproven(label, `insufficient reveal pixels: ${trace.length} frames; lit ground=${!!ground}`);
+    else { const [pass, detail] = grade(); ok(label, pass, detail); }
+  };
+
   ok('CONTROL the reveal was graded against a real, lit screen (an empty trace or a black ground would make every row below vacuous)',
-    trace.length >= 20 && ground.mean > 20 && ground.std > 12 && !dom?.error,
-    `${trace.length} frames sampled over ${trace.length ? trace[trace.length - 1].ms : 0}ms, ground mean ${ground.mean} std ${ground.std}`);
+    pixelReady && !dom?.error,
+    `${trace.length} frames sampled over ${trace.length ? trace[trace.length - 1].ms : 0}ms, ground mean ${ground?.mean ?? 'missing'} std ${ground?.std ?? 'missing'}`);
 
   ok('REVEAL one line, through the app\'s one typing path, and no second typer',
     dom && dom.boxes === 1 && /mimic-enc-box/.test(dom.cls) && rev.line.length > 10
@@ -450,10 +457,10 @@ try {
      with 0.0% of the ground surviving. Anti-regression rule 11 is exactly this.
      A blackout measures std 0.00 in this band (measured, on that mutation) and
      the scrim measures 1.73, so the floor sits between two real numbers. */
-  ok('SMALLER a scrim, not a blackout: the screen behind is suppressed but not deleted',
+  pixelRow('SMALLER a scrim, not a blackout: the screen behind is suppressed but not deleted', () => [
     scrim.length >= 5 && worst.std / ground.std < 0.15 && worst.mean < ground.mean * 0.35
       && worst.std > 0.5,
-    `behind the scrim: mean ${worst.mean} std ${worst.std} against ${ground.mean}/${ground.std} lit (${(worst.std / ground.std * 100).toFixed(1)}% of the ground's contrast survives; 0% would be a blackout)`);
+    `behind the scrim: mean ${worst.mean} std ${worst.std} against ${ground.mean}/${ground.std} lit (${(worst.std / ground.std * 100).toFixed(1)}% of the ground's contrast survives; 0% would be a blackout)`]);
 
   /* NO STROBE. The Wanderer alternates a near-white wash with near-black on 60ms
      beats; this may not. The measurable difference is DIRECTION: a strobe has to
@@ -464,9 +471,9 @@ try {
     const d = trace[i].full - trace[i - 1].full;
     if (d > jump.d) jump = { d, i };
   }
-  ok('SMALLER no strobe: once the scrim lands the sequence only ever darkens',
+  pixelRow('SMALLER no strobe: once the scrim lands the sequence only ever darkens', () => [
     jump.d < 12,
-    `biggest brightening between consecutive frames ${jump.d.toFixed(1)} luma (frame ${jump.i} of ${trace.length})`);
+    `biggest brightening between consecutive frames ${jump.d.toFixed(1)} luma (frame ${jump.i} of ${trace.length})`]);
 
   /* THE LENGTH, both sides derived rather than typed in: his from the constants
      js/wanderer.js exports, this one MEASURED off the real clock. */
@@ -488,10 +495,10 @@ try {
   /* THE HANDOVER, the row the Wanderer's COVER row exists for. The overlay must
      still be up and the screen must still be covered at the moment the caller
      gets control, because that is when it builds the arena underneath. */
-  ok('COVER the reveal is still up and the screen still hidden when it hands over',
+  pixelRow('COVER the reveal is still up and the screen still hidden when it hands over', () => [
     atResolve.overlay && atResolve.dismissable && atResolve.opacity > 0.9
       && coverShot.full < 12 && coverShot.std < ground.std * 0.1,
-    `overlay=${atResolve.overlay} dismiss=${atResolve.dismissable} cover frame ${coverShot.full} mean, ${coverShot.std} std behind`);
+    `overlay=${atResolve.overlay} dismiss=${atResolve.dismissable} cover frame ${coverShot.full} mean, ${coverShot.std} std behind`]);
 
   /* AND THE CALLER MUST USE IT. The rows above prove the overlay hands over
      covered; only app.js can throw that away, by dismissing before it builds the
@@ -563,7 +570,7 @@ try {
   await settle(page, 400);
   ok('REDUCED the handover still covers under reduced motion, and never as a fast repeat',
     !rmCover.error && rmShot.full < 12 && !(rmCover.iter === 'infinite' && rmCover.secs < 0.1),
-    rmCover.error || `screen ${rmShot.full} mean luma behind a ${ground.mean} lit one, cover animation ${rmCover.dur} x ${rmCover.iter}`);
+    rmCover.error || `screen ${rmShot.full} mean luma behind a ${ground?.mean ?? 'missing'} lit one, cover animation ${rmCover.dur} x ${rmCover.iter}`);
   await meter.close().catch(() => {});
 
   /* --------------------------------------- 5. THE ARENA, reached by playing */
@@ -772,5 +779,6 @@ try {
   await browser.close();
   if (srv) await srv.close();
 }
-console.log(fails ? '\nMIMIC AUDIT FAILED' : '\nMIMIC AUDIT VERIFIED');
-process.exit(fails);
+completeAudit();
+console.log(`\nMIMIC AUDIT ${fails ? 'FAILED' : unprovenRows ? 'UNPROVEN' : 'VERIFIED'} (${unprovenRows} UNPROVEN rows)`);
+process.exit(fails ? 1 : unprovenRows ? 97 : 0);

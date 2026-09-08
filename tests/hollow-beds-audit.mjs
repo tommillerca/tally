@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* tests/hollow-beds-audit.mjs — the guard rail for js/hollow-beds.js.
  *
  * WHAT IT IS FOR. hollow-beds.js replaces openHollow's hand-written bed and crop
@@ -27,8 +28,9 @@
  *
  * LIMITATION, stated rather than hidden: the module is not wired into openHollow
  * yet (Reggie owns that call site), so the rig below mounts its output into the
- * live app document rather than into #hlwStage. tests/hollow-audit.mjs is what
- * covers the shipped screen.
+ * live app document rather than into #hlwStage. UNREACHABLE: the Hollow lost
+ * its player doors on 2026-08-18; hollow-audit.mjs was deleted. These are
+ * module probes, not proof of a shipped screen.
  *
  * Usage:  node tests/hollow-beds-audit.mjs [width] [height]
  * Set HB_OUT to a directory to also write the screenshots and the raw JSON.
@@ -36,6 +38,8 @@
  */
 import fs from 'node:fs';
 import { boot, serveTree, sleep, setWidth } from './godmode.js';
+
+console.log('UNREACHABLE Hollow: module probe only, zero player coverage. Product decision pending: docs/P1-R48-REPORT.md');
 
 const ROOT = process.env.HB_ROOT || decodeURIComponent(new URL('..', import.meta.url).pathname);
 const W = Number(process.argv[2]) || 390, H = Number(process.argv[3]) || 844;
@@ -207,7 +211,7 @@ const clips = await page.evaluate(() => Object.fromEntries([...document.querySel
 const shots = {};
 for (const [name, clip] of Object.entries(clips)) {
   shots[name] = (await page.screenshot({ clip })).toString('base64');
-  if (OUT) fs.writeFileSync(`${OUT}/hb-${name}.png`, Buffer.from(shots[name], 'base64'));
+  if (OUT) fs.writeFileSync(auditOutputPath(`${OUT}/hb-${name}.png`), Buffer.from(shots[name], 'base64'));
 }
 const names = [...rig.bedNames, 'background'];
 note(names.every(n => shots[n]), `EMPTY SAMPLE: missing screenshots for ${names.filter(n => !shots[n])}`);
@@ -291,7 +295,7 @@ for (const l of dropRender.lines) {
 let dropInk = null;
 if (dropRender.dropClip) {
   const b64 = (await page.screenshot({ clip: { x: dropRender.dropClip.x, y: dropRender.dropClip.y, width: dropRender.dropClip.width, height: dropRender.dropClip.height } })).toString('base64');
-  if (OUT) fs.writeFileSync(`${OUT}/hb-droplet.png`, Buffer.from(b64, 'base64'));
+  if (OUT) fs.writeFileSync(auditOutputPath(`${OUT}/hb-droplet.png`), Buffer.from(b64, 'base64'));
   dropInk = await page.evaluate(async b => {
     const im = new Image(); im.src = 'data:image/png;base64,' + b; await im.decode();
     const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
@@ -385,7 +389,7 @@ note(consoleErrs.length === 0, `CONSOLE ERRORS: ${JSON.stringify(consoleErrs.sli
 
 const res = { url: srv.url, viewport: [W, H], scope, used, notInBeds: Object.keys(NOT_IN_BEDS),
   vsBackground: px.vsBg, pairs: Object.fromEntries(pairList), motionOn, motionOff, dropRender, dropInk, inert: { ...inert, hits: inert.hits.slice(0, 5) }, boxes, fail };
-if (OUT) fs.writeFileSync(`${OUT}/hollow-beds.json`, JSON.stringify(res, null, 1));
+if (OUT) fs.writeFileSync(auditOutputPath(`${OUT}/hollow-beds.json`), JSON.stringify(res, null, 1));
 
 console.log(`\nCOVERAGE  scope ${scope.length}: ${scope.join(' ')}`);
 console.log(`          used  ${used.length}: ${used.join(' ')}`);

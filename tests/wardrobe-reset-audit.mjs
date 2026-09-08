@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* "TAKE IT ALL OFF": THE WARDROBE'S ONE-TAP STRIP.
  *
  * A player suggested a button that clears the Bonehead so a new outfit starts
@@ -269,7 +270,7 @@ const chip = () => page.evaluate(() => {
 const shoot = async (name) => {
   if (!SHOTS) return;
   const el = await page.$('#chContent');
-  if (el) await el.screenshot({ path: `${SHOTS}/${name}.png` });
+  if (el) await el.screenshot({ path: auditOutputPath(`${SHOTS}/${name}.png`) });
 };
 
 await openWardrobe();

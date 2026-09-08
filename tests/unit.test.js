@@ -4,6 +4,7 @@ import * as execFile_ from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
 /* eggProgress is PURE (no db, no DOM), so it unit-tests directly. */
 import { eggProgress } from '../js/loot.js';
 /* onAppResume touches window/document only when CALLED, so it imports clean (O24). */
@@ -3366,24 +3367,8 @@ test('no browser test changes the viewport without isMobile and hasTouch', () =>
     + 'Use setWidth(page, w, h) from godmode.js, or state both keys if you really do want the reload.');
 });
 
-/* A SELF-SERVED AUDIT HAS TO BE ABLE TO EXIT. serveTree's python child, and the
-   two piped stdio sockets, are refed handles: an audit that falls off the end of
-   its file after browser.close() then stays alive forever and has to be SIGTERMed,
-   which reports as exit 143 and reads as a red audit. contrast-audit.mjs sat like
-   that in the FULL tier of the release gate. Run for real rather than grepped for
-   unref(): the assertion is that the process ENDS, which is the thing that broke.
-   Goes red on the unfixed serveTree (measured: killed at the 20s cap, exit 143). */
-test('serveTree does not hold the event loop open after the script ends', () => {
-  const script = `import { serveTree } from ${JSON.stringify(join(here, 'godmode.js'))};
-    const own = await serveTree(${JSON.stringify(join(here, '..'))});
-    process.once('exit', () => own.close());`;
-  try {
-    execFile_.execFileSync(process.execPath, ['--input-type=module', '-e', script],
-      { timeout: 20000, stdio: 'ignore' });
-  } catch (e) {
-    assert.fail(`serveTree kept node alive, so a self-serving audit can never exit: ${e.signal || e.message}`);
-  }
-});
+// The socket-dependent serveTree exit proof lives in serve-tree-identity-audit.mjs.
+// PURE must remain executable on machines that cannot bind local sockets.
 
 /* ===== PLUGIN PARITY =====================================================
  * @capacitor/haptics was missing for weeks and nothing could notice, because a
@@ -5371,25 +5356,57 @@ test('QA round 27 R13: Android manifest declares exactly the Health Connect type
   assert.equal(read.size, 7, `expected the 7 read types traced in R13, saw ${[...read].sort().join(', ')}: if a read was added on purpose, update this count with it`);
 });
 
-/* ---------------------------------------------------------------------------
- * QA round 27 R14(a). The first CTA of a fresh install refused taps for
- * 2,676 ms because the #splash montage (fixed, inset 0, z-index 400, opaque)
- * sat over the onboarding. showSplash now returns before it builds anything
- * when there is no profile yet, and it does so BEFORE the ?splash=1 force so
- * the onb-audit row can tap through a forced splash and prove the gate.
- * PROVE-RED (2026-09-04, origin/main v472): the gate is absent, fails at the
- * first assertion.
- * ------------------------------------------------------------------------- */
-test('QA round 27 R14(a): no splash is built over a fresh install\'s onboarding', () => {
+/* M5 frozen order, 2026-09-07, supersedes R27 R14(a): first run keeps its
+ * montage. Execute the shipped function until it creates the overlay, so both
+ * the rejected !forced gate and the older !S.settings gate fail this matrix. */
+test('M5 splash keeps first run and skips returning only', async () => {
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
-  const fn = app.match(/async function showSplash\(userEq\) \{([\s\S]*?)\n\}/);
-  assert.ok(fn, 'showSplash not found: re-anchor this test');
-  const head = fn[1].slice(0, fn[1].indexOf("const forced"));
-  assert.match(head, /if \(!S\.settings\) return;/, 'showSplash builds the montage over onboarding again (no S.settings gate before the forced check)');
-  assert.ok(!/document\.createElement/.test(head), 'the gate must run before the splash element exists');
-  // the CSS half: the moment the splash fades it must stop eating taps
+  const fn = app.match(/async function showSplash\(userEq\) \{([\s\S]*?)\n\}/)?.[0];
+  assert.ok(fn, 'showSplash not found');
+  for (const returning of [false, true]) for (const forced of [false, true]) {
+    let built = false;
+    const stop = new Error('overlay reached');
+    const context = vm.createContext({
+      S: { settings: returning ? {} : null }, location: { search: forced ? '?splash=1' : '' },
+      navigator: { webdriver: false }, reducedMotion: false,
+      sessionStorage: { getItem: () => null, setItem() {} },
+      document: { createElement() { built = true; throw stop; } },
+    });
+    await vm.runInContext(`${fn}; showSplash({})`, context).catch(e => { if (e !== stop) throw e; });
+    assert.equal(built, !returning || forced, `returning=${returning}, forced=${forced}`);
+  }
   const css = readFileSync(join(here, '..', 'app.css'), 'utf8');
   assert.match(css, /#splash\.out \{[^}]*pointer-events: none/, 'a fading splash must be non-interactive');
+});
+
+test('M5 Gwart introduces himself and discloses the anonymous account verbatim', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const declaration = app.match(/const ONB_GWART = \[([\s\S]*?)\n\];/)?.[0];
+  assert.ok(declaration, 'ONB_GWART not found');
+  assert.equal(vm.runInNewContext(`${declaration}; ONB_GWART[0]`),
+    "New bones. I'm Gwart. You eat, the skeleton earns. I keep an anonymous account for you. No email, password, or sign-up. The Privacy policy tells the long version.");
+});
+
+test('M5 toast retains the four-job backlog cap and each retained job gets its dwell', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const start = app.indexOf('const toastQ = []');
+  const end = app.indexOf('/* Test hook (webdriver only)', start);
+  assert.ok(start >= 0 && end > start, 'toast queue source not found');
+  const timers = [], seen = [];
+  const el = { classList: { add() {}, remove() {} }, hidden: true, textContent: '' };
+  const context = vm.createContext({
+    $: () => el, reducedMotion: true, toastTimer: 0, clearTimeout() {},
+    setTimeout(fn, ms) { timers.push({ fn, ms }); return timers.length; },
+  });
+  vm.runInContext(app.slice(start, end), context);
+  vm.runInContext('for (let i = 0; i < 6; i++) toast(`toast-${i}`, 260 + i)', context);
+  while (timers.length) {
+    const timer = timers.shift(); seen.push([el.textContent, timer.ms]); timer.fn();
+    assert.ok(seen.length <= 6, 'queue failed to drain');
+  }
+  assert.deepEqual(seen, [['toast-0', 260], ['toast-2', 262], ['toast-3', 263], ['toast-4', 264], ['toast-5', 265]]);
+  assert.equal(el.hidden, true);
+  assert.match(app.slice(start, end), /toastQ\.length > 4[^\n]*never a backlog lecture/);
 });
 
 /* ---------------------------------------------------------------------------
@@ -7958,12 +7975,12 @@ test('B14 app.js retries the wheel once the blocking sheet stack drains, and fir
    leveled you up (or just moved XP within the level) left #lvlChip reading
    its pre-fight numbers until the player left Today and came back, measured
    at chip 0/200 against a ledger of 65.
-   PROVE-RED: dropping either window.__refreshLevelChip?.() call below (win
+   PROVE-RED: dropping either refreshLevelChip() call below (win
    or loss) removes the only place that repaints the chip for that outcome,
    and this test goes red on the missing call. */
-test('R41-16 __refreshLevelChip exists and fires on both fight-settle outcomes, beside the wallet pill', () => {
+test('R41-16 refreshLevelChip exists and fires on both fight-settle outcomes, beside the wallet pill', () => {
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
-  const helper = app.match(/window\.__refreshLevelChip = async \(\) => \{[\s\S]*?\n\};\n/);
+  const helper = app.match(/\nasync function refreshLevelChip\(\) \{[\s\S]*?\n\}\n/);
   assert.ok(helper, '__refreshLevelChip is missing');
   // MUST live at module scope, not nested inside renderToday: today-reads-lint.mjs
   // (A1) walks every call reachable from renderToday's own body, so a closure
@@ -7971,7 +7988,7 @@ test('R41-16 __refreshLevelChip exists and fires on both fight-settle outcomes, 
   // would count as a second 'xp' scan and that guard goes red.
   const rt = app.match(/\nasync function renderToday\(el\) \{\n([\s\S]*?)\n\}\n/);
   assert.ok(rt, 'renderToday not found');
-  assert.ok(!rt[1].includes('window.__refreshLevelChip ='), '__refreshLevelChip must not be defined inside renderToday (today-reads-lint.mjs A1 would double-count its xp read)');
+  assert.ok(!rt[1].includes('function refreshLevelChip('), '__refreshLevelChip must not be defined inside renderToday (today-reads-lint.mjs A1 would double-count its xp read)');
   /* totalXp(), not a literal db.all('xp') here: cached, reuses the existing
      epoch check instead of re-scanning on every call. */
   assert.match(helper[0], /levelFor\(await totalXp\(\)\)/, '__refreshLevelChip must re-derive the level from a fresh xp total (totalXp(), not a stale in-memory one)');
@@ -7991,9 +8008,9 @@ test('R41-16 __refreshLevelChip exists and fires on both fight-settle outcomes, 
   const openFight = app.slice(ofStart, ofEnd);
   // bounded to the win branch's own few lines, so a removed call cannot be
   // masked by the loss branch's own (separate) call further down the file
-  const winSite = openFight.match(/window\.__refreshWalletPill\?\.\(\);[^\n]*\n\s*const badges = await evaluateBadges\(\);\n[\s\S]{0,900}?\n\s*window\.__refreshLevelChip\?\.\(\);\n\s*confettiRain\(90\);/);
+  const winSite = openFight.match(/window\.__refreshWalletPill\?\.\(\);[^\n]*\n\s*const badges = await evaluateBadges\(\);\n[\s\S]{0,900}?\n\s*refreshLevelChip\(\);\n\s*confettiRain\(90\);/);
   assert.ok(winSite, 'the win branch does not refresh the level chip after badges are evaluated (R41-16)');
-  const lossSite = openFight.match(/coins = foeCfg\.mode === 'spar'[\s\S]*?window\.__refreshWalletPill\?\.\(\);\n\s*window\.__refreshLevelChip\?\.\(\);/);
+  const lossSite = openFight.match(/coins = foeCfg\.mode === 'spar'[\s\S]*?window\.__refreshWalletPill\?\.\(\);\n\s*refreshLevelChip\(\);/);
   assert.ok(lossSite, 'the loss branch does not refresh the level chip beside the wallet pill (R41-16)');
 });
 
