@@ -1,3 +1,4 @@
+import { writeSinks } from './lib/audit-write-scan.mjs';
 /* GUARDS THAT PASS WHILE BLIND. 2026-08-19.
  *
  * In one day, FOUR separate guards in this repo reported green while unable to
@@ -261,6 +262,35 @@ ok('SEAM no NEW audit proves a feature only through a test hook',
 ok('SEAM the seam-only inventory has no stale entries (fixed one? delete its line)',
   seamGone.length === 0,
   seamGone.length ? `${seamGone.length} no longer seam-only: ${seamGone.join(', ')}` : 'inventory matches');
+
+/* R3: every recognized filesystem destination and screenshot/trace path
+   is checked at the sink. Recurse into helpers and retired audits too.
+   Bounded lexical coverage, not an OS sandbox. See docs/RELEASE-GATE-STATUS.md. */
+const outputFiles = [];
+function scanOutput(dir) {
+  for (const ent of readdirSync(dir, { withFileTypes: true })) {
+    const file = join(dir, ent.name);
+    if (ent.isDirectory()) scanOutput(file);
+    else if (/\.(mjs|js)$/.test(ent.name)) outputFiles.push(file);
+  }
+}
+scanOutput(here);
+const outputViolations = [];
+let outputSinks = 0;
+for (const file of outputFiles) {
+  const text = readFileSync(file, 'utf8');
+  const sinks = writeSinks(text);
+  outputSinks += sinks.length;
+  const bound = /import\s*\{[^}]*\bauditOutputPath\b[^}]*\}\s*from\s*['"][^'"]*\/audit-output\.mjs['"]/.test(text);
+  for (const sink of sinks) if (!sink.guarded || !bound) {
+    outputViolations.push(`${file.slice(here.length + 1)}:${sink.line} ${sink.api}`);
+  }
+}
+ok('OUTPUT all recognized audit writes validate destinations outside the graded checkout',
+  outputViolations.length === 0, outputViolations.length ? outputViolations.join(' | ') : `${outputSinks} guarded sinks`);
+ok('CONTROL the output sweep is nonempty and rejects an unguarded checkout screenshot',
+  outputSinks > 100 && writeSinks('page.' + 'screenshot({path: join(repo, "probe.png")});').some(r => !r.guarded),
+  `${outputFiles.length} files scanned recursively`);
 
 console.log(`\nguard-hygiene: ${fails.length ? fails.length + ' FAILED' : 'clean'}`);
 process.exit(fails.length ? 1 : 0);

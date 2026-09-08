@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* AN ACCESSORY YOU BOUGHT IS AN ACCESSORY YOU CAN PUT ON, AND SEE.
  *
  * WHY THIS EXISTS. v422 shipped the whole selling half and none of the wearing
@@ -137,7 +138,7 @@ const setup = (label, pass, detail = '') => {
 
 const shotsAt = process.argv.indexOf('--shots');
 const SHOTS = shotsAt > 0 ? process.argv[shotsAt + 1] : null;
-if (SHOTS) mkdirSync(SHOTS, { recursive: true });
+if (SHOTS) mkdirSync(auditOutputPath(SHOTS), { recursive: true });
 /* THE SHOT HAS TO CONTAIN THE PET. Tapping a tile scrolls the wardrobe row into
    view, which puts the carousel above the top of a 852px viewport, so a
    screenshot taken straight after a tap frames the buttons and not the animal
@@ -150,7 +151,7 @@ const shot = async (page, name, { pet = false } = {}) => {
     await sleep(350);
   }
   await settle(page);
-  await page.screenshot({ path: file });
+  await page.screenshot({ path: auditOutputPath(file) });
   console.log(`      shot: ${file}`);
 };
 

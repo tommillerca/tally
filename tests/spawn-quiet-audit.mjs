@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* THE SMALL FINDS COLLECT QUIETLY. THE OPENABLE ONES KEEP THE CEREMONY.
  *
  * Tom, 2026-08-18: "ok then let's lose the full screen reveal on the smaller
@@ -57,7 +58,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
 const SHOTS = process.env.SHOTS || null;
-if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
+if (SHOTS) fs.mkdirSync(auditOutputPath(SHOTS), { recursive: true });
 
 /* ---------------------------------------------------------------- STATIC ---
  * These need no browser, so they grade on every machine including one that
@@ -312,7 +313,7 @@ async function collect(shotName) {
     // shoot the moment there is something to look at, not 5s later when the
     // toast has expired and the next queued message is on screen instead
     if (SHOTS && shotName && !shot && (s.packReveal || s.toast)) {
-      shot = true; await settle(page, 150); await page.screenshot({ path: path.join(SHOTS, `${shotName}.png`) });
+      shot = true; await settle(page, 150); await page.screenshot({ path: auditOutputPath(path.join(SHOTS, `${shotName}.png`)) });
     }
     if (saw.packReveal && shot) break;
   }

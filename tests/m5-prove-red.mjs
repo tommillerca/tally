@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* M5, 2026-09-07. Node-only positive controls on throwaway source copies.
  * Every replacement must match exactly once; each child exit and full output
  * are saved separately. No working source is reverted, no browser is started.
@@ -11,11 +12,11 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const temp = mkdtempSync(join(tmpdir(), 'm5-red-'));
-for (const dir of ['js', 'data']) cpSync(join(root, dir), join(temp, dir), { recursive: true });
-mkdirSync(join(temp, 'tests', 'lib'), { recursive: true });
+const temp = mkdtempSync(auditOutputPath(join(tmpdir(), 'm5-red-')));
+for (const dir of ['js', 'data']) cpSync(join(root, dir), auditOutputPath(join(temp, dir)), { recursive: true });
+mkdirSync(auditOutputPath(join(temp, 'tests', 'lib')), { recursive: true });
 for (const file of ['package.json', 'app.css', 'tests/lookup-guard-lint.mjs', 'tests/lib/lookup-guard-scan.mjs']) {
-  cpSync(join(root, file), join(temp, file));
+  cpSync(join(root, file), auditOutputPath(join(temp, file)));
 }
 const appPath = join(temp, 'js/app.js'), original = readFileSync(appPath, 'utf8');
 const unit = readFileSync(join(root, 'tests/unit.test.js'), 'utf8');
@@ -23,7 +24,7 @@ const start = unit.indexOf("test('M5 splash keeps"), end = unit.indexOf('/* ----
 assert(start >= 0 && end > start, 'M5 unit test boundaries missing');
 const bodies = unit.slice(start, end);
 assert.equal((bodies.match(/^test\(/gm) || []).length, 3, 'expected all three shipped M5 unit guards');
-writeFileSync(join(temp, 'tests/first-run-node.mjs'), `
+writeFileSync(auditOutputPath(join(temp, 'tests/first-run-node.mjs')), `
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
@@ -48,8 +49,8 @@ function replaceOnce(text, from, to) {
 function run(name, script, expected, failureText) {
   const result = spawnSync(process.execPath, [join(temp, 'tests', script)], { cwd: temp, encoding: 'utf8', timeout: 20000 });
   const output = (result.stdout || '') + (result.stderr || '');
-  writeFileSync(join(temp, `${name}.log`), output);
-  writeFileSync(join(temp, `${name}.exit`), String(result.status));
+  writeFileSync(auditOutputPath(join(temp, `${name}.log`)), output);
+  writeFileSync(auditOutputPath(join(temp, `${name}.exit`)), String(result.status));
   const pass = result.status === expected && (!failureText || output.includes(failureText));
   console.log(`${pass ? 'PASS' : 'FAIL'} CONTROL ${name}: exit ${result.status}, expected ${expected}`);
   console.log(output.split('\n').filter(l => /^(FAIL|SITE .*UNREVIEWED|lookup-guard:|\d\/\d M5)/.test(l)).join('\n'));
@@ -69,19 +70,19 @@ try {
       '  if (toastQ.length > 4) toastQ.splice(0, toastQ.length - 4); // never a backlog lecture\n', ''), 'FAIL M5 toast'],
   ];
   for (const [name, mutate, message] of variants) {
-    writeFileSync(appPath, mutate(original));
+    writeFileSync(auditOutputPath(appPath), mutate(original));
     run(name, 'first-run-node.mjs', 1, message);
-    writeFileSync(appPath, original);
+    writeFileSync(auditOutputPath(appPath), original);
   }
-  writeFileSync(appPath, replaceOnce(original, 'instsAll.filter(x => x && isKnownPet(x.sp))', 'instsAll.filter(x => x && x.sp)'));
+  writeFileSync(auditOutputPath(appPath), replaceOnce(original, 'instsAll.filter(x => x && isKnownPet(x.sp))', 'instsAll.filter(x => x && x.sp)'));
   run('red-pet-species', 'lookup-guard-lint.mjs', 1, 'FAIL NEW unresolved lookup guard');
   let oldArt = replaceOnce(original,
     'const ownArt = BH_BY_ID[wornGear ? wornGear.artId : rawEq[slot]];\n    const baseArtId = ownArt?.id || null;',
     'const baseArtId = wornGear ? wornGear.artId : (rawEq[slot] || null);');
   oldArt = replaceOnce(oldArt, "    const nameOf = v => v === ''", "    const ownArt = BH_BY_ID[baseArtId];\n    const nameOf = v => v === ''");
-  writeFileSync(appPath, oldArt);
+  writeFileSync(auditOutputPath(appPath), oldArt);
   run('red-equipped-art', 'lookup-guard-lint.mjs', 1, 'FAIL NEW unresolved lookup guard');
-} finally { writeFileSync(appPath, original); }
+} finally { writeFileSync(auditOutputPath(appPath), original); }
 run('restored-first-run', 'first-run-node.mjs', 0);
 run('restored-lint', 'lookup-guard-lint.mjs', 0);
 console.log(`Evidence: ${resolve(temp)}`);

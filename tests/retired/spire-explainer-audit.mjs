@@ -1,3 +1,4 @@
+import { auditOutputPath } from '../lib/audit-output.mjs';
 /* The explainer has to be TRUE: every number in it must come from the constants,
  * or the card will drift from the game the first time a dial is tuned. */
 import { boot, sleep, shotDir } from './godmode.js';
@@ -156,7 +157,7 @@ console.log('columns:', JSON.stringify(lead));
 check('the text column gets most of the width', lead.textW > lead.leadW * 8, JSON.stringify(lead));
 
 const el = await page.$('details.spire-banner');
-if (el) { await el.screenshot({ path: `${DIR}/spire-explainer.png` }); console.log('shot spire-explainer'); }
+if (el) { await el.screenshot({ path: auditOutputPath(`${DIR}/spire-explainer.png`) }); console.log('shot spire-explainer'); }
 await browser.close();
 console.log(bad ? `\n${bad} FAILED` : '\nSPIRE EXPLAINER VERIFIED');
 process.exit(bad ? 1 : 0);

@@ -4,6 +4,12 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 516, date: '2026-09-08', title: 'The Paddock holds a real collection', items: [
+    'With a large collection the pets in the Paddock overlapped each other. They lay out properly now, however many you have.',
+    'A pet you have armed for breeding, and the one you have equipped, are both marked in the field. You chose those; the app should show them.',
+    'The Stable stopped throwing away your place in the list every time you tapped a copy.',
+    'The colour of a pet is now named where it matters: on its card, when you breed it, and when you are about to destroy it. Melting a pet also asks properly when the one you picked is rare or highly levelled, instead of treating a one-of-a-kind like a spare.',
+  ] },
   { n: 515, date: '2026-09-08', title: 'A restore keeps what you earned', items: [
     'Four ways a restore could quietly take something off you are closed. A second copy of a pet you had earned could vanish. Steps you had walked into a pet could be rolled back. A potion you had already drunk could come back as though you still had it. And opening an older copy of the app after an update could delete things the newer one had saved.',
     'The Kennel now says what a colour is called and shows you the colours you have not won yet, so it is possible to learn there are five of each rather than guessing.',

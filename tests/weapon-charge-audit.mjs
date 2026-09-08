@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* The Wardrobe weapon charge, verified the way v245 taught us to verify motion:
  * by sampling DECODED PIXELS while the animation runs, never by reading geometry.
  *
@@ -111,11 +112,11 @@ const clip = { x: el.rect.x, y: el.rect.y, width: el.rect.w, height: el.rect.h }
  * antialiasing jitter), so "distinct hashes" cannot tell a parked band from a
  * moving one: noise alone manufactures variation. The noise floor is measured in
  * this run and every threshold below is expressed relative to it. */
-const shotDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wpn-'));
+const shotDir = fs.mkdtempSync(auditOutputPath(path.join(os.tmpdir(), 'wpn-')));
 let shotN = 0;
 const shotAt = async () => {
   const f = path.join(shotDir, `f${String(shotN++).padStart(3, '0')}.png`);
-  await page.screenshot({ clip, type: 'png', path: f });
+  await page.screenshot({ clip, type: 'png', path: auditOutputPath(f) });
   return f;
 };
 // Freeze everything else on the stage first. The Bonehead's 3.4s idle breath
@@ -212,7 +213,7 @@ check('and it is LEGIBLE, not a one-frame flash', movingSteps >= 4,
   `${movingSteps} of ${travelD.length} travel steps show motion`);
 check('the band rests OFF the art (parked, within noise)', mx(restD) <= noiseFloor * 3,
   `${f(mx(restD))} max vs ${f(noiseFloor * 3)} allowed`);
-fs.rmSync(shotDir, { recursive: true, force: true });
+fs.rmSync(auditOutputPath(shotDir), { recursive: true, force: true });
 
 /* ===== Cohesion sweep: the charge must reach every surface the character does.
  * The mask is compared against the SIBLING ARTWORK's computed object-fit rather

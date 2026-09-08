@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* A PET YOU OWN IS A PET YOU CAN SEE, IN THE STABLE AND IN THE PADDOCK.
  *
  * WHY THIS EXISTS. v421 sold Bumbleseal for 50,000 coins and she did not arrive.
@@ -99,11 +100,11 @@ const setup = (label, pass, detail = '') => {
 
 const shotsAt = process.argv.indexOf('--shots');
 const SHOTS = shotsAt > 0 ? process.argv[shotsAt + 1] : null;
-if (SHOTS) mkdirSync(SHOTS, { recursive: true });
+if (SHOTS) mkdirSync(auditOutputPath(SHOTS), { recursive: true });
 const shot = async (page, name) => {
   if (!SHOTS) return;
   const file = path.join(SHOTS, `${name}.png`);
-  await page.screenshot({ path: file });
+  await page.screenshot({ path: auditOutputPath(file) });
   console.log(`      shot: ${file}`);
 };
 

@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* THE WARDROBE'S COLOURWAY RAIL, IN PIXELS.
  *
  * Tom, 2026-09-04: "you still have yet to show me the dressing room/wardrobe
@@ -111,7 +112,7 @@ const setup = (label, pass, detail = '') => {
 
 const shotsAt = process.argv.indexOf('--shots');
 const SHOTS = shotsAt > 0 ? process.argv[shotsAt + 1] : null;
-if (SHOTS) mkdirSync(SHOTS, { recursive: true });
+if (SHOTS) mkdirSync(auditOutputPath(SHOTS), { recursive: true });
 
 /* THREE TEAMS FAR APART IN THE GAMUT so "the colour followed the team" is a
    question a mean can answer: navy, yellow, teal. The first two are OWNED and
@@ -256,7 +257,7 @@ const shot = async (name, rect) => {
   if (!SHOTS) return;
   await settle(page);
   const f = path.join(SHOTS, `${name}.png`);
-  await page.screenshot({ path: f, ...(rect ? { clip: rect } : {}) });
+  await page.screenshot({ path: auditOutputPath(f), ...(rect ? { clip: rect } : {}) });
   console.log(`      shot: ${f}`);
 };
 

@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* A LATER MILESTONE IS NEVER A THINNER SCREEN THAN AN EARLIER ONE.
  *
  * THE BUG (R41-21). Measured 2026-09-07 at 393x852, on the shipped card:
@@ -99,7 +100,7 @@ const card = async n => {
       blocks, stats: (blocks.find(x => /cele-stats/.test(x.cls)) || {}).text || null, truth,
     };
   }, n);
-  if (SHOTS) await page.screenshot({ path: `${SHOTS}/r41-21-day${n}-393x852.png` });
+  if (SHOTS) await page.screenshot({ path: auditOutputPath(`${SHOTS}/r41-21-day${n}-393x852.png`) });
   await page.evaluate(() => document.getElementById('celeOk')?.click());
   await sleep(900);
   return m;

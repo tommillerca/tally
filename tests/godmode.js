@@ -1,3 +1,5 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
+import { protectAuditTree } from './lib/audit-output.mjs';
 /* God mode for tests: reach any state directly instead of playing to it.
  *
  * WHY. Checks here kept being written as "play the game and hope": mash JAB and
@@ -48,7 +50,7 @@ export const sleep = ms => new Promise(r => setTimeout(r, ms));
  * filename. 2026-09-02. */
 export const shotDir = sub => {
   const d = path.join(os.tmpdir(), sub);
-  fs.mkdirSync(d, { recursive: true });
+  fs.mkdirSync(auditOutputPath(d), { recursive: true });
   return d;
 };
 
@@ -1072,13 +1074,28 @@ export async function serveTree(root, { timeoutMs = 15000, forcePort = null } = 
     s.once('error', rej);
     s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => res(port)); });
   });
-  /* A random file in the requested tree proves identity even when two checkouts
-     contain byte-identical commits. A hash of repository content cannot do that. */
+  // A per-process endpoint proves server identity without touching the tree.
+  const releaseOutputTree = protectAuditTree(root);
   const proofName = `.serve-tree-${randomUUID()}`;
-  const proofPath = path.join(root, proofName);
   const proofToken = randomUUID();
-  fs.writeFileSync(proofPath, proofToken, { flag: 'wx' });
-  const srv = spawn('python3', ['-m', 'http.server', String(port), '--bind', '127.0.0.1'],
+  const serverCode = `
+import http.server, sys
+root, port, proof_name, proof_token = sys.argv[1:]
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=root, **kwargs)
+    def do_GET(self):
+        if self.path == '/' + proof_name:
+            body = proof_token.encode()
+            self.send_response(200)
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            super().do_GET()
+http.server.ThreadingHTTPServer(('127.0.0.1', int(port)), Handler).serve_forever()
+`;
+  const srv = spawn('python3', ['-B', '-c', serverCode, path.resolve(root), String(port), proofName, proofToken],
     { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
   /* Track BEFORE anything downstream can throw, same reason as boot(): the caller
      never saw this child, so cleanup on parent-throw belongs here. */
@@ -1128,10 +1145,12 @@ export async function serveTree(root, { timeoutMs = 15000, forcePort = null } = 
       if (Date.now() - t0 > timeoutMs) { srv.kill('SIGKILL'); throw new Error(`serveTree: nothing answered on ${url} within ${timeoutMs}ms. stderr: ${err.trim() || '(silent)'}`); }
       await new Promise(r => setTimeout(r, 100));
     }
-  } finally {
-    fs.unlinkSync(proofPath);
+  } catch (error) {
+    srv.kill('SIGKILL');
+    releaseOutputTree();
+    throw error;
   }
-  return { url, port, close: () => { try { srv.kill('SIGKILL'); } catch { /* already gone */ } } };
+  return { url, port, close: () => { releaseOutputTree(); try { srv.kill('SIGKILL'); } catch { /* already gone */ } } };
 }
 
 /* PROCESS-EXIT SAFETY NET for browsers and serveTree children.

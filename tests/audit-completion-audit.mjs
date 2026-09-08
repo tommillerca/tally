@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* N2 CONTROL: execute the shipped receipt and unavailable grading branches.
  * No browser or socket. A killed child, a throw after a red control and healthy
  * controls verify outcomes, not merely the presence of source strings.
@@ -15,7 +16,7 @@ import { observeDependencies, requireDependencyHosts, observePuppeteer } from '.
 const here = fileURLToPath(new URL('.', import.meta.url));
 const lifecycle = new URL('./audit-lifecycle.mjs', import.meta.url).href;
 const godmode = new URL('./godmode.js', import.meta.url).href;
-const temp = mkdtempSync(join(tmpdir(), 'n2-receipts-'));
+const temp = mkdtempSync(auditOutputPath(join(tmpdir(), 'n2-receipts-')));
 let failures = 0, cases = 0;
 async function check(name, fn) {
   cases++;
@@ -24,11 +25,11 @@ async function check(name, fn) {
 }
 function run(source, preload = true) {
   const file = join(temp, 'fixture.mjs');
-  writeFileSync(file, source);
+  writeFileSync(auditOutputPath(file), source);
   const result = spawnSync(process.execPath, [...(preload ? ['--import', lifecycle] : []), file], { encoding: 'utf8', timeout: 5000 });
   const out = result.stdout + result.stderr;
-  writeFileSync(join(temp, 'last.out'), out);
-  writeFileSync(join(temp, 'last.exit'), String(result.status));
+  writeFileSync(auditOutputPath(join(temp, 'last.out')), out);
+  writeFileSync(auditOutputPath(join(temp, 'last.exit')), String(result.status));
   assert.ifError(result.error);
   return { ...result, out };
 }
@@ -152,8 +153,8 @@ try {
     assert.ok(missing.every(r=>r[1]===false));
   });
   await check('GATE preloads the receipt and reports SIGKILL without a false completion', async () => {
-    writeFileSync(join(temp, 'audit-lifecycle.mjs'), readFileSync(join(here, 'audit-lifecycle.mjs')));
-    writeFileSync(join(temp, 'gate-fixture.mjs'), "console.log('FAIL CONTROL before kill'); process.kill(process.pid,'SIGKILL');");
+    writeFileSync(auditOutputPath(join(temp, 'audit-lifecycle.mjs')), readFileSync(join(here, 'audit-lifecycle.mjs')));
+    writeFileSync(auditOutputPath(join(temp, 'gate-fixture.mjs')), "console.log('FAIL CONTROL before kill'); process.kill(process.pid,'SIGKILL');");
     const body = between('release-gate.mjs', 'function run(file, args) {', '\n/* THERE ARE THREE');
     const result = await vm.runInNewContext(`${body};run('gate-fixture.mjs',[])`, {spawn,process,join,here:temp});
     assert.notEqual(result.code,0);
@@ -244,6 +245,6 @@ try {
     assert.ok(source.indexOf('declareAudit({') < source.indexOf('await serveTree('));
     assert.match(source,/completeAudit\(\);\s*console.log\(`\\nMIMIC AUDIT/);
   });
-} finally { rmSync(temp,{recursive:true,force:true}); }
+} finally { rmSync(auditOutputPath(temp),{recursive:true,force:true}); }
 console.log(`audit-completion: ${cases-failures}/${cases} passed, ${failures} FAILED`);
 process.exitCode = failures ? 1 : 0;

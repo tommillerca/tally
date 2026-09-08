@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* KENNEL PALETTES, RENDER AUDIT (rewritten 2026-09-05, was Phase A's CSS
  * filter audit). A morph is now a per-species recolored PNG variant
  * (scripts/build-pet-morphs-v2.py, assets/bh/C/morph/<sp>__<morph>.png), resolved
@@ -97,7 +98,7 @@ const setup = (label, pass, detail = '') => {
 
 const shotsAt = process.argv.indexOf('--shots');
 const SHOTS = shotsAt > 0 ? process.argv[shotsAt + 1] : null;
-if (SHOTS) mkdirSync(SHOTS, { recursive: true });
+if (SHOTS) mkdirSync(auditOutputPath(SHOTS), { recursive: true });
 const urlArg = process.argv[2] && !process.argv[2].startsWith('--') ? process.argv[2] : null;
 
 /* Seed exactly two petInst rows (raw IndexedDB, same shape seed() in godmode.js
@@ -278,7 +279,7 @@ const rgb = c => `rgb(${c.r.toFixed(1)},${c.g.toFixed(1)},${c.b.toFixed(1)})`;
 const shot = async (page, name) => {
   if (!SHOTS) return;
   await settle(page);
-  await page.screenshot({ path: path.join(SHOTS, `${name}.png`) });
+  await page.screenshot({ path: auditOutputPath(path.join(SHOTS, `${name}.png`)) });
 };
 
 async function run() {

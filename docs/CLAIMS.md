@@ -1,5 +1,18 @@
 # What each patch note claims, and what backs it
 
+## R3: operational debt (2026-09-07)
+
+1. PROOF: unit.test.js | REACH: The hotfix registerKey/goOnline regions and strengthened R37-24 guard are byte-identical to locally available origin/main. The current unit suite checks the failed retry, welcome receipt and successful later signup. Branch left intact; no live-wallet measurement is claimed.
+2. PROOF: audit-output-audit.mjs, guard-hygiene-lint.mjs | REACH: Recognized audit write destinations reject the checkout, traversal and symlink aliases; the remaining serveTree proof file moved into memory. Three throwaway reversions went red and restored copies went green. This is bounded source/path evidence, not an OS-level guarantee for opaque subprocesses or a browser proof.
+3. PROOF: serve-tree-identity-audit.mjs | REACH: Real wrong-port, read-only directory and child-exit proofs remain pending on a socket-permitted machine. The socket-dependent checks now belong to FULL, preserving their assertions. Initial inherited PURE execution received listen EPERM and did not grade any row.
+
+Four verdicts, files, exact proof output, denials and deviations are recorded in
+[R3-REPORT.md](R3-REPORT.md). Current census/machine limits are in
+[RELEASE-GATE-STATUS.md](RELEASE-GATE-STATUS.md). [TESTFLIGHT-STATE.md](TESTFLIGHT-STATE.md)
+attributes the supplied snapshot and marks current remote verification blocked
+by the contradictory ASC instruction. No commit, push or publication occurred.
+
+
 ## M5: first-run disclosure and lookup guards (2026-09-07)
 
 1. PROOF: unit.test.js | REACH: Gwart retains his introduction and gives the exact anonymous-account disclosure. First run retains its intro, returning players skip it unless explicitly previewing. The four-job toast backlog cap remains. The three focused Node guards pass; the full unit command has one socket-dependent failure.
@@ -427,6 +440,19 @@ the upload path and its guards.
 
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
+
+## v516
+1. Round 44's Paddock geometry and Kennel naming backlog, plus the operational debt. Its dated sections are further down, folded here.
+
+   Not player-visible, so it carries no changelog item: `hotfix/register-429-wallet` is dead weight and can be deleted. Its `registerKey` is byte-identical to main's through the whole retry body, and main additionally guards `apiBase()` being absent, which the branch version does not. QA round 43 confirmed the shipped behaviour live on v493 at 28 of 28 samples. Recorded with the evidence in docs/TESTFLIGHT-STATE.md rather than acted on, because branch deletion is Tom's call.
+
+2. PROOF: paddock-pack-audit.mjs, paddock-pack-browser-audit.mjs | REACH: the Paddock with a large collection. At 200 pets the packer failed the contract stated in `js/paddock.js`'s own header: 76 pairs overlapped by more than 20px in both axes, worst 121x72, among the 50 actually drawn. A breeding-armed pet and the equipped pet were both completely unmarked in the field, which are two states the player chose. The Stable copy row also lost 2,160px of scroll position on every tap, and a breeding pick was silently dropped on leaving the sheet while the sibling team pick persisted, which is the tell that one of the two was re-rendering rather than refreshing.
+
+3. PROOF: kennel-copy-browser-audit.mjs | REACH: hatch a pet, then look for its colour anywhere. The reveal said "A Frost Bumbleseal!" and from that second the word Frost appeared on no screen in the game except one Kennel panel, while the Stable card for that exact animal printed rarity, level and four stats and no colour, with its own img pointing at the Frost art. The card already had a chip vocabulary for rarity, level and shiny, so the colourway was the only pet property with art and no chip. It is now named on the card, in the breed picker and in the destroy confirm, which are the three points where the choice is irreversible. The typed-confirm gate also keyed on species and never on colourway or level, so a Level 10 one-of-a-kind with 105,000 banked steps was destroyed by two taps inside 2,800 ms with no toast on arming.
+
+4. PROOF: paddock-pack-audit.mjs | REACH: the Stable copy row. It lost 2,160px of scroll position on every tap, and a breeding pick was silently dropped on leaving the sheet while the sibling team pick persisted. Two sibling controls behaving differently is what identified it: one path was re-rendering where the other refreshed.
+
+5. PROOF: kennel-copy-audit.mjs | REACH: melt a pet. The heavier typed-confirm gate keyed on species and never on colourway or level, so a Level 10 one-of-a-kind with 105,000 banked steps went to two taps inside a 2,800 ms window, with no toast on arming, a button reading "Melt for 60?" and a result toast naming only the species.
 
 ## v515
 1. The restore path hardened ahead of round 50, plus round 48's remainder and the pet-screen accessibility work. Its dated sections are further down, folded here.

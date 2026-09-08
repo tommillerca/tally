@@ -65,7 +65,7 @@ import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribut
 import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
-import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear, bestInstance } from './loot.js';
+import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, petColourName, petInstanceName, salvageInstance, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear, bestInstance } from './loot.js';
 import { buildBattlePet, legalPicks, isKnownPet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs, ownedCellCount } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
@@ -16184,7 +16184,7 @@ function openHatchReveal(res, charWrap) {
     ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? `${sparkIco(24)} SHINY! ${sparkIco(24)}` : res.dupe ? 'ANOTHER ONE!' : esc(hatchName)}</div>
        <div class="hatch-prize r-${item.rarity}${res.shiny ? ' is-shiny' : ''}">
          <canvas class="hatch-art" width="512" height="512"></canvas>
-         <b>${esc(item.name)}${res.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</b>
+         <b>${esc(petInstanceName({ sp: item.id, morph: res.morph, shiny: res.shiny }))}${res.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</b>
          <small>${res.shiny ? 'Ultra-rare variant · follows your bonehead' : res.dupe ? 'A duplicate · joins your crew as breeding stock' : 'Pet · follows your bonehead'}</small>
          <span class="rar-chip" style="color:${res.shiny ? 'var(--gold)' : RARITIES[item.rarity].color}">${res.shiny ? 'SHINY' : RARITIES[item.rarity].label}</span>
        </div>`
@@ -19608,7 +19608,7 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
            their duration, so it is deterministic (a pet drifts the same way every
            visit) and needs no randomness. Negative, so the animation starts
            mid-stride instead of pausing first. */
-        : `left:${p.x}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px;--pdk-phase:-${[...r.iid].reduce((a, c) => a + c.charCodeAt(0), 0) % 9}s`;
+        : `left:${p.x}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px;--pdk-range:${p.range || 0}px;--pdk-phase:-${[...r.iid].reduce((a, c) => a + c.charCodeAt(0), 0) % 9}s`;
     /* THE SPRITE NAMES THE COPY, not just the species. `data-pdk` alone meant the field
        was a species picker: tapping the fourth Bulldog opened the slider on the first
        one, so the animal you pressed and the card you got were different animals. The
@@ -19617,6 +19617,7 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
        unchanged: it has no card to open. */
     return `<div class="pdk-pet pdk-${p.kind}${glow}" data-pdk="${r.sp}" data-iid="${r.iid}" style="${pos}">
       <span class="pdk-flip"><span class="pdk-bob">${art}</span></span>
+      ${r.equipped || r.breeding ? `<span class="pdk-state">${r.equipped ? '<span>OUT WITH YOU</span>' : ''}${r.breeding ? '<span class="pdk-breeding">BREEDING</span>' : ''}</span>` : ''}
       ${p.kind === 'walk' || p.kind === 'flop' ? '<span class="pdk-shadow"></span>' : ''}
     </div>`;
   };
@@ -19692,8 +19693,12 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
  * fork per screen. The hanging sign stays. */
 async function openPaddock() {
   const { paddockRoster, paddockEggs, placePaddock, PDK_SCENE, rotHash } = await import('./paddock.js');
-  const [roster, eggs, eqOwn, ownedIds, petTapped] = await Promise.all([
+  const eqIid = await equippedPetIid();
+  const [rows, eggs, eqOwn, ownedIds, petTapped] = await Promise.all([
     paddockRoster(), paddockEggs(), equipped(), ownedCosmeticIds(), kvGet('pdkPetTapped', false)]);
+  const breeding = (S.settings || {}).stableBreed || {};
+  const roster = rows.map(r => ({ ...r, equipped: r.iid === eqIid && r.sp === eqOwn.C,
+    breeding: Array.isArray(breeding.iids) && breeding.iids.includes(r.iid) }));
   /* THE HERD TURNS OVER WHEN THE PLAYER'S DAY DOES. placePaddock's rotation seed
      defaults to toISOString(), which is UTC, and calling it with no day meant a
      collection past the walk cap swapped its herd at 17:00 local here while
@@ -19832,8 +19837,25 @@ async function choosePetTalent(iid, node) {
 }
 
 async function openStable(opts = {}) {
-  let sel = [];      // iids flagged for breeding
-  let offSp = null;
+  const savedBreed = (S.settings || {}).stableBreed || {};
+  let sel = Array.isArray(savedBreed.iids) ? [...new Set(savedBreed.iids)].slice(0, 2) : [];
+  let offSp = savedBreed.keep || null;
+  const saveBreed = () => {
+    S.settings = S.settings || {};
+    S.settings.stableBreed = { iids: [...sel], keep: offSp };
+    saveSettings();
+  };
+  const kinScroll = new Map();
+  const rememberKin = body => {
+    const kin = $('.cf-kin', body);
+    if (kin?.dataset.sp) kinScroll.set(kin.dataset.sp, kin.scrollLeft);
+  };
+  const restoreKin = (body, sp) => {
+    const kin = $('.cf-kin', body);
+    if (!kin || !sp) return;
+    kin.dataset.sp = sp;
+    kin.scrollLeft = kinScroll.get(sp) || 0;
+  };
   // which pet the carousel is parked on. Held by IID, not index, so it survives a
   // re-render that adds or removes a pet (breeding destroys one mid-session).
   let cfIid = opts.focusIid || null;
@@ -19940,6 +19962,9 @@ async function openStable(opts = {}) {
     // offspring under the feed model: the keeper is the same pet all the way
     // through, so the old "which one does it become?" question had no answer.
     if (pair && offSp !== a.iid && offSp !== b.iid) offSp = a.iid;
+    if (!pair) offSp = null;
+    const saved = (S.settings || {}).stableBreed || {};
+    if (JSON.stringify(saved.iids || []) !== JSON.stringify(sel) || (saved.keep || null) !== offSp) saveBreed();
     const keeper = pair ? (offSp === b.iid ? b : a) : null;
     const spare = pair ? (offSp === b.iid ? a : b) : null;
     const offLineage = keeper ? (keeper.lineage || 0) + 1 : 0;
@@ -19984,7 +20009,7 @@ async function openStable(opts = {}) {
        off a species id), thumb: true so the tier follows the geometry. */
     const kinChips = inst => bySp[inst.sp].length < 2 ? '' : bySp[inst.sp].slice().sort(byBest).map(x => {
       const on = x.iid === inst.iid;
-      return `<button class="chip kin${on ? ' on' : ''}" type="button" data-kin="${x.iid}" role="option" aria-selected="${on}"><span class="kin-pic" aria-hidden="true">${petPortraitHtml(x.sp, 26, x.shiny, { thumb: true, morph: x.morph })}</span><span class="kin-tx">${nicks[x.iid] ? esc(nicks[x.iid]) + ' · ' : ''}Lv ${petLevel(bank[x.iid] || 0)}${x.shiny ? ' ✦' : ''}${x.iid === eqIid ? ' · out' : ''}${sel.includes(x.iid) ? ' · breeding' : ''}</span></button>`;
+      return `<button class="chip kin${on ? ' on' : ''}" type="button" data-kin="${x.iid}" role="option" aria-selected="${on}"><span class="kin-pic" aria-hidden="true">${petPortraitHtml(x.sp, 26, x.shiny, { thumb: true, morph: x.morph })}</span><span class="kin-tx">${nicks[x.iid] ? esc(nicks[x.iid]) + ' · ' : ''}${esc(petColourName(x))} · Lv ${petLevel(bank[x.iid] || 0)}${x.shiny ? ' ✦' : ''}${x.iid === eqIid ? ' · out' : ''}${sel.includes(x.iid) ? ' · breeding' : ''}</span></button>`;
     }).join('');
     const focusIdx = Math.max(0, roster.findIndex(x => x.iid === (cfIid || eqIid)));
     const focused = roster[focusIdx] || roster[0] || null;
@@ -19996,6 +20021,7 @@ async function openStable(opts = {}) {
       return `<div class="cf-card r-${it.rarity || 'common'}${x.shiny ? ' is-shiny' : ''}${isEq ? ' active' : ''}${inSel ? ' picked' : ''}"
           data-cfi="${i}" data-petsel="${x.iid}" data-sp="${x.sp}">
         <span class="cf-chip r-${it.rarity || 'common'}">${x.shiny ? `${sparkIco(9)} SHINY` : esc((RARITIES[it.rarity] || {}).label || it.rarity || '')}</span>
+        ${x.shiny ? '' : `<span class="cf-chip" style="top:38px">${esc(petColourName(x))}</span>`}
         <span class="cf-lv">LV ${lvl}</span>
         <!-- Tom, 2026-08-08: "you should have the animated versions of the pets we
              have animations for. That is the cloud, the orange liz and the purple
@@ -20024,7 +20050,7 @@ async function openStable(opts = {}) {
       if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next', toNext.toLocaleString()]);
       if (focused.lineage) rows.push(['Lineage', `${focused.lineage} · +${Math.round(focused.lineage * 5)}% stats`]);
       return `<div class="cf-cap">
-          <b>${esc(it.name || focused.sp)}${focused.shiny ? ' ✦' : ''}${nickTag(focused.iid)}</b>
+          <b>${esc(petInstanceName(focused))}${focused.shiny ? ' ✦' : ''}${nickTag(focused.iid)}</b>
           <span class="role"><span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}</span>
           <dl class="cf-meta">${rows.map(([k, v]) => `<div class="row"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
         </div>
@@ -20160,7 +20186,7 @@ async function openStable(opts = {}) {
        plus which side of the trade each chip currently sits on. */
     const spChips = pair ? [a, b]
       .map(x => {
-        const lbl = nicks[x.iid] || (BH_BY_ID[x.sp] || {}).name || x.sp;
+        const lbl = `${nicks[x.iid] ? nicks[x.iid] + ' · ' : ''}${petInstanceName(x)}`;
         const bits = [`Lv ${petLevel(bank[x.iid] || 0)}`];
         if (x.lineage) bits.push(`lineage ${x.lineage}`);
         return `<button class="chip ${offSp === x.iid ? 'on' : ''}" data-offsp="${x.iid}">${esc(lbl)}${x.shiny ? ' ✦' : ''} &middot; ${bits.join(' &middot; ')} &middot; <b>${offSp === x.iid ? 'KEPT' : 'FED'}</b></button>`;
@@ -20213,6 +20239,8 @@ async function openStable(opts = {}) {
     const kennelOwned = ownedPairs(insts);
     const kennelMorphs = new Set([...kennelOwned].map(k => k.split('|')[1]));
     const kennelFound = ownedCellCount(kennelOwned, KENNEL_SPECIES.map(x => x.id));
+    rememberKin(body);
+    const bodyScroll = body.scrollTop;
     body.innerHTML = `
       <button class="pdk-door" id="stableToPaddock" type="button">
         <span class="pdk-door-scene" aria-hidden="true">
@@ -20229,7 +20257,7 @@ async function openStable(opts = {}) {
         </span>
         <span class="pdk-door-tx">
           <b>THE PADDOCK</b>
-          <small>${insts.length} pet${insts.length === 1 ? '' : 's'} out in the field</small>
+          <small>${insts.length} pet${insts.length === 1 ? '' : 's'} in your collection</small>
         </span>
         <!-- the house disclosure arrow: a plain glyph in a span, as in .gbn-chev,
              .gd-arrow and .ul-chev. No ICONS ternary fallback here, per the note in
@@ -20256,7 +20284,7 @@ async function openStable(opts = {}) {
         <span class="kdoor-sw" aria-hidden="true">${MORPHS.map(m => `<i class="${kennelMorphs.has(m) ? 'on' : ''}" style="--kc:${morphSwatch(m)}"></i>`).join('')}</span>
         <span class="pdk-door-tx">
           <b>THE KENNEL</b>
-          <small>Every colour your pets come in &middot; ${kennelFound} of ${KENNEL_SPECIES.length * MORPHS.length}</small>
+          <small>${kennelFound} of ${KENNEL_SPECIES.length * MORPHS.length} species colourways &middot; founder excluded</small>
         </span>
         <span class="pdk-door-go" aria-hidden="true">›</span>
       </button>
@@ -20327,9 +20355,9 @@ async function openStable(opts = {}) {
             </span>
           </div>
           <ul class="breed-facts">
-            <li>You keep <b>${esc((BH_BY_ID[keeper.sp] || {}).name || keeper.sp)}</b>. Same pet, same name, <b>same level and look</b>.</li>
+            <li>You keep <b>${esc(petInstanceName(keeper, bank[keeper.iid] || 0))}</b>. Same pet, same name, <b>same level and look</b>.</li>
             <li>It reaches <b>lineage ${offLineage}</b>: <b>+${Math.round(offLineage * 5)}% to every stat</b>.</li>
-            <li><b>${esc((BH_BY_ID[spare.sp] || {}).name || spare.sp)} is destroyed</b> and does not come back.</li>
+            <li><b>${esc(petInstanceName(spare, bank[spare.iid] || 0))} is destroyed</b> and does not come back.</li>
           </ul>
           ${spareIsPrecious ? `<div class="breed-warn">
             ${ICONS.warn(17)}
@@ -20339,8 +20367,11 @@ async function openStable(opts = {}) {
           </div>` : ''}
           <div class="breed-pick"><span class="note">Which one are you keeping?</span><div class="breed-sp">${spChips}</div></div>
           ${st.ready ? '' : `<p class="note">Walk ${st.cooldownLeft.toLocaleString()} more steps before breeding again.</p>`}
-          <button class="btn" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Feed ${esc((BH_BY_ID[spare.sp] || {}).name || spare.sp)} in</button>
+          <button class="btn" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Feed ${esc(petInstanceName(spare, bank[spare.iid] || 0))} in</button>
         </div>` : ''}`;
+
+    body.scrollTop = bodyScroll;
+    restoreKin(body, focused?.sp);
 
     /* Bring the pet we came here for onto the screen, once. Opening its tree is
        not enough when it is the fourth card down: the sheet still lands at the
@@ -20394,7 +20425,7 @@ async function openStable(opts = {}) {
       /* 8px of clearance, not zero: scrolling by exactly the overflow lands the
          tile's bottom border ON the fold, where sub-pixel rounding eats it. */
       const over = pwTile.getBoundingClientRect().bottom + 8 - view.bottom;
-      if (over > 0) body.scrollTop += Math.min(over, pwFrame.getBoundingClientRect().top - view.top);
+      if (bodyScroll === 0 && over > 0) body.scrollTop += Math.max(0, Math.min(over, pwFrame.getBoundingClientRect().top - view.top));
     }
     /* The ring. Painted straight to the DOM because sixty transform updates a
        second is not a job for a re-render: render() rebuilds this whole body, so
@@ -20726,7 +20757,7 @@ async function openStable(opts = {}) {
         const rows = [['Level', lvl], ['Power', bs.power], ['Health', bs.hp], ['Reflex', bs.reflex]];
         if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next', toNext.toLocaleString()]);
         if (inst.lineage) rows.push(['Lineage', `${inst.lineage} · +${Math.round(inst.lineage * 5)}% stats`]);
-        $('b', cap).innerHTML = `${esc(it.name || inst.sp)}${inst.shiny ? ' ✦' : ''}${nickTag(inst.iid)}`;
+        $('b', cap).innerHTML = `${esc(petInstanceName(inst))}${inst.shiny ? ' ✦' : ''}${nickTag(inst.iid)}`;
         const role = $('.role', cap);
         if (role) role.innerHTML = `<span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}`;
         const meta = $('.cf-meta', cap);
@@ -20743,12 +20774,17 @@ async function openStable(opts = {}) {
       if (eqB) { eqB.dataset.eq = inst.iid; eqB.textContent = isEq ? 'OUT WITH YOU' : 'EQUIP'; eqB.disabled = isEq; eqB.classList.toggle('ghost', isEq); }
       if (trB) { trB.dataset.pettree = inst.iid; trB.textContent = isOpen ? 'HIDE TALENTS' : 'TALENTS'; }
       if (brB) { brB.dataset.breedsel = inst.iid; brB.textContent = inSel ? 'BREEDING' : 'BREED'; brB.classList.toggle('on', inSel); }
-      if (dsB) { dsB.dataset.destroy = inst.iid; dsB.dataset.dust = dustVal; dsB.textContent = `DESTROY ${dustVal}`; }
+      if (dsB) { delete dsB.dataset.armed; dsB.dataset.destroy = inst.iid; dsB.dataset.dust = dustVal; dsB.textContent = `DESTROY ${dustVal}`; }
       // her wardrobe follows the ring: shown only while she is the pet in front
       $$('.pet-wear', body).forEach(pwB => { pwB.hidden = pwB.dataset.pwsp !== inst.sp; });   // Football kit, 2026-09-04
       centreRail();
       const kin = $('.cf-kin', body);
-      if (kin) { kin.innerHTML = kinChips(inst); kin.setAttribute('aria-label', `Your ${it.name || inst.sp}s`); }
+      if (kin) {
+        rememberKin(body);
+        kin.innerHTML = kinChips(inst);
+        kin.setAttribute('aria-label', `Your ${it.name || inst.sp}s`);
+        restoreKin(body, inst.sp);
+      }
     }
 
     // No card-click-to-open-talents any more: on a carousel a tap means "bring
@@ -20865,7 +20901,7 @@ async function openStable(opts = {}) {
       if (sel.includes(iid)) sel = sel.filter(x => x !== iid);
       else if (sel.length < 2) sel.push(iid);
       else sel = [sel[1], iid];
-      offSp = null; render();
+      offSp = null; saveBreed(); render();
     }));
     /* THE FIRST PICK NOW SAYS WHAT TO DO NEXT. Tom, 2026-08-10: "Tapping breed
        doesn't make it clear what to do next to find the next pet and also hit
@@ -20874,7 +20910,7 @@ async function openStable(opts = {}) {
        which does not exist until there ARE two. The waiting bar fills that gap in
        the same place the real one will appear, so the answer is already where you
        are about to look. */
-    $('#breedCancel', body)?.addEventListener('click', () => { sel = []; offSp = null; render(); });
+    $('#breedCancel', body)?.addEventListener('click', () => { sel = []; offSp = null; saveBreed(); render(); });
     $('#petsHelp', body)?.addEventListener('click', openPetsHelp);
     $('#stableToPaddock', body)?.addEventListener('click', () => openPaddock());
     $('#kennelBtn', body)?.addEventListener('click', () => openKennel());
@@ -20903,33 +20939,30 @@ async function openStable(opts = {}) {
     }
     $$('[data-destroy]', body).forEach(btn => btn.addEventListener('click', async () => {
       const inst = insts.find(x => x.iid === btn.dataset.destroy);
+      if (!inst) return;
+      const iid = inst.iid;
+      const steps = bank[iid] || 0;
+      const nm = petInstanceName(inst, steps);
       const isShiny = !!(inst && inst.shiny);
       const dustVal = btn.dataset.dust || '?';
       const doSalvage = async () => {
-        const res = await salvageInstance(btn.dataset.destroy);
+        const res = await salvageInstance(iid);
         if (!res.ok) { toast('Could not destroy that pet.'); return false; }
         popSound(S.sounds);
-        toast(`${res.name} salvaged into ${res.dust} Bone Dust.`, 2600);
+        toast(`${nm} salvaged into ${res.dust} Bone Dust.`, 2600);
         return true;
       };
-      /* THE LAST COPY OF A PREMIUM PET is not a dupe melt. The two-tap arm below
-         is sized for a spare that hatches again next week; a 50,000-coin shop pet
-         or a legendary the player owns exactly ONE of does not come back for 120
-         dust, so it gets the same typed-confirm the app already uses for Erase
-         and Delete account. A dupe of the same species keeps the light arm:
-         salvaging spares is routine and the heavier gate would just teach players
-         to type through it. */
-      const petIt = inst ? (BH_BY_ID[inst.sp] || {}) : {};
-      const lastCopy = !!inst && insts.filter(x => x.sp === inst.sp).length === 1;
-      if (lastCopy && (inst.sp === PET_SHOP.pet.id || petIt.rarity === 'legendary')) {
-        const nm = petIt.name || inst.sp;
+      // A colour's last copy or any investment needs a typed confirmation.
+      // Only an untrained, plain duplicate keeps the quick two-tap action.
+      const lastColour = insts.filter(x => x.sp === inst.sp && petColourName(x) === petColourName(inst)).length === 1;
+      if (lastColour || steps > 0 || isShiny || (inst.lineage || 0) > 0) {
         const wrap = openSheet(`
           <div class="sheet-head">
             <div class="hd"><h2>Destroy ${esc(nm)}?</h2><div class="sub">This cannot be undone</div></div>
             <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
           </div>
           <div class="sheet-body">
-            <p class="note" style="margin-bottom:12px">This is your <b>only ${esc(nm)}</b>${isShiny ? ', and it is SHINY' : ''}. Destroying it pays <span class="dust-ico">${ICONS.dust(13)}</span><b>${dustVal} Bone Dust</b> and it does not come back.</p>
+            <p class="note" style="margin-bottom:12px">${lastColour ? 'This is your last copy of this colour. ' : ''}<b>${esc(nm)}</b> has <b>${steps.toLocaleString()} banked steps</b>${inst.lineage ? ` and lineage ${inst.lineage}` : ''}. Its steps and lineage are lost. Destroying it pays <span class="dust-ico">${ICONS.dust(13)}</span><b>${dustVal} Bone Dust</b> and it does not come back.</p>
             <div class="t1-field"><label>Type ${esc(nm.toUpperCase())} or DESTROY to confirm</label><input id="pdIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="DESTROY"></div>
           </div>
           <div class="t1-foot"><button class="btn danger-ish" id="pdGo" disabled>Destroy it</button></div>`, { cls: 't1', name: 'DestroyPet' });
@@ -20945,11 +20978,16 @@ async function openStable(opts = {}) {
         });
         return;
       }
-      if (btn.dataset.armed !== '1') {
-        btn.dataset.armed = '1'; const t = btn.innerHTML;
-        btn.innerHTML = isShiny ? `SHINY! Melt for <span class="dust-ico">${ICONS.dust(13)}</span>${dustVal}?` : `Melt for <span class="dust-ico">${ICONS.dust(13)}</span>${dustVal}?`;
-        if (isShiny) toast(`⚠️ That's a SHINY pet, ultra-rare (~3% on hatch). Destroying it is permanent and only gives ${dustVal} Bone Dust. Tap again to confirm.`, 4600);
-        setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.innerHTML = t; } }, isShiny ? 4600 : 2800);
+      if (btn.dataset.armed !== iid) {
+        btn.dataset.armed = iid; const t = btn.innerHTML;
+        btn.innerHTML = `Melt ${esc(nm)} for <span class="dust-ico">${ICONS.dust(13)}</span>${dustVal}?`;
+        toast(`${nm} will be destroyed for ${dustVal} Bone Dust. This cannot be undone. Tap again to confirm.`, 4600);
+        setTimeout(() => {
+          if (btn.isConnected && btn.dataset.armed === iid) {
+            delete btn.dataset.armed;
+            if (btn.dataset.destroy === iid) btn.innerHTML = t;
+          }
+        }, 4600);
         return;
       }
       if (await doSalvage()) render();
@@ -20960,7 +20998,7 @@ async function openStable(opts = {}) {
       // colour carries to (and overtakes any common colour in) the offspring,
       // but the parent itself is gone. Arm-then-confirm.
       const spareInst = insts.find(x => x.iid === sel.find(y => y !== offSp)) || {};
-      const spareName = (BH_BY_ID[spareInst.sp] || {}).name || 'that pet';
+      const spareName = petInstanceName(spareInst, bank[spareInst.iid] || 0);
       const btn = e.currentTarget;
       /* ARM ON EVERY BREED. It permanently destroys a pet, and since v270 every
          irreversible spend takes two taps. A precious spare gets a louder line,
@@ -20979,7 +21017,7 @@ async function openStable(opts = {}) {
       const keepIid = offSp, feedIid = sel.find(x => x !== offSp);
       const res = await breedPets(keepIid, feedIid);
       if (!res.ok) { toast(BREED_ERR[res.reason] || 'Could not breed those.'); render(); return; }
-      sel = []; offSp = null;
+      sel = []; offSp = null; saveBreed();
       await render();                          // refresh the stable underneath
       openPetBreedResult(res.offspring);       // reveal on top (Stable stays open, no race)
     });
@@ -21019,6 +21057,9 @@ async function openKennel() {
   if (!body) return;
   const insts = await petInstances();
   const owned = ownedPairs(insts);   // Set of "sp|morph", pure (js/pets.js)
+  const found = ownedCellCount(owned, KENNEL_SPECIES.map(s => s.id));
+  const total = KENNEL_SPECIES.length * MORPHS.length;
+  const complete = found === total;
   const ownedSp = KENNEL_SPECIES.filter(s => insts.some(x => x.sp === s.id));
   // The roster's tile shows the HIGHEST-TIER owned morph for that species
   // (plan section 3), not merely "an" owned copy: MORPH_TIER orders midnight
@@ -21031,13 +21072,13 @@ async function openKennel() {
     const morph = bestMorphFor(s.id);
     // R39-11: the dots are indicators, not controls (the grid cells are).
     const dots = MORPHS.map(m => `<i data-morph="${esc(m)}" class="k-dot${owned.has(`${s.id}|${m}`) ? ' on' : ''}" style="--kc:${morphSwatch(m)}"></i>`).join('');
-    const morphNames = MORPHS.filter(m => owned.has(`${s.id}|${m}`) && m !== 'base').map(m => MORPH_LABEL[m]);
+    const morphNames = MORPHS.filter(m => owned.has(`${s.id}|${m}`)).map(m => m === 'base' ? 'Base' : MORPH_LABEL[m]);
     return `<div class="k-row">
       <span class="k-thumb">${croppedPetImg(s.id, 48, false, morphAsset(s.id, morph) || null, undefined, true)}</span>
       <div class="k-id">
         <b>${esc(s.name)}</b>
         <div class="k-dots" aria-hidden="true">${dots}</div>
-        <p class="k-cap" data-cap="${esc(s.id)}">${esc(morphNames.length ? `${morphNames.join(', ')} owned` : 'Base owned')}</p>
+        <p class="k-cap" data-cap="${esc(s.id)}">${esc(morphNames.length ? `${morphNames.join(', ')} owned` : 'No colourways owned')}</p>
       </div>
     </div>`;
   };
@@ -21083,13 +21124,14 @@ async function openKennel() {
     <p class="sect-h">Your pets</p>
     <div class="k-roster">${ownedSp.length ? ownedSp.map(rosterRow).join('') : '<p class="k-empty">Hatch an egg to start your collection.</p>'}</div>
     <p class="k-gwart"><b>Gwart says:</b> It's paint, not power. Ember, Frost, Toxic, Midnight, same skeleton underneath.</p>
-    <p class="sect-h">Collection &middot; ${ownedCellCount(owned, KENNEL_SPECIES.map(s => s.id))} / ${KENNEL_SPECIES.length * MORPHS.length}</p>
+    <p class="sect-h">Collection &middot; ${found} / ${total}</p>
+    ${complete ? '<p class="k-complete">Every colour, every pet. Your Kennel is complete.</p>' : ''}
     <!-- HOW TO READ THE GRID, one line, at the point of use (v500: "How to use
          the kennel not clear at all"). The same idiom the Paddock's "Tap a pet
          to say hi" and the Dressing Room's lead already use: a sentence where
          the thing is, never a tutorial screen. It says the rule the colours
          encode AND names the one control the screen has. -->
-    <p class="k-lead">Five colourways per pet, in column order. Filled dots are hatched; hollow dots and locked cells are not. Tap a cell to read its name.</p>
+    <p class="k-lead">${complete ? 'All five colourways of every pet are yours. Tap a cell to read its name.' : 'Five colourways per pet, in column order. Filled dots are hatched; hollow dots and locked cells are not. Tap a cell to read its name.'}</p>
     <div class="k-grid">${gridHead}${KENNEL_SPECIES.map(gridRow).join('')}</div>`;
   $$('.k-cell', body).forEach(c => c.addEventListener('click', () => {
     const { sp, morph: m } = c.dataset;
@@ -23714,7 +23756,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v515'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v516'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

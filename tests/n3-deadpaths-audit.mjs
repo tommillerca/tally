@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* N3 Node regression: execute the real artifact path expressions and the News
  * callback through openRaceIntro to its renderer input. No browser or sockets.
  * CONTROL: restore each original path / the original News callback in a copy.
@@ -45,9 +46,9 @@ for (const [file, variable, expression] of paths) {
     outside(dest); // Refuse before writing, including on a reverted copy.
     const probe = `${dest}.n3-${process.pid}`;
     try {
-      writeFileSync(probe, 'N3 artifact routing proof', { flag: 'wx' });
+      writeFileSync(auditOutputPath(probe), 'N3 artifact routing proof', { flag: 'wx' });
       assert.equal(readFileSync(probe, 'utf8'), 'N3 artifact routing proof');
-    } finally { unlinkSync(probe); }
+    } finally { unlinkSync(auditOutputPath(probe)); }
   });
 }
 

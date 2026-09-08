@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* THE DAY IS ONE CONTAINER, AND A PAST DAY IS NOT A STRIPPED ONE.
  *
  * Today is the app's default screen and its most regression-prone one: four of
@@ -606,7 +607,7 @@ try {
   ok('READONLY and the header stops advertising things to claim', !ro.badge && !ro.accent,
     `badge ${ro.badge}, accent ${ro.accent}`);
   ok('READONLY one line says why, in the app’s own note idiom', /record of/i.test(ro.note || ''), String(ro.note));
-  await page.screenshot({ path: shotPath('d2-7-pastday-quests.png') });
+  await page.screenshot({ path: auditOutputPath(shotPath('d2-7-pastday-quests.png')) });
 
   await tapDay(page, 'nextDay', todayShape.pickDate);
   const openQuests = () => page.evaluate(() => {

@@ -1,0 +1,28 @@
+{
+  "topLevelFiles": 348,
+  "mjs": 336,
+  "gateVisible": 324,
+  "exactlyOneTier": 324,
+  "pure": 78,
+  "browser": 117,
+  "full": 129,
+  "uniqueNamed": 334,
+  "mjsOnly": [
+    "audit-lifecycle.mjs",
+    "badge-centre-lib.mjs",
+    "dependency-observer.mjs",
+    "fight-sim.mjs",
+    "mem-idb.mjs",
+    "release-gate.mjs",
+    "store-copy-scan.mjs"
+  ],
+  "namesOnly": [
+    "balance-audit.js",
+    "fx-audit.js",
+    "pit.test.js",
+    "ui-audit.js",
+    "unit.test.js"
+  ],
+  "missing": [],
+  "duplicated": []
+}

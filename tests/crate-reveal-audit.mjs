@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* THE CRATE ACTUALLY CRACKS OPEN, AND THE LID IS CUT IN THE RIGHT PLACE.
  *
  * WHY THIS EXISTS. The crate reveal shipped from a branch whose own handoff said
@@ -805,7 +806,7 @@ await browser.close();
 const traceDir = process.env.FLICK_TRACE_DIR;
 console.log('FLICK INTERPRETATION: preserve the v500 burst-pause mechanism. First-flick asymmetry is environment-specific pending reproduction. If Tom\'s QA rig reproduces 12 to 20 frames, build and verify the fix there. Compare MACHINE CHARACTER lines, including baseline and trace overhead.');
 if (traceDir) {
-  mkdirSync(traceDir, { recursive: true });
+  mkdirSync(auditOutputPath(traceDir), { recursive: true });
   console.log('FLICK DIAGNOSTIC tracing enabled: cadence includes profiling overhead');
 }
 for (let run = 1; run <= 5; run++) {
@@ -833,7 +834,7 @@ for (let run = 1; run <= 5; run++) {
   await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="crates"]')?.click());
   await sleep(1200);
   if (traceDir) {
-    await page.tracing.start({ path: path.join(traceDir, `flick-${run}.trace.json`),
+    await page.tracing.start({ path: auditOutputPath(path.join(traceDir, `flick-${run}.trace.json`)),
       categories: ['devtools.timeline', 'blink.user_timing', 'gpu', 'cc',
         'disabled-by-default-devtools.timeline', 'disabled-by-default-devtools.timeline.layers'] });
     tracing = true;
@@ -908,7 +909,7 @@ for (let run = 1; run <= 5; run++) {
   }
   const flick = await page.evaluate(() => window.__flick);
   if (tracing) { await page.tracing.stop(); tracing = false; }
-  if (traceDir) writeFileSync(path.join(traceDir, `flick-${run}.samples.json`),
+  if (traceDir) writeFileSync(auditOutputPath(path.join(traceDir, `flick-${run}.samples.json`)),
     JSON.stringify({ run, viewport: { width: 393, height: 852 },
       dpr: await page.evaluate(() => devicePixelRatio), moves, ...flick }, null, 2));
   ok('FLICK CONTROL fresh session has no page errors', flickErrors.length === 0, JSON.stringify(flickErrors));

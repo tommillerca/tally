@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* SHOTS OF THE SHIPPED TODAY, not of a mockup: four states at 390x844 dark on a
  * ?demo-seeded save. Capture only, no assertions; tests/today-container-audit.mjs
  * is the guard. Usage: node tests/today-d2-shots.mjs [baseUrl]
@@ -21,7 +22,7 @@ const settle = async () => {
   });
   await sleep(500);
 };
-const shot = async name => { await settle(); await page.screenshot({ path: join(out, name) }); console.log(name); };
+const shot = async name => { await settle(); await page.screenshot({ path: auditOutputPath(join(out, name)) }); console.log(name); };
 const scrollTo = y => page.evaluate(v => { document.getElementById('screen').scrollTop = v; }, y);
 
 await shot('d2-1-top.png');
