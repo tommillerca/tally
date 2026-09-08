@@ -53,6 +53,8 @@ try {
   ok('FIRST-INTRO first run retains its unforced splash', await fresh.evaluate(() => window.__m5Splashes === 1));
   await fresh.click('#splash');
   await fresh.waitForSelector('#splash', { hidden: true });
+  await fresh.waitForSelector('#saveNew', { visible: true });
+  await fresh.click('#saveNew');
   await fresh.waitForSelector('#onbGo', { visible: true });
   const disclosure = await fresh.$eval('.onb', el => el.innerText);
   const expected = "New bones. I'm Gwart. You eat, the skeleton earns. I keep an anonymous account for you. No email, password, or sign-up. The Privacy policy tells the long version.";

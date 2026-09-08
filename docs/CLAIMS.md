@@ -1,5 +1,20 @@
 # What each patch note claims, and what backs it
 
+## T1: pet re-tune rulings (2026-09-07)
+
+1. PROOF: pit.test.js | REACH: Eternal Guard retains its per-species, automatic level-10 unlock, with the contract and existing player text both promising exactly 20% HP. A real lethal hit saves once at that amount; reverting to 40% fails both effect and resolved-HP checks.
+2. PROOF: pit.test.js, dish-worth-audit.mjs | REACH: Hunter's Skewer shortens special recovery by one turn, with a one-turn minimum. All seven species enforce the timer in displayed availability and direct dispatch. Recipe, active-buff label and worth copy agree. Existing dishes, charges and saved petFree flags remain usable; no progression or inventory is migrated.
+3. PROOF: dish-worth-audit.mjs | REACH: Re-measured 2,000 seeds in each arm. The trained C6 hound improves from 1836 to 1900 wins; without a pet both arms win 747. The copy contains no percentage. Removing the edge fails PET, falsely marking the working dish unclaimed fails NOCLAIM upward, and restoring the old mechanical copy fails both copy rows.
+4. PROOF: pet-family-audit.mjs | REACH: Deliberately ratified the already-frozen tuned baseline under the 20% ruling. All 13,552 builds and 54,208 effects match. The original fixture, frozen hashes and separate family identity guard remain; reverting the C2 effect fails NO-DRIFT.
+5. PROOF: balance.mjs, fight-sim.mjs | REACH: Whole-board before/after measurements use the real five-rung ladder and all mixed legal paths. The ordinary target passes 128/128 guards, but daily-Glutton stress still reaches 99.5% for maxed shiny lineage20 C4 with Crow Lord and Skewer. No fourth family or release clearance is claimed.
+6. PROOF: pit.test.js, dish-worth-audit.mjs | REACH: The agreed command exits 0: 101 passed, 0 failed; dish-worth: all rows green. Every one of the 80 actual PURE entries exits 0. Browser/server proofs were prohibited. No commit, push, publication or version change occurred.
+
+The complete advisory report, before/after boards, red/green output, file list,
+limitations and proposed owner fixes are in `tests/fight-sim.mjs`, printable with
+`node tests/fight-sim.mjs --report`. Existing maxed pets keep all earned records
+and unlocks but have less combat power under the inherited tuning. The unowned
+app.js lineage promises still contradict its cap and remain a release blocker.
+
 ## R3: operational debt (2026-09-07)
 
 1. PROOF: unit.test.js | REACH: The hotfix registerKey/goOnline regions and strengthened R37-24 guard are byte-identical to locally available origin/main. The current unit suite checks the failed retry, welcome receipt and successful later signup. Branch left intact; no live-wallet measurement is claimed.
@@ -440,6 +455,21 @@ the upload path and its guards.
 
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
+
+## v517
+1. The master handoff's tier-1 losses, rounds 45 to 54. Its dated sections are further down, folded here. Eight of that pack's sixteen P0s were already closed by v510 to v516 and were verified on main rather than re-dispatched.
+
+2. PROOF: take-and-pay-audit.mjs | REACH: be killed mid-action in the Shop, the Pit, or just after logging a meal. Zero torn transactions were found in 232 real process kills, so IndexedDB is used correctly here and every loss sat in the gap between a PAIR of transactions. The Shop debited at `js/loot.js:2360` and granted at `:2362`, 10 of 10, costing 90 coins for no goods and repeatably 900 coins for zero goods. The Pit cleared the staked record before paying, 10 of 10, costing the charge plus 60 coins and 75 XP. A meal committed its totals and not its XP ledger, 10 of 10: ten dinners, 6,420 kcal, 0 XP. The Shop and the Pit became one transaction each, reusing `claimAndPay`/`takeAndPay` (the rack was already fixed for this exact seam and the Shop was not, so the code was written next door). The meal deliberately took the OTHER form the handoff names, idempotent retry on next open keyed off the row id, because making it atomic would mean a failed XP write throws away the dinner, which is worse than the bug. Proven red at `kcal=642, XP=0` and green at `kcal=642, XP=25`, with a double-open proven unable to pay twice.
+
+3. PROOF: multidevice-earnings-audit.mjs | REACH: two devices, both offline, both earning. Whichever device moved a counter by the larger magnitude kept its version of everything and the other device's entire offline session was deleted from every copy, 6 of 6, driven three times through `pushBackup` and three through the real `visibilitychange -> hidden`. Bound: 300 coins per episode as measured, unbounded above, because the amount lost is exactly what that device earned. Bone Dust identical. 0 error-shaped messages out of 46 rendered toast and alert nodes, `backupFail` null, push `ok:true`: the player was told it worked. Round 53 pinned the overwrite to `importAll`, locally, before anything reaches the wire, which is where the fix went.
+
+4. PROOF: device-loss-audit.mjs, device-loss-browser-audit.mjs | REACH: clear the app's storage, fill the disk, or restore onto a phone that already has a save. A cleared store took 965 rows to 6 with zero toasts and landed on the first-run poster while a verified 180,368 byte encrypted backup sat on the Worker unreachable, because `bootSync` returned `'new-player'`, which is in `CLOUD_QUIET_REASONS`: the state the loss creates is the state that suppresses the offer. A full disk took 950 rows to 6 mid-session, with 108 toast mutations and none of them a write failure, then replayed init against an empty store and paid a new-player welcome kit to a level 12 account. Restore onto an occupied device discarded 168,680 coins of the restored account while its own sheet read "This replaces whatever is on this phone now". Also fixed: both out-of-storage messages matched `/quota|QuotaExceeded/i` while the real error is `DataError: Failed to write blobs (IOError)`, so neither could ever fire, and a comment claiming otherwise was wrong.
+
+5. PROOF: device-loss-audit.mjs | REACH: Settings, "I already have an account", on a phone that already holds a save. The sheet reads "This replaces whatever is on this phone now" and the restore discarded 168,680 coins of the account it had just restored, keeping all 25 local rows, 1 of 1. The copy is a promise; it now does what it says.
+
+6. PROOF: numbers-honesty-audit.mjs | REACH: a device whose locale writes thousands as `1.234`. `NUM_GROUPED` matched comma grouping only, so `1,234` was correctly refused while `1.234` parsed as 1.234 and the toast read `Added - 1 kcal - +10 XP`. An exact factor of 1000, silent and permanent, and the app prints that format itself, so it could not read back the number it had just written.
+
+7. PROOF: crew-pet-audit.mjs, crew-fan-audit.mjs | REACH: the Crew tab, looking at a friend who dressed their pet. `socialSnapshot` sent the equipped pet as `{id, level, shiny, lineage, morph}` with no `wear`, while the Crew fan rendered with `wear: p.pet.wear`, which was therefore always undefined, so a friend's pet accessories could never draw on the card for any species.
 
 ## v516
 1. Round 44's Paddock geometry and Kennel naming backlog, plus the operational debt. Its dated sections are further down, folded here.
@@ -2968,3 +2998,209 @@ requested docs. No version stamp, changelog, commit, push or publication.
 1. PROOF: restore-state-audit.mjs | REACH: Settings file import and cloud merge reach production importAll, followed by actual equipment, receipt and export readers. Invalid known containers, duplicate kv keys and unsupported pet bank formats refuse before store writes. Receipt unions preserve both sides on merges. Unsupported equipment is hidden from the normal look reader without erasing its stored selection during loot equip calls. The raw Dressing Room contract is retained. Throwaway original-source reversion reports 2 passed, 19 failed; restored code reports 21 passed, 0 failed.
 2. PROOF: restore-debt-audit.mjs | REACH: Explicitly unresolved, not green. An old blob erases an earned pet duplicate (2 to 1), lowers its banked steps (1000 to 10), and refunds a spent potion (0 to 1). A future same-schema food buff is deleted when the cooking reader opens it (1 to 0). All four desired invariants remain failing assertions in PURE. The coordinated fixes and file ownership boundaries are in docs/P3-KV-CENSUS.md.
 3. PROOF: unit.test.js | REACH: The agreed command ran and reported 364 passed, 1 failed, exit 1. The same serveTree subprocess failure occurs on the unmodified baseline. The standalone serve-tree-identity PURE entry requires prohibited local sockets and was not run. Browser/server results are not certified. Full per-file Node results, measured red/green output, blockers and deviations are in docs/P3-RESTORE-REPORT.md.
+
+
+## 2026-09-07: L1 transaction pairs, advisory and incomplete
+
+PROOF: take-and-pay-audit.mjs unit.test.js reward-sop-audit.mjs
+
+REACH: Buy a Shop Draught or win a staked Pit fight (ladder, Champion,
+Gauntlet). Pending Pit wins retry through the existing game initialization
+path on the next open, including when game-init is already true.
+
+The frozen L1x.md SHA256 matched
+fa84a687928124ccb1fc2430bb8165c35afc654fc9af6491a118f692682f3f1f.
+The input checkout HEAD was 5cfdfbd07fdc6197c50fd4e1f410fcdc17559eee.
+All source paths were resolved inside this checkout. The root CLAUDE.md was
+read. There is no tally/CLAUDE.md in this checkout.
+
+Files changed:
+
+- js/loot.js: Shop affordability, debit, currency revision and goods use payAtomic.
+- js/app.js: only the Pit settle function changed. It records a win before
+  resolving the stake and delegates staked payouts to the recovery path.
+- js/game.js: durable Pit intents, atomic first-clear/repeat payouts, deduped
+  capped XP, badge retry and initialization recovery. Buff consumption commits
+  with the intent. Champion loot commits with the first-clear ledger row.
+- tests/take-and-pay-audit.mjs: extended the existing transaction-boundary kill
+  model for all five requested sites. The meal assertion is enabled and red.
+- tests/reward-sop-audit.mjs: registered the moved Pit payouts, updated the Shop
+  description and corrected the stale grant count from eight calls to one.
+- tests/release-gate.mjs: updated the existing PURE entry's description. No new
+  audit file or duplicate tier registration was added.
+- docs/CLAIMS.md: this explicitly requested dated lane section only.
+
+Site disposition:
+
+| Site | Disposition |
+| --- | --- |
+| Shop | Fixed, single transaction through payAtomic. |
+| Pit | Fixed for staked wins, durable intent plus idempotent retry. The capped XP, first-clear/repeat payment and badges retain their existing ledger authorities. |
+| Meal | Blocked by file ownership. Log totals still survive while base XP is lost. |
+| Grant | Already atomic on the input tree. applyPayload stages the payload through awardOnce(..., pay), which uses claimAndPay. New coverage passes on both trees. |
+| Spire | Already retried on the input tree. fetchMySpires plus syncSieges recreates a missing local tower from server ownership at boot/resume. New local-storage coverage passes on both trees. |
+
+Proof results:
+
+- node tests/unit.test.js: `364 passed, 0 failed`, exit 0.
+- All 80 files in the current release gate's PURE tier were executed directly
+  with Node. 79 exit 0. take-and-pay-audit.mjs exits 1 for the unresolved meal
+  seam. The all-PURE-green success criterion is NOT met.
+- The final extended take-and-pay audit prints `1 FAIL`. Shop, Pit, grant and
+  Spire rows pass. This is not a green overall audit.
+- The Node source-census portion of reward-sop-audit.mjs passes its five checks,
+  exit 0. Its full browser driver was not run. The stale grant census was
+  observed red before the metadata correction: `js/social.js:applyPayload
+  registered 8 paying site(s), source has 1`.
+
+Red proof used a throwaway tree under /private/tmp/l1-proof/red-tree. It kept
+the new guard unchanged and replaced js/loot.js, js/app.js and js/game.js with
+their saved, unmodified input versions. No original checkout was edited. The
+baseline audit exits 1 and prints `15 FAIL`; the final audit exits 1 with the
+single remaining meal failure. Output and exit codes are separate files, never
+an exit status read through a pipe.
+
+Representative red and fixed output:
+
+```text
+RED  FAIL CRASH shop: 90 coins buys one Draught even after death  coins=0, goods=0, cost=90 coins
+FIX  ok   CRASH shop: 90 coins buys one Draught even after death  coins=0, goods=1, cost=90 coins
+RED  FAIL REBOOT Pit stake: staked win retains 60 coins and 75 XP  coins=0, XP=0; measured loss: charge, 60 coins and 75 XP
+FIX  ok   REBOOT Pit stake: staked win retains 60 coins and 75 XP  coins=60, XP=75; measured loss: charge, 60 coins and 75 XP
+BOTH FAIL REBOOT meal: saved 642-kcal dinner recovers 25 XP  kcal=642, XP=0; measured loss: 25 XP per meal
+```
+
+Pit recovery also passes after deaths at the capped fight-XP row, rung-XP row
+and badge row. The first two additional boundaries are red on the input tree;
+the badge boundary already conserves the measured payout on the input tree.
+Controls cover concurrent settlement, repeat wins, all three staked modes,
+one Champion crate and skull, and exactly one charm/food charge for a modified
+94-coin payout. The meal row measures log and firstlog XP only, excluding badge
+XP. Under the existing economy, 25 is the first entry of a day's 10 plus 15;
+subsequent entries do not each earn another firstlog award.
+
+Blocked actions and deviations:
+
+1. The meal writer is js/app.js:commitLogEntry, outside this lane's explicit
+   Shop/Pit-only app.js ownership. Permission to edit that one function was
+   requested and has not been received. It was not edited. Proposed change:
+   persist an eligible reward intent with the log row in its first transaction,
+   recording the original reward date and scan/label context. Replay that
+   intent idempotently from js/game.js at initialization, including after
+   midnight, and retire it only when its rewards have landed. Do not infer
+   entitlement from old edited/backdated rows or reset game-init. That would
+   change the economy. The existing red guard is left intact for the owner.
+2. The Pit needs retry recovery as well as the meal and remote Spire seam.
+   Forcing its capped XP, first-clear key and derived badges under one new
+   primitive would redesign their authorities. Existing claimAndPay,
+   takeAndPay and payAtomic are reused; no database primitive was added.
+3. Grant and Spire cannot honestly be proven red for the stated defects on
+   this input tree, because their current implementations already pass the
+   guards. They were not artificially broken or rewritten to match the plan.
+   These are baseline passes, not claimed new fixes.
+4. Browser and server proofs were prohibited by the work order and were not
+   attempted. The executed kill model is transactional mem-idb with later
+   transactions aborted, not an actual OS process kill or browser run.
+   Independent review still needs the full reward-sop browser driver and real
+   arena/boot checks. Expected changed-path outcomes are one paid staked win,
+   no duplicate on reopen, and the existing victory card with its paid coins,
+   XP and Champion loot. No browser result is claimed.
+5. No command was rejected by automatic approval review, and no permission
+   denial occurred. No commit, push, PR, publish, deployment, version stamp or
+   changelog edit was performed. No Worker, App Store Connect, native submission
+   file or integ/day5 action was taken. The user's no-commit/no-push instruction
+   superseded the contradictory commit-and-push sentence inside the plan.
+
+Evidence directory: /private/tmp/l1-proof. Key files are audit.red.txt,
+audit.red.exit, audit.green.txt, audit.green.exit, unit.txt, unit.exit,
+reward-sop-static.green.txt and pure/results.json. The final changes and this
+report are advisory inputs to independent review. Meal recovery and therefore
+the frozen work order remain incomplete.
+
+## L5: durable meal XP recovery (2026-09-07)
+
+1. PROOF: take-and-pay-audit.mjs | REACH: The real commitLogEntry saves reward eligibility, original date, scan/label route and targets with the meal row. Game initialization retries unfinished eligible rows before its established-player early return. Existing awardCapped entry-id refs and awardOnce ledger keys prevent duplicate XP; a separate completion marker is written only after the reward path succeeds. The meal and XP remain separate transactions.
+2. PROOF: take-and-pay-audit.mjs | REACH: The agreed command passes 78 rows and prints all clean, exit 0. Coverage includes deaths after the meal write, base XP, first-log XP, scan XP, label XP and completion marker; independent module instances open concurrently against one database, then open again. Midnight recovery retains the original date and label context, while a backdated edit still returns zero XP. Recovery of 21 saved meals retains the existing 215-XP daily limit (20 times 10, plus one 15-XP first-log bonus).
+3. PROOF: unit.test.js, device-loss-audit.mjs, take-and-pay-audit.mjs | REACH: R24-L17 is unchanged and passes its real midnight roll/write test. Both write-failure outcomes remain intact: an unsuccessful meal save returns null, re-arms Add and reports the storage failure; a saved meal with failed rewards returns zero XP and receiptFailed. Both production Add-toast expressions still say Added, the calories, and XP did not record. The DataError IOError control proves the injected error reaches the actual meal write. These are Node source/transaction proofs, not browser sheet-visibility proofs.
+4. PROOF: release-gate.mjs | REACH: All 84 files in PURE were executed directly with Node and exit 0. No gate server was started. The existing take-and-pay registration remains in exactly one tier; its description now includes meal retry. No new audit file was introduced.
+5. PROOF: reward-sop-audit.mjs | REACH: The five Node source-census checks pass: 161 paying sites, 67 source actions, 72 registry entries with matching counts. The existing seven food reward call sites moved into finishFoodLogged, shared by normal logging and recovery; the registry names that owner. The full browser driver remains unrun.
+
+Advisory implementation report for independent review:
+
+| File changed | Change |
+| --- | --- |
+| js/app.js | Stage the row's reward intent inside the existing meal-write try/catch, after the unchanged day roll. Preserve a pending intent when an existing row is edited. |
+| js/game.js | Share the existing food reward path, record completion after success, and recover unfinished intents at initialization. |
+| tests/take-and-pay-audit.mjs | Extend the existing kill-boundary proof with partial writes, midnight, concurrent/repeated opens, caps, failure returns and actual toast expressions. |
+| tests/unit.test.js | Let R25-M4's structural check accept preparation statements inside the same write try/catch. It still requires the write's catch to return null and re-arm Add. R24-L17 is untouched. |
+| tests/device-loss-audit.mjs | Supply the new read/clock dependencies in the isolated writer fixture and assert the failing put was reached. Existing IOError and input-preservation assertions remain. |
+| tests/reward-sop-audit.mjs | Register the relocated food reward call sites under their actual owner. |
+| tests/release-gate.mjs | Update the existing audit's description only. |
+| docs/CLAIMS.md | Append this dated L5 section only. |
+
+The supplied plan file's SHA256 matched
+`bcd03869f61017bfdb50000382a263df05cfc85f76dc9b687f83a947a403679b`.
+The checkout's CLAUDE.md was read; no nested tally/CLAUDE.md exists here.
+All source paths were resolved in this checkout. The opening whole-worktree
+ownership instruction supersedes the plan's copied sibling-lane boilerplate.
+
+Red and green evidence:
+
+```text
+BASELINE FAIL REBOOT meal: saved 642-kcal dinner recovers 25 XP  kcal=642, XP=0; measured loss: 25 XP per meal
+BASELINE 1 FAIL (exit 1)
+REVERTED FAIL REBOOT meal: saved 642-kcal dinner recovers 25 XP  kcal=642, XP=0
+REVERTED 11 FAIL (exit 1)
+RESTORED ok   REBOOT meal: saved 642-kcal dinner recovers 25 XP  kcal=642, XP=25
+RESTORED all clean (exit 0)
+PASS R24-L17 commitLogEntry rolls the day before the row is written, and a fresh row follows it
+PASS R25-M4 every UI log write routes through commitLogEntry, and its two outcomes are honest
+365 passed, 0 failed
+84/84 PURE files exited 0
+```
+
+The expanded audit was held unchanged on a throwaway copy under
+/private/tmp/l5-meal-proof/red-tree. Restoring the saved pre-fix app.js and
+game.js reproduced the real defect; restoring the final sources returned it
+to green. A separate throwaway mutation replaced the write-failure return
+with a throw. The adapted R25-M4 guard failed with
+`db.put('log', e) is no longer in a try whose catch returns null (the not-committed outcome)`.
+The final guard passes. Final review also reproduced an interaction with an
+unfinished history backfill on a throwaway copy: `refs=b-pending,b-pending`
+and `XP=45` for two meals. Recovery now runs after history assigns its
+ordinal slots, producing `refs=a-legacy,b-pending` and `XP=35` even after retry.
+The two new guards were red on the earlier implementation and green after
+this ordering fix. Initial PURE execution found two fixture assumptions,
+then both corrected fixtures passed with their behavior assertions retained.
+Output and exit status were captured separately, never read through a pipe.
+
+Denied/blocked actions and deviations:
+
+- No command was denied by automatic approval review. Browser/server proofs
+  were explicitly prohibited and were not attempted. The crash model aborts
+  later mem-idb transactions after a committed boundary; it does not kill an
+  OS process. Independent review still needs the browser logging control and
+  failure modes in log-write-failure-audit.mjs, plus a real reload/double-tab
+  check. Expected results: saved calories persist, missing eligible XP lands
+  once, failed meal writes retain the open input, and receipt failures show
+  the honest saved-meal message without re-arming Add.
+- Legacy-data limitation and proposed deviation: replay uses durable intents
+  created by this fix. Unmarked pre-fix rows cannot reliably distinguish an
+  eligible meal from a backdated entry, and lack the original scan/label and
+  target context. They are not retroactively awarded by this recovery path.
+  Repairing those historical losses requires an explicit compensation policy;
+  no such policy or entitlement was invented. This limitation was disclosed
+  before implementation. The original history award phases remain intact and run before intent recovery on an unfinished initialization.
+- The quoted 25 XP is the first meal's existing 10 plus the day's one-time 15,
+  not a new 25-XP payment for every meal. Existing reward keys and caps remain.
+- The user's explicit instruction supersedes the plan's contradictory
+  commit-and-push sentence. No commit, push, PR, publication, deployment,
+  version stamp or changelog edit occurred. No original checkout, Worker,
+  App Store Connect, native/ASC-SUBMISSION.md or integ/day5 was modified.
+
+Evidence is under /private/tmp/l5-meal-proof: baseline-audit.txt and .exit,
+audit.red.txt and .exit, audit.green.txt and .exit, audit.restored.txt and .exit,
+selected-unit.txt and .exit, write-guard.red.txt and .exit, backfill.red.txt and .exit, backfill.green.txt and .exit, unit.txt and .exit,
+device-loss.txt and .exit, sop-static.txt and .exit, and pure/results.json
+with per-file output and exit status. This report is advisory and is not
+independent review or release authorization.

@@ -4,7 +4,7 @@
 
 import { db, kvGet, kvSet, claimDay } from './db.js';
 import { dayTotals, addDays, dateKey, streakFrom } from './nutrition.js';
-import { grantCrate, crateRow, grantConsumable, coinsAdd, boneDustAdd, grantEgg, equipped } from './loot.js';
+import { grantCrate, crateRow, cosRow, grantConsumable, coinsAdd, boneDustAdd, grantEgg, equipped, BATTLE_CHARM_BONUS } from './loot.js';
 import { gardenState, clearGarden, PLOT_PRICES, PLOTS_FREE, HARVEST_BASE, HARVEST_BASE_RARE } from './garden.js';
 import { grantIngredient } from './cooking.js';
 import { BH_SLOTS } from '../data/boneheadz.js';
@@ -208,6 +208,98 @@ export const SPAR_COINS = { win: 15, loss: 5 };
 export async function claimSpar(fightId, won, date) {
   const r = await claimCapped('spar', 'spar', 0, won ? 'Sparring win' : 'Sparring loss', SPAR_DAILY_CAP, date, fightId);
   return { claimed: r.claimed, coins: r.claimed ? (won ? SPAR_COINS.win : SPAR_COINS.loss) : 0 };
+}
+
+// A decided staked win survives closing the arena or a process death. Keep its
+// intent separate from pitFight, whose close/ack controls may clear that row.
+export async function rememberPitWin(cfg, fightId, coinMult) {
+  const key = `pitPending:${fightId}`;
+  const now = Date.now();
+  const intent = {
+    cfg: { mode: cfg.mode, rung: cfg.rung, rank: cfg.rank, name: cfg.name,
+      xp: cfg.xp, coins: cfg.coins, repeatCoins: cfg.repeatCoins, done: cfg.done },
+    fightId, coinMult, date: dateKey(), stake: await kvGet('pitFight', null),
+  };
+  let charm = false;
+  // The win intent and its spent buffs commit together. Reopening the app
+  // cannot spend a second charm, or recover a win with an unspent food buff.
+  await db.claimAndPay('kv', { k: key, v: intent }, { kv: {
+    buffs: cur => {
+      charm = cur?.xp2 > 0;
+      return charm ? { ...cur, xp2: cur.xp2 - 1 } : undefined;
+    },
+    foodbuffs: cur => (cur || []).map(b =>
+      b && !Object.hasOwn(b, 'format') && b.kind === 'combat' && Number.isFinite(b.fightsLeft) && b.fightsLeft > 0
+        ? { ...b, fightsLeft: b.fightsLeft - 1 } : b
+    ).filter(b => {
+      if (!b || Object.hasOwn(b, 'format')) return true;
+      if (b.kind === 'combat' && Number.isFinite(b.fightsLeft)) return b.fightsLeft > 0;
+      if (b.kind === 'coins' && Number.isFinite(b.untilMs)) return b.untilMs > now;
+      return true;
+    }),
+    [key]: () => ({ ...intent, charm }),
+  } });
+  return key;
+}
+
+export async function finishPitWin(key) {
+  const pending = await kvGet(key, null);
+  if (!pending) return null;
+  const { cfg, fightId, date, coinMult, stake, charm } = pending;
+  const baseXp = await awardCapped('fight', 'fight', 10, 'Pit win', XP_DAILY_CAP.fight, date, fightId);
+  const firstKey = cfg.mode === 'rung' ? `pitrung-${cfg.rung}` : cfg.mode === 'champ' ? 'pitchamp' : `endless-${cfg.rank}`;
+  const type = cfg.mode === 'rung' ? 'pitrung' : cfg.mode === 'champ' ? 'pitchamp' : 'endless';
+  const label = cfg.mode === 'rung' ? `Ladder: beat ${cfg.name}` : cfg.mode === 'champ' ? `Champion: beat ${cfg.name}` : `Gauntlet rank ${cfg.rank}: ${cfg.name}`;
+  const reward = first => {
+    let coins = first ? cfg.coins : cfg.repeatCoins;
+    const extras = [];
+    if (coins > 0 && charm) {
+      const bonus = Math.round(coins * BATTLE_CHARM_BONUS);
+      coins += bonus; extras.push(`Battle Charm +${bonus} coins`);
+    }
+    if (coins > 0 && coinMult > 1) {
+      const bonus = Math.round(coins * (coinMult - 1));
+      coins += bonus; extras.push(`Feast +${bonus} coins`);
+    }
+    return { coins, extras, first, xp: first ? cfg.xp : 0 };
+  };
+  const pay = ({ coins, first }) => ({
+    kv: {
+      coins: cur => Math.max(0, (Number(cur) || 0) + coins),
+      coinsRev: cur => (Number(cur) || 0) + Math.max(1, Math.abs(coins)),
+      ...(first && cfg.mode === 'champ' ? {
+        looks: cur => [...new Set([...(cur || []), 'SK15'])],
+      } : {}),
+    },
+    puts: first && cfg.mode === 'champ' ? [
+      { store: 'inv', val: crateRow('golden', 'pit-champion') },
+      { store: 'inv', val: cosRow('SK15', 'pit-champion') },
+    ] : [],
+  });
+  // The first-clear ledger and its coins/items are one claimAndPay. A loser
+  // takes its own repeat receipt. Retrying the winner must never pay a repeat.
+  if (!cfg.done) {
+    const r = reward(true);
+    await awardOnce(firstKey, type, cfg.xp, label, date, { pitFightId: fightId, pitReward: r }, pay(r));
+  }
+  let receipt = await db.get('xp', firstKey);
+  if (receipt?.pitFightId !== fightId) {
+    const key = `pitrepeat-${fightId}`, r = reward(false);
+    await awardOnce(key, 'pitrepeat', 0, 'Pit repeat win', date, { pitFightId: fightId, pitReward: r }, pay(r));
+    receipt = await db.get('xp', key);
+  }
+  const paid = receipt.pitReward;
+  const badges = await evaluateBadges();
+  // Only the matching old stake can be cleared. A different arena may have
+  // opened while an earlier win was recovering in the background.
+  await db.takeAndPay('kv', key, { kv: {
+    pitFight: cur => cur?.at === stake?.at && cur?.mode === stake?.mode ? null : undefined,
+  } });
+  return { ...paid, xp: baseXp + paid.xp + badges.length * BADGE_XP, badges };
+}
+
+async function recoverPitWins() {
+  for (const row of await db.all('kv')) if (row.k.startsWith('pitPending:')) await finishPitWin(row.k);
 }
 /* B3: the board used to say "+15 coins on a win" even past the cap above, the
    same dishonesty the Pit-charge gate was already fixed for ("free fights
@@ -590,6 +682,15 @@ export async function onFoodLogged(entry, { via = null, targets = null, entriesF
   if (entry.date < dateKey()) {
     return { xp: 0, total: await totalXp(), newBadges: [], streakMilestone: null, streak: 0, boosted: false, crates: 0 };
   }
+  return finishFoodLogged(entry, { via, targets, entriesForDate });
+}
+
+// The persisted meal is the authority. Its original entitlement may be retried
+// after midnight, while the public logging path still refuses backdated XP.
+// Every award below keeps its existing ledger key, including the capped log
+// award's entry.id ref. The completion marker is written LAST, never a claim
+// that could spend the reward before its XP lands.
+async function finishFoodLogged(entry, { via = null, targets = null, entriesForDate = [] } = {}) {
   let gained = 0;
   /* Capped and keyed by DATE, never by entry.id: see XP_DAILY_CAP.log. The
      date is the entry's own, so a backdated log spends that day's ceiling. */
@@ -641,7 +742,7 @@ export async function onFoodLogged(entry, { via = null, targets = null, entriesF
      through awardOnce, which reads a fresh total per award and compares the
      level either side of it. XP only ever grows, so a crossing over the sum is
      a crossing over one of the parts, and that part is the one that dispatches. */
-  return {
+  const result = {
     xp: gained,
     total: await totalXp(),
     newBadges,
@@ -652,6 +753,19 @@ export async function onFoodLogged(entry, { via = null, targets = null, entriesF
     // crossing's own owner (awardOnce -> grantLevelRewards).
     crates: sa.milestone ? 1 : 0,
   };
+  if (entry.foodXp?.id === entry.id) await kvSet(`foodXpDone:${entry.id}`, true);
+  return result;
+}
+
+async function recoverFoodLogs() {
+  const log = await db.all('log');
+  const done = new Set((await db.all('kv')).filter(r => r.k.startsWith('foodXpDone:') && r.v === true).map(r => r.k));
+  for (const entry of log) {
+    const intent = entry.foodXp;
+    if (!intent || intent.id !== entry.id || intent.date !== entry.date || done.has(`foodXpDone:${entry.id}`)) continue;
+    await finishFoodLogged(entry, { via: intent.via, targets: intent.targets,
+      entriesForDate: log.filter(e => e.date === intent.date) });
+  }
 }
 
 export async function onWeighIn(date) {
@@ -1030,7 +1144,8 @@ export function initGameIfNeeded(targets, { onProgress = null } = {}) {
 }
 
 async function runInitBackfill(targets, onProgress) {
-  if (await kvGet('game-init')) return null;
+  await recoverPitWins();
+  if (await kvGet('game-init')) { await recoverFoodLogs(); return null; }
   quietLevelups = true;
   try {
   const [log, weights] = await Promise.all([db.all('log'), db.all('weights')]);
@@ -1103,6 +1218,9 @@ async function runInitBackfill(targets, onProgress) {
   const streak = streakFrom(dates, today);
   await streakAwards(streak);
   await evaluateBadges();
+  // History owns its ordinal slots first. Pending intents then find their
+  // existing entry-id refs, rather than taking slots history will reassign.
+  await recoverFoodLogs();
   const xp = await totalXp();
   const lv = levelFor(xp);
   // baseline: levels reached before this feature never retro-drop rewards

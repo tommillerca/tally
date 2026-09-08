@@ -4280,7 +4280,7 @@ test('R25-M4 every UI log write routes through commitLogEntry, and its two outco
   const body = m[1];
   assert.ok(body.length > 300 && body.includes("db.put('log', e)"), `commitLogEntry body looks wrong (${body.length} chars)`);
   // outcome 1: NOT committed -> the button is re-armed and the caller gets null
-  const notCommitted = body.match(/try \{\s*await db\.put\('log', e\);\s*\} catch \(err\) \{([\s\S]*?)return null;/);
+  const notCommitted = body.match(/try \{(?:(?!\b(?:try|catch)\b)[\s\S])*?await db\.put\('log', e\);\s*\} catch \(err\) \{([\s\S]*?)return null;/);
   assert.ok(notCommitted, "db.put('log', e) is no longer in a try whose catch returns null (the not-committed outcome)");
   assert.ok(/btn\.disabled = false/.test(notCommitted[1]), 'the not-committed catch no longer re-arms the button');
   // outcome 2: committed, receipt failed -> a stub game object, the button stays as it was
@@ -8198,6 +8198,11 @@ test('R43-12 Gwart does not scold a player returning after a long gap for an emp
   // and he still says SOMETHING: an empty pool would pass the row above and break the plaque
   assert.ok(gwartPool({ ...base, returning: true }).length >= 6,
     'the empty-ledger pool must still be a pool, not one line');
+});
+
+test('L2 independent offline currency earnings survive both backup entry paths', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'multidevice-earnings-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /17 passed, 0 failed/);
 });
 
 await runAll();

@@ -1,0 +1,7 @@
+
+ok    WEB-CONSISTENT  app.js=v516 sw.js=v516 version.json=v516
+ok    iOS-MARKED      iOS 1.0 has WRAPPED_WEB_BUILD=v413
+ok    ANDROID-MARKED  Android 1.0.9 has WRAPPED_WEB_BUILD=v413
+
+VERSION ALIGNMENT LINT: web builds aligned at v516, native shells marked.
+

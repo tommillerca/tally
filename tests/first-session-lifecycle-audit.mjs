@@ -102,6 +102,9 @@ try {
   ok('CLOCK the fake Date replaced the real one before any app script ran', clockOk);
 
   /* ---- ONBOARD: the real screens, the real buttons, one page, no reload --- */
+  await page.waitForSelector('#saveNew', { visible: true });
+  await page.click('#saveNew');
+  await page.waitForSelector('#onbGo', { visible: true });
   const step0 = await page.evaluate(() => !!document.querySelector('#onbGo'));
   ok('ONBOARD step 0 renders for a fresh install (no settings)', step0);
   if (step0) { await page.click('#onbGo'); await sleep(500); }

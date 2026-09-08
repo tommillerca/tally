@@ -58,6 +58,9 @@ try {
   await page.goto(base.replace(/\/?$/, '/'), { waitUntil: 'networkidle2' });
   await sleep(900);
 
+  await page.waitForSelector('#saveNew', { visible: true });
+  await page.click('#saveNew');
+  await page.waitForSelector('#onbGo', { visible: true });
   const step0 = await page.evaluate(() => !!document.querySelector('#onbGo'));
   ok('ONBOARD step 0 renders for a fresh install', step0);
   if (step0) { await page.click('#onbGo'); await sleep(500); }

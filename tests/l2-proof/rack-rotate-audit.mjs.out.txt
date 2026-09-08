@@ -1,0 +1,22 @@
+PASS  SETUP the rotating pool is not empty  | 355 sellable ids out of 626 in the catalogue
+PASS  POOL   no pets (hatched, never bought) can be sold on the rotating shelf  | 7 such item(s) in the catalogue [C6, C1, C2, C3, C4, C5, CX], 0 leaked into the pool
+PASS  POOL   no Bumbleseal's own pieces (her own shelf) can be sold on the rotating shelf  | 5 such item(s) in the catalogue [CE1, CB1, CB2, CG1, CM1], 0 leaked into the pool
+PASS  POOL   no exclusive (awarded by name only) can be sold on the rotating shelf  | 2 such item(s) in the catalogue [SK15, CX], 0 leaked into the pool
+PASS  POOL   no starting body and skull can be sold on the rotating shelf  | 2 such item(s) in the catalogue [B0-1, SK0-1], 0 leaked into the pool
+PASS  PRICED every sellable id has a rarity price, so no tile renders undefined  | 355 ids across 5 rarities
+PASS  DISJOINT no id is ever on both shelves at once, so the indexOf price lookup cannot cross  | 0 collision(s) across 240 week/salt shelves
+PASS  SIZE   every shelf is full, so the picker never returns short  | 0 short shelf/shelves of 240
+PASS  MOVES  a reroll actually changes the rotating shelf  | 180 of 180 rerolls moved it
+PASS  WEEKLY a new ISO week gives a different shelf, which is the point of seeding on the week  | 30 distinct shelves across 30 consecutive weeks
+PASS  STABLE the same week and salt give the same shelf, so it cannot change under a re-render  | 12 ids, identical on a second call
+PASS  CURVE  one free roll, then the price rises strictly, all finite and paid  | 0 < 1000 < 2000 < 4000 < 8000 < 16000
+PASS  CURVE  past the ladder the price holds at the cap, never null or undefined  | rackRerollCost(6/11/50) = 16000/16000/16000, cap 16000, first rung 0
+PASS  DISTINCT six salts give six pairwise-different shelves, week after week  | 10 of 10 weeks fully distinct across salts 0..5
+PASS  N0     salt 0 is exactly the un-rerolled draw (seed string pinned)  | 12 ids against the pinned ${week}:0:rot:${i} seed
+PASS  WEEK-IDENTITY rerollRack keeps the themed nine and debits only after the claim  | ids: cur.ids present, debit-after-claim true
+PASS  GUARD buyRackItem refuses a non-finite price before the receipt claim  | the NaN-wallet guard sits between pricing and the claim
+PASS  PARALLEL every RACK_POOLS rung has its RACK_DUST price  | 8 rungs, 8 dust prices
+PASS  RUNG-LADDER coins-per-dust never reverses across the themed rungs  | 8.57 <= 9.33 <= 10.00 <= 10.53 <= 11.54 <= 12.50 <= 13.71 <= 15.00
+PASS  LADDER coins-per-dust never reverses as pieces get dearer (dust is the certainty premium)  | common 8.57 < uncommon 9.33 < rare 10.53 < epic 10.77 < legendary 12.50
+
+rack-rotate: clean

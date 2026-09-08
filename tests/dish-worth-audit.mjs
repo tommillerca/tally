@@ -11,7 +11,7 @@
  * THE INSTRUMENT is tests/fight-sim.mjs against a MIRROR (foe at 100% of the
  * player's own stats), no talents, both arms on the same seed list, in TWO
  * configurations: with a level-5 Hound, and with no pet at all. The hound
- * baseline now wins 97%: pet actions fire through smartPlayerTurn's call to
+ * baseline now wins 91.8%: pet actions fire through smartPlayerTurn's call to
  * smartPetTurn before endTurn, matching app.js's body -> pet -> end sequence.
  * Sizes depend on configuration, so the copy contains no percentage.
  *
@@ -35,7 +35,7 @@
  *   node tests/dish-worth-audit.mjs
  */
 import { measure } from './fight-sim.mjs';
-import { RECIPES, DISH_WORTH } from '../js/cooking.js';
+import { RECIPES, DISH_WORTH, foodBuffLabel } from '../js/cooking.js';
 import { buildBattlePet } from '../js/pets.js';
 import { BH_ITEMS } from '../data/boneheadz.js';
 
@@ -55,6 +55,14 @@ const ok = (m, cond, detail = '') => {
   console.log(`${cond ? 'ok  ' : 'FAIL'} ${m}${detail ? '  ' + detail : ''}`);
   if (!cond) fails++;
 };
+
+// The numeric worth instrument uses a hound, whose one-turn recovery already
+// allows a special every round. Guard the changed promise separately; engine
+// recovery for all species is guarded by pit.test.js, including direct calls.
+const skewer = RECIPES.find(r => r.id === 'hunters-skewer');
+ok('SKEWER recipe promises one-turn-faster recovery', /recovers one turn sooner/.test(skewer?.desc || ''));
+ok('SKEWER saved petFree buffs print the same recovery promise',
+  foodBuffLabel({ kind: 'combat', petFree: true, fightsLeft: 2 }) === 'pet special recovers one turn sooner · 2 fights left');
 
 let hound = null;
 for (const it of BH_ITEMS.filter(i => i.slot === 'C' && !i.unreleased)) {

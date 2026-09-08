@@ -131,9 +131,9 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
  * loss, silent and permanent. That format is not exotic either, it is the
  * format THIS APP prints: every kcal readout goes through toLocaleString().
  *
- * So the contract is: accept a plain decimal, accept ONE comma used as a
- * decimal point, and REFUSE everything else rather than guess at intent. A
- * refusal the player can see beats a number they can never find again.
+ * Accept plain decimals and a single decimal comma. In dot-grouping locales,
+ * read that locale's grouped output back as thousands (L4). Comma grouping
+ * keeps its existing explicit refusal because it overlaps decimal-comma input.
  *
  * `numParse` returns { ok, value } or { why } so callers can say WHICH kind of
  * wrong it was. `num` keeps the old null-or-number shape for the live-preview
@@ -143,9 +143,18 @@ const NUM_SHAPE = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/;
    the decimal-comma reading and the grouping reading disagree by 1000x. Never
    guessed, always refused. */
 const NUM_GROUPED = /^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?$/;
+// L4: the default Intl locale is also the one used by the app's readouts.
+const NUM_DOT_GROUPED = /^[+-]?\d{1,3}(?:\.\d{3})+(?:,\d+)?$/;
+const NUM_LOCALE_DOT_GROUP = new Intl.NumberFormat().formatToParts(1234.5)
+  .some(p => p.type === 'group' && p.value === '.');
 function numParse(v) {
+  if (typeof v === 'number') return isFinite(v) ? { ok: true, value: v } : { why: 'shape' };
   const s = String(v ?? '').trim();
   if (!s) return { why: 'empty' };
+  if (NUM_LOCALE_DOT_GROUP && NUM_DOT_GROUPED.test(s)) {
+    const value = Number(s.replace(/\./g, '').replace(',', '.'));
+    return isFinite(value) ? { ok: true, value } : { why: 'shape' };
+  }
   if (NUM_GROUPED.test(s)) return { why: 'grouped' };
   const commas = (s.match(/,/g) || []).length;
   const t = commas === 1 && !s.includes('.') ? s.replace(',', '.') : s;
@@ -1334,6 +1343,7 @@ function bindAppLifecycle() {
      every resume because a suspended WebView's pending timer is stale. */
   const midnight = armMidnightTimer(rollDayIfNeeded);
   onAppResume(async () => {
+    if (await guardSaveBeforeInit()) return;
     if (!NOSOCIAL) social.touchServerDay();
     /* AND THE GAP OPEN GETS THE SAME BOUNDED WAIT THE BOOT DOES. A native shell
        resumes after days without ever booting, so a 14-day return arrives here
@@ -1370,9 +1380,71 @@ function bindAppLifecycle() {
   refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
 }
 
+// In-memory evidence survives a store disappearing while this page stays open.
+// Never pay initialization rewards after a receipt we already read goes missing.
+let saveWitness = { settings: false, loot: false };
+let saveRecoveryActive = false;
+let saveRecoveryStatus = 'unknown';
+let newPlayerConfirmed = false;
+function storageIsFull(error) {
+  return !!error && /quota|IOError|Failed to write blobs/i.test(`${error.name || ''} ${error.message || ''}`);
+}
+async function guardSaveBeforeInit() {
+  const settings = await kvGet('settings', null);
+  const loot = await kvGet('loot-init', false);
+  if ((saveWitness.settings && !settings) || (saveWitness.loot && !loot)) {
+    newPlayerConfirmed = false;
+    renderAccountRecovery('known');
+    return true;
+  }
+  saveWitness.settings ||= !!settings;
+  saveWitness.loot ||= !!loot;
+  return saveRecoveryActive;
+}
+function renderAccountRecovery(status = saveRecoveryStatus) {
+  saveRecoveryActive = true;
+  saveRecoveryStatus = status;
+  const known = status !== 'unknown' || saveWitness.settings || saveWitness.loot;
+  const el = $('#screen');
+  el.classList.add('screen-in');
+  markBooted();
+  $('#tabbar').style.display = 'none';
+  const gear = $('#gearBtn'); if (gear) gear.hidden = true;
+  el.innerHTML = `<div class="onb onb-in"><div class="onb-scroll">
+    <h1>${known ? 'RECOVER YOUR BONES' : 'PLAYED BEFORE?'}</h1>
+    <p class="onb-sub">${known
+      ? 'Your saved progress is missing or could not be read. Restore your backup before continuing.'
+      : 'This phone has no saved progress. If you have played before, restore your account or a backup file.'}</p>
+    </div><div class="onb-foot">
+    <button class="btn" id="saveRestore">Restore an account or backup file</button>
+    ${known ? '<button class="btn ghost" id="saveRetry">Retry cloud recovery</button>'
+      : '<button class="btn ghost" id="saveNew">I am new. Start my Bonehead</button>'}
+    </div></div>`;
+  $('#saveRestore').addEventListener('click', () => openRestoreSheet());
+  $('#saveNew')?.addEventListener('click', async () => {
+    const saved = await kvGet('onbProgress', null);
+    newPlayerConfirmed = true;
+    saveRecoveryActive = false;
+    renderOnboarding(saved && Number.isInteger(saved.step) ? Math.min(2, Math.max(0, saved.step)) : 0,
+      saved && saved.pick ? { pick: saved.pick } : {});
+  });
+  $('#saveRetry')?.addEventListener('click', async () => {
+    const btn = $('#saveRetry'); btn.disabled = true;
+    try {
+      const r = await social.bootSync({ saveMissing: true });
+      if (r.restored) { location.reload(); return; }
+      toast(r.reason === 'decrypt' ? 'The backup exists but this key cannot unlock it. Use your recovery code or a backup file.'
+        : 'Recovery did not finish. Use your recovery code or a backup file, or try again when storage and connection are available.', 5200);
+    } finally { btn.disabled = false; }
+  });
+}
+
 async function boot() {
   if (S.demo) { useDbName('tally-demo'); document.body.insertAdjacentHTML('beforeend', '<div class="demo-badge">DEMO</div>'); }
+  saveWitness.settings ||= !!S.settings;
   S.settings = await kvGet('settings');
+  saveWitness.settings ||= !!S.settings;
+  saveWitness.loot ||= !!(await kvGet('loot-init', false));
   if (S.demo && !S.settings) { await seedDemo(); S.settings = await kvGet('settings'); }
   snapSettings();
   S.userFoods = await db.all('foods');
@@ -1456,8 +1528,7 @@ async function boot() {
      meal, weight, crate or coin row was still silent. This is the consumer, and
      it lives here because js/app.js is what owns the toast.
 
-     LOUD ONLY, and the classification is db.js's, not a second opinion invented
-     here: `quiet` is already true for ambient bookkeeping the app re-derives next
+     LOUD ONLY: db.js's `quiet` is true for ambient bookkeeping the app re-derives next
      launch, and false for anything the player did or earned and could name
      afterwards. A key nobody classified arrives LOUD, which is the right way
      round (anti-regression rule 8).
@@ -1472,7 +1543,9 @@ async function boot() {
      luck: track() queues by writing kv 'evq', so a quota failure makes that write
      fail too, and reportWriteFailure returns early for exactly `kv`/`evq` before
      it reaches any sink. Checked in js/db.js before this was written. */
-  onWriteFailure(({ store, key, op, quiet, quota }) => {
+  onWriteFailure(({ store, key, op, quiet, quota, error }) => {
+    // Some engines report a full disk as DataError: Failed to write blobs (IOError).
+    quota ||= storageIsFull(error);
     trackEvent('write_fail', { store, key, op, quiet, quota });
     if (quiet) return;
     const now = Date.now();
@@ -1505,7 +1578,7 @@ async function boot() {
   // DB, polluting the leaderboard). Real users never run with ?demo.
   const NOSOCIAL = S.demo || navigator.webdriver === true;
   await social.initFromQuery();
-  const cloudRestore = NOSOCIAL ? null : await social.bootSync().catch(() => null);
+  const cloudRestore = NOSOCIAL ? null : await social.bootSync({ saveMissing: !S.settings }).catch(() => null);
   /* THE REASONS THAT ARE NOT A FAILURE, so the boot toast stays silent for them.
      'none'/'empty' (no backup on the server) and 'already' (restored on an
      earlier boot) were always here. The other three were NOT, and each one made
@@ -1569,15 +1642,15 @@ async function boot() {
     /* the same definite-failure branch the toast speaks from, so the event and
        the player see the identical condition (launch visibility, 2026-08-30) */
     try { trackEvent('cloud_restore_failed', { reason: String(cloudRestore.reason).slice(0, 24) }); } catch { /* analytics never breaks the app */ }
-    setTimeout(() => toast('Could not reach your cloud backup just now. Nothing has been lost; we will try again next time you open the app.', 5200), 900);
+    setTimeout(() => toast('Could not reach your cloud backup just now. We will try again next time you open the app. You can also restore with your recovery code or a backup file.', 5200), 900);
   }
 
   if (!S.settings) {
-    const saved = await kvGet('onbProgress', null);
-    renderOnboarding(saved && Number.isInteger(saved.step) ? Math.min(2, Math.max(0, saved.step)) : 0,
-      saved && saved.pick ? { pick: saved.pick } : {});
+    const status = await social.recoveryStatus().catch(() => 'unreadable');
+    renderAccountRecovery(status);
     return;
   }
+  if (await guardSaveBeforeInit()) return;
 
   /* FIRST PAINT COMES BEFORE THE AWARDING WORK, NOT AFTER IT.
    *
@@ -1647,6 +1720,7 @@ async function boot() {
      player would otherwise be reading. Toasts queue, so the line stays on screen
      for the length of the run without any new chrome to go wrong. */
   let backfillSpoke = false;
+  if (await guardSaveBeforeInit()) return;
   const init = await initGameIfNeeded(S.settings.targets, {
     onProgress: ({ done, total, resumed, complete }) => {
       if (complete || !total) return;
@@ -1664,7 +1738,9 @@ async function boot() {
     setTimeout(() => toast(`Progress imported: Level ${init.level.level} · ${init.xp.toLocaleString()} XP`, 3200), 700);
     route({ keepScroll: true }); // the screen painted at their old level; show the real one
   }
+  if (await guardSaveBeforeInit()) return;
   const kit = await initLootIfNeeded();
+  saveWitness.loot = !!(await kvGet('loot-init', false));
   /* R38-21: this toast is the ONLY thing that fires on a fresh install (kit is
      always truthy the first time, so backfillStarterSeedsIfNeeded below never
      runs for a new player), and it used to stop at "ingredients in the
@@ -3446,6 +3522,7 @@ function routeFromHash() {
 
 let _dayRefreshPending = false;
 function route({ keepScroll = false } = {}) {
+  if (saveRecoveryActive) return renderAccountRecovery();
   const { dayRoll = false } = arguments[0] || {};
   // Midnight changes the diary date immediately, but must not destroy input.
   // The last sheet's close drains this repaint; an explicit navigation wins.
@@ -11200,7 +11277,7 @@ async function renderTrends(el) {
         ${rate != null ? `<span class="trend-chip ${rate > 0.02 ? 'up' : ''}">${rate > 0 ? '+' : ''}${toUnit(rate).toFixed(1)} ${unit}/wk</span>` : ''}
       </div>
       <p class="note" style="margin-bottom:10px">Trend weight (smoothed). Last weigh-in: ${toUnit(latest.kg).toFixed(1)} ${unit}</p>
-      <div class="chart">${weightChart(trended.slice(-45), toUnit)}</div>` :
+      <div class="chart">${weightChart(trended, toUnit)}</div>` :
       '<p class="note" style="padding:6px 0 12px">Log your weight a few times a week. The smoothed trend line cuts through daily water-weight noise so you can see if your plan is working.</p>'}
     <div style="height:10px"></div>
     <button class="btn ghost" id="logWeight">Log weight</button>
@@ -11415,7 +11492,7 @@ function metricSeries(metricKey, rangeKey, health, weights) {
       /* `label` is the one-letter axis tick, which is all the chart needs; `full`
          is what the READOUT says. Tapping a year bucket used to print "J ·
          210,432 steps" and three different months answer to J. */
-      points.push({ label: 'JFMAMJJASOND'[dt.getMonth()], value: avg,
+      points.push({ label: 'JFMAMJJASOND'[dt.getMonth()], month: mk, value: avg,
         full: dt.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) });
     }
   } else {
@@ -11542,7 +11619,9 @@ async function openMetricDetail(metricKey) {
   const bodyHtml = (rangeKey) => {
     const pts = metricSeries(metricKey, rangeKey, health, weights);
     const vals = pts.map(p => p.value).filter(v => v != null);
-    if (!vals.length) return `<div class="trend-panel"><p class="note" style="text-align:center;padding:22px 0">No readings in this window yet. They will appear here as your watch syncs.</p></div>`;
+    const shownDays = dates.filter(d => pts.some(p => p.date === d || p.month === d.slice(0, 7))).length;
+    const historyCount = `<p class="note">Showing ${shownDays} of ${dates.length} recorded days${rangeKey === 'year' ? ', as monthly averages' : ''}.${shownDays < dates.length ? ' Some recorded days are outside this window.' : ''}</p>`;
+    if (!vals.length) return `${historyCount}<div class="trend-panel"><p class="note" style="text-align:center;padding:22px 0">No readings in this window yet. They will appear here as your watch syncs.</p></div>`;
     // stats exclude the in-progress current day for cumulative metrics (steps etc.)
     // so a partial today never drags the average/lowest down; the chart still shows it.
     const statPts = (cumulative && rangeKey !== 'year' && pts.length > 1) ? pts.slice(0, -1) : pts;
@@ -11558,7 +11637,7 @@ async function openMetricDetail(metricKey) {
       const exLbl = metric.goodLow ? 'Lowest' : 'Highest', exVal = metric.goodLow ? mn : mx;
       stats = stat('Average', `${metricNum(metricKey, avg)}<small> ${u}</small>`) + stat('Range', `${metricNum(metricKey, mn)}-${metricNum(metricKey, mx)}`) + stat(exLbl, `${metricNum(metricKey, exVal)}<small> ${u}</small>`);
     }
-    return `<div class="trend-panel">${metricDetailChart(pts, metricKey)}
+    return `${historyCount}<div class="trend-panel">${metricDetailChart(pts, metricKey)}
       <p class="bc-readout note">Tap any bar for that day.</p></div><div class="trend-stats">${stats}</div>${metricInsight(metricKey, pts)}`;
   };
 
@@ -11945,14 +12024,15 @@ const MY_FOODS_FILTER_AT = 15;
 
 async function renderFoods(el) {
   const customs = S.userFoods.filter(f => f.source === 'custom').sort(byLastUsedThenName);
-  const scanned = S.userFoods.filter(f => f.source !== 'custom').sort(byLastUsedThenName).slice(0, 12);
+  const allScanned = S.userFoods.filter(f => f.source !== 'custom').sort(byLastUsedThenName);
+  const scanned = allScanned.slice(0, 12);
   const favIds = S.userFoods.filter(f => f.favorite).map(f => f.id);
   const kvRows = await db.all('kv');
   const genFavs = kvRows.filter(r => r.k.startsWith('fav-') && r.v).map(r => GENERIC_FOODS.find(g => g.id === r.k.slice(4))).filter(Boolean);
   const favs = [...S.userFoods.filter(f => f.favorite), ...genFavs];
 
   el.innerHTML = `
-  <h1 class="page-h1">Foods<span class="sub">${GENERIC_FOODS.length} built-in · ${customs.length} custom · ${scanned.length ? scanned.length + ' scanned' : 'none scanned yet'}</span></h1>
+  <h1 class="page-h1">Foods<span class="sub">${GENERIC_FOODS.length} built-in · ${customs.length} custom · ${allScanned.length ? allScanned.length + ' scanned' : 'none scanned yet'}</span></h1>
   <div class="search-wrap">${ICONS.search}<input id="fq" class="input" type="search" placeholder="Search all foods" autocomplete="off"></div>
   <div id="fCount" class="note" aria-live="polite"></div>
   <div id="fList"></div>`;
@@ -11971,7 +12051,8 @@ async function renderFoods(el) {
       if (customs.length > MY_FOODS_FILTER_AT) html += `<div class="t1-search" style="margin-bottom:8px">${ICONS.searchIco()}<input id="myFoodsQ" type="search" placeholder="Filter my ${customs.length} foods" autocomplete="off"></div>`;
       html += `<div id="myFoodsList">${customs.map(foodRowHtml).join('')}</div>`;
     }
-    if (scanned.length) html += '<div class="sect-h">Recently scanned</div>' + scanned.map(foodRowHtml).join('');
+    if (scanned.length) html += `<div class="sect-h">Recently scanned · ${scanned.length} of ${allScanned.length}</div>` + scanned.map(foodRowHtml).join('');
+    if (scanned.length < allScanned.length) html += '<p class="note">Showing the most recent scans. Search finds the rest.</p>';
     if (!favs.length && !customs.length && !scanned.length) html += '<p class="note" style="text-align:center;padding:14px 20px 6px">Foods you scan, create, or favorite collect here.</p>';
     const sample = [...GENERIC_FOODS].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 40);
     html += `<div class="sect-h">Built-in library · ${GENERIC_FOODS.length}</div>` + sample.map(foodRowHtml).join('');
@@ -12204,7 +12285,10 @@ function nameWithAlias(f) {
 function crewCardArtHtml(f) {
   const p = f.profile || {};
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
-  const pet = p.pet && p.pet.id ? `<div class="cfan-pet">${petPortraitHtml(p.pet.id, 58, !!p.pet.shiny, { mass: true, wear: p.pet.wear || null, thumb: true, morph: snapPetMorph(p.pet) })}</div>` : '';
+  // Same friends-only wardrobe as openFriendProfile. Older snapshots stay bare.
+  const yard = p.yard && Array.isArray(p.yard.pets) ? p.yard : null;
+  const yardWear = (yard && yard.wear) || null;
+  const pet = p.pet && p.pet.id ? `<div class="cfan-pet">${petPortraitHtml(p.pet.id, 58, !!p.pet.shiny, { mass: true, wear: yardWear, thumb: true, morph: snapPetMorph(p.pet) })}</div>` : '';
   return (eq.BG && BH_BY_ID[eq.BG] ? `<img class="cfan-bg" src="${bhThumb(bhAsset(BH_BY_ID[eq.BG]))}" alt="">` : '')
     + avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'], thumb: 384, foreign: true }) + pet;
 }
@@ -15009,6 +15093,7 @@ async function renderSettings(el) {
     const r = await social.adoptIdentity(other);
     if (!r.ok) return toast(r.reason || 'Could not switch to it.', 3600);
     S.settings = await kvGet('settings', S.settings);
+    if (r.restored) saveWitness = { settings: !!S.settings, loot: !!(await kvGet('loot-init', false)) };
     snapSettings();
     /* FOUR outcomes, not two. 'decrypt' means the save exists but this key
        cannot read it; 'none'/'empty' means there is genuinely nothing to pull;
@@ -15495,6 +15580,7 @@ function onbGwartHtml(step) {
   </div>`;
 }
 function renderOnboarding(step = 0, ctx = {}) {
+  if (!newPlayerConfirmed) return renderAccountRecovery();
   const el = $('#screen');
   /* THE CONTAINER HIDE IS OPT-OUT, AND THIS PATH NEVER OPTED OUT.
      app.css: `.screen:not(.screen-in) { opacity: 0 }`. Only route() adds
@@ -15648,6 +15734,7 @@ function renderOnboarding(step = 0, ctx = {}) {
 }
 
 async function saveInitialSettings(np) {
+  if (await guardSaveBeforeInit()) return;
   const profile = { sex: np.sex, age: np.age, heightCm: np.heightCm, weightKg: np.weightKg, activity: np.activity, goal: np.goal };
   S.settings = {
     profile,
@@ -15669,7 +15756,9 @@ async function saveInitialSettings(np) {
   // means the unread badge only ever counts news posted AFTER today, not the
   // whole backlog the account was never around for.
   await kvSet('newsSeen', NEWS.map(n => n.id));
+  if (await guardSaveBeforeInit()) return;
   const kit = await initLootIfNeeded();
+  saveWitness.loot = !!(await kvGet('loot-init', false));
   // R38-21: same instruction as boot()'s copy of this toast, see the comment there.
   if (kit) setTimeout(() => toast(`Welcome kit: ${kit.coins} coins, 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen: exactly one Bone Broth. Cook it.`, 4200), 1200);
   // The cloud account is created HERE, not at first boot: bootSync no longer
@@ -15687,6 +15776,8 @@ async function saveInitialSettings(np) {
    whoever ends onboarding owns the shell latch: without it a restored player gets
    Today with a hidden tab bar, unbound tabs and a dead hashchange. */
 function enterAppFromOnboarding() {
+  saveRecoveryActive = false;
+  saveWitness.settings = !!S.settings;
   kvSet('onbProgress', null).catch(() => {});   // onboarding is over; nothing to resume
   $('#tabbar').style.display = '';
   window.addEventListener('hashchange', routeFromHash);
@@ -15745,10 +15836,15 @@ async function commitLogEntry(e, btn, via = null) {
   await rollDayIfNeeded();
   if (S.date !== dayBefore && e.date === dayBefore && !(await db.get('log', e.id))) e.date = S.date;
   try {
+    // L5: entitlement travels with the meal's first write. A copied row gets
+    // its own intent; a backdated edit cannot acquire a new reward entitlement.
+    const previous = await db.get('log', e.id);
+    e.foodXp = previous?.foodXp?.date === e.date ? previous.foodXp
+      : e.date >= dateKey() ? { id: e.id, date: e.date, via, targets: S.settings.targets } : null;
     await db.put('log', e);
   } catch (err) {
     /* A FAILED WRITE MUST NOT LOOK LIKE A SAVED MEAL.
-       Measured 2026-08-13: reject this put the way a full quota does and the
+       Measured 2026-08-13 with an injected write rejection: the
        meal vanished with NO error, while an unrelated toast ("New talent points
        ready") stayed on screen reading like success. 166 log rows before, 166
        after. Storage really does fill: measured growth is 3.6MB in the first
@@ -15759,7 +15855,7 @@ async function commitLogEntry(e, btn, via = null) {
        on screen so the user knows whats happening and that they have to make
        room on the storage of their device". */
     if (btn) btn.disabled = false;
-    const full = err && /quota/i.test(err.name + ' ' + err.message);
+    const full = storageIsFull(err);
     toast(full
       ? 'Could not save: this device is out of storage. Free up some space and tap Add again.'
       : 'Could not save that meal. Tap Add to try again.', 5200);
@@ -18039,6 +18135,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
   if (tab === 'progress') {
     const earned = await earnedBadgeIds();
     const todayRows = await xpForDate(dateKey());
+    const shownRows = todayRows.slice(0, 6);
     const todayXp = todayRows.reduce((a, r) => a + r.xp, 0);
     const keys = new Set(todayRows.map(r => r.key));
     const earnables = [];
@@ -18050,7 +18147,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
     content.innerHTML = `
       <p class="note" style="margin:4px 2px 2px">${lvl.into.toLocaleString()} / ${lvl.need.toLocaleString()} XP to level ${lvl.level + 1} · ${xp.toLocaleString()} XP total</p>
       <div class="sect-h">Today · ${todayXp} XP earned</div>
-      ${todayRows.slice(0, 6).map(r => `<div class="xp-row"><span>${esc(r.label)}</span><b>+${r.xp}</b></div>`).join('') || '<p class="note" style="padding:6px 2px">Nothing yet. Log something!</p>'}
+      ${shownRows.map(r => `<div class="xp-row"><span>${esc(r.label)}</span><b>+${r.xp}</b></div>`).join('') || '<p class="note" style="padding:6px 2px">Nothing yet. Log something!</p>'}
+      <p class="note">Showing ${shownRows.length} of ${todayRows.length} XP receipts for today.</p>
       <div class="sect-h">Still on the table today</div>
       ${earnables.slice(0, 4).map(e => `<div class="xp-row dim"><span>${esc(e)}</span></div>`).join('')}
       <div class="sect-h">Badges · ${earned.size}/${BADGES.length}</div>
@@ -21500,7 +21598,7 @@ function importSummary(counts) {
    restore and is untouched. Lands the player on Today afterwards; a restore
    mid-onboarding also ends onboarding, exactly like a successful cloud restore. */
 async function importBackupFromFile(file) {
-  const wasOnb = !S.settings;   // onboarding is exactly "no settings yet"
+  const wasOnb = saveRecoveryActive || !S.settings;   // recovery also needs the shell rebound
   let counts;
   try {
     counts = await importAll(JSON.parse(await file.text()));
@@ -21515,7 +21613,8 @@ async function importBackupFromFile(file) {
       : 'Import failed: ' + err.message, 4200);
     return;
   }
-  S.settings = await kvGet('settings') || S.settings;
+  S.settings = await kvGet('settings') || (wasOnb ? null : S.settings);
+  saveWitness = { settings: !!S.settings, loot: !!(await kvGet('loot-init', false)) };
   snapSettings();
   S.userFoods = await db.all('foods');
   await hydrateGenericUse(); // L3: generic use + stars back onto GENERIC_FOODS
@@ -21560,12 +21659,13 @@ async function openRestoreSheet() {
     await importBackupFromFile(file);
   });
   $('#rsGo', wrap).addEventListener('click', async () => {
-    const wasOnb = !S.settings;   // this sheet is also onboarding's restore path
+    const wasOnb = saveRecoveryActive || !S.settings;   // this sheet is also onboarding's restore path
     const btn = $('#rsGo', wrap); btn.disabled = true; btn.textContent = 'Restoring...';
     const r = await social.restoreWithPhrase($('#rsCode', wrap).value, $('#rsPhrase', wrap).value);
     btn.disabled = false; btn.textContent = 'Restore my Bonehead';
     if (!r.ok) return err(r.reason || 'Could not restore.');
     S.settings = await kvGet('settings', S.settings);
+    if (r.restored) saveWitness = { settings: !!S.settings, loot: !!(await kvGet('loot-init', false)) };
     snapSettings();
     levelSound(S.sounds);
     closeAllSheetsViaHistory();
@@ -21587,6 +21687,7 @@ async function openRestoreSheet() {
        onboarding uses, and it routes. An account with no save to pull has no
        settings either: onboarding continues instead of routing into the gate. */
     if (wasOnb) {
+      if (saveRecoveryActive && !r.restored) return renderAccountRecovery();
       if (S.settings) { enterAppFromOnboarding(); return; }
       const saved = await kvGet('onbProgress', null);
       renderOnboarding(saved && Number.isInteger(saved.step) ? Math.min(2, Math.max(0, saved.step)) : 0,
@@ -23756,7 +23857,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v516'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v517'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
@@ -25918,15 +26019,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
        node is safe: showGateIntro's finish() is idempotent and nobody awaits
        its promise on this path. */
     document.querySelectorAll('body > .gi').forEach(n => n.remove());
-    await consumeFightFoodBuffs(); // combat dish buffs are spent one fight at a time
     const won = fight.over.winner === 'p';
-    /* Resolve the staked-fight record the moment the outcome is known (see the
-       lifecycle above openFight). A win clears it HERE, not on the Done tap,
-       so killing the app on the victory screen can never read as a forfeit. A
-       non-win (loss or double KO) becomes phase:'lost' and stays until the
-       player sees the panel: acknowledged by closing this sheet (onClose), or
-       by the #pitDefeatAck button in the Pit if the app dies first. */
-    if (staked) await kvSet('pitFight', won ? null : { phase: 'lost', mode: foeCfg.mode, foe: foeCfg.name, at: Date.now() });
+    const pitRecovery = staked && won ? await import('./game.js') : null;
+    const pitPending = pitRecovery ? await pitRecovery.rememberPitWin(foeCfg, fightId, await foodCoinMult()) : null;
+    if (!pitPending) await consumeFightFoodBuffs(); // staked wins spent theirs with the durable intent
+    // A win's durable intent owns recovery until its whole payout lands.
+    // Losses retain the existing acknowledgement panel.
+    if (staked && !won) await kvSet('pitFight', { phase: 'lost', mode: foeCfg.mode, foe: foeCfg.name, at: Date.now() });
     // KO choreography
     const loserStage = fight.over.winner === 'p' ? el('foeStage') : fight.over.winner === 'f' ? el('youStage') : null;
     if (loserStage) loserStage.classList.add('ko');
@@ -25950,6 +26049,19 @@ async function openFight(pitWrap, fighter, foeCfg) {
         if (badges.length) queueCelebration({ newBadges: badges });
       }
     } else if (won) {
+      if (staked) {
+        const r = await pitRecovery.finishPitWin(pitPending);
+        coins = r?.coins || 0; xp = r?.xp || 0; extras = r?.extras || [];
+        if (foeCfg.mode === 'champ' && r?.first) extraCards.push(
+          { wear: CHAMP_PRIZE_ID, imgSrc: bhAsset(BH_BY_ID[CHAMP_PRIZE_ID]),
+            name: BH_BY_ID[CHAMP_PRIZE_ID].name, rarity: 'legendary', kind: 'CHAMPION COSMETIC',
+            stats: `No crate can roll it. Wear it in your Wardrobe, and carry the ${CHAMP_TITLE} title.` },
+          crateCard('golden'));
+        trackEvent('pit_win', { mode: foeCfg.mode });
+        window.__refreshWalletPill?.(); refreshLevelChip();
+        confettiRain(90); levelSound(S.sounds);
+        if (r?.badges.length) queueCelebration({ newBadges: r.badges });
+      } else {
       await awardCapped('fight', 'fight', 10, FIGHT_ROW_LABEL[foeCfg.mode] || 'Pit win', XP_DAILY_CAP.fight);
       trackEvent(foeCfg.mode === 'boss' ? 'boss_win' : foeCfg.mode === 'mini' ? 'mini_win' : 'pit_win', { mode: foeCfg.mode });
       xp += 10;
@@ -26127,44 +26239,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           toast(`You hold ${SPIRE_CAP} spires already. Let one go dormant to take another.`, 4000);
         }
       }
-      else if (foeCfg.mode === 'rung') {
-        if (!foeCfg.done) {
-          const g = await award(`pitrung-${foeCfg.rung}`, 'pitrung', foeCfg.xp, `Ladder: beat ${foeCfg.name}`);
-          if (g) { xp += g; coins = foeCfg.coins; } else coins = foeCfg.repeatCoins;
-        } else coins = foeCfg.repeatCoins;
-      } else if (foeCfg.mode === 'champ') {
-        if (!foeCfg.done) {
-          const g = await award('pitchamp', 'pitchamp', foeCfg.xp, `Champion: beat ${CHAMPION.name}`);
-          if (g) {
-            xp += g; coins = foeCfg.coins;
-            await grantCrate('golden', 'pit-champion');
-            /* THE CHAMPION'S PRIZE IS A LOOK AND A NAME, NOT A NUMBER (S0,
-               2026-08-25). This used to write a `kind:'weapon'` inv row for
-               Bonecrusher: the single strongest item in the game, invisible on
-               your character, handed out by the one fight everybody eventually
-               wins. Tom's call was that the weapon grant goes; the trophy still
-               has to feel like one, or the ladder loses its payoff.
-               So: the Moonlit Skull, the only piece in the game no crate can
-               roll (data/boneheadz.js `exclusive`), plus the Marrow King title
-               under your name wherever your crew can see it. Both are visible on
-               the Bonehead, which is the entire point of the change, and neither
-               moves a single point of damage.
-               The title needs no storage of its own: it is derived from the
-               `pit-champ` badge this same win already mints (championTitle). */
-            const skull = await grantCosmetic(CHAMP_PRIZE_ID, 'pit-champion');
-            extraCards.push(
-              { wear: CHAMP_PRIZE_ID, imgSrc: bhAsset(BH_BY_ID[CHAMP_PRIZE_ID]),
-                name: BH_BY_ID[CHAMP_PRIZE_ID].name, rarity: 'legendary', kind: 'CHAMPION COSMETIC',
-                stats: skull ? `No crate can roll it. Wear it in your Wardrobe, and carry the ${CHAMP_TITLE} title.`
-                             : `You already had it. The ${CHAMP_TITLE} title is yours from here.` },
-              crateCard('golden'));
-          } else coins = foeCfg.repeatCoins;
-        } else coins = foeCfg.repeatCoins;
-      } else if (foeCfg.mode === 'endless') {
-        // first clear of each rank pays XP + full coins; re-clears pay diminishing coins
-        const g = await award(`endless-${foeCfg.rank}`, 'endless', foeCfg.xp, `Gauntlet rank ${foeCfg.rank}: ${foeCfg.name}`);
-        if (g) { xp += g; coins = foeCfg.coins; } else coins = foeCfg.repeatCoins;
-      } else if (foeCfg.mode === 'mimic') {
+      else if (foeCfg.mode === 'mimic') {
         /* THE CHEST IS SPENT HERE AND NOWHERE ELSE.
            The key is the chest's OWN ledger key, `spawn-<date>-<id>`: the exact
            key collectSpawn would have claimed had it been an ordinary crate. So
@@ -26262,6 +26337,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       refreshLevelChip();
       confettiRain(90); levelSound(S.sounds);
       if (badges.length) queueCelebration({ newBadges: badges });
+      }
     } else if (fight.over.winner === 'f') {
       /* QA round 28 P4: a spar LOSS paid 5 coins unconditionally, with no charge
          spent and no cap, so losing on purpose was a coin tap. Spars now take the

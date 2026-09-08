@@ -64,7 +64,11 @@ function wrapDb(d) {
     const realOs = t.objectStore.bind(t);
     t.objectStore = name => {
       const s = realOs(name);
-      const put = s.put, del = s.delete;
+      const put = s.put, add = s.add, del = s.delete;
+      s.add = v => {
+        if (CRASH.pred && CRASH.pred({ store: name, op: 'add', key: v && (v.k ?? v.id ?? v.key ?? v.date), v })) CRASH.armed = true;
+        return add(v);
+      };
       s.put = v => {
         if (CRASH.pred && CRASH.pred({ store: name, op: 'put', key: v && (v.k ?? v.id ?? v.key ?? v.date), v })) CRASH.armed = true;
         return put(v);
@@ -251,6 +255,284 @@ useDbName('tap-legacy');
   const legacy = inv.filter(r => r.kind === 'crate' && r.crate === 'egg').length;
   const eggs = inv.filter(r => r.kind === 'egg').length;
   ok('CRASH legacy: the egg-crate is gone AND the egg exists (count conserved)', legacy === 0 && eggs === 1, `legacy rows=${legacy}, eggs=${eggs}`);
+}
+
+/* L1 frozen-order seams. Drive production exports and the actual settle/log
+   source. DOM collaborators are inert; writes use the same kill model above.
+   A failed recovery is a loss, even when the meal/fight itself was saved. */
+const { readFileSync } = await import('node:fs');
+const game = await import('../js/game.js');
+const cooking = await import('../js/cooking.js');
+const { CHAMPION } = await import('../js/pit.js');
+const { dateKey } = await import('../js/nutrition.js');
+const app = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+const noop = () => {};
+
+useDbName('tap-shop');
+{
+  await kvSet('coins', 90);
+  dieAfter(e => e.store === 'kv' && e.key === 'coins' && e.v.v === 0);
+  await attempt(loot.buyShopItem('vigor'));
+  ok('SETUP shop: kill armed at 90-coin debit', CRASH.armed);
+  reboot();
+  ok('CRASH shop: 90 coins buys one Draught even after death',
+    await kvGet('coins', 0) === 0 && await loot.consumableCount('vigor') === 1 && await kvGet('coinsRev', 0) === 90,
+    `coins=${await kvGet('coins', 0)}, goods=${await loot.consumableCount('vigor')}, cost=90 coins`);
+}
+useDbName('tap-shop-race');
+{
+  await kvSet('coins', 90);
+  const both = await Promise.all([loot.buyShopItem('vigor'), loot.buyShopItem('vigor')]);
+  ok('CONTROL shop: two buyers can spend a 90-coin wallet only once',
+    both.filter(r => r.ok).length === 1 && await loot.consumableCount('vigor') === 1 && await kvGet('coins', 0) === 0);
+}
+
+// Execute settle through its economic end, before the victory-panel DOM. This
+// includes the shipped clear-then-pay sequence when copied onto the old tree.
+const settleStart = app.indexOf('  async function settle() {');
+const settleEnd = app.indexOf('    // the fight is decided, so the escape hatch', settleStart);
+if (settleStart < 0 || settleEnd < 0) throw new Error('settle source missing');
+const settleSrc = app.slice(settleStart, settleEnd).replace("import('./game.js')", "import('../js/game.js')") + '\n}';
+const cfg = { mode: 'rung', rung: 1, name: 'Rattles', coins: 60, repeatCoins: 15, xp: 40, done: false };
+async function drivePit(config = cfg, id = 'l1-fight') {
+  const ctx = { ...game, ...loot, kvSet, kvGet, db, dateKey,
+    settled: false, staked: true, fightId: id, foeCfg: config,
+    fight: { over: { winner: 'p' } }, add: null,
+    document: { querySelectorAll: () => [] }, el: () => null,
+    consumeFightFoodBuffs: cooking.consumeFightFoodBuffs, foodCoinMult: cooking.foodCoinMult,
+    markDowned: noop, renderActions: noop, trackEvent: noop,
+    window: {}, refreshLevelChip: noop, confettiRain: noop, levelSound: noop,
+    S: { sounds: false }, queueCelebration: noop, FIGHT_ROW_LABEL: {},
+    CHAMPION, CHAMP_PRIZE_ID: 'SK15', CHAMP_TITLE: 'Marrow King', BH_BY_ID: Object.fromEntries(BH_ITEMS.map(i => [i.id, i])),
+    bhAsset: () => '', crateIcon: () => '', CRATES: loot.CRATES,
+  };
+  return new Function('ctx', `with (ctx) { return (${settleSrc})(); }`)(ctx);
+}
+for (const seam of ['stake', 'fight-xp', 'rung-xp', 'badge']) {
+  useDbName(`tap-pit-${seam}`);
+  await kvSet('game-init', true);
+  await kvSet('pitFight', { phase: 'open', mode: 'rung', foe: cfg.name, at: 123 });
+  dieAfter(e => seam === 'stake'
+    ? e.store === 'kv' && ((e.key === 'pitFight' && e.v?.v === null) || e.key === 'pitPending:l1-fight')
+    : e.store === 'xp' && (seam === 'fight-xp' ? e.v.type === 'fight' : seam === 'rung-xp' ? e.key === 'pitrung-1' : e.key === 'badge-pit-1'));
+  const r = await attempt(drivePit());
+  ok(`SETUP Pit ${seam}: kill boundary reached`, CRASH.armed, r.err || 'settled');
+  reboot();
+  await game.initGameIfNeeded(null);
+  const total = (await db.all('xp')).reduce((n, row) => n + row.xp, 0);
+  ok(`REBOOT Pit ${seam}: staked win retains 60 coins and 75 XP`,
+    await kvGet('coins', 0) === 60 && total === 75 && await kvGet('pitFight', null) === null,
+    `coins=${await kvGet('coins', 0)}, XP=${total}; measured loss: charge, 60 coins and 75 XP`);
+  await game.initGameIfNeeded(null);
+  ok(`ONCE Pit ${seam}: another open cannot pay again`, await kvGet('coins', 0) === 60 && (await db.all('xp')).reduce((n, row) => n + row.xp, 0) === 75);
+}
+
+useDbName('tap-pit-modifiers');
+{
+  await kvSet('game-init', true);
+  await kvSet('pitFight', { phase: 'open', mode: 'rung', foe: cfg.name, at: 123 });
+  await kvSet('buffs', { xp2: 5 });
+  const opaque = { kind: 'combat', format: 99, fightsLeft: 8 };
+  await kvSet('foodbuffs', [{ kind: 'combat', fightsLeft: 3 }, opaque, { kind: 'coins', untilMs: Date.now() + 60000, pct: 0.25 }]);
+  dieAfter(e => e.key === 'pitPending:l1-fight' || (e.key === 'pitFight' && e.v?.v === null));
+  await attempt(drivePit());
+  ok('SETUP Pit modifiers: win intent boundary reached', CRASH.armed);
+  reboot();
+  await kvSet('pitFight', null); // the arena's close handler may acknowledge it first
+  await game.initGameIfNeeded(null);
+  await game.initGameIfNeeded(null);
+  const buffs = await kvGet('foodbuffs', []);
+  ok('REBOOT Pit modifiers: one charm and food charge buy the recorded 94 coins',
+    await kvGet('coins', 0) === 94 && (await kvGet('buffs')).xp2 === 4 && buffs[0].fightsLeft === 2 && JSON.stringify(buffs[1]) === JSON.stringify(opaque),
+    `coins=${await kvGet('coins', 0)}, charm=${(await kvGet('buffs')).xp2}, food=${buffs[0].fightsLeft}`);
+}
+for (const mode of ['rung', 'champ', 'endless']) {
+  useDbName(`tap-pit-control-${mode}`);
+  const config = { ...cfg, mode, rank: 1, name: mode === 'champ' ? 'The Marrow King' : cfg.name };
+  await kvSet('game-init', true);
+  await kvSet('pitFight', { phase: 'open', mode, foe: config.name, at: 123 });
+  const results = await Promise.all([attempt(drivePit(config)), attempt(drivePit(config))]);
+  const primary = mode === 'rung' ? 'pitrung-1' : mode === 'champ' ? 'pitchamp' : 'endless-1';
+  ok(`CONTROL Pit ${mode}: overlapping settlement pays one primary reward`,
+    results.every(r => r.ok) && await kvGet('coins', 0) === 60 && !!await db.get('xp', primary),
+    `coins=${await kvGet('coins', 0)}, errors=${results.filter(r => !r.ok).map(r => r.err)}`);
+  const before = (await db.all('xp')).reduce((n, r) => n + r.xp, 0);
+  await kvSet('pitFight', { phase: 'open', mode, foe: config.name, at: 124 });
+  await drivePit({ ...config, done: true }, 'l1-repeat');
+  ok(`CONTROL Pit ${mode}: a different repeat win pays 15 coins and only 10 fight XP`,
+    await kvGet('coins', 0) === 75 && (await db.all('xp')).reduce((n, r) => n + r.xp, 0) === before + 10);
+  if (mode === 'champ') ok('CONTROL Pit champion: first clear pays one crate and the skull',
+    (await db.all('inv')).filter(r => r.kind === 'crate').length === 1 && !!await db.get('inv', 'cos:SK15') && (await kvGet('looks', [])).includes('SK15'));
+}
+
+// L5: run the actual meal writer. Storage and XP are real; UI collaborators
+// expose the writer's return contract, not a claimed browser/pixel proof.
+const mealStart = app.indexOf('async function commitLogEntry(');
+const mealEnd = app.indexOf('\nfunction queueCelebration(', mealStart);
+if (mealStart < 0 || mealEnd < 0) throw new Error('log commit source missing');
+function mealWriter(entry, overrides = {}) {
+  const ctx = { db, dateKey, S: { date: dateKey(), settings: { targets: null } },
+    rollDayIfNeeded: async () => {}, refreshNotifSchedules: noop, recordMealUsed: async () => {},
+    onFoodLogged: game.onFoodLogged, entriesFor: async date => (await db.all('log')).filter(e => e.date === date),
+    trackEvent: noop, toast: noop, storageIsFull: err => err?.name === 'QuotaExceededError', ...overrides };
+  return new Function('ctx', `with (ctx) { return ${app.slice(mealStart, mealEnd)}; }`)(ctx);
+}
+const dinner = id => ({ id, date: dateKey(), ts: Date.now(), meal: 2, foodId: 'dinner', name: 'Dinner', kcal: 642, p: 20, c: 80, f: 20 });
+const foodXp = async () => (await db.all('xp')).filter(r => r.type === 'log' || r.type === 'firstlog').reduce((n, r) => n + r.xp, 0);
+// Separate module state represents a second opener, sharing the same database.
+const otherGame = await import('../js/game.js?l5-second-open');
+for (const seam of ['log', 'base', 'firstlog', 'scan', 'label', 'done']) {
+  useDbName(`tap-meal-${seam}`);
+  await kvSet('game-init', true);
+  const entry = dinner('l5-meal');
+  const via = seam === 'label' ? 'label' : 'scan';
+  const commit = mealWriter(entry);
+  dieAfter(e => seam === 'log' ? e.store === 'log' && e.key === entry.id
+    : seam === 'done' ? e.store === 'kv' && e.key === `foodXpDone:${entry.id}`
+    : e.store === 'xp' && e.v.type === (seam === 'base' ? 'log' : seam));
+  const result = await attempt(commit(entry, null, via));
+  ok(`SETUP meal ${seam}: kill armed after committed totals`, CRASH.armed);
+  reboot();
+  if (seam === 'log') ok('CONTROL meal: committed receipt failure returns zero XP',
+    result.ok && result.v.receiptFailed === true && result.v.xp === 0 && (await db.get('log', entry.id))?.kcal === 642);
+  await Promise.all([game.initGameIfNeeded(null), otherGame.initGameIfNeeded(null)]);
+  const xp = await foodXp();
+  ok(seam === 'log' ? 'REBOOT meal: saved 642-kcal dinner recovers 25 XP' : `REBOOT meal ${seam}: saved dinner recovers 25 XP`,
+    (await db.get('log', entry.id))?.kcal === 642 && xp === 25,
+    `kcal=${(await db.get('log', entry.id))?.kcal}, XP=${xp}`);
+  ok(`REBOOT meal ${seam}: original ${via} context survives`,
+    (await db.all('xp')).filter(r => r.type === via).reduce((n, r) => n + r.xp, 0) === (via === 'scan' ? 15 : 20));
+  const before = await game.totalXp();
+  await game.initGameIfNeeded(null);
+  await otherGame.initGameIfNeeded(null);
+  ok(`ONCE meal ${seam}: overlapping and repeated opens pay exactly once`,
+    xp === 25 && await foodXp() === 25 && await game.totalXp() === before &&
+    (await db.all('xp')).filter(r => r.type === 'log' && r.ref === entry.id).length === 1);
+}
+
+useDbName('tap-meal-midnight');
+{
+  await kvSet('game-init', true);
+  const entry = dinner('l5-midnight');
+  dieAfter(e => e.store === 'log' && e.key === entry.id);
+  await attempt(mealWriter(entry)(entry, null, 'label'));
+  const armed = CRASH.armed;
+  reboot();
+  const RealDate = globalThis.Date;
+  const tomorrow = new RealDate(); tomorrow.setDate(tomorrow.getDate() + 1);
+  globalThis.Date = class extends RealDate {
+    constructor(...args) { super(...(args.length ? args : [tomorrow.getTime()])); }
+    static now() { return tomorrow.getTime(); }
+  };
+  try {
+    // Reconstruct an old-day edit just as the portion form does, without
+    // copying private metadata. It must retain the pending original intent.
+    const edit = { ...entry, kcal: 650 }; delete edit.foodXp;
+    const edited = await mealWriter(edit)(edit, null);
+    ok('CONTROL meal: yesterday edit saves and returns zero XP', edited.xp === 0 && (await db.get('log', entry.id)).kcal === 650);
+    await game.initGameIfNeeded({ p: 1 });
+    await game.initGameIfNeeded({ p: 1 });
+    ok('REBOOT meal midnight: original date and label entitlement recover once', armed && await foodXp() === 25 &&
+      (await db.get('xp', `firstlog-${entry.date}`))?.xp === 15 &&
+      (await db.get('xp', 'label-dinner'))?.xp === 20 && !(await db.get('xp', `protein-${entry.date}`)));
+    const backdated = { ...entry, id: 'l5-backdated' }; // copied intent is not authority
+    const res = await mealWriter(backdated)(backdated, null, 'scan');
+    await game.initGameIfNeeded(null);
+    ok('CONTROL meal: backdated copies create no entitlement or XP', res.xp === 0 && await foodXp() === 25 &&
+      !(await db.get('log', backdated.id)).foodXp);
+  } finally { globalThis.Date = RealDate; }
+}
+
+for (const quota of [false, true]) {
+  useDbName(`tap-meal-write-failure-${quota}`);
+  const entry = dinner('l5-unsaved'), btn = { disabled: true }, messages = [], events = [];
+  let followed = false;
+  const err = new Error('injected log write failure');
+  if (quota) err.name = 'QuotaExceededError';
+  const result = await mealWriter(entry, {
+    db: { get: db.get, put: async () => { throw err; } },
+    toast: message => messages.push(message), trackEvent: event => events.push(event),
+    onFoodLogged: async () => { followed = true; },
+  })(entry, btn);
+  ok(`CONTROL meal: ${quota ? 'quota' : 'write'} failure keeps the entry available and reports failure`,
+    result === null && btn.disabled === false && entry.kcal === 642 && !followed &&
+    !(await db.get('log', entry.id)) && events.includes('log_write_failed') &&
+    messages.some(m => quota ? m.includes('out of storage') : m.includes('Could not save that meal')));
+}
+// Execute the production toast expressions for both Add forms with the actual
+// zero-XP receipt shape. Full sheet visibility still requires the browser audit.
+const toastLines = app.split('\n').filter(l => l.includes('toast(') && l.includes('game.receiptFailed'));
+ok('CONTROL meal: both Add forms report saved calories and missing XP', toastLines.length === 2 && toastLines.every(line => {
+  let message;
+  new Function('toast', 'editing', 'entry', 'n', 'kcal', 'game', line)(m => { message = m; }, false, null, { kcal: 642 }, 642, { xp: 0, receiptFailed: true });
+  return message === 'Added · 642 kcal · XP did not record';
+}));
+
+useDbName('tap-meal-cap');
+{
+  await kvSet('game-init', true);
+  for (let n = 0; n < 21; n++) {
+    const entry = dinner(`l5-cap-${n}`);
+    await mealWriter(entry, { onFoodLogged: async () => { throw new Error('XP unavailable'); } })(entry, null);
+  }
+  await Promise.all([game.initGameIfNeeded(null), otherGame.initGameIfNeeded(null)]);
+  await game.initGameIfNeeded(null);
+  ok('REBOOT meal: recovery retains the 20-log daily ceiling',
+    (await db.all('log')).length === 21 && await foodXp() === 215,
+    `meals=${(await db.all('log')).length}, XP=${await foodXp()}`);
+}
+
+useDbName('tap-meal-backfill');
+{
+  // A restore may contain an older row plus a new pending intent, without a
+  // completed game-init flag. Ordinal history replay must go first, so it and
+  // recovery agree on which entry owns each capped slot.
+  const legacy = dinner('a-legacy'), pending = dinner('b-pending');
+  await db.put('log', legacy);
+  await mealWriter(pending, { onFoodLogged: async () => { throw new Error('XP unavailable'); } })(pending, null);
+  await game.initGameIfNeeded(null);
+  const logs = (await db.all('xp')).filter(r => r.type === 'log');
+  ok('INIT meal: history backfill and recovery keep one receipt per entry',
+    logs.length === 2 && logs.filter(r => r.ref === legacy.id).length === 1 && logs.filter(r => r.ref === pending.id).length === 1,
+    `refs=${logs.map(r => r.ref).join(',')}`);
+  await game.onFoodLogged(legacy, { entriesForDate: [legacy, pending] });
+  await game.initGameIfNeeded(null);
+  ok('ONCE meal: restored history cannot acquire an extra slot on retry', await foodXp() === 35, `XP=${await foodXp()}`);
+}
+
+// These two seams are ALREADY repaired in this checkout. They must remain
+// green on the baseline too; do not call that a newly proven-red fix.
+const social = await import('../js/social.js');
+const spires = await import('../js/spires.js');
+useDbName('tap-grant');
+{
+  const grant = { key: 'l1-grant', type: 'social', payload: { coins: 90, xp: 25, consumable: 'vigor' } };
+  dieAfter(e => e.store === 'xp' && e.key === grant.key);
+  await attempt(social.__testApplyGrant(grant));
+  ok('SETUP grant: kill armed at receipt', CRASH.armed);
+  reboot();
+  await social.__testApplyGrant(grant);
+  ok('BASELINE grant: receipt and payout commit together, retry pays once',
+    await kvGet('coins', 0) === 90 && (await db.get('xp', grant.key))?.xp === 25 && await loot.consumableCount('vigor') === 1);
+}
+useDbName('tap-spire');
+{
+  const tower = { id: 'sp-l1-1', name: 'L1 tower', level: 1, claimedAt: Date.now(), tendedAt: Date.now() };
+  await kvSet('social', { playerId: 'audit', onlineAt: Date.now() });
+  const priorFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ spires: [tower], serverNow: Date.now() }) });
+  try {
+    // The authority has committed ownership; all subsequent local writes die.
+    dieAfter(() => false); CRASH.armed = true;
+    await attempt(spires.syncSieges([tower]));
+    const killed = CRASH.killed;
+    reboot();
+    ok('SETUP Spire: device mirror died after server ownership', killed > 0 && !(await spires.spireState())[tower.id]);
+    await spires.syncSieges(await social.fetchMySpires());
+    await spires.syncSieges(await social.fetchMySpires());
+    ok('BASELINE Spire: next ownership sync heals the missing tower once',
+      (await spires.spireState())[tower.id]?.claimedAt === tower.claimedAt && Object.keys(await spires.spireState()).length === 1);
+  } finally { globalThis.fetch = priorFetch; }
 }
 
 console.log(fails ? `\n${fails} FAIL` : '\nall clean');

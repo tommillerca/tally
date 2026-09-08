@@ -1,0 +1,17 @@
+ok    SETUP the changelog was parsed and has entries to grade  280 entries
+ok    SETUP the newest entry (v516) has items to grade  4 items
+ok    SETUP docs/CLAIMS.md exists  found
+ok    CLAIMS docs/CLAIMS.md carries no merge conflict markers  clean
+ok    CLAIMS docs/CLAIMS.md has a section for v516  found
+ok    CLAIMS every item in the newest entry is answered  4 answered of 4 claims
+ok    PROOF every claim names an audit that exists and the gate actually runs  4 claims backed
+ok    REACH no claim in a shipped entry is GATED, PENDING-DEPLOY or NEEDS-PEER  all 4 reachable
+ok    REACH the route is written out, not left as a word  every route spelled out
+
+    WHAT v516 CLAIMS, AND WHAT BACKS IT:
+      2. the Paddock with a large collection. At 200 pets the packer failed t  <- paddock-pack-audit.mjs, paddock-pack-browser
+      3. hatch a pet, then look for its colour anywhere. The reveal said "A F  <- kennel-copy-browser-audit.mjs
+      4. the Stable copy row. It lost 2,160px of scroll position on every tap  <- paddock-pack-audit.mjs
+      5. melt a pet. The heavier typed-confirm gate keyed on species and neve  <- kennel-copy-audit.mjs
+
+claim-evidence: clean

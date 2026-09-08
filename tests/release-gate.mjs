@@ -259,9 +259,10 @@ const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-ato
      consumes 501 items and merges the pre-consumption blob, which is the one
      shape the merge audit never drove. */
   'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs',
-  'take-and-pay-audit.mjs'];   // 2026-09-06 lane 2: the take and its whole payout are one transaction; node-only, ~1s
+  'take-and-pay-audit.mjs'];   // L1/L5: transaction-boundary kills for inventory, Shop, Pit, meal XP retry (including midnight and overlapping opens), grants and Spire recovery; Node-only.
 PURE.unshift('store-copy-lint.mjs');
 PURE.push('paddock-pack-audit.mjs');   // 2026-09-08 R44-12/20/25: the Paddock packer honours its own header contract at 200 pets (76 pairs overlapped >20px in both axes, worst 121x72, among the 50 drawn), a breeding-armed and an equipped pet are marked in the field, and the Stable copy row keeps its scroll position (2,160px lost per tap); node-only source and geometry proof, the real-render half is paddock-pack-browser-audit.mjs
+PURE.push('numbers-honesty-audit.mjs'); // L4: Node-driven numeric save handler, rendered counts, full weight SVG and history-window coverage.
 PURE.push('audit-output-audit.mjs'); // R3: Node filesystem refusal/control fixtures and serveTree identity source check; no browser or network.
 PURE.push('branch-graveyard-audit.mjs');   // 2026-09-08: the branch classifier only calls a branch shipped on merged-PR evidence and never on commit counts or three-dot diffs, both of which lie under squash-merge; node-only, no network
 PURE.push('store-runtime-audit.mjs'); // M4/K1: Node-only real web bundle, local paths, scheme condition, App Store refresh/background checks and web update controls.
@@ -273,6 +274,7 @@ PURE.push('guard-debts-audit.mjs'); // R45: node-only regression checks execute 
 PURE.push('submission-preflight-audit.mjs');   // 2026-09-07: drives native/submission-preflight.mjs for real and proves it refuses all three (a bundle without STORE_BUILD=1, a synced config that still has a server URL, a reachable TestFlight string) with a healthy control; node-only, <1s
 PURE.push('pet-state-audit.mjs'); // Lane A: real pet exports, migration, unsupported rows, instance talent clicks and the input to battle construction; Node-only.
 PURE.push('pet-family-audit.mjs'); // Lane D: refuses incomplete family kits, validates species/picks and tree unlocks, checks cooldown agreement and exhaustive frozen combat outputs; Node-only.
+PURE.push('crew-pet-audit.mjs'); // S1: Node-only production snapshot to Crew markup, friends-only accessories, C6 art and C4 tint layers at DPR 2/3; browser pixels remain in crew-fan-audit.
 PURE.push('coins-merge-tie-audit.mjs');   // R38-13: coinsRev bumps by magnitude, importAll keeps the higher balance on a tie, taken receipts; node-only (shipped unregistered in v485)
 PURE.unshift('no-debug-markers-lint.mjs');
 /* routine-race-audit is PURE for the same reason spawn-claim-atomic-audit is:
@@ -319,7 +321,11 @@ PURE.push('restore-debt-audit.mjs'); // Q1: stale restore must preserve pet owne
 PURE.push('p1-r48-rest-audit.mjs'); // P1: executes art coverage grading on empty-surface controls, checks Hollow probe disclosure and landed race/reward rows; Node-only.
 PURE.push('pet-a11y-audit.mjs'); // P2: production Kennel labels/clicks, swatch identity, relative pet-sheet type; Node-only, no pixel claim.
 PURE.push('kennel-copy-audit.mjs'); // R2: production Kennel/reveal/selection copy and destroy controls with real storage; Node-only, no browser or pixel claim.
+PURE.push('device-loss-audit.mjs'); // L3: encrypted wipe/restore, initialization rewards, recovery choice and real IOError messages in Node doubles; no browser or network.
+PURE.push('multidevice-earnings-audit.mjs'); // L2: both offline currency histories, replay/spends, atomic import, encrypted push and simulated lifecycle; Node-only.
 const BROWSER = [
+  'device-loss-browser-audit.mjs', // L3 recovery choice, known-save retry, file replacement and Settings restore reachability; local disposable origin only.
+  'multidevice-earnings-browser-audit.mjs', // L2: real IndexedDB and visibilitychange listener, encrypted two-device merge both directions; pending reviewer browser proof.
   'paddock-pack-browser-audit.mjs',
   'kennel-copy-browser-audit.mjs', // R2: real copy/breed/destroy/Kennel controls, reveal dismissal, card-chip fit and hit tests; pending reviewer browser proof.
   'pet-a11y-pixels-audit.mjs', // P2: screenshot dot contrast, deuteranopia dE76, keyboard identity and 200% pet-sheet text.

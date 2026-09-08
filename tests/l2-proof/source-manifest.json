@@ -1,0 +1,12 @@
+{
+  "js/db.js": "49bfc060c549b6936a8b94a890bb66112896ffa6e4cb93f428bb0fc5eece44fd",
+  "tests/backup-key-audit.mjs": "22970a95ca4f5db3550cc7996d0d43578949beb84ddf4e710d238d6e8f546247",
+  "tests/backup-version-audit.mjs": "156dc31ae9ddede3051e2900609cbeb3bb0444f0e26524605fb1911ba71b96cd",
+  "tests/release-gate.mjs": "9e08a3a2235c2d92b9d227c4f5fba0e791c7a81250cb350a98c49ac5755b000e",
+  "tests/restore-latch-audit.mjs": "4406710f4bd5b068e03c38c6eefaf8b3f2610ae3b1b1991c419184e338e17f01",
+  "tests/unit.test.js": "832350a37ba28ef038e28b0bbd95755998f4e6b3ac566dfe95b2460e58dc62d3",
+  "tests/multidevice-earnings-audit.mjs": "94c1c7a2db4d3546d08d742e40266efc8c37a49d6d0bb4000563ccc432f4741e",
+  "tests/multidevice-earnings-browser-audit.mjs": "40718a594fe3f19ffa6f504e1ed41b12138088f5046bedab1b362ea79296c955",
+  "tests/lib/l2-scenarios.mjs": "73f4362ee24ea4854445e6a5089f02b746e62ab34d81c15a40da05dd31cffdf3",
+  "tests/fixtures/l2-browser.html": "bc84aaf1fde5f8dfe48ea76a87c0ab747658c2dd5dbed345b0d9c5634c8fb997"
+}

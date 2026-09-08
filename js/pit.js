@@ -425,11 +425,10 @@ function gainHype(f, amt) {
 export function petActionsFor(fight) {
   const pet = fight.p && fight.p.pet, body = fight.pAux;
   if (!pet || !body || body.fainted || body.hp <= 0 || fight.over) return [];
-  const petFree = !!(fight.p && fight.p.foodPetFree); // Hunter's Skewer
   return petActionMeta(pet.family).map(a => ({
     ...a,
-    cd: a.kind === 'special' && !petFree ? (pet.specialCd || 0) : 0,
-    enabled: a.kind !== 'special' || petFree || (pet.specialCd || 0) <= 0,
+    cd: a.kind === 'special' ? (pet.specialCd || 0) : 0,
+    enabled: a.kind !== 'special' || (pet.specialCd || 0) <= 0,
   }));
 }
 
@@ -439,13 +438,13 @@ export function applyPetAction(fight, actionId) {
   if (!pet || !body || body.fainted || fight.over) return events;
   const meta = petActionMeta(pet.family).find(a => a.id === actionId);
   if (!meta) return events;
-  const petFree = !!me.foodPetFree; // Hunter's Skewer: special ignores cooldown
-  if (meta.kind === 'special' && !petFree && (pet.specialCd || 0) > 0) return events;
+  if (meta.kind === 'special' && (pet.specialCd || 0) > 0) return events;
   const foeWho = targetWhoFor(fight, 'p');
   const foe = fighterOf(fight, foeWho);
 
   if (meta.kind === 'special') {
-    if (!petFree) pet.specialCd = meta.cd;
+    // Keep the saved petFree flag compatible: Skewer shortens recovery by one turn.
+    pet.specialCd = Math.max(1, meta.cd - (me.foodPetFree ? 1 : 0));
     const fx = petAbilityEffect(pet, me, foe);
     if (fx.kind === 'pethit') {
       for (let b = 0; b < fx.bites && foe.hp > 0; b++) {
@@ -471,7 +470,7 @@ export function applyPetAction(fight, actionId) {
     } else if (fx.kind === 'petdebuff') {
       if (foe.hp > 0) {
         if (!foe.weaken || foe.weaken.pct < fx.weakenPct) foe.weaken = { pct: fx.weakenPct, turns: fx.turns };
-        if (fx.blind) foe.blind = { pct: 0.30, turns: 2 };
+        if (fx.blind) foe.blind = { pct: 0.20, turns: 2 };
         if (fx.staminaDrain) foe.wind = Math.max(0, foe.wind - fx.staminaDrain);
         if (fx.mark) foe.marked = { turns: 3 };
         if (fx.stagger) foe.stagger = true;
@@ -660,12 +659,12 @@ export function makeFighter({ name, stats, style = 'plain', outfit = null, talen
 export function makePetBody(petDescriptor, owner) {
   const L = petDescriptor.level || 1;
   // Intrinsic stat line comes from pets.js (rarity + per-pet tilt + shiny). Fall
-  // back to the pre-v124 generic line for any descriptor built without it.
-  const bs = petDescriptor.stats || { power: 10 + L * 4, marrow: 20, wind: 30, reflex: 25 + L * 5, hype: 0, hp: 40 + L * 8 };
+  // back to the same tuned common line for any descriptor built without it.
+  const bs = petDescriptor.stats || { power: 10 + L * 4, marrow: 20, wind: 30, reflex: 25 + L * 5, hype: 0, hp: 47 + L };
   const petStats = { power: bs.power, marrow: bs.marrow, wind: bs.wind, reflex: bs.reflex, hype: 0 };
   const body = makeFighter({ name: petDescriptor.name, stats: petStats });
   const hpBoost = 1 + (owner.foodPetHpPct || 0); // Bonemeal Kibble
-  const petHp = bs.hp != null ? bs.hp : 40 + L * 8;
+  const petHp = bs.hp != null ? bs.hp : 47 + L;
   const maxHp = Math.round((petHp + Math.round((owner.stats.marrow || 40) * 0.25)) * hpBoost);
   body.d = { ...body.d, maxHp };
   body.hp = maxHp;
@@ -777,7 +776,7 @@ export function dealDamage(fight, victimWho, amount, events) {
   if (amount >= v.hp && v.pet && v.pet.lastStandArmed && !v.pet.lastStandUsed) {
     v.pet.lastStandUsed = true; v.pet.lastStandArmed = false;
     // a real last stand: survive the killing blow at a sliver (C2 Eternal Guard mends big)
-    v.hp = Math.max(1, Math.round(v.d.maxHp * (v.pet.lastStandHealFrac || 0.15)));
+    v.hp = Math.max(1, Math.round(v.d.maxHp * (v.pet.lastStandHealFrac || 0.05)));
     events.push({ t: 'petshield', who: victimWho, shield: 0, laststand: true, name: v.pet.name });
     return;
   }
@@ -1827,7 +1826,7 @@ export const SETUP_FIRST = ['rage', 'totem', 'raisedead', 'callcrows', 'ward'];
 // Mirrors app.js endPlayerBody -> petAct -> doEndTurn: one living-pet action
 // after the body, before endTurn. Read dispatch availability, not pet.cooldown:
 // applyPetAction uses meta.cd (including for Pack Tactics), and foodPetFree
-// bypasses that timer. Prefer the special, then the basic on cooldown.
+// shortens that timer by one turn. Prefer the special, then the basic on cooldown.
 export function smartPetTurn(fight) {
   if (fight.over || fight.active !== 'p') return null;
   const legal = petActionsFor(fight).filter(a => a.enabled);

@@ -26,6 +26,9 @@ const { browser, page } = await boot(process.argv[2] || process.env.URL);
 try {
   const origin = await page.evaluate(() => location.origin);
   await page.goto(origin + '/', { waitUntil: 'domcontentloaded' });   // PLAIN url: the real empty db
+  await page.waitForSelector('#saveNew', { visible: true });
+  await page.click('#saveNew');
+  await page.waitForSelector('#onbGo', { visible: true });
   await sleep(3200);
 
   const g = await page.evaluate(() => {

@@ -1,0 +1,17 @@
+PASS CONTROL naming follows rendered morph, base, shiny and CX identity
+PASS R44-14 copy chips name both colours even with a nickname
+PASS R44-14 card chip and initial caption name the displayed colour
+PASS R44-14 carousel repaint preserves the new focused colour
+PASS R44-14 breed picker and irreversible facts name colour and level
+PASS R44-14 armed breeding button and toast keep the spare identity
+PASS R44-16 true duplicate reveal keeps Frost Drizzle
+PASS R44-5 level 10 unique colour opens typed gate and names lost steps
+PASS R44-5 unique colour at level 1 needs typing
+PASS R44-5 trained duplicate, shiny and lineage each need typing
+PASS R44-5 plain duplicate arm and result toast retain colour and level
+PASS CONTROL untrained duplicate still requires two taps and really pays once
+PASS R44-5 an armed button cannot confirm a different copy
+PASS CONTROL empty and partial Kennel still show 30 grid controls
+PASS R44-18 complete collection acknowledges 30/30 without locked-cell instructions
+PASS R44-23 roster never asserts Base ownership without its cell
+KENNEL COPY: 16 passed, 0 failed (Node only, no pixel claim)

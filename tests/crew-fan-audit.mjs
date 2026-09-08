@@ -13,6 +13,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { boot, sleep, serveTree, waitForImageDecode } from './godmode.js';
+import { BH_BY_ID, petWornLayers, petWornTints } from '../data/boneheadz.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 let fails = 0;
@@ -494,7 +495,7 @@ ok('ONLINE an empty result explains itself and says how to undo it',
 await seedCrew([{ playerId: 'plate0', name: 'Bartholomew Fitzgerald-Wellington',
   alias: 'the Unbelievably Long Nickname', lastSeen: Date.now(),
   profile: { level: 113, levelName: 'Bone Grand Master 113', badges: 3, gearCount: 4,
-             outfit: { B: 'B0-1', SK: 'SK0-1', BG: 'BG1' }, pet: { sp: 'bumbleseal' } } }]);
+             outfit: { B: 'B0-1', SK: 'SK0-1', BG: 'BG1' }, pet: { id: 'C6', level: 8 } } }]);
 const plate = await page.evaluate(() => {
   const c = document.querySelector('.cfan-card'); if (!c) return null;
   const pl = c.querySelector('.cfan-plate'); if (!pl) return null;
@@ -549,6 +550,141 @@ ok('BANNER a banner icon slot with a glyph in it was found to grade (empty is a 
 ok('BANNER the glyph is centred in its slot, not parked in the top-left corner',
   !!bico && !bico.noGlyph && Math.abs(bico.dx) <= 2 && Math.abs(bico.dy) <= 2,
   JSON.stringify(bico));
+
+/* S1: bought legendary, worn accessories and the football tint path. These are
+   fixtures on the real Crew controls, not evidence about a live friend's phone.
+   HTTP records the initial request too, so a successful fallback cannot conceal
+   a missing thumbnail. Pixel contribution hides one layer without reflow and
+   compares screenshots. Zero changed pixels or zero matched layers FAILS.
+   PROVE-RED: revert crewCardArtHtml's wear argument to p.pet.wear || null.
+   Browser execution and browser prove-red remain required outside the sandbox. */
+await page.setCacheEnabled(false);
+await page.setBypassServiceWorker(true);
+const petResponses = new Map();
+const recordPetResponse = response => {
+  if (/\/assets\/bh\//.test(response.url())) {
+    petResponses.set(response.url(), response.status());
+    if (/\/C\/C6\.png(?:\?|$)/.test(response.url()))
+      console.log(`PET-HTTP C6 ${response.url()} ${response.status()}`);
+  }
+};
+page.on('response', recordPetResponse);
+const petFreeze = await page.addStyleTag({ content:
+  '*, *::before, *::after { animation: none !important; transition: none !important; }' });
+const pixelContribution = async selector => {
+  // Restrict the comparison to the pet's visible box. A timer elsewhere on the
+  // Crew page must not supply changed pixels for a blank pet.
+  const clip = await page.evaluate(() => {
+    const pet = document.querySelector('.cfan-card.feat .cfan-pet');
+    if (!pet) return null;
+    const r = pet.getBoundingClientRect(), card = pet.closest('.cfan-card').getBoundingClientRect();
+    const x = Math.max(0, r.left, card.left), y = Math.max(0, r.top, card.top);
+    const right = Math.min(innerWidth, r.right, card.right), bottom = Math.min(innerHeight, r.bottom, card.bottom);
+    return right > x && bottom > y ? { x, y, width: right - x, height: bottom - y } : null;
+  });
+  if (!clip) return { count: 0, changed: 0 };
+  const on = await page.screenshot({ clip, encoding: 'base64' });
+  const count = await page.evaluate(s => {
+    const nodes = [...document.querySelectorAll(s)];
+    for (const node of nodes) { node.dataset.petVisibility = node.style.visibility; node.style.visibility = 'hidden'; }
+    return nodes.length;
+  }, selector);
+  let off;
+  try { off = await page.screenshot({ clip, encoding: 'base64' }); }
+  finally {
+    await page.evaluate(s => {
+      for (const node of document.querySelectorAll(s)) {
+        node.style.visibility = node.dataset.petVisibility; delete node.dataset.petVisibility;
+      }
+    }, selector);
+  }
+  const changed = await page.evaluate(async (a, b) => {
+    const read = async png => {
+      const image = new Image(); image.src = `data:image/png;base64,${png}`; await image.decode();
+      const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
+      const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0);
+      return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    };
+    const [x, y] = await Promise.all([read(a), read(b)]);
+    if (x.length !== y.length) throw new Error('PET-PIXELS screenshot dimensions changed');
+    let n = 0;
+    for (let i = 0; i < x.length; i += 4)
+      if (Math.abs(x[i] - y[i]) + Math.abs(x[i + 1] - y[i + 1]) + Math.abs(x[i + 2] - y[i + 2]) > 10) n++;
+    return n;
+  }, on, off);
+  return { count, changed };
+};
+const petHelmet = Object.values(BH_BY_ID).find(x => x.slot === 'CH' && x.football);
+const petJersey = Object.values(BH_BY_ID).find(x => x.slot === 'CT' && x.football);
+if (!petHelmet || !petJersey) throw new Error('PET-CONTROL football garment fixtures missing');
+for (const dpr of [2, 3]) {
+  await page.setViewport({ width: 393, height: 852, deviceScaleFactor: dpr, isMobile: true, hasTouch: true });
+  for (const [label, id, wear] of [
+    ['C6 bare', 'C6', null],
+    ['C6 accessories', 'C6', { CE: 'CE1', CB: 'CB1', CG: 'CG1', CM: 'CM1' }],
+    ['C4 tinted kit', 'C4', { CH: petHelmet.id, CT: petJersey.id }],
+  ]) {
+    petResponses.clear();
+    const friend = { playerId: 'pet-proof', name: 'PET PROOF', lastSeen: Date.now(),
+      profile: { level: 8, outfit: { B: 'B0-1', SK: 'SK0-1' },
+        pet: { id, level: 8, shiny: false, morph: 'base' },
+        yard: { n: 1, pets: [{ sp: id, shiny: false, morph: 'base' }], wear } } };
+    await seedCrew([friend]);
+    await waitForImageDecode(page, '.cfan-pet img');
+    const pet = await page.evaluate(async () => {
+      const el = document.querySelector('.cfan-card.feat .cfan-pet');
+      if (!el) return null;
+      const imgs = [...el.querySelectorAll('img')];
+      const tints = [...el.querySelectorAll('.fb-tint')];
+      const masks = await Promise.all(tints.map(async tint => {
+        const match = getComputedStyle(tint).getPropertyValue('--fbm').match(/url\(['"]?([^'")]+)['"]?\)/);
+        if (!match) return false;
+        const image = new Image(); image.src = match[1];
+        try { await image.decode(); return image.naturalWidth > 0; } catch { return false; }
+      }));
+      return { urls: imgs.map(i => i.currentSrc), decoded: imgs.every(i => i.naturalWidth > 0),
+        worn: el.querySelectorAll('img.pw').length, tints: tints.length, masks,
+        colors: tints.map(t => t.style.background) };
+    });
+    const expectedWorn = petWornLayers(id, wear).length;
+    const expectedTints = petWornTints(id, wear).flat().filter(Boolean).length;
+    ok(`PET-CONTROL ${label} DPR ${dpr} has decoded base and exact worn layers`,
+      !!pet && pet.decoded && pet.urls.length === 1 + expectedWorn && pet.worn === expectedWorn,
+      JSON.stringify(pet));
+    const requests = [...petResponses].map(([url, status]) => ({ url, status }));
+    ok(`PET-HTTP ${label} DPR ${dpr} requests succeed, including initial thumbnails`,
+      requests.length > 0 && requests.every(r => r.status === 200)
+      && !!pet && pet.urls.every(url => petResponses.get(url) === 200), JSON.stringify(requests));
+    ok(`PET-TINT ${label} DPR ${dpr} carries decoded tint masks`,
+      !!pet && pet.tints === expectedTints && pet.masks.every(Boolean));
+    const baseInk = await pixelContribution('.cfan-card.feat .cfan-pet img:not(.pw)');
+    ok(`PET-PIXELS ${label} DPR ${dpr} base paints visible pixels`,
+      baseInk.count === 1 && baseInk.changed > 0, JSON.stringify(baseInk));
+    if (expectedWorn) {
+      const wornInk = await pixelContribution('.cfan-card.feat .cfan-pet .pw');
+      ok(`PET-PIXELS ${label} DPR ${dpr} accessories paint visible pixels`,
+        wornInk.count === expectedWorn + expectedTints && wornInk.changed > 0, JSON.stringify(wornInk));
+    }
+    if (expectedTints) {
+      const tintInk = await pixelContribution('.cfan-card.feat .cfan-pet .fb-tint');
+      ok(`PET-PIXELS ${label} DPR ${dpr} team tints change the kit pixels`,
+        tintInk.count === expectedTints && tintInk.changed > 0, JSON.stringify(tintInk));
+    }
+    // Operate the actual card and compare its wardrobe with the detail sheet.
+    await page.click('.cfan-card.feat');
+    await sleep(900);
+    await waitForImageDecode(page, '.fp-pet img');
+    const detailWorn = await page.$$eval('.fp-pet img.pw', imgs => imgs.map(i => i.currentSrc));
+    const untier = url => new URL(url).pathname.replace(/\/thumb\/(192|384)\//, '/');
+    ok(`PET-DETAIL ${label} DPR ${dpr} card and opened profile wear the same accessories`,
+      !!pet && detailWorn.length === expectedWorn
+      && JSON.stringify(detailWorn.map(untier)) === JSON.stringify(pet.urls.slice(1).map(untier)));
+    await page.evaluate(() => history.back());
+    await sleep(500);
+  }
+}
+page.off('response', recordPetResponse);
+await petFreeze.evaluate(el => el.remove());
 
 await browser.close();
 if (srv) srv.kill();

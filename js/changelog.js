@@ -4,6 +4,14 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 517, date: '2026-09-08', title: 'Nothing you earned goes missing', items: [
+    'If the app was killed at exactly the wrong moment you could pay for something in the Shop and not get it, lose a Pit charge along with its coins and XP, or log a meal that never paid its XP. Ten dinners could add up to no XP at all. Those three are closed, and a meal that was interrupted now collects its XP the next time you open the app.',
+    'Two phones both earning offline no longer overwrite each other. Whichever one had moved a number further used to keep its whole version of everything, and the other phone\'s entire session was deleted with no warning.',
+    'A phone whose storage was cleared or filled up used to land on the welcome screen as though it were brand new, hand you a new-player kit, and never mention the backup sitting on the server. It now recognises what happened and offers you the backup.',
+    'Restoring an account onto a phone that already had one silently kept the old one, despite the screen promising it would replace it. It now does what it says.',
+    'On phones set to a language that writes numbers as 1.234, the app read that back as 1 calorie. It was printing a number it could not read.',
+    'Your friends\' pets show what they are wearing on the Crew tab instead of only inside their card.',
+  ] },
   { n: 516, date: '2026-09-08', title: 'The Paddock holds a real collection', items: [
     'With a large collection the pets in the Paddock overlapped each other. They lay out properly now, however many you have.',
     'A pet you have armed for breeding, and the one you have equipped, are both marked in the field. You chose those; the app should show them.',

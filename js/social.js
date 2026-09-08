@@ -935,6 +935,8 @@ export async function syncProfile(snapshot, appV = '') {
 // closing under it (see the top-level onAppHide wiring below).
 export async function pushBackup(appV = '', opts = {}) {
   try {
+    // A recovery download must finish before this device can overwrite its backup.
+    if (await kvGet('restoreReplace', false)) return false;
     /* THE OPT-OUT IS A WRITE GUARD, NOT JUST A RESTORE ONE. `cloudOff` used to
        be read in exactly one place, bootSync's restore path, so Settings ->
        Cloud backup -> Off stopped the download and left the UPLOAD running on
@@ -1065,18 +1067,8 @@ export async function pullBackup({ slot = null, replace = false } = {}) {
     let snapshot;
     try { snapshot = await decryptBackup(data.blob); }
     catch { return { restored: false, reason: 'decrypt' }; }
-    /* `replace: false` PINS TODAY'S BEHAVIOUR HERE ON PURPOSE. importAll now
-       defaults to a true restore (it clears each declared store first) so the
-       Settings Import button cannot be farmed for coins. This path is not that
-       button. It runs once per install from bootSync on a device that has
-       nothing to clear, and from adoptIdentity on a device that may have a
-       local save the cloud snapshot has never seen. Turning that one into a
-       replace would delete local-only progress, which is a product call about
-       account recovery and not a security fix. Left as the documented merge
-       until Reg rules on it.
-       The daily archive is the one caller that passes replace:true, and for the
-       opposite reason: it is being used BECAUSE the local save is wrong, so
-       merging the good copy into the bad one would keep the bad one. */
+    // Automatic sync merges. Explicit account recovery and a missing save
+    // replace the declared stores, matching the restore sheet's promise.
     const counts = await importAll(snapshot, { replace });
     const version = data.version ?? data.updatedAt;
     if (slot !== 'daily' && Number.isSafeInteger(version)) await kvSet('backupVersion', version);
@@ -1591,7 +1583,9 @@ export async function adoptIdentity(bundle) {
   await kvSet('bootRestored', false);            // let the backup pull run (and re-run at boot if it fails below)
   await kvSet('vaultConflict', null);
   await kvSet('recoverySetAt', Date.now());
-  const pulled = await pullBackup();
+  await kvSet('restoreReplace', true); // preserve explicit intent across a failed download
+  const pulled = await pullBackup({ replace: true });
+  if (pulled.restored || pulled.reason === 'none' || pulled.reason === 'empty') await kvSet('restoreReplace', false);
   // exactly bootSync's rule below: only a success or a definitive "there is no
   // backup" settles the one-shot. 'decrypt' is deliberately NOT settled either:
   // the device holding the right key re-pushes daily and self-heals the cloud
@@ -1668,7 +1662,17 @@ export async function settleServerDay(key, ms = 1500) {
   return !(await dayIsUnwitnessed(key));
 }
 
-export async function bootSync() {
+// Read-only evidence for the onboarding gate. A failed vault read is unknown,
+// never proof of a first install. This function never creates an identity.
+export async function recoveryStatus() {
+  const prior = await kvGet('identity', null);
+  if (prior?.privJwk || await kvGet('social', null)) return 'known';
+  const kc = await readKeychainIdentity();
+  if (!kc.ok) return 'unreadable';
+  return kc.id?.privJwk ? 'known' : 'unknown';
+}
+
+export async function bootSync({ saveMissing = false } = {}) {
   try {
     // before every gate below: the ceiling is not a cloud feature (see above)
     touchServerDay().catch(() => {});
@@ -1690,6 +1694,7 @@ export async function bootSync() {
       const prior = await kvGet('identity', null);
       if (!(prior && prior.privJwk)) {
         const kc = await readKeychainIdentity();
+        if (!kc.ok) return { restored: false, reason: 'vault-unreadable' };
         if (!(kc.id && kc.id.privJwk)) return { restored: false, reason: 'new-player' };
       }
       const r = await goOnline();
@@ -1706,8 +1711,11 @@ export async function bootSync() {
          player a backup plausibly does exist and the warning is true. */
       if (!r.ok) return { restored: false, reason: (await kvGet('idMinted', null)) ? 'never-registered' : 'offline' };
     }
-    if (await kvGet('bootRestored', false)) return { restored: false, reason: 'already' };
-    const res = await pullBackup();
+    const replace = saveMissing || await kvGet('restoreReplace', false);
+    if (!replace && await kvGet('bootRestored', false)) return { restored: false, reason: 'already' };
+    if (replace) await kvSet('restoreReplace', true);
+    const res = await pullBackup({ replace });
+    if (res.restored || res.reason === 'none' || res.reason === 'empty') await kvSet('restoreReplace', false);
     /* DO NOT BURN THE ONE-SHOT ON A FAILURE. This used to set bootRestored
        unconditionally, so a transient 500 or a dropped connection on the very
        first boot permanently forfeited the automatic cloud restore: the flag said
