@@ -24,25 +24,26 @@ await check('bench has all three paths, empty slots, progress and every sink', (
   const grade = h => { assert.equal((h.match(/data-recipe=/g)||[]).length, 3); assert.match(h,/Choose first pet/); assert.match(h,/Choose second pet/); assert.match(h,/data-lab-review disabled/); assert.match(h,/1 of 36 colours/); for (const dest of ['collection','eggs','melt','breed']) assert.match(h,new RegExp(`data-lab-nav="${dest}"`)); assert.match(h,/Melting clears the pile. Breeding builds strength. The Laboratory builds the collection./); assert.match(h,/1,250\/8,000 steps/); };
   rejectsMutation(html, html.replace('data-recipe="toxic-rose"','removed'), grade);
 });
-await check('entry portraits precede odds and ledger, and native choices retain pet identity', () => {
+await check('chooser has six 96px portraits before selection; selected bench leads the path', () => {
   const html = ui.labBenchHtml(state(), [null,null], '');
   const grade = h => {
     assert.equal((h.match(/data-portrait/g) || []).length, 6);
     assert.equal((h.match(/type="radio" name="labSpecies"/g) || []).length, 6);
-    assert.doesNotMatch(h, / checked|Six Rose colours added/);
-    const art = h.indexOf('data-portrait'), odds = h.indexOf('class="lab-odds"');
-    assert.ok(art >= 0 && odds > art && h.indexOf('class="lab-clock"') > art);
-    for (let i = 1; i <= 6; i++) assert.match(h, new RegExp(`C${i}-base.png" width="144"`));
-    assert.match(h, /Base colour: not owned/);
+    assert.doesNotMatch(h, / checked|Base colour:|Not collected/);
+    assert.ok(h.indexOf('data-portrait') < h.indexOf('class="lab-odds"'));
+    for (let i = 1; i <= 6; i++) assert.match(h, new RegExp(`C${i}-base.png" width="96"`));
   };
   rejectsMutation(html, html.replaceAll('data-portrait', 'missing-portrait'), grade);
-  rejectsMutation(html, '<p class="lab-odds">50%</p>' + html, grade);
   const selected = ui.labBenchHtml(state(), [null,null], 'C1');
-  for (const morph of MORPHS) assert.match(selected, new RegExp(`C1-${morph}.png" width="144"`));
-  assert.match(selected, /Colour previews. Choose your own pets below/);
-  assert.match(selected, /✓ Selected/);
-  assert.ok(selected.indexOf('Colour previews') < selected.indexOf('class="lab-odds"'));
-  assert.match(css, /lab-species-choice input:focus-visible[^}]+outline: 2px solid var\(--accent\)/);
+  const selectedGrade = h => {
+    assert.doesNotMatch(h, /class="lab-species"|Colour previews|class="lab-recipe"|lab-colour-dots/);
+    assert.match(h, /Selected species/); assert.match(h, /data-lab-change-species/);
+    assert.match(h, /<h3>Choose your pair<\/h3>/);
+    assert.ok(h.indexOf('data-lab-slot="0"') < h.indexOf('class="lab-path"'));
+    for (const morph of MORPHS) assert.match(h, new RegExp(`C1-${morph}.png" width="96"`));
+  };
+  rejectsMutation(selected, selected + ui.labSpeciesHtml(state(), ''), selectedGrade);
+  rejectsMutation(selected, selected.replace('data-lab-change-species', 'missing-control'), selectedGrade);
 });
 // Polish guards pin source contracts. Layout, glyph ink and motion still need pixels.
 const rule = (text, selector) => {
@@ -50,17 +51,20 @@ const rule = (text, selector) => {
   assert.ok(start >= 0, `CONTROL rule exists: ${selector}`);
   return text.slice(start, text.indexOf('}', start) + 1);
 };
-await check('Base ownership names the colour even when another colour of the species is owned', () => {
-  const grade = h => { assert.match(h, /Base colour: not owned/); assert.match(h, /C1-base.png/); assert.match(h, /1 of 6 colours/); assert.doesNotMatch(h, /Not collected|Base ·/); };
-  const html = ui.labSpeciesHtml(state({ pets: [pet('rose', 'rose')] }), 'C1');
-  rejectsMutation(html, html.replace('Base colour: not owned', 'Base · Not collected'), grade);
-  const owned = ui.labSpeciesHtml(state(), 'C1');
-  rejectsMutation(owned, owned.replace('Base colour: owned', 'Base colour: not owned'), h => assert.match(h, /Base colour: owned/));
-  const empty = ui.labSpeciesHtml(state({ pets: [], species: {} }), '');
-  assert.equal((empty.match(/Base colour: not owned/g) || []).length, 6);
-  assert.doesNotMatch(empty, /Base colour: owned/);
+await check('path ownership has positive markers, honest accessible names and no wall of absence', () => {
+  const html = ui.labRecipesHtml(state({ pets: [pet('rose', 'rose')] }), 'C1');
+  const grade = h => {
+    assert.equal((h.match(/class="lab-specimen"/g) || []).length, 6);
+    assert.equal((h.match(/✓ Have/g) || []).length, 1);
+    assert.match(h, /Base [^"]+: not owned/); assert.match(h, /Rose [^"]+: owned/);
+    assert.match(h, /Unmarked colours are still to collect/);
+    assert.doesNotMatch(h, />Not collected|>Not owned/);
+  };
+  rejectsMutation(html, html.replace('✓ Have', 'Not collected'), grade);
+  const empty = ui.labBenchHtml(state({ pets: [], species: { C1: { count: 0 } } }), [null,null], 'C1');
+  rejectsMutation(empty, empty.replace('Six colours to collect','0 missing'), h => { assert.match(h,/Six colours to collect/); assert.doesNotMatch(h,/✓ Have/); });
   // The coherent engine collection takes precedence over the fallback roster.
-  assert.match(ui.labSpeciesHtml(state({ pets: [], ownedCells: ['C1|base'] }), 'C1'), /Base colour: owned/);
+  assert.match(ui.labRecipesHtml(state({ pets: [], ownedCells: ['C1|base'] }), 'C1'), /Base [^"]+: owned/);
 });
 await check('radio circles are visually hidden while native focus and selected text survive', () => {
   const grade = text => {
@@ -72,16 +76,16 @@ await check('radio circles are visually hidden while native focus and selected t
   };
   rejectsMutation(css, css.replace('clip-path: inset(50%)', 'clip-path: none'), grade);
   rejectsMutation(css, css.replace('clip-path: inset(50%)', 'display: none; clip-path: inset(50%)'), grade);
-  const html = ui.labSpeciesHtml(state(), 'C2');
+  const html = ui.labSpeciesHtml(state(), 'C2', true);
   const radios = html.match(/<input[^>]+>/g);
   assert.equal(radios.length, 6);
   assert.equal(radios.filter(r => / checked/.test(r)).length, 1);
   assert.match(radios[1], /value="C2" checked/);
   assert.ok(radios.every(r => /type="radio" name="labSpecies"/.test(r) && !/tabindex|disabled|aria-hidden/.test(r)));
   assert.equal((html.match(/✓ Selected/g) || []).length, 1);
-  assert.equal((html.match(/Choose species/g) || []).length, 5);
+  assert.equal((html.match(/type="radio"/g) || []).length, 6);
 });
-await check('species tile spacing contracts without shrinking the 144px portraits or text', () => {
+await check('species tile spacing contracts with the approved 96px portraits and readable text', () => {
   const grade = text => {
     const tile = rule(text, '.lab-species-tile');
     assert.match(tile, /gap: 2px/); assert.match(tile, /padding: 4px/);
@@ -92,7 +96,18 @@ await check('species tile spacing contracts without shrinking the 144px portrait
   };
   rejectsMutation(css, css.replace('gap: 2px; height: 100%; min-height: 44px; padding: 4px;', 'gap: 8px; height: 100%; min-height: 44px; padding: 12px;'), grade);
   const html = ui.labSpeciesHtml(state(), '');
-  rejectsMutation(html, html.replaceAll('width="144"', 'width="64"'), h => assert.equal((h.match(/width="144"/g) || []).length, 6));
+  rejectsMutation(html, html.replaceAll('width="96"', 'width="64"'), h => assert.equal((h.match(/width="96"/g) || []).length, 6));
+});
+await check('path art stays in normal flow and phone species choices keep two columns', () => {
+  const grade = text => {
+    assert.match(rule(text, '.lab-tier .lab-art'), /min-height: 96px/);
+    assert.match(rule(text, '.lab-species'), /repeat\(2, minmax\(0, 1fr\)\)/);
+    for (const selector of ['.lab-path', '.lab-tier', '.lab-connection', '.lab-specimen figcaption']) assert.doesNotMatch(rule(text, selector), /max-height|overflow: hidden|position: absolute|filter:/);
+    const phone = text.slice(text.lastIndexOf('@media (max-width: 380px)'));
+    assert.doesNotMatch(phone, /\.lab-species/);
+  };
+  rejectsMutation(css, css.replace('.lab-tier .lab-art { min-height: 96px', '.lab-tier .lab-art { min-height: 48px'), grade);
+  rejectsMutation(css, css.replace('.lab-slots { grid-template-columns: 1fr;', '.lab-slots, .lab-species { grid-template-columns: 1fr;'), grade);
 });
 await check('reveal settles in 240ms at full opacity without rarity effects', () => {
   const grade = text => {
@@ -180,13 +195,70 @@ await check('recipe progression uses engine distributions and preserves certain 
   const grade = h => {
     assert.ok(h.indexOf('data-recipe="base-base"') < h.indexOf('data-recipe="ember-frost"'));
     assert.ok(h.indexOf('data-recipe="ember-frost"') < h.indexOf('data-recipe="toxic-rose"'));
-    for (const text of ['Make Frost. Guaranteed.', '100% Frost', 'Missing colours come first.', 'Need another Base pet.', '75% Toxic', '25% Rose', 'Make Midnight. Guaranteed.', '100% Midnight']) assert.ok(h.includes(text), text);
+    for (const text of ['Make Frost. Guaranteed.', '100% Frost', 'Missing colours come first.', '75% Toxic', '25% Rose', 'Make Midnight. Guaranteed.', '100% Midnight']) assert.ok(h.includes(text), text);
     assert.doesNotMatch(h, /50%|roulette/);
   };
   rejectsMutation(html, html.replace('100% Midnight', '50% Midnight'), grade);
   assert.match(ui.labRecipesHtml(state(), ''), /Example odds. Choose a species to see your chances./);
-  const counts = ui.labRecipesHtml(state(), 'C1');
-  rejectsMutation(counts, counts.replace('Have 2 spare Base pets', 'Have 0 spare Base pets'), h => { assert.match(h, /Have 2 spare Base pets. Need 2 Base pets/); assert.match(h, /Have \? spare Ember pets/); });
+  const counts = ui.labBenchHtml(state(), [null,null], 'C1');
+  rejectsMutation(counts, counts.replace('Base 2. Need 2.', 'Base 0. Need 2.'), h => assert.match(h, /Spare pets: Base 2. Need 2./));
+  const unknown = ui.labBenchHtml(state({ pets: [pet('a','ember')] }), ['a',null], 'C1');
+  rejectsMutation(unknown, unknown.replaceAll('Unknown', '0'), h => assert.match(h, /Spare pets: Ember Unknown. Need 1. Frost Unknown. Need 1./));
+});
+await check('the two repeated sentences occur once in their applicable context', () => {
+  const snapshot = state({ species: { C1: { count: 1, recipes: {
+    'base-base': { distribution: [{ morph: 'frost', weight: 1 }], protection: 'collection' },
+    'ember-frost': { distribution: [{ morph: 'toxic', weight: 1 }, { morph: 'rose', weight: 1 }], protection: 'collection' }
+  } } } });
+  const html = ui.labBenchHtml(snapshot, [null,null], 'C1');
+  for (const sentence of ['Two pets in. One new pet out.', 'Missing colours come first.']) {
+    const grade = h => assert.equal(h.split(sentence).length - 1, 1);
+    rejectsMutation(html, html + sentence, grade);
+    rejectsMutation(html, html.replace(sentence, ''), grade);
+  }
+  assert.equal((html.match(/aria-describedby="labCollectionProtection"/g) || []).length, 2);
+  assert.doesNotMatch(html.slice(html.indexOf('data-recipe="toxic-rose"'), html.indexOf('<details id="labHelp"')), /Missing colours|labCollectionProtection/);
+  assert.doesNotMatch(ui.labRecipesHtml(state(), 'C1'), /Missing colours come first/);
+});
+await check('species change expands native choices and clears the exact pets and quote on selection', () => {
+  const handler = source.match(/radio.addEventListener\('change', e => \{ ([^\n]+?) \}\)\);/)[1];
+  const run = text => {
+    const ctx = vm.createContext({ e: { target: { value: 'C2' } }, species: 'C1', choosingSpecies: true, selected: ['a','b'], quote: { opId: 'old' }, body: {}, paint() {}, $: () => ({ focus() {} }) });
+    vm.runInContext(text, ctx);
+    return ctx;
+  };
+  const grade = text => { const ctx = run(text); assert.equal(ctx.species,'C2'); assert.equal(ctx.choosingSpecies,false); assert.deepEqual(Array.from(ctx.selected),[null,null]); assert.equal(ctx.quote,null); };
+  rejectsMutation(handler, handler.replace('selected = [null, null];', ''), grade);
+  rejectsMutation(handler, handler.replace('quote = null;', ''), grade);
+  rejectsMutation(handler, handler.replace('choosingSpecies = false;', ''), grade);
+  const cancel = source.match(/data-lab-keep-species.*?click', \(\) => \{ (.+?) \}\);/)[1];
+  rejectsMutation(cancel, cancel.replace('choosingSpecies = false;', ''), text => {
+    const ctx = run(text); assert.equal(ctx.choosingSpecies,false); assert.equal(ctx.species,'C1');
+    assert.deepEqual(Array.from(ctx.selected),['a','b']); assert.equal(ctx.quote.opId,'old');
+  });
+  const expand = source.match(/choosingSpecies = true; paint\(\);[^\n]+?focus\(\);/)[0];
+  const ctx = vm.createContext({ choosingSpecies: false, body: {}, paint() {}, $: () => ({ focus() {} }) });
+  vm.runInContext(expand, ctx);
+  const html = ui.labSpeciesHtml(state(), 'C1', ctx.choosingSpecies);
+  rejectsMutation(html, ui.labSpeciesHtml(state(), 'C1'), h => assert.equal((h.match(/type="radio"/g) || []).length,6));
+});
+await check('compact supporting disclosures preserve help, recovery and the full bench quote', () => {
+  const s = state({ unseen: [quote()], ui: { introRead: true } });
+  const html = ui.labBenchHtml(s, [null,null], 'C1', quote());
+  const grade = h => {
+    assert.ok(h.indexOf('data-lab-recover') < h.indexOf('class="lab-working"'));
+    assert.ok(h.includes(ui.labBranchesHtml(quote())));
+    for (const text of ['Both inputs are permanently consumed.', 'Every experiment removes two pets to make one.', 'Both pets are consumed.', 'Spending last copies can leave cells empty.', 'Trained pets are allowed, but all their investment is lost.', '0/1 experiments used', '00:00, America/Vancouver', 'More pet actions']) assert.ok(h.includes(text), text);
+    assert.match(h, /<details id="labHelp" >/);
+  };
+  rejectsMutation(html, html.replace(ui.labBranchesHtml(quote()), ''), grade);
+  rejectsMutation(html, html.replaceAll('Both pets are consumed.', ''), grade);
+  assert.match(ui.labBenchHtml(state(),[null,null],'C1'), /<details id="labHelp" open>/);
+  const exhausted = ui.labBenchHtml(state({ remaining: 0, used: 1, pets: [], hasEligiblePair: false }),[null,null],'C1');
+  const visible = exhausted.replace(/<details[^>]*>[\s\S]*?<\/details>/g,'');
+  rejectsMutation(visible, visible.replace('00:00, America/Vancouver', ''), h => assert.match(h, /Experiments reset at 00:00, America\/Vancouver/));
+  const picker = source.slice(source.indexOf('  function picker(slot)'), source.indexOf('  async function updatePreview()'));
+  rejectsMutation(picker, picker.replace('<div id="labPickRows"></div>', ''), h => { assert.ok(h.indexOf('Both inputs will be destroyed.') < h.indexOf('id="labPickRows"')); assert.ok(h.indexOf('id="labPickRows"') < h.indexOf('${labSinksHtml()}')); });
 });
 await check('all 36 preview files use the shipped morph resolver and suppress shiny and wear', () => {
   const helper = source.slice(source.indexOf('function petPortraitHtml('), source.indexOf('async function refreshShinyPets'));
@@ -226,6 +298,12 @@ await check('confirmation names every investment and exact pair-wide cell loss',
   const grade = h => { for (const text of ['&lt;Bite&gt;','level 10, 82,001 banked training steps','level 1, 731 banked training steps','lineage 4 and bond 3/5','Fang','Non-shiny','equipped pet','Type ANIMATE','Toxic','Rose','Midnight','Collection after: 1/36','20 Bone Dust','Animate pays no dust','Both pets are permanently consumed.','will be destroyed:','The name &lt;Bite&gt; is removed with this pet.','This cannot be undone. Type ANIMATE to destroy both pets and create one new pet.']) assert.ok(h.includes(text),text); assert.doesNotMatch(h,/<Bite>/); };
   rejectsMutation(html,html.replace('82,001','82,000').replace('82,001','82,000'),grade);
   rejectsMutation(html,html.replaceAll('will be destroyed:', 'will be changed:'),grade);
+  const exactLoss = h => {
+    assert.match(h, /cells become empty: Toxic [^,]+, Rose [^.]+\. New cells: Midnight [^.]+\./);
+    for (const cell of q.branches[0].counts) assert.ok(h.includes(`${ui.labCell(cell.cell)}: ${cell.before} to ${cell.after} pets`));
+  };
+  rejectsMutation(html, html.replace('cells become empty: Toxic', 'cells become empty: Ember'), exactLoss);
+  rejectsMutation(html, html.replace('1 to 0 pets', '1 to 1 pets'), exactLoss);
   assert.equal(ui.labNeedsTyped(q),true);
   assert.equal(ui.labNeedsTyped(quote({ branches: [{ morph: 'midnight', lost: [], gained: [], afterCount: 3 }] })),false);
   for (const extra of [{ bankedSteps: 1 },{ level: 2 },{ nickname: 'N' },{ lineage: 1 },{ bond: 1 },{ talents: ['Fang'] },{ equipped: true }]) assert.equal(ui.labNeedsTyped(quote({ inputs: [pet('a','toxic',extra),pet('b','rose')],branches: [{ lost: [] }] })),true);
