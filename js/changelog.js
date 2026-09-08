@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 522, date: '2026-09-08', title: 'The line above the tab bar is gone', items: [
+    'A strip of your bonehead\'s backdrop colour was showing along the bottom of Today, between the page and the tab bar. It reads as part of the bar again.',
+  ] },
+
   { n: 521, date: '2026-09-08', title: 'The wheel settles instead of bouncing', items: [
     'The prize card at the end of a wheel spin used to overshoot and snap back. It now settles the same way the wheel itself does.',
   ] },

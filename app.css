@@ -20,6 +20,7 @@
 /* Tally design system: dark, quiet, fast. */
 :root {
   --bg: #0d0c12;
+  --dock-rgb: 15, 14, 20;
   --surface: #16151d;
   --surface-2: #1e1c26;
   --surface-3: #2a2734;
@@ -158,11 +159,11 @@ svg { display: block; }
      measured on the News rows announcing the Locker Room, 58 x 7.9px, at both
      widths: a tap there opens the food sheet rather than the row.
      A BORDER, NOT PADDING OR A MARGIN. A scroller clips its content to the
-     PADDING box, so a transparent bottom border is a band content can never
-     enter, while the element's own background still paints under it (default
-     background-clip: border-box) -- which is what keeps .screen--today's
-     --hero-edge colour running all the way down to the bar, the exact thing
-     Tom flagged when the backdrop stopped short. 13px covers the 12.1px the
+     PADDING box, so a bottom border is a band content can never enter.
+     Today paints this band with the dock's opaque base colour below: leaving
+     it transparent exposed --hero-edge as a full-width stripe on v521.
+     The scroller's background colour still fills the TOP rubber band.
+     13px covers the 12.1px the
      FAB and its ring reach; re-measure if .fab's size or margin move. */
   border-bottom: 13px solid transparent;
 }
@@ -231,7 +232,16 @@ svg { display: block; }
    if you scroll beyond it just shows the same colour. no seam, no wordmark."
    The overscroll wordmark used to print into this strip and was removed in the
    same change; the strip itself is the whole feature now. */
-.screen--today { position: relative; isolation: isolate; background-color: var(--hero-edge, var(--bg)); }
+.screen--today {
+  position: relative; isolation: isolate; background-color: var(--hero-edge, var(--bg));
+  /* v521 dock sliver: retain R40-22's content exclusion, but cover the hero-edge
+     paint under the border with the dock's base colour. Opaque on purpose:
+     the dock's .84 alpha here would still blend with the equipped backdrop.
+     No clipping or background image changes: the solid scroller colour remains
+     available to WebKit's top bounce (Tom, 2026-08-24). Native pixel proof is
+     required separately; see tests/manual/today-dock-pixels.md. */
+  border-bottom-color: rgb(var(--dock-rgb));
+}
 .today-plate {
   /* ZERO HEIGHT, AND THE PAINT IS IN THE PSEUDOS. The first version was 100vh
      tall with margin-bottom: -100vh to cancel itself. Margins do not cancel, they
@@ -417,7 +427,7 @@ svg { display: block; }
   flex: none; width: 100%; position: relative;
   display: flex; align-items: center; justify-content: space-around;
   padding: 8px 10px calc(var(--sab) + 8px);
-  background: rgba(15, 14, 20, 0.84);
+  background: rgba(var(--dock-rgb), 0.84);
   -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px);
   border-top: 1px solid var(--line);
   z-index: 40;
