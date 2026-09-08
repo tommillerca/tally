@@ -471,7 +471,7 @@ export function applyPetAction(fight, actionId) {
     } else if (fx.kind === 'petdebuff') {
       if (foe.hp > 0) {
         if (!foe.weaken || foe.weaken.pct < fx.weakenPct) foe.weaken = { pct: fx.weakenPct, turns: fx.turns };
-        if (fx.blind) foe.blind = { pct: 0.30, turns: 2 };
+        if (fx.blind) foe.blind = { pct: 0.20, turns: 2 };
         if (fx.staminaDrain) foe.wind = Math.max(0, foe.wind - fx.staminaDrain);
         if (fx.mark) foe.marked = { turns: 3 };
         if (fx.stagger) foe.stagger = true;
@@ -660,12 +660,12 @@ export function makeFighter({ name, stats, style = 'plain', outfit = null, talen
 export function makePetBody(petDescriptor, owner) {
   const L = petDescriptor.level || 1;
   // Intrinsic stat line comes from pets.js (rarity + per-pet tilt + shiny). Fall
-  // back to the pre-v124 generic line for any descriptor built without it.
-  const bs = petDescriptor.stats || { power: 10 + L * 4, marrow: 20, wind: 30, reflex: 25 + L * 5, hype: 0, hp: 40 + L * 8 };
+  // back to the same tuned common line for any descriptor built without it.
+  const bs = petDescriptor.stats || { power: 10 + L * 4, marrow: 20, wind: 30, reflex: 25 + L * 5, hype: 0, hp: 47 + L };
   const petStats = { power: bs.power, marrow: bs.marrow, wind: bs.wind, reflex: bs.reflex, hype: 0 };
   const body = makeFighter({ name: petDescriptor.name, stats: petStats });
   const hpBoost = 1 + (owner.foodPetHpPct || 0); // Bonemeal Kibble
-  const petHp = bs.hp != null ? bs.hp : 40 + L * 8;
+  const petHp = bs.hp != null ? bs.hp : 47 + L;
   const maxHp = Math.round((petHp + Math.round((owner.stats.marrow || 40) * 0.25)) * hpBoost);
   body.d = { ...body.d, maxHp };
   body.hp = maxHp;
@@ -777,7 +777,7 @@ export function dealDamage(fight, victimWho, amount, events) {
   if (amount >= v.hp && v.pet && v.pet.lastStandArmed && !v.pet.lastStandUsed) {
     v.pet.lastStandUsed = true; v.pet.lastStandArmed = false;
     // a real last stand: survive the killing blow at a sliver (C2 Eternal Guard mends big)
-    v.hp = Math.max(1, Math.round(v.d.maxHp * (v.pet.lastStandHealFrac || 0.15)));
+    v.hp = Math.max(1, Math.round(v.d.maxHp * (v.pet.lastStandHealFrac || 0.05)));
     events.push({ t: 'petshield', who: victimWho, shield: 0, laststand: true, name: v.pet.name });
     return;
   }

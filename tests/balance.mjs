@@ -16,10 +16,10 @@
  *
  * Usage: node tests/balance.mjs
  */
-import { measure, BUILDS, STACKS, PET_BUILDS, FOES, HIGH_LINEAGE, winInterval, medianInterval, createSimFight } from './fight-sim.mjs';
+import { measure, BUILDS, STACKS, PET_BUILDS, FOES, HIGH_LINEAGE, winInterval, medianInterval, createSimFight, measurePet, petPicks, petEnvelope } from './fight-sim.mjs';
 import { BUILD_MULT_CAP, CATALYST_CAP, makeFighter, createFight, smartPlayerTurn,
   petActionsFor, applyPetAction, endTurn, actionsFor, applyAction, ACTIONS, expectedDamage, scaleStats } from '../js/pit.js';
-import { buildBattlePet, PET_ASSIGN, PET_TREES, PET_STATS, petBattleStats } from '../js/pets.js';
+import { buildBattlePet, PET_ASSIGN, PET_TREES, PET_STATS, petBattleStats, PET_ACTIONS, petAbilityEffect, PET_LEVEL_STEPS, PET_MAX_LEVEL } from '../js/pets.js';
 import { runFight as auditFight, POLICIES } from './balance-audit.js';
 import { isDeepStrictEqual } from 'node:util';
 
@@ -74,7 +74,7 @@ for (const id of Object.keys(PET_ASSIGN)) {
     if (!actual.over) endTurn(actual);
     if (!reference.over) endTurn(reference);
   }
-  ok(`PET-PHASE ${id} body then exactly one pet action then endTurn`, same && isDeepStrictEqual(cds, [2, 1, 2, 1]), `cooldowns=${cds}`);
+  ok(`PET-PHASE ${id} body then exactly one pet action then endTurn`, same && isDeepStrictEqual(cds, PET_ACTIONS[PET_ASSIGN[id]][0].cd === 2 ? [2, 1, 2, 1] : [4, 3, 2, 1]), `cooldowns=${cds}`);
 }
 for (const state of ['fainted', 'dead', 'over', 'foe', 'body-kill', 'pet-kill']) {
   const actual = petFixture('C4', { state }), reference = petFixture('C4', { state });
@@ -118,11 +118,11 @@ for (const id of Object.keys(PET_ASSIGN)) {
     && [1, 6, 10].every(level => rows.some(b => b.pet.level === level && b.pet.picks.size === 0))
     && rows.every(b => b.pet.signatureActive === (b.pet.level === 10)));
   const high = rows.find(b => b.pet.shiny && b.pet.lineage === HIGH_LINEAGE);
-  const m = PET_STATS[id].mult * 1.08 * (1 + 0.05 * HIGH_LINEAGE);
+  const m = Math.min(1.5, PET_STATS[id].mult * 1.08 * (1 + 0.05 * HIGH_LINEAGE));
   ok(`PET-STACK ${id} high lineage reaches the intrinsic HP at end of construction`, !!high
     && makeFighter({ stats: BUILDS[0].stats, pet: high.pet }).pet.stats.hp
-      === Math.round(120 * m * (PET_STATS[id].tilt.marrow || 1))
-    && petBattleStats(id, 10, true, HIGH_LINEAGE + 1).hp > high.pet.stats.hp, `${m.toFixed(4)}x, still grows above HIGH`);
+      === Math.round(57 * m * (PET_STATS[id].tilt.marrow || 1))
+    && petBattleStats(id, 10, true, HIGH_LINEAGE + 1).hp === high.pet.stats.hp, `${m.toFixed(4)}x, bounded above HIGH`);
 }
 ok('PET-STATS confidence retains uncertainty at extremes and sparse wins',
   winInterval(0, 200)[1] > 0 && winInterval(200, 200)[0] < 1
@@ -137,6 +137,103 @@ for (const foeCfg of FOES) {
     && isDeepStrictEqual(fight.f.talents, expected.talents) && fight.aiLevel === foeCfg.aiLevel,
     `mult=${foeCfg.mult}, AI=${fight.aiLevel}, style=${fight.f.style.id}, talents=${fight.f.talents.size}`);
 }
+
+/* WAVE 2026-09-07. New guards in the already registered FULL-tier audit.
+   Red control: original pets.js/pit.js on a throwaway copy of this checkout.
+   These assert resolved combat state as well as the stat boundary. */
+for (const id of Object.keys(PET_ASSIGN)) {
+  const high = buildBattlePet(id, 10, petPicks(id, 10), { shiny: true, lineage: 1000000 });
+  const low = petBattleStats(id, 1);
+  const tilt = PET_STATS[id].tilt;
+  ok(`WAVE-STAT-CAP ${id} finite power budget keeps the earned lineage`,
+    high.stats.hp <= Math.round(57 * 1.5 * (tilt.marrow || 1))
+    && high.stats.power <= Math.round(50 * 1.5 * (tilt.power || 1))
+    && high.lineage === 1000000 && high.stats.lineage === 1000000,
+    `HP=${high.stats.hp}, lineage=${high.lineage}`);
+  ok(`WAVE-HP ${id} hatch HP is preserved, level growth is bounded`,
+    low.hp === Math.round(48 * PET_STATS[id].mult * (tilt.marrow || 1))
+    && petBattleStats(id, 10).hp === Math.round(57 * PET_STATS[id].mult * (tilt.marrow || 1)));
+}
+for (const mode of ['missing stats', 'missing HP']) {
+  const descriptor = buildBattlePet('C3', 10);
+  if (mode === 'missing stats') delete descriptor.stats;
+  else delete descriptor.stats.hp;
+  const fight = createFight({ player: makeFighter({ stats: BUILDS[0].stats, pet: descriptor }),
+    foe: makeFighter({ stats: BUILDS[0].stats }) });
+  ok(`WAVE-HP-FALLBACK ${mode} reaches the same bounded body HP`, fight.pAux.d.maxHp === 71,
+    `body HP=${fight.pAux.d.maxHp}`);
+}
+ok('WAVE-EARNED level 10 and Signature still unlock at 82000 steps',
+  PET_MAX_LEVEL === 10 && PET_LEVEL_STEPS[9] === 82000
+  && Object.keys(PET_ASSIGN).every(id => buildBattlePet(id, 10).signatureActive));
+{
+  const self = { d: { powerMult: 1, maxHp: 100 } }, foe = { hp: 100, d: { maxHp: 100 } };
+  const effect = (id, picks) => petAbilityEffect(buildBattlePet(id, 10, picks), self, foe);
+  const poison = effect('C3', ['h-venom', 'h-rupture']);
+  ok('WAVE-POISON stacked poison and Signature share an additive budget', poison.poison.per === 7 && poison.poison.stacks === 3,
+    `per=${poison.poison.per}, stacks=${poison.poison.stacks}`);
+  const shield = effect('C5', ['w-bulwark', 'w-fortify']);
+  ok('WAVE-SHIELD shield talents and Signature share an additive budget', shield.shield === 55, `shield=${shield.shield}`);
+  const imp = effect('C1', ['i-doublehex', 'i-deephex', 'i-oblivion']);
+  ok('WAVE-CURSE-GAP maximum duration leaves an unweakened enemy turn', imp.turns === 4, `duration=${imp.turns}`);
+  ok('WAVE-CURSE bounded weaken and burning Signature', Math.abs(imp.weakenPct - 0.216) < 1e-10 && imp.burn.per === 8,
+    `weaken=${imp.weakenPct.toFixed(3)}, burn=${imp.burn.per}`);
+  const bite = effect('C4', []);
+  ok('WAVE-AMBUSH guaranteed crit keeps a smaller Signature multiplier', bite.critAlways && bite.damage === 11, `damage=${bite.damage}`);
+}
+for (const id of ['C1', 'C2']) {
+  const fight = petFixture(id, { picks: id === 'C1' ? ['i-jinx'] : [] });
+  applyPetAction(fight, id === 'C1' ? 'hex' : 'shield');
+  ok(`WAVE-RECOVERY ${id} special resolves with four-turn recovery`, fight.p.pet.specialCd === 4,
+    `cooldown=${fight.p.pet.specialCd}`);
+  if (id === 'C1') ok('WAVE-BLIND resolved curse misses at 20 percent', fight.f.blind.pct === 0.2,
+    `blind=${fight.f.blind.pct}`);
+  else ok('WAVE-ETERNAL resolved save arms a 20 percent heal', fight.p.pet.lastStandHealFrac === 0.2,
+    `save=${fight.p.pet.lastStandHealFrac}`);
+}
+{
+  const fight = petFixture('C1', { picks: ['i-doublehex', 'i-oblivion'] });
+  applyPetAction(fight, 'hex');
+  const weakened = [];
+  for (let round = 0; round < 4; round++) {
+    endTurn(fight); weakened.push(!!fight.f.weaken); endTurn(fight);
+  }
+  ok('WAVE-CURSE-WINDOW real enemy phase has a gap before recast',
+    isDeepStrictEqual(weakened, [true, true, true, false]), `weakened=${weakened}`);
+}
+// Real lethal hits test the shared damage path, not merely the effect intent.
+for (const [id, expected] of [['C5', 0.05], ['C2', 0.2]]) {
+  const fight = petFixture(id, { picks: ['w-laststand'] });
+  applyPetAction(fight, 'shield');
+  fight.p.ward = 0; fight.p.hp = 1; fight.pTarget = 'f';
+  endTurn(fight); fight.ap = 2; fight.f.wind = fight.f.d.maxWind; fight.rng = () => 0.5;
+  applyAction(fight, 'haymaker');
+  ok(`WAVE-SAVE ${id} lethal hit consumes one save at the tuned HP`,
+    fight.p.pet.lastStandUsed && fight.p.hp === Math.round(fight.p.d.maxHp * expected), `HP=${fight.p.hp}`);
+}
+const appSource = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+ok('WAVE-ENCOUNTER daily Glutton config matches the real caller',
+  appSource.includes('const GLUTTON_FOE_MULT = 1.3;')
+  && appSource.includes('const GLUTTON_FOE_AI_LEVEL = 3;')
+  && appSource.includes("const GLUTTON_FOE_TALENTS = ['heavyhands', 'marrowlust', 'bonebreaker'];"));
+
+// Fixed 200-seed outcome ceilings. Maxed pets help unlock a rung, but cannot
+// erase it. The level-6 ceiling reserves a reason to finish the walking curve.
+const waveEnvelope = petEnvelope({ seeds: 200 });
+for (const row of waveEnvelope) {
+  const ceilings = row.level === 6 ? [0.75, 0.40, 0.35, 0.10, 0.15] : [0.90, 0.75, 0.70, 0.45, 0.55];
+  ok(`WAVE-OUTCOME ${row.id} L${row.level} every mixed legal path stays below rung ceilings`,
+    row.samples > 0 && row.best.every((r, i) => r.winRate <= ceilings[i]),
+    row.best.map((r, i) => `${FOES[i].key}=${(100 * r.winRate).toFixed(1)}<=${Math.round(100 * ceilings[i])}`).join(', '));
+  if (row.level === 10) {
+    const floors = [0.25, 0.15, 0.10, 0.02, 0.10];
+    ok(`WAVE-REWARD ${row.id} retains useful builds on every rung`,
+      row.best.every((r, i) => r.winRate >= floors[i]),
+      row.best.map(r => (100 * r.winRate).toFixed(1)).join('/'));
+  }
+}
+ok('WAVE-COVERAGE nonempty sweep includes all seven species and both levels',
+  waveEnvelope.length === 14 && waveEnvelope.reduce((n, r) => n + r.samples, 0) === 560000);
 
 /* The band. A build may be meaningfully better than no talents at all (that is
    the entire point of talents) but not so far ahead that the rest of the game
