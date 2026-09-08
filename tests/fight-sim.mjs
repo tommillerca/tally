@@ -100,14 +100,16 @@ export function medianInterval(values) {
   }
   return k === 0 ? [-Infinity, Infinity] : [sorted[k - 1], sorted[n - k]];
 }
-export function measurePet(build, { foeCfg, seeds = SEEDS } = {}) {
+export function measurePet(build, { foeCfg, seeds = SEEDS, seedStart = 1 } = {}) {
   if (!Number.isInteger(seeds) || seeds < 1) throw new Error('seeds must be a positive integer');
+  if (!Number.isSafeInteger(seedStart) || seedStart < 1
+    || !Number.isSafeInteger((seedStart + seeds - 1) * 7919)) throw new Error('seedStart must define a positive safe integer seed range');
   let wins = 0, draws = 0; const turns = [];
   const family = build.pet?.family, actions = PET_ACTIONS[family];
   // Diagnostic ablation only: same real body and AI targeting, no pet action.
   if (build.noPetActions && family) PET_ACTIONS[family] = [];
   try {
-    for (let s = 1; s <= seeds; s++) {
+    for (let s = seedStart; s < seedStart + seeds; s++) {
       const r = runFight({ ...build, foeCfg, seed: s * 7919 });
       if (r.winner === 'p') { wins++; turns.push(r.turns); }
       if (r.winner === 'draw') draws++;
@@ -301,16 +303,16 @@ export function petStressBuilds() {
       food: kind.includes('Skewer') ? { petFree: true } : null };
   }));
 }
-export function petStressCells({ seeds = SEEDS } = {}) {
+export function petStressCells({ seeds = SEEDS, seedStart = 1 } = {}) {
   return petStressBuilds().flatMap(build => FOES.map(foeCfg => ({
     key: `${build.name}/${foeCfg.key}`, id: build.id, kind: build.kind, foe: foeCfg.key, seeds,
-    ...measurePet(build, { foeCfg, seeds }),
-    control: measurePet({ ...build, pet: null }, { foeCfg, seeds }),
+    ...measurePet(build, { foeCfg, seeds, seedStart }),
+    control: measurePet({ ...build, pet: null }, { foeCfg, seeds, seedStart }),
   })));
 }
 function printPetStress() {
   console.log('PET STRESS: win% [95% Wilson interval], paired no-pet win%, seeds');
-  for (const cell of petStressCells()) console.log(JSON.stringify(cell));
+  for (const cell of petStressCells({ seedStart: arg('--seed-start', 1) })) console.log(JSON.stringify(cell));
 }
 
 // Historical T1 report retained for provenance. --report reads the current T2 handoff.

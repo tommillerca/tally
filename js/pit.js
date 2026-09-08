@@ -1,4 +1,4 @@
-import { petAbilityEffect, petActionMeta } from './pets.js';
+import { petAbilityEffect, petActionMeta, petTargetChance } from './pets.js';
 import { bossLook, ladderLook } from './bosses.js';
 
 // The Pit: turn-based combat engine. Pure module (no DOM, injected RNG),
@@ -1353,12 +1353,11 @@ function actForEnemy(fight, who, events) {
   const f = fighterOf(fight, who), p = fight.p;
   f._sweptThisTurn = false;
   const petUp = () => fight.pAux && !fight.pAux.fainted && fight.pAux.hp > 0 && p.pet;
-  // T2 stress tuning: pressure the living pet to limit sustained free actions.
-  // Target it half the time, more often when low, to strip its aura.
+  // Increase pet pressure only as its owner pulls ahead in remaining health.
   fight.fTarget = 'p';
   if (petUp()) {
     const petLow = fight.pAux.hp <= fight.pAux.d.maxHp * 0.4;
-    if (fight.rng() < (petLow ? 0.65 : 0.50)) fight.fTarget = 'pa';
+    if (fight.rng() < petTargetChance(p, f, petLow)) fight.fTarget = 'pa';
   }
   let guard = 0;
   while (!fight.over && fight.active === who && fight.ap > 0 && guard++ < 6) {

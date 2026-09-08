@@ -1,110 +1,141 @@
-# T2 balance advisory, 2026-09-08
+# T2 round 2 advisory, 2026-09-08
 
-The fixed stress-board maximum fell from 99.5% to 89.0%. All 105 cells meet the 90% observed ceiling. A separate 400-seed held-out sample peaks at 89.75%, with no cell above 90%. This is advisory evidence for independent review, not release certification.
+**The tuning board meets both bands. Held-out validation fails the peak band.** The final tuning distribution is 3.5% minimum, 47.5% median, 88.5% peak. Fresh held-out seeds give 4.75% minimum, 47.0% median, 93.5% peak. All matched no-pet controls are unchanged. This candidate is ready for independent review, but it does not establish the requested peak on unseen seeds.
 
-## Provenance and scope
+## Provenance and method
 
-Verified the supplied plan file against SHA256 `7fcef9d2f24ae1525284bfa70a901f71c67686caf8fdac67e1b64ab1c1555dab` before editing. All source edits resolve inside this checkout. Historical production for controls was read from this checkout's Git objects or saved before editing and placed in `/private/tmp/t2-proof`. No original checkout named in historical material was edited.
+Verified the supplied plan SHA256 `cbe3519a4fbaac733c314e0798931a8cfcbf4b76167f9e41752c53a5ea8eebce`. Every edited path resolves inside this checkout. The incoming checkout was clean at `8dce49f9`. No original checkout was edited.
 
-The historical findings in the work order are accepted, not re-derived. The before arm here is this checkout's incoming T1 production, including Skewer recovery and the existing 1.5x intrinsic stat cap.
+“Before” retains the original pre-round-1 measurements from the incoming JSON, with a 61.0% median and 99.5% peak. “Round 1” is the incoming flat-multiplier production, with a 27.0% median and 89.0% peak. Those historical arms are retained evidence, not claimed as newly rerun full boards. “After” is final production on seeds s=1..200. “Held-out” is final production on fresh s=601..1000. Every seed is s*7919. Each of the 105 cells retains a no-pet control, wins, draws, 95% Wilson intervals and winning-turn intervals in [the measurement artifact](t2-balance-measurements.json).
 
-## Target and method
+The same seven species, three builds, five real encounter configurations, owner stats 55, level 10, shiny and lineage 20 remain in use. C1 retains Jinx/Double Hex/Mark/Deep Hex/Havoc; other species retain the first legal path. Each cell has equal weight. The median is the middle of 105 cell rates, not the pooled fight rate.
 
-Target: observed win rate between 0% and 90% in every fixed stress cell, plus at least a 5 percentage point advantage over a matched no-pet control for each daily-Glutton species/build cell. The upper bound reserves meaningful losses; the advantage floor prevents simply making pets useless. Hard rungs may legitimately approach zero. Existing ordinary-pet outcome ceilings and reward floors remain unchanged and pass.
+The first candidate was frozen before checking s=201..600: tuning 47.5% median/90.0% peak, validation 48.25% median/93.25% peak. That failed validation is preserved separately and informed the opening-bite diagnostic. It is not reused as final held-out evidence. After selecting the final soft-cap candidate using the original tuning seeds, s=601..1000 was checked once. No production parameters changed after that check.
 
-Both full pet boards ran through `tests/fight-sim.mjs --pets-only --seeds 200`. Each includes 78 representative rows, 75 decomposition rows, the 560,000-fight mixed-path envelope and 105 stress cells with paired no-pet controls. Stress cells use all seven species, level 10, shiny, lineage 20, with Skewer, Crow Lord, or both. C1 uses Jinx/Double Hex/Mark/Deep Hex/Havoc; the others use the first legal path. Owner stats are 55, and all five opponents use the existing real encounter configurations. The ordinary envelope covers every legal mixed path at levels 6 and 10, ordinary and shiny/lineage20.
+## Selected shape and measured tradeoff
 
-Tuning uses seed s*7919, s=1..200. The held-out check uses 400 unseen seeds, s=201..600, through the same exported `runFight`. Wilson intervals, winning-turn medians and paired controls are retained in [the measurement artifact](t2-balance-measurements.json). These are finite samples and fixed builds, not a guarantee about all builds or population probabilities. The held-out peak's 95% Wilson interval is 86.4% to 92.4%.
+Let L = max(0, owner remaining-health fraction - foe remaining-health fraction - 0.15). Pet special damage, poison and burn use multiplier 1/(1+64L), rounded once after scaling. Damage is unchanged when behind or within the 15 percentage point lead allowance. A 25-point lead gives a factor about 0.135; a 50-point lead gives about 0.043. At large leads small special intents can round to zero. Existing poison/burn durations and stacks, crit resolution, basic attacks, support effects and cooldown rules remain intact. Missing HP in legacy pure-effect callers means no measured lead, so the multiplier is 1.
 
-## Measured diagnosis and tuning
+Before applying that factor, a bite up to 16 damage is unchanged. Above 16, use 16 + 8*(damage-16)/(8+damage-16), approaching 24 before engine crits. This limits large opening bites before a lead exists. It is not an absolute cap on total crit, multi-bite or poison damage.
 
-At C4/Crow Lord/Skewer, disabling pet actions while preserving the body and aura changes 99.5% to 46.5% on the daily Glutton. A fragile-body diagnostic (intrinsic HP and reflex zero, owner HP contribution still present) changes it to 84.5%. Ordinary intrinsic stats give 96.0%; removing the pet entirely gives 11.0%. At C1 with the same combination, the corresponding figures are 96.0%, 50.0%, 58.5%, 94.0% and 11.0%. Sustained pet actions dominate the measured edge, and body survival enables them. These ablations change interactions and RNG consumption, so they are not additive causal shares.
+Enemy targeting uses the same L: base + (0.8-base)*min(1,3L), where base is 18% for a healthy pet and 45% below or at 40% pet health. This restores pre-round-1 pressure while behind and increases it toward 80% as the owner pulls ahead. It is evaluated only with a living pet and does not consume any extra RNG draws. No encounter IDs, species-specific win odds or random win/loss overrides are used.
 
-Trials, each re-measured over the same 105 stress cells:
+**Scope extension reported during implementation:** damage-only restoration with round-1 targeting measured a 41.5% median and 98.0% peak. It offered no observed room to reach the median band using damage reductions. The candidate therefore shapes the existing round-1 targeting intervention as well as damage. This extends the requested replacement of the flat multiplier; it is explicitly proposed for review. No claim is made that every possible damage-only design is mathematically impossible.
 
-| Trial | Damage factor | Enemy pet-target chance, healthy/low | Maximum win% |
-|---|---:|---:|---:|
-| Incoming | 1 | 18% / 45% | 99.5 |
-| Less pet pressure | 1 | 8% / 25% | 100.0 |
-| More pet pressure | 1 | 35% / 65% | 99.0 |
-| High pet pressure | 1 | 65% / 75% | 97.0 |
-| Damage alone | 0.5 | 18% / 45% | 96.0 |
-| Combined first trial | 0.5 | 35% / 65% | 91.0 |
-| Final | 0.5 | 50% / 65% | 89.0 |
+## Full distributions
 
-Final production halves the rounded special bite damage, poison tick and imp Signature burn intents. Crits, stacks, durations, recovery, support effects and basics retain their existing rules. Enemy turns target a living pet at 50%, or 65% below 40% HP, limiting prolonged free actions and aura uptime. The intrinsic stat cap stays 1.5x because changing intrinsic stats alone did not address the action contribution. There is no random win/loss override.
+All entries are minimum / median / peak win%, with complete per-cell vectors below.
 
-## Stress distributions
+| Group | Before | Round 1 | After | Held-out |
+|---|---|---|---|---|
+| all | 8.5/61/99.5 | 2/27/89 | 3.5/47.5/88.5 | 4.75/47/93.5 |
+| dailyGlutton | 82.5/93.5/99.5 | 47.5/75/89 | 55/84.5/88.5 | 49.5/84.5/93.5 |
+| champion | 34.5/62.5/83.5 | 15.5/31.5/47 | 24.5/52/67 | 21.25/53.25/69.25 |
+| endless1 | 32.5/58.5/87 | 11.5/25.5/50.5 | 18.5/43.5/61.5 | 16.25/46/59.5 |
+| glutton10 | 8.5/30/69.5 | 2/9/27 | 3.5/24/48.5 | 4.75/26/43.25 |
+| wanderer13 | 14.5/51.5/85 | 5/25/52 | 10.5/43/64.5 | 11.25/39/64 |
+| C1 | 21.5/61/96 | 8.5/40.5/89 | 17/49.5/87 | 15.75/51.5/93.5 |
+| C2 | 9/44/85.5 | 2/22.5/62 | 7/41/76 | 4.75/35.25/75 |
+| C3 | 11/54/98 | 3/20.5/78.5 | 4.5/45/87.5 | 4.75/43.5/86.25 |
+| C4 | 43.5/70/99.5 | 6.5/27.5/88.5 | 15/50.5/87 | 16.75/49.5/91 |
+| C5 | 16/58.5/92 | 7/29.5/78.5 | 16/51/88.5 | 10.75/52/85.25 |
+| CX | 11.5/57/98 | 4/27.5/84 | 4/43.5/85.5 | 4.75/42.25/85.25 |
+| C6 | 8.5/54/98 | 3/25/81 | 3.5/43/85.5 | 4.75/41.25/84.75 |
+| Skewer | 8.5/39.5/93.5 | 2/15.5/89 | 3.5/29/88.5 | 4.75/26.25/86.25 |
+| Crow Lord | 25/57.5/96.5 | 6/27.5/80.5 | 19.5/47.5/87.5 | 20/50/91 |
+| Crow Lord + Skewer | 30/72/99.5 | 9/34/88.5 | 25/56.5/86.5 | 28/56.75/93.5 |
 
-Min / median / maximum across the 21 stress builds per opponent, win%:
+The 6 cells originally at or below 20% change by a median -4.5 percentage points, ranging from -7.5 to 0. This is smaller absolute movement than the peak reduction, but individual weak cells can still lose a substantial share of their wins. The live health-lead proxy does not guarantee protection of every low-win build.
 
-| Opponent | Before | After |
+Each vector below follows dailyGlutton / champion / endless1 / glutton10 / wanderer13.
+
+| Pet/build | Before | Round 1 | After | Held-out |
+|---|---|---|---|---|
+| C1 Skewer | 90/62.5/61/21.5/37.5 | 89/44.5/38.5/8.5/17.5 | 87/52/47.5/17/35 | 86.25/45.5/46/15.75/33.25 |
+| C1 Crow Lord | 94.5/59/61/31/57.5 | 80.5/40.5/39.5/12.5/33 | 84.5/49/47.5/24/49.5 | 90.5/52.75/50/26/51.5 |
+| C1 Crow Lord + Skewer | 96/77/78.5/50/72 | 86/47/50.5/27/52 | 86.5/59.5/61.5/42.5/64 | 93.5/63.75/59.5/43.25/64 |
+| C2 Skewer | 82.5/44/39.5/9/14.5 | 57/22.5/11.5/2/5 | 74/41.5/32/7/10.5 | 70.25/35.25/29.75/4.75/11.25 |
+| C2 Crow Lord | 84/56/50/28.5/32.5 | 60.5/23/23.5/7.5/13.5 | 73/45/41/25.5/30.5 | 71.5/52/43.5/27.25/32.75 |
+| C2 Crow Lord + Skewer | 85.5/60.5/53/30/35.5 | 62/28.5/27/9/14.5 | 76/49.5/43.5/26/33 | 75/56.25/46.5/28/33.5 |
+| C3 Skewer | 83.5/34.5/37/11/31.5 | 47.5/15.5/12.5/3/10.5 | 55.5/24.5/18.5/4.5/18 | 51/21.75/16.25/4.75/15.25 |
+| C3 Crow Lord | 96.5/62/54/27.5/53 | 73/28/20/6/20.5 | 87.5/52/41.5/19.5/45 | 86.25/50.75/43.5/21.75/43.5 |
+| C3 Crow Lord + Skewer | 98/73.5/68.5/35.5/68 | 78.5/31.5/26/9.5/26.5 | 84.5/58/47.5/25/50 | 84.75/56.75/48.5/28.25/52.25 |
+| C4 Skewer | 93.5/64.5/65.5/48.5/65.5 | 59.5/25/20.5/6.5/15.5 | 55/36/30/15/32 | 49.5/35/31.5/16.75/28.25 |
+| C4 Crow Lord | 96.5/75/70/43.5/66 | 79.5/34.5/25.5/11.5/27.5 | 87/62/49.5/30.5/50.5 | 91/56.25/49/29.25/55 |
+| C4 Crow Lord + Skewer | 99.5/83.5/87/69.5/85 | 88.5/40/40.5/21.5/39.5 | 85/62/56.5/48.5/64.5 | 89.75/60/58.5/41.75/64 |
+| C5 Skewer | 92/61/45/16/29 | 78.5/39.5/25.5/7/15 | 88.5/56/39/16/25 | 85.25/53.5/38/10.75/26.25 |
+| C5 Crow Lord | 86/70.5/58.5/31.5/48 | 69/35/29.5/10/25 | 78.5/59/47.5/27/40 | 79.25/63/52/31.5/42 |
+| C5 Crow Lord + Skewer | 89/77.5/68/42/56 | 72/43/37.5/13.5/29 | 82/67/56.5/33/51 | 84.5/69.25/58/34.5/49.5 |
+| CX Skewer | 85.5/40.5/39.5/11.5/33 | 55/18/13.5/4/12.5 | 60/28/19.5/4/15.5 | 53.5/22.75/17.75/4.75/14.5 |
+| CX Crow Lord | 95.5/65/57/27.5/51.5 | 76/31/25/11.5/27.5 | 85.5/50/43.5/22.5/43 | 85.25/53.25/42.25/20/39 |
+| CX Crow Lord + Skewer | 98/75.5/72.5/39.5/68 | 84/38.5/31/14/34 | 84.5/57.5/48.5/26/49.5 | 83.5/59/47.5/29.25/50.25 |
+| C6 Skewer | 82.5/38/32.5/8.5/27.5 | 52.5/17.5/12.5/3/12 | 59.5/29/19.5/3.5/16 | 53/21.25/16.75/4.75/14 |
+| C6 Crow Lord | 95/62/54/25/49 | 75/30.5/24/8.5/25 | 85.5/49/42/22.5/43 | 84.75/52/41.25/20.5/39 |
+| C6 Crow Lord + Skewer | 98/74/69/37/64 | 81/34.5/30/14/32 | 85.5/57.5/45.5/27/46.5 | 83/57.25/47/29/48.25 |
+
+## Controls and binding constraint
+
+Tuning no-pet controls match the incoming production artifact in all 105 cells. Incoming production was also rerun against s=601..1000 through the same sim, using saved source modules in memory. All 105 held-out controls match final production exactly, including serialized uncertainty and turn data. Tuning control maxima stay 11.0%; held-out maxima stay 10.5%. Different seed populations can give different control rates; the comparison is exact within each paired seed population.
+
+| Build | Tuning no-pet vector | Held-out no-pet vector |
 |---|---|---|
-| dailyGlutton | 82.5/93.5/99.5 | 47.5/75.0/89.0 |
-| champion | 34.5/62.5/83.5 | 15.5/31.5/47.0 |
-| endless1 | 32.5/58.5/87.0 | 11.5/25.5/50.5 |
-| glutton10 | 8.5/30.0/69.5 | 2.0/9.0/27.0 |
-| wanderer13 | 14.5/51.5/85.0 | 5.0/25.0/52.0 |
+| Skewer | 1.5/0.5/0.5/0/0.5 | 4/0.75/0.75/0/0 |
+| Crow Lord | 11/1/0.5/0.5/1.5 | 10.5/2/0.75/0.25/1.75 |
+| Crow Lord + Skewer | 11/1/0.5/0.5/1.5 | 10.5/2/0.75/0.25/1.75 |
 
-Cells at or above the historical 95% flag: 9 before, 0 after.
+**Unmet target:** held-out peak is 93.5%, 3.5 percentage points above 90%, at C1 Crow Lord + Skewer/dailyGlutton. Its 95% Wilson interval is 90.65% to 95.53%. Three held-out cells exceed 90%. The median remains inside 45-55%. The binding observed constraint is the upper tail on unseen seeds, especially Imp/Crow Lord/Skewer; a tuning-only pass is insufficient.
 
-Complete stress distribution below. Each vector follows daily Glutton / Champion / Endless 1 / Glutton 10 / Wanderer 13; all numbers are win%.
+The tested shapes did not establish simultaneous tuning and held-out compliance. This is a measured limitation of this candidate and search, not proof that the requested balance is impossible. No band was widened and the validation miss was not concealed. Further tuning needs a new independent validation sample.
 
-| Pet/build | Before | After |
-|---|---|---|
-| C1 Skewer | 90.0/62.5/61.0/21.5/37.5 | 89.0/44.5/38.5/8.5/17.5 |
-| C1 Crow Lord | 94.5/59.0/61.0/31.0/57.5 | 80.5/40.5/39.5/12.5/33.0 |
-| C1 Crow Lord + Skewer | 96.0/77.0/78.5/50.0/72.0 | 86.0/47.0/50.5/27.0/52.0 |
-| C2 Skewer | 82.5/44.0/39.5/9.0/14.5 | 57.0/22.5/11.5/2.0/5.0 |
-| C2 Crow Lord | 84.0/56.0/50.0/28.5/32.5 | 60.5/23.0/23.5/7.5/13.5 |
-| C2 Crow Lord + Skewer | 85.5/60.5/53.0/30.0/35.5 | 62.0/28.5/27.0/9.0/14.5 |
-| C3 Skewer | 83.5/34.5/37.0/11.0/31.5 | 47.5/15.5/12.5/3.0/10.5 |
-| C3 Crow Lord | 96.5/62.0/54.0/27.5/53.0 | 73.0/28.0/20.0/6.0/20.5 |
-| C3 Crow Lord + Skewer | 98.0/73.5/68.5/35.5/68.0 | 78.5/31.5/26.0/9.5/26.5 |
-| C4 Skewer | 93.5/64.5/65.5/48.5/65.5 | 59.5/25.0/20.5/6.5/15.5 |
-| C4 Crow Lord | 96.5/75.0/70.0/43.5/66.0 | 79.5/34.5/25.5/11.5/27.5 |
-| C4 Crow Lord + Skewer | 99.5/83.5/87.0/69.5/85.0 | 88.5/40.0/40.5/21.5/39.5 |
-| C5 Skewer | 92.0/61.0/45.0/16.0/29.0 | 78.5/39.5/25.5/7.0/15.0 |
-| C5 Crow Lord | 86.0/70.5/58.5/31.5/48.0 | 69.0/35.0/29.5/10.0/25.0 |
-| C5 Crow Lord + Skewer | 89.0/77.5/68.0/42.0/56.0 | 72.0/43.0/37.5/13.5/29.0 |
-| CX Skewer | 85.5/40.5/39.5/11.5/33.0 | 55.0/18.0/13.5/4.0/12.5 |
-| CX Crow Lord | 95.5/65.0/57.0/27.5/51.5 | 76.0/31.0/25.0/11.5/27.5 |
-| CX Crow Lord + Skewer | 98.0/75.5/72.5/39.5/68.0 | 84.0/38.5/31.0/14.0/34.0 |
-| C6 Skewer | 82.5/38.0/32.5/8.5/27.5 | 52.5/17.5/12.5/3.0/12.0 |
-| C6 Crow Lord | 95.0/62.0/54.0/25.0/49.0 | 75.0/30.5/24.0/8.5/25.0 |
-| C6 Crow Lord + Skewer | 98.0/74.0/69.0/37.0/64.0 | 81.0/34.5/30.0/14.0/32.0 |
+## Tuning history
 
-Matched no-pet controls stay identical: Skewer-only 1.5/0.5/0.5/0.0/0.5%; Crow Lord, with or without Skewer, 11.0/1.0/0.5/0.5/1.5%. Final daily-Glutton pet advantages range from 46.0 to 87.5 percentage points.
+All exploratory trials used only the original 200 tuning seeds. Full per-group summaries and exact factor expressions are retained in JSON. Repeated parameter combinations are retained as executed.
 
-## Ordinary mixed-path envelope
-
-Maxima across all legal level-10 paths and ordinary/high intrinsic profiles. Same five-opponent order, win%:
-
-| Pet | Before | After |
-|---|---|---|
-| C1 | 87.0/55.5/49.0/14.0/22.0 | 83.5/48.5/34.5/6.5/16.5 |
-| C2 | 88.5/54.0/45.5/10.0/26.5 | 73.5/30.5/19.0/4.0/13.0 |
-| C3 | 87.0/39.0/35.0/12.5/33.0 | 50.0/24.5/16.0/6.5/13.0 |
-| C4 | 88.5/48.5/46.0/25.0/46.0 | 53.0/18.5/16.5/3.0/11.5 |
-| C5 | 89.5/57.5/46.0/14.5/30.5 | 77.0/35.0/22.5/5.5/15.0 |
-| CX | 84.5/38.0/33.0/7.0/27.0 | 53.0/25.0/16.0/6.5/14.0 |
-| C6 | 82.0/37.0/30.0/6.0/25.5 | 51.5/24.5/16.5/6.5/13.5 |
-
-Before level-6 maxima across species: 69.0/18.5/14.0/3.5/5.5%.
-
-After level-6 maxima across species: 64.0/21.0/13.0/1.5/4.5%.
-
-## Copy and existing owners
-
-Combat stats, level, earned lineage, shiny state, picks and serialized pet builds are unchanged. Owners experience lower offensive special damage and more enemy pressure on their pets. Family effect hashes were deliberately re-frozen after measurement; build hashes, counts, the original fixture and independent identity guard remain intact.
-
-Stable help, pet cards, lineage details, the breeding preview and result now share the capped stat calculation. Breeding previews and receipts compute actual rounded stat gains at the keeper's level, including an explicit no-combat-gain result at the cap. The unconditional stronger celebration is removed. Shiny help discloses its multiplier before rounding and the shared cap. One historical player-facing changelog sentence was corrected to avoid continuing the uncapped promise; no release entry or version stamp was added.
-
-The secondary 2,000-seed hound dish check found baseline 1716 wins and Skewer 1750, a difference interval of -0.4 to 3.8 percentage points. Skewer's unsupported measured-benefit sentence was removed. Its one-turn recovery description remains. The existing NOCLAIM path now requires that comparison to span zero, and will fail upward if the edge returns. No numerical confidence threshold was relaxed. Bonemeal Kibble and all other dish claims still pass.
+| Trial | Min / median / peak win% |
+|---|---|
+| full-damage | 2/41.5/98 |
+| lead4 | 2/35/93.5 |
+| lead8 | 2/32.5/92 |
+| adaptive4 | 5/43.5/95.5 |
+| adaptive8 | 5/43/92.5 |
+| adaptive16 | 4/40.5/90 |
+| baseline8 | 4.5/53.5/96.5 |
+| baseline16 | 4/52/96 |
+| threshold0.2-16 | 6.5/51/95.5 |
+| threshold0.2-32 | 6.5/51/93 |
+| threshold0.35-16 | 8.5/57.5/99.5 |
+| threshold0.35-32 | 8.5/57.5/98 |
+| refine0.1-32 | 5/42/89.5 |
+| refine0.1-64 | 4/41/89.5 |
+| refine0.15-32 | 5/47/91.5 |
+| refine0.15-64 | 5/47/91 |
+| refine0.2-32 | 6.5/51/93 |
+| refine0.2-64 | 6/51/91 |
+| final96-4-0.8 | 6/51/91 |
+| final64-6-0.8 | 6/47/91.5 |
+| final64-4-0.95 | 6/48/91 |
+| final96-4-0.95 | 6/48.5/91 |
+| band0.125 | 4.5/46/89 |
+| band0.15 | 5.5/47.5/90 |
+| band0.175 | 6/50/91 |
+| band2-0.1-2 | 4/45/89.5 |
+| band2-0.1-1 | 4.5/48/92.5 |
+| band2-0.125-2 | 5/48.5/90 |
+| softcap12-6 | 2/43.5/88.5 |
+| softcap10-4 | 2/41.5/88.5 |
+| softcap8-4 | 1.5/40.5/88.5 |
+| softcap6-4 | 1.5/39/88.5 |
+| softcap2-0.2-12-6 | 4/48/91 |
+| softcap2-0.2-16-8 | 5.5/51/91 |
+| softcap2-0.25-12-6 | 4/50/94 |
+| softcap2-0.25-16-8 | 6/54.5/93.5 |
+| softcap3-0.15-16-8 | 3.5/47.5/88.5 |
+| softcap3-0.175-12-6 | 3/46.5/89.5 |
+| softcap3-0.175-16-8 | 4.5/49/89.5 |
 
 ## Proof output
 
-Agreed command, executed in this checkout:
+Agreed command, run in this checkout against final production:
 
 ```text
 node tests/unit.test.js
@@ -112,12 +143,18 @@ node tests/unit.test.js
 exit 0
 ```
 
-Additional Node-only checks:
+Additional Node-only proof:
 
 ```text
 node tests/pet-stress-guard.mjs
-pet-stress: 105 cells x 200 paired fights, 90% ceiling and daily +5pp floor PASS
-CONTROL empty, duplicate, zero-seed, NaN, saturated and no-advantage samples rejected; capped copy PASS
+all: min/median/max 3.5/47.5/88.5%
+dailyGlutton: min/median/max 55.0/84.5/88.5%
+champion: min/median/max 24.5/52.0/67.0%
+endless1: min/median/max 18.5/43.5/61.5%
+glutton10: min/median/max 3.5/24.0/48.5%
+wanderer13: min/median/max 10.5/43.0/64.5%
+pet-stress: 105 cells x 200 paired fights, 85-90% peak, 45-55% median, daily +5pp floor and unchanged no-pet controls PASS
+CONTROL empty, duplicate, zero-seed, NaN, saturated, no-advantage, median and moved-control samples rejected; shaped effects and capped copy PASS
 exit 0
 
 node tests/balance.mjs
@@ -135,43 +172,46 @@ exit 0
 node tests/dish-worth-audit.mjs
 dish-worth: all rows green
 exit 0
+
+node tests/pet-stress-guard.mjs --control-empty
+AssertionError: stress sample must contain all 105 cells
+exit 1 (expected red)
+
+after: all 105 no-pet controls identical, including wins, draws, rates, Wilson intervals and serialized winning-turn intervals
+heldOut: all 105 no-pet controls identical, including wins, draws, rates, Wilson intervals and serialized winning-turn intervals
+CONTROL round-1 engine rejected: stress median 27.0% outside 45-55% band
 ```
 
-`node --check js/app.js` and `git diff --check` passed. Before/after complete pet boards and the held-out stress run exited 0. The guard is registered directly in the release gate's PURE initializer. The browser/full release gate itself was not run.
+The stress guard remains directly registered in `tests/release-gate.mjs` PURE. Its empty-sample CONTROL is retained. New negative controls reject both low and high medians and any moved no-pet win count. The unchanged round-1 engine is rejected by the new guard for a 27.0% median. The guard checks the fixed tuning population; it does not turn the failed held-out result into a pass.
 
-Expected-red controls, all exit 1, with final production subsequently green:
+The existing 560,000-fight ordinary mixed-path envelope runs inside `balance.mjs`; all its unchanged outcome ceilings and reward floors pass. This round did not rerun the full 78-row representative/75-row decomposition board. Prior envelope and ablation data remain explicitly labelled historical in JSON.
 
-- Old damage and targeting in a throwaway tree: `C1 Crow Lord/dailyGlutton: 94.5% exceeds 90% ceiling`.
-- `--control-empty`: `stress sample must contain all 105 cells`.
-- `--control-degenerate`: `stress cells must be unique and cover every species/build/foe`.
-- Old damage against the updated frozen family guard: `NO-DRIFT ... C1 level 10`.
-- Old app copy with final tuning: stale uncapped-lineage source assertion fails.
-- Restored Skewer benefit claim with final tuning: PET confidence assertion fails, alongside claimed/unclaimed coverage assertions.
+Reproduction of final distributions:
 
-Raw board, proof and red-control transcripts remain in `/private/tmp/t2-proof`. The checkout-local measurement artifact retains all 105 before/after stress results, controls, intervals, both 14-row envelopes, the 105 held-out results and diagnostic ablations.
+```sh
+node tests/fight-sim.mjs --stress-only --seeds 200
+node tests/fight-sim.mjs --stress-only --seeds 400 --seed-start 601
+```
+
+`git diff --check` passes. Node-only raw transcripts and exploratory scripts are in `/private/tmp/t2b-proof`. This report and JSON are the persistent checkout-local advisory evidence.
 
 ## Files changed
 
-- `js/pets.js`: special damage budget and shared cap/breeding-copy helpers.
-- `js/pit.js`: measured enemy targeting probabilities.
-- `js/app.js`: capped lineage/shiny disclosure and exact breeding gains.
-- `js/cooking.js`: remove unsupported Skewer worth claim.
-- `js/changelog.js`: correct one historical uncapped-lineage sentence.
-- `tests/fight-sim.mjs`: reusable stress builds/cells, paired controls, stress-only CLI and current report access.
-- `tests/pet-stress-guard.mjs`: new sim-backed outcome, coverage, negative-control and copy guard.
-- `tests/release-gate.mjs`: register the guard in PURE.
-- `tests/balance.mjs`: update three exact effect assertions to 4 poison, 4 burn and 6 pre-crit bite; outcome bands unchanged.
-- `tests/pet-family-audit.mjs`: deliberate effect-only hash update.
-- `tests/dish-worth-audit.mjs`: measured Skewer NOCLAIM registration; thresholds unchanged.
+- `js/pets.js`: health-lead factor, shaped targeting helper and opening-bite soft cap.
+- `js/pit.js`: apply the targeting helper only for living pets.
+- `tests/fight-sim.mjs`: validated seed-range support and `--seed-start` for reproducible held-out stress runs.
+- `tests/pet-stress-guard.mjs`: median and lower-peak bands, frozen per-cell control counts, shape checks and negative controls.
+- `tests/balance.mjs`: unscaled no-lead effect expectations; ensure the pet-kill lifecycle fixture uses a lethal basic action.
+- `tests/pet-family-audit.mjs`: deliberate effect-only hash update; build hashes, counts and original fixture unchanged.
+- `docs/t2-balance-measurements.json`: full distributions, cell results, uncertainty, failed validation, tuning history and source hashes.
 - `docs/t2-balance-report.md`: this advisory report.
-- `docs/t2-balance-measurements.json`: complete numerical evidence.
 
-## Denied/blocked actions, deviations and limits
+## Denied/blocked actions, deviations and unrun work
 
-No denied action or approval rejection occurred. No sockets, browser, commit, push or publish was attempted. Browser operation, rendered copy, native environments and release-gate certification are explicitly unrun.
+No permission denial, automatic approval rejection or sandbox-blocked action occurred. No sockets, browser, commit, push or publish was attempted. Browser checks, rendered UI, native checks and the full release gate are explicitly unrun.
 
-No frozen requirement proved impossible and no requirement was redesigned. The cap remained 1.5x by measurement; the tuning instead acts on damage and enemy targeting, within the authorized balance scope. Supporting scope expanded to the stale historical changelog sentence and the now-unsupported Skewer claim because the work order includes player-facing claims invalidated by the maths.
+Deviations are the disclosed targeting-shape extension and the unresolved held-out peak miss. The first held-out seed range was retired from validation after diagnosis; the final range is disjoint and fully disclosed. The v275 copy correction and deleted Skewer “Measured:” claim remain intact; no player-facing copy changed.
 
-Intermediate failures were measured and resolved: three exact old effect assertions, the old family effect snapshot and Skewer's confidence claim. One initial search used an unmatched shell glob; a later orchestration call had a JavaScript syntax error before any command launched. Both were corrected. Abandoned numeric trials are listed above; their targeting values are absent from final production.
+Intermediate verification issues were resolved without widening balance limits: the pet-kill fixture previously assumed a special remained lethal at a large health lead, and an in-memory comparison initially compared Infinity to its JSON null representation. The fixture now uses an unchanged basic attack and the comparison uses identical serialization on both sides. Preliminary failures are not reported as final green results.
 
-The stress guard covers the specified paths and combinations, not all possible food/player-talent combinations or every owner stat profile. Strong ordinary pets still offer large advantages. The 90% ceiling is an observed regression band, not a statistical assertion that the true rate is below 90%. Independent review should operate the changed copy surfaces and assess the more aggressive pet targeting in play.
+Independent review should assess the zero-damage special behavior at large leads and whether the pressure extension is acceptable. The current candidate does not satisfy the peak target on held-out seeds and should not be represented as fully balanced.

@@ -457,17 +457,35 @@ export function petActionMeta(family) {
 // Resolve the pet's on-use ability. Pure: returns a list of intents the engine
 // applies (so the engine keeps its dealDamage/status authority). `self`/`foe`
 // are the fighters; `atkDamageBase` scales the hound bite off the owner's power.
-// T2: sustained pet damage budget, measured against the stress board.
-export const PET_DAMAGE_MULT = 0.5;
+// T2 round 2: preserve specials until the owner leads by 15 percentage points
+// of remaining health. Beyond that, diminish damage and expose the pet to more
+// pressure. This uses live combat state, never species/encounter IDs or win odds.
+export function petCombatLead(self, foe) {
+  if (![self.hp, foe.hp, self.d.maxHp, foe.d.maxHp].every(Number.isFinite)
+    || self.d.maxHp <= 0 || foe.d.maxHp <= 0) return 0;
+  const health = fighter => Math.max(0, Math.min(1, fighter.hp / fighter.d.maxHp));
+  return Math.max(0, health(self) - health(foe) - 0.15);
+}
+export function petDamageMultiplier(self, foe) {
+  return 1 / (1 + 64 * petCombatLead(self, foe));
+}
+export function petTargetChance(self, foe, petLow) {
+  const base = petLow ? 0.45 : 0.18;
+  return base + (0.8 - base) * Math.min(1, 3 * petCombatLead(self, foe));
+}
 export function petAbilityEffect(pet, self, foe) {
   requirePetFamily(pet.family);
   const has = id => pet.picks.has(id);
   const lvl = pet.level;
   const sig = id => pet.signatureActive && pet.id === id; // species signature is lit
   const effect = PET_ABILITIES[pet.family]({ has, lvl, sig, self, foe });
-  if (effect.damage) effect.damage = Math.round(effect.damage * PET_DAMAGE_MULT);
-  if (effect.poison) effect.poison.per = Math.round(effect.poison.per * PET_DAMAGE_MULT);
-  if (effect.burn) effect.burn.per = Math.round(effect.burn.per * PET_DAMAGE_MULT);
+  // Opening burst also needs a ceiling before a health lead exists. Bites up
+  // to 16 are unchanged; excess damage approaches 8 more, before engine crits.
+  if (effect.damage > 16) effect.damage = 16 + 8 * (effect.damage - 16) / (8 + effect.damage - 16);
+  const mult = petDamageMultiplier(self, foe);
+  if (effect.damage) effect.damage = Math.round(effect.damage * mult);
+  if (effect.poison) effect.poison.per = Math.round(effect.poison.per * mult);
+  if (effect.burn) effect.burn.per = Math.round(effect.burn.per * mult);
   return effect;
 }
 
