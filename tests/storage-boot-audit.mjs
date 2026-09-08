@@ -46,6 +46,18 @@ async function runBoot(failedStorage) {
     location: { protocol: 'file:', reload() { reloads++; } },
     navigator: { webdriver: true }, sessionStorage: { getItem: () => null },
     ERASED_FLAG: 'erased',
+    /* L6 landed save-disclosure wiring inside boot(). This audit evaluates
+       boot's SOURCE in a vm context, so every new collaborator it calls has
+       to be registered here or the boot throws for a reason that has nothing
+       to do with storage. Stubs only: they must not make the storage
+       assertions below pass on their own. */
+    takeSaveInterruption: () => null,
+    interruptionCopy: () => 'interrupted',
+    writeFailureCopy: () => 'write failed',
+    storageIsFull: () => false,
+    toast: setup,
+    lastWriteFailToast: 0,
+    WRITE_FAIL_QUIET_MS: 0,
     snapSettings: setup, hydrateGenericUse: setup,
     requestPersistence: async () => { setup(); return false; },
     trackEvent: setup, watchForWipe: setup, onWriteFailure: setup,
