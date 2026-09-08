@@ -407,6 +407,17 @@ the upload path and its guards.
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
 
+## v511
+1. Round 47's economy and siege lane. The server half needs a Worker deploy, which Tom runs; the client half is live on merge. Its dated section is further down, folded here.
+
+2. PROOF: r47-economy.test.mjs | REACH: lose a Spire to another player. Nothing in `js/spires.js` deleted a local spire record, so after B took A's tower A kept a phantom Keeper's Boon worth up to +15% on every quest payout for up to 7 days AND could collect real tribute from a tower B owned: measured through the real map button while offline, 90 coins and 12 Bone Dust, pennant still reading `mine`, button still offering to defend it. Tom ruled the fix shape on 2026-09-07: an offline fight's claim on a shared tower stays PENDING until the server confirms, granting no ownership, tribute or Boon. That was the ruling rather than a plain delete because the fight handler treats an `offline` response as permission to call `claimSpire`, so deleting the record alone would have let a loser fight offline and recreate a paying tower while the rival still owned it server-side. Proven red on the shipped tree at the measured 90 coins, at the offline re-fight minting a tower, and at a stale file restore resurrecting the income.
+
+3. PROOF: r47-economy.test.mjs | REACH: receive any server-delivered reward. `applyPayload` committed `awardOnce` before separately adding coins, dust and inventory, so terminating in between left the receipt written and the reward unpaid, and the next pull found the receipt and skipped it permanently. Routed through `claimAndPay` via `awardOnce`'s pay argument, the same shape this project already uses for crates, eggs and salvage. Guarded for an interrupted application and a concurrent delivery.
+
+4. PROOF: r47-economy.test.mjs | REACH: hold a Spire through a takeover. Losing the tower was silent in session: 0 toasts and 0 pushes across 30 samples in the 150s after zero, and for the first 30 seconds, 7 of 7 samples, the tower read as normally held with a Tend button, a state already untrue on the server.
+
+5. PROOF: r47-economy.test.mjs | REACH: a siege deadline with a skewed device clock. Countdowns were device time against a server deadline, so inside the Worker's plus or minus 5 minute tolerance a connected player saw "48h 4m" for a 48 hour window, and beyond it the poll 401s, `fetchMySpires` returns null and the player was never told a siege existed at all, with no skew notice on that path although `leaderboard()` has one.
+
 ## v510
 1. The pet train: seven lanes off v509, closing round 45's two open debts and round 44's state and render defects. Its dated sections are further down, folded here.
 
