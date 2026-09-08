@@ -13,6 +13,7 @@ const PRECACHE = [
   './manifest.webmanifest',
   './js/app.js',
   './js/db.js',
+  './js/save-disclosure.js',
   './js/nutrition.js',
   './js/labelparse.js',
   './js/sources.js',

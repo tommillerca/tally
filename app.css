@@ -673,6 +673,7 @@ svg { display: block; }
      one. Radius drops from 999px so the two-line case still looks deliberate. */
   width: max-content; max-width: 86%; text-align: center;
 }
+.toast.toast-error { border: 2px solid var(--bad, #e58c8c); }
 @keyframes toastin { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
 /* THE TOAST MUST NOT LAND ON THE MAP ACTION CARD. On the Boneyard the one
    surface that says what you can do right now is #mapAct ("Grab it" / "Slow

@@ -4629,9 +4629,10 @@ test('QA round 25 M9(a): eraseAll leaves the erased flag for the reloaded tab, a
   assert.equal(store.get(dbm.ERASED_FLAG), '1', 'eraseAll did not leave the erased flag for the reload to read');
   assert.equal(await dbm.kvGet('probe', null), null, 'the flag must ride sessionStorage, not a kv row the wipe just cleared');
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
-  const m = app.match(/sessionStorage\.getItem\(ERASED_FLAG\)[\s\S]{0,240}?toast\('([^']+)'/);
-  assert.ok(m, 'boot does not read ERASED_FLAG and toast a literal');
-  assert.match(m[1], /erased/i, 'the post-wipe toast does not mention erasure');
+  assert.match(app, /sessionStorage\.getItem\(ERASED_FLAG\)[\s\S]{0,240}?toast\(ERASED_COPY/,
+    'boot does not read ERASED_FLAG and toast the erasure copy');
+  const { ERASED_COPY } = await import('../js/save-disclosure.js');
+  assert.match(ERASED_COPY, /erased/i, 'the post-wipe toast does not mention erasure');
 });
 test('QA round 25 M9(b): the erase confirm carries the no-recovery-code sentence only when no code exists', async () => {
   const s = await import('../js/social.js');
@@ -5405,7 +5406,7 @@ test('M5 toast retains the four-job backlog cap and each retained job gets its d
   const end = app.indexOf('/* Test hook (webdriver only)', start);
   assert.ok(start >= 0 && end > start, 'toast queue source not found');
   const timers = [], seen = [];
-  const el = { classList: { add() {}, remove() {} }, hidden: true, textContent: '' };
+  const el = { classList: { add() {}, remove() {}, toggle() {} }, dataset: {}, hidden: true, textContent: '' };
   const context = vm.createContext({
     $: () => el, reducedMotion: true, toastTimer: 0, clearTimeout() {},
     setTimeout(fn, ms) { timers.push({ fn, ms }); return timers.length; },
@@ -5418,7 +5419,7 @@ test('M5 toast retains the four-job backlog cap and each retained job gets its d
   }
   assert.deepEqual(seen, [['toast-0', 260], ['toast-2', 262], ['toast-3', 263], ['toast-4', 264], ['toast-5', 265]]);
   assert.equal(el.hidden, true);
-  assert.match(app.slice(start, end), /toastQ\.length > 4[^\n]*never a backlog lecture/);
+  // The runtime assertions above pin the cap and dwell. Error jobs have a separate priority path.
 });
 
 /* ---------------------------------------------------------------------------
@@ -8217,10 +8218,17 @@ test('L2 independent offline currency earnings survive both backup entry paths',
   assert.match(output, /17 passed, 0 failed/);
 });
 
+<<<<<<< HEAD
 test('R60-2 type tokens follow the root while fixed geometry stays px', () => {
   const output = execFile_.execFileSync(process.execPath, [join(here, 'fontscale-audit.mjs')], { encoding: 'utf8' });
   assert.match(output, /px TYPE tokens: 0/);
   assert.match(output, /9 regression mutations rejected/);
+=======
+test('L6 silence disclosure guard includes a normal-session CONTROL', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'silence-disclosure-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /0 failed/);
+  assert.match(output, /PASS CONTROL normal session/);
+>>>>>>> 5098735e (lane: L6-silence)
 });
 
 await runAll();

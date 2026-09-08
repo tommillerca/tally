@@ -1,3 +1,4 @@
+import { writeFailureCopy } from '../js/save-disclosure.js';
 /* L3: Node-only real encrypted backup/import/init paths and production UI
  * functions in DOM doubles. The 965/950/6-row and 168,680-coin fixtures model
  * the measured incidents; this does not reproduce tmpfs eviction or pixels.
@@ -36,7 +37,7 @@ function uiContext(extra = {}) {
   };
   const c = vm.createContext({ $, els, S: { settings: null }, saveWitness: { settings: false, loot: false }, saveRecoveryActive: false,
     saveRecoveryStatus: 'unknown', newPlayerConfirmed: false, kvGet, kvSet, db, social, markBooted() {}, messages: [],
-    toast(m) { c.messages.push(m); }, trackEvent() {}, setTimeout(f) { f(); },
+    writeFailureCopy, toast(m) { c.messages.push(m); }, trackEvent() {}, setTimeout(f) { f(); },
     openRestoreSheet() { c.restoreOpened = true; }, renderOnboarding() { c.onboardingOpened = true; },
     ...extra });
   vm.runInContext(['storageIsFull', 'guardSaveBeforeInit', 'renderAccountRecovery'].map(n => fn(n, true)).join('\n'), c);

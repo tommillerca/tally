@@ -2,6 +2,7 @@
 // IMPORTANT: upgrades must stay strictly ADDITIVE (create-if-missing only).
 // Existing user data must survive every version bump.
 import { dayOrdinal, dateKey } from './nutrition.js';
+import { beginSave, finishSave } from './save-disclosure.js';
 
 /* Exported because it is also the backup file's `version` stamp (exportAll),
    so a file and the schema that wrote it can never disagree again (QA round
@@ -305,7 +306,16 @@ function reportWriteFailure(store, val, op, err) {
 
 /* Rejections are re-thrown so every existing caller behaves exactly as before. */
 function guard(store, val, op, run) {
-  return run().catch(err => { reportWriteFailure(store, val, op, err); throw err; });
+  const token = writeIsQuiet(store, val) ? null : beginSave();
+  return Promise.resolve().then(run).then(value => {
+    if (token) finishSave(token);
+    return value;
+  }, err => {
+    const refusal = err?.refused || err?.insufficientFunds || String(err?.message || err) === FROZEN_MSG;
+    if (token) finishSave(token, !refusal);
+    reportWriteFailure(store, val, op, err);
+    throw err;
+  });
 }
 
 /* L2 currency history. A balance is a projection of one shared opening balance

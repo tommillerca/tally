@@ -1,5 +1,6 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
 import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, storageStatus, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG, dayIsUnwitnessed } from './db.js';
+import { takeSaveInterruption, interruptionCopy, writeFailureCopy, ERASED_COPY } from './save-disclosure.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
@@ -1430,7 +1431,7 @@ function renderAccountRecovery(status = saveRecoveryStatus) {
   markBooted();
   $('#tabbar').style.display = 'none';
   const gear = $('#gearBtn'); if (gear) gear.hidden = true;
-  el.innerHTML = `<div class="onb onb-in"><div class="onb-scroll">
+  el.innerHTML = `<div class="onb onb-in"${known ? ' data-severity="error" role="alert"' : ''}><div class="onb-scroll">
     <h1>${known ? 'RECOVER YOUR BONES' : 'PLAYED BEFORE?'}</h1>
     <p class="onb-sub">${known
       ? 'Your saved progress is missing or could not be read. Restore your backup before continuing.'
@@ -1478,6 +1479,18 @@ async function boot() {
   if (S.demo) { useDbName('tally-demo'); document.body.insertAdjacentHTML('beforeend', '<div class="demo-badge">DEMO</div>'); }
   // Explain and stop before reads, migrations, cloud recovery, or lifecycle setup.
   if (!(await storageStatus()).ok) { renderStorageUnavailable(); return; }
+  // Register before boot can write, including migrations and demo seeding.
+  const interruptedSave = takeSaveInterruption();
+  onWriteFailure(({ store, key, op, quiet, quota, error }) => {
+    quota ||= storageIsFull(error);
+    try { trackEvent('write_fail', { store, key, op, quiet, quota }); } catch { /* reporting cannot hide the disclosure */ }
+    if (quiet) return;
+    const now = Date.now();
+    if (now - lastWriteFailToast < WRITE_FAIL_QUIET_MS) return;
+    lastWriteFailToast = now;
+    toast(writeFailureCopy(quota), 8000, { error: true });
+  });
+  if (interruptedSave) toast(interruptionCopy({ save: interruptedSave }), 8000, { error: true });
   saveWitness.settings ||= !!S.settings;
   S.settings = await kvGet('settings');
   saveWitness.settings ||= !!S.settings;
@@ -1555,43 +1568,9 @@ async function boot() {
   try {
     if (sessionStorage.getItem(ERASED_FLAG)) {
       sessionStorage.removeItem(ERASED_FLAG);
-      toast('Everything on this device was erased.', 4600);
+      toast(ERASED_COPY, 8000, { error: true });
     }
   } catch { /* private mode */ }
-  /* THE OTHER HALF OF THE WRITE-FAILURE SEAM. js/db.js routes every rejected
-     write through one reporter and then RE-THROWS, so callers keep their control
-     flow, but the reporter only calls a sink and nothing registered one: the
-     seam shipped in v425 with `writeFailureSink` permanently null, so a lost
-     meal, weight, crate or coin row was still silent. This is the consumer, and
-     it lives here because js/app.js is what owns the toast.
-
-     LOUD ONLY: db.js's `quiet` is true for ambient bookkeeping the app re-derives next
-     launch, and false for anything the player did or earned and could name
-     afterwards. A key nobody classified arrives LOUD, which is the right way
-     round (anti-regression rule 8).
-
-     THROTTLED, because a failing database does not fail once. A full disk
-     rejects every write in the same second, and toast() caps its queue at four,
-     which is still four identical lectures. One message per WRITE_FAIL_QUIET_MS
-     is enough to tell the player something is wrong; the telemetry row is what
-     counts them.
-
-     THE TELEMETRY CALL CANNOT RECURSE, and that is db.js's guarantee rather than
-     luck: track() queues by writing kv 'evq', so a quota failure makes that write
-     fail too, and reportWriteFailure returns early for exactly `kv`/`evq` before
-     it reaches any sink. Checked in js/db.js before this was written. */
-  onWriteFailure(({ store, key, op, quiet, quota, error }) => {
-    // Some engines report a full disk as DataError: Failed to write blobs (IOError).
-    quota ||= storageIsFull(error);
-    trackEvent('write_fail', { store, key, op, quiet, quota });
-    if (quiet) return;
-    const now = Date.now();
-    if (now - lastWriteFailToast < WRITE_FAIL_QUIET_MS) return;
-    lastWriteFailToast = now;
-    toast(quota
-      ? 'Your phone is out of storage, so that did not save. Free some space, then export a backup from Settings.'
-      : 'That did not save. If it keeps happening, export a backup from Settings.', 4600);
-  });
   S.sounds = (await kvGet('sounds', true)) !== false;
   S.haptics = (await kvGet('haptics', true)) !== false;
   setHaptics(S.haptics);
@@ -1688,6 +1667,21 @@ async function boot() {
     return;
   }
   if (await guardSaveBeforeInit()) return;
+  const interruptedFight = await kvGet('pitFight', null);
+  const interruptedDraft = await kvGet('addDraft', null);
+  const unfinished = interruptionCopy({ fight: interruptedFight, draft: interruptedDraft });
+  // Once per unchanged interrupted action in this tab, including later reloads.
+  if (unfinished) {
+    let seen = false;
+    try {
+      const evidence = JSON.stringify([interruptedFight?.phase, interruptedFight?.mode, interruptedFight?.at, interruptedDraft?.ts]);
+      seen = sessionStorage.getItem('tally-interruption-seen') === evidence;
+      sessionStorage.setItem('tally-interruption-seen', evidence);
+    } catch { /* unavailable storage: show the evidence-backed notice */ }
+    if (!seen) toast(unfinished, 10000, { error: true });
+  } else {
+    try { sessionStorage.removeItem('tally-interruption-seen'); } catch { /* unavailable */ }
+  }
 
   /* FIRST PAINT COMES BEFORE THE AWARDING WORK, NOT AFTER IT.
    *
@@ -3748,30 +3742,51 @@ function bgRefresh() {
 let toastTimer = 0;
 /* One write-failure message per this window. See the sink in boot(). */
 const WRITE_FAIL_QUIET_MS = 8000;
-let lastWriteFailToast = 0;
+let lastWriteFailToast = -Infinity;
 const toastQ = [];
 let toastBusy = false;
-function toast(msg, ms = 2200) {
-  toastQ.push({ msg, ms });
-  if (toastQ.length > 4) toastQ.splice(0, toastQ.length - 4); // never a backlog lecture
+let activeToast = null;
+let toastGeneration = 0;
+function toast(msg, ms = 2200, { error = false } = {}) {
+  if (error && (activeToast?.msg === msg || toastQ.some(job => job.error && job.msg === msg))) return;
+  const job = { msg, ms, error };
+  if (error) {
+    // Failure notices cannot be evicted by the four-message routine backlog.
+    const firstRoutine = toastQ.findIndex(item => !item.error);
+    toastQ.splice(firstRoutine < 0 ? toastQ.length : firstRoutine, 0, job);
+    if (toastBusy && !activeToast?.error) {
+      clearTimeout(toastTimer);
+      toastGeneration++; // invalidate an already scheduled exit animation
+      toastBusy = false;
+    }
+  } else {
+    toastQ.push(job);
+    while (toastQ.filter(item => !item.error).length > 4) {
+      toastQ.splice(toastQ.findIndex(item => !item.error), 1);
+    }
+  }
   if (!toastBusy) nextToast();
 }
 function nextToast() {
   const t = $('#toast');
   const job = toastQ.shift();
-  if (!job) { toastBusy = false; return; }
+  if (!job) { toastBusy = false; activeToast = null; return; }
   toastBusy = true;
-  /* aria-live and role are in index.html now. Attaching them here meant the
-     region came into existence in the same tick as the message it carried, so
-     the first toast of a session announced to nobody. */
+  activeToast = job;
+  const generation = ++toastGeneration;
   t.classList.remove('out');
+  t.classList.toggle('toast-error', job.error);
+  t.dataset.severity = job.error ? 'error' : 'status';
   t.textContent = job.msg;
   t.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
+    if (generation !== toastGeneration) return;
     t.classList.add('out');
-    // exit animation, then the next message; reduced-motion gets the instant path
-    const done = () => { t.hidden = true; t.classList.remove('out'); nextToast(); };
+    const done = () => {
+      if (generation !== toastGeneration) return;
+      t.hidden = true; t.classList.remove('out'); nextToast();
+    };
     if (reducedMotion) done(); else setTimeout(done, 180);
   }, job.ms);
 }
