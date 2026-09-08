@@ -37,6 +37,12 @@ async function drive(opts = {}, env = {}) {
     sleep: async ms => trace.push(['sleep', ms]), dismissOverlays: async () => trace.push(['dismiss']),
     console: { log: (...a) => trace.push(['log', ...a]) },
   };
+  /* n2's dependency observer is called from inside boot(). This context executes
+     boot's SOURCE, so the import is not present; stub it as a no-op recorder.
+     Added 2026-09-08 when the n1 and n2 lanes met. */
+  c.observeDependencies = (...a) => { (c.__observed ||= []).push(a); };
+  c.requireDependencyHosts = () => {};
+  c.observePuppeteer = () => {};
   const functions = ['boot', 'emulateEnvironment', 'setOrientation'].map(functionSource).join('\n');
   await vm.runInNewContext(`${functions}\nboot('https://example.invalid', opts)`, c);
   return { trace: JSON.parse(JSON.stringify(trace)), c, page, viewport: () => viewport };
