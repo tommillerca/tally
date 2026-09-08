@@ -131,33 +131,53 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
  * loss, silent and permanent. That format is not exotic either, it is the
  * format THIS APP prints: every kcal readout goes through toLocaleString().
  *
- * Accept plain decimals and a single decimal comma. In dot-grouping locales,
- * read that locale's grouped output back as thousands (L4). Comma grouping
- * keeps its existing explicit refusal because it overlaps decimal-comma input.
+ * Read the default Intl locale back, including its digits and separators.
+ * Locale syntax settles grouping versus decimals (L4, extended by R52-9).
+ * Otherwise accept plain decimals, but refuse ambiguous foreign grouping.
  *
  * `numParse` returns { ok, value } or { why } so callers can say WHICH kind of
  * wrong it was. `num` keeps the old null-or-number shape for the live-preview
  * call sites that must not nag on every keystroke. */
 const NUM_SHAPE = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/;
-/* `1,234` / `1,234.5` / `1,234,567`: digit grouping, and the exact shape where
-   the decimal-comma reading and the grouping reading disagree by 1000x. Never
-   guessed, always refused. */
-const NUM_GROUPED = /^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?$/;
 // L4: the default Intl locale is also the one used by the app's readouts.
-const NUM_DOT_GROUPED = /^[+-]?\d{1,3}(?:\.\d{3})+(?:,\d+)?$/;
-const NUM_LOCALE_DOT_GROUP = new Intl.NumberFormat().formatToParts(1234.5)
-  .some(p => p.type === 'group' && p.value === '.');
+// R52-9: derive the whole numeric shape from that same formatter, including
+// Indian grouping and localized signs/digits. Space grouping has three aliases.
+const NUM_LOCALE = new Intl.NumberFormat();
+const NUM_PARTS = NUM_LOCALE.formatToParts(-123456789.5);
+const NUM_SPACE = s => s.replace(/[\u00a0\u202f]/g, ' ');
+const NUM_ESCAPE = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const NUM_GROUP = NUM_SPACE(NUM_PARTS.find(p => p.type === 'group')?.value || '');
+const NUM_DECIMAL = NUM_PARTS.find(p => p.type === 'decimal')?.value || '.';
+const NUM_MINUS = NUM_PARTS.find(p => p.type === 'minusSign')?.value || '-';
+const NUM_DIGITS = new Map();
+for (let i = 0; i < 10; i++) {
+  NUM_DIGITS.set(NUM_LOCALE.formatToParts(i).find(p => p.type === 'integer').value, String(i));
+  NUM_DIGITS.set(String.fromCharCode(0x0660 + i), String(i));
+}
+const NUM_INTEGERS = NUM_PARTS.filter(p => p.type === 'integer');
+const NUM_PRIMARY = Array.from(NUM_INTEGERS.at(-1).value).length;
+const NUM_SECONDARY = Array.from(NUM_INTEGERS.at(-2)?.value || NUM_INTEGERS.at(-1).value).length;
+const NUM_GROUPED = NUM_GROUP ? `\\d{1,${NUM_SECONDARY}}(?:${NUM_ESCAPE(NUM_GROUP)}\\d{${NUM_SECONDARY}})*${NUM_ESCAPE(NUM_GROUP)}\\d{${NUM_PRIMARY}}` : '(?!)';
+const NUM_LOCAL_SHAPE = new RegExp(`^[+-]?(?:(?:\\d+|${NUM_GROUPED})(?:${NUM_ESCAPE(NUM_DECIMAL)}\\d+)?|${NUM_ESCAPE(NUM_DECIMAL)}\\d+)$`);
+// A foreign single separator before three digits can mean either a decimal
+// or thousands. Only the locale branch above can settle that disagreement.
+const NUM_AMBIGUOUS = /^[+-]?\d{1,3}(?:([.,])\d{3})+(?:[.,]\d+)?$/;
 function numParse(v) {
   if (typeof v === 'number') return isFinite(v) ? { ok: true, value: v } : { why: 'shape' };
-  const s = String(v ?? '').trim();
+  // Intl may prefix a signed number with a bidi mark. Do not strip marks from
+  // inside a number, where doing so could silently join separate digit runs.
+  let s = NUM_SPACE(String(v ?? '').trim()).replace(/^[\u061c\u200e\u200f]+/, '');
   if (!s) return { why: 'empty' };
-  if (NUM_LOCALE_DOT_GROUP && NUM_DOT_GROUPED.test(s)) {
-    const value = Number(s.replace(/\./g, '').replace(',', '.'));
-    return isFinite(value) ? { ok: true, value } : { why: 'shape' };
+  s = Array.from(s, c => NUM_DIGITS.get(c) ?? c).join('');
+  if (s.startsWith(NUM_MINUS)) s = '-' + s.slice(NUM_MINUS.length);
+  let t;
+  if (NUM_LOCAL_SHAPE.test(s)) {
+    t = (NUM_GROUP ? s.split(NUM_GROUP).join('') : s).replace(NUM_DECIMAL, '.');
+  } else {
+    if (NUM_AMBIGUOUS.test(s)) return { why: 'grouped' };
+    const commas = (s.match(/,/g) || []).length;
+    t = commas === 1 && !s.includes('.') ? s.replace(',', '.') : s;
   }
-  if (NUM_GROUPED.test(s)) return { why: 'grouped' };
-  const commas = (s.match(/,/g) || []).length;
-  const t = commas === 1 && !s.includes('.') ? s.replace(',', '.') : s;
   if (!NUM_SHAPE.test(t)) return { why: 'shape' };
   const x = Number(t);
   return isFinite(x) ? { ok: true, value: x } : { why: 'shape' };
@@ -183,7 +203,7 @@ function readNum(input, { name, min = null, max = null, optional = false, blank 
   const refuse = msg => { toast(msg, 3600); input?.focus(); return { ok: false }; };
   if (!r.ok) {
     if (r.why === 'empty') return optional ? { ok: true, value: blank } : refuse(`${name} is required`);
-    if (r.why === 'grouped') return refuse(`${name}: leave out the thousands comma, type 1234 not 1,234`);
+    if (r.why === 'grouped') return refuse(`${name}: ambiguous separators; use your locale’s number format or omit thousands separators`);
     return refuse(`${name}: digits only, like 1234 or 12.5`);
   }
   if (min != null && r.value < min) return refuse(`${name} must be at least ${min}${unit}`);
@@ -9306,8 +9326,8 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
       qin.addEventListener('input', e => { amtRaw = e.target.value; sel.qty = Math.max(0, num(e.target.value) || 0); preview(); });
       qin.addEventListener('focus', () => qin.select());
       qin.addEventListener('blur', () => {
-        // P2 playtest: "1,234" is refused by numParse (grouped, ambiguous with a
-        // decimal comma) but blur used to clamp the FIELD to 0.25 regardless,
+        // P2 playtest: malformed text is refused by numParse, but blur used
+        // to clamp the FIELD to 0.25 regardless,
         // so it looked valid while amtRaw (what Add actually checks) still held
         // the refused text. Leave invalid text on screen; only a genuinely
         // blank field gets the 0.25 default.
@@ -9333,8 +9353,8 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
     });
   }
 
-  /* P2 playtest: while amtRaw holds text numParse refuses (e.g. "1,234",
-     grouped/ambiguous with a decimal comma), sel.qty/grams already sit at
+  /* P2 playtest: while amtRaw holds text numParse refuses (e.g. "1,23,4"),
+     sel.qty/grams already sit at
      whatever the live-typing coercion left them (usually 0), so the old
      preview showed "0 kcal" and "0 x 1 large": a valid-looking answer the
      draft does not actually hold. Blank it instead, same signal the Add
@@ -9424,7 +9444,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
       const amtEl = $(sel.mode === 'grams' ? '#gramsIn' : '#qtyIn', wrap);
       if (!raw.ok && raw.why !== 'empty') {
         toast(raw.why === 'grouped'
-          ? `${amt.name}: leave out the thousands comma, type 1234 not 1,234`
+          ? `${amt.name}: ambiguous separators; use your locale’s number format or omit thousands separators`
           : `${amt.name}: digits only, like 150 or 1.5`, 3600);
         amtEl?.focus();
         return;

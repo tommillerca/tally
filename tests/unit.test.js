@@ -71,6 +71,12 @@ let passed = 0, failed = 0;
    them, sync and async alike. */
 const QUEUE = [];
 function test(name, fn) { QUEUE.push([name, fn]); }
+
+test('R52-9 locale formatter/parser round trips and ambiguity control', async () => {
+  const { checkLocaleNumbers } = await import('./locale-numbers-audit.mjs');
+  checkLocaleNumbers();
+});
+
 async function runAll() {
   for (const [name, fn] of QUEUE) {
     try { await fn(); passed++; }

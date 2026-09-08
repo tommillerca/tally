@@ -29,10 +29,9 @@
  * is how most of the world writes 1.5, and catastrophically wrong for "1,234",
  * which came back as 1.234. Every kcal readout in this app is printed with
  * toLocaleString(), so "1,234" is the app's OWN format, and typing it back into
- * Quick add lost 99.9% of the meal. Both halves are pinned below: a comma
- * decimal must still read as a decimal, and a grouped thousands separator must
- * be REFUSED rather than guessed at. Refusing is the product decision (see the
- * handover note): guessing at intent is what caused the loss.
+ * Quick add lost 99.9% of the meal. R52-9 (2026-09-08) now requires the
+ * locale to resolve valid grouping and decimals. Malformed input stays refused;
+ * the PURE locale-numbers audit also pins ambiguous foreign separators.
  *
  * DIRECTION AND BOUND, both stated, because a guard that only refuses is not a
  * guard, it is an outage:
@@ -231,7 +230,7 @@ const MALFORMED = [
   ['whitespace', '   '],
   ['partial-parse', '12abc'],           // parseFloat('12abc') === 12
   ['scientific', '1e9'],                // parseFloat('1e9') === 1000000000
-  ['grouped-comma', '1,234'],           // THE comma case: was read as 1.234
+  ['grouped-comma', '1,23,4'],          // malformed grouping in every locale
   ['absurd', '99999999999999999999'],
   ['negative', '-70'],
   ['zero', '0'],
@@ -555,12 +554,12 @@ for (const [label, typed] of [['empty', ''], ['spaces', '   ']]) {
   await closeSheets();
 }
 
-/* P2 playtest (2026-09-04): a GROUPED comma in #qtyIn is refused on Add, and
-   that part always worked. But the tap that commits also blurs the field, and
+/* P2 playtest (2026-09-04), updated for R52-9: malformed grouping in
+   #qtyIn is refused on Add. But the tap that commits also blurs the field, and
    the blur handler used to clamp #qtyIn's TEXT to "0.25" regardless of why
    sel.qty was not > 0, while the preview (#pvKcal, #pvServ) still showed the
    stale "0" / "0 x 1 large" from the live-typing coercion. Two different
-   fields told two different stories, neither matching the "1,234" the toast
+   fields told two different stories, neither matching the malformed text the toast
    quoted and neither matching the log row that never wrote. Assert the field,
    the preview and the store all agree: nothing here should ever look valid
    when the draft holds no valid amount. */
@@ -569,7 +568,7 @@ await evalPage(async () => { const { db } = await import('./js/db.js'); await db
 await closeSheets();
 await openPortion('serving');
 await killToast();
-await typeInto('#qtyIn', '1,234');
+await typeInto('#qtyIn', '1,23,4');
 await sleep(300);
 await tap('#addBtn');   // the same gesture that blurs the field
 const commaToast = await waitToast();
@@ -584,7 +583,7 @@ const state = await evalPage(async () => {
   };
 });
 check('QTY-COMMA the field keeps showing what was typed, not a silently-clamped 0.25',
-  state.field === '1,234', `field="${state.field}"`);
+  state.field === '1,23,4', `field="${state.field}"`);
 check('QTY-COMMA the preview is blanked, not a valid-looking "0 kcal"',
   state.preview === '-', `preview="${state.preview}"`);
 check('QTY-COMMA the serving preview is blanked too, not "0 x ..."',
@@ -592,7 +591,7 @@ check('QTY-COMMA the serving preview is blanked too, not "0 x ..."',
 check('QTY-COMMA and nothing reached the log',
   state.rows === 0, `stored=${JSON.stringify(state)}`);
 check('QTY-COMMA the refusal still names the fix',
-  /comma/i.test(commaToast), `toast="${commaToast}"`);
+  /digits only/i.test(commaToast), `toast="${commaToast}"`);
 await closeSheets();
 
 /* ============ THE COMMA, PINNED SEPARATELY AND BOTH WAYS ============ */
@@ -612,15 +611,15 @@ await closeSheets();
 await reset('kg');
 await openWeight();
 await killToast();
-await typeInto('#wVal', '82,500');
+await typeInto('#wVal', '82,50,0');
 const groupedTap = await tap('#wSave');
 const groupedToast = await waitToast();
 await sleep(500);
 const groupedW = await weightRead();
-check('COMMA  a GROUPED thousands comma is refused, never guessed: "82,500" writes nothing',
+check('COMMA  malformed grouping is refused: "82,50,0" writes nothing',
   groupedTap && groupedW.rows === 0, `stored=${JSON.stringify(groupedW)}`);
 check('COMMA  and the refusal names the fix rather than just failing',
-  /comma/i.test(groupedToast), `toast="${groupedToast}"`);
+  /digits only/i.test(groupedToast), `toast="${groupedToast}"`);
 await closeSheets();
 
 /* ============ DOWNSTREAM: follow the bad value to a rendered number ============ */
@@ -688,21 +687,22 @@ check('CONTROL a legitimate weight DOES reach the store and DOES move the trend'
   controlTrend.rows === beforeTrend.rows + 1 && !near(controlTrend.trend, beforeTrend.trend) && near(controlTrend.profileKg, 79.4),
   `rows ${beforeTrend.rows} -> ${controlTrend.rows}, trend ${beforeTrend.trend} -> ${controlTrend.trend}, profileKg=${controlTrend.profileKg}`);
 
-/* The grouped-comma quick add, followed to the number on Today. */
+/* The app's own locale-formatted quick add reaches the store at full value. */
 await reset('kg');
 await openQuickAdd();
 await killToast();
-await typeInto('#qaKcal', '1,234');
+const formattedKcal = await evalPage(() => (1234).toLocaleString());
+await typeInto('#qaKcal', formattedKcal);
 await typeInto('#qaName', 'Steakhouse');
 await tap('#qaAdd');
 const qaToast = await waitToast();
 await sleep(500);
 const qaAfter = await logRead();
 await closeSheets();
-check('TRACE  quick add "1,234" writes nothing (pre-fix it wrote 1.234 kcal and Today rendered "1")',
-  qaAfter.rows === 0, `rows=${qaAfter.rows} kcal=${qaAfter.kcal}`);
-check('TRACE  and the player is told to drop the comma',
-  /comma/i.test(qaToast), `toast="${qaToast}"`);
+check('TRACE  locale-formatted quick add stores 1234 kcal without a 1000x loss',
+  qaAfter.rows === 1 && near(qaAfter.kcal, 1234), `input=${formattedKcal} rows=${qaAfter.rows} kcal=${qaAfter.kcal}`);
+check('TRACE  and the player sees the successful addition',
+  /Added/i.test(qaToast), `toast="${qaToast}"`);
 
 /* ============ OVERFLOW: a food can no longer poison itself ============ */
 console.log('\n--- OVERFLOW ---');

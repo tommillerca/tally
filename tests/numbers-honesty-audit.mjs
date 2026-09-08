@@ -82,8 +82,9 @@ await test('CONTROL locale decimals, grouping, malformed input and numeric value
       const expected = typeof raw === 'number' ? raw : Number(raw.replace(',', '.'));
       assert.equal(parse(raw).value, expected, `${locale} ${raw}`);
     }
-    for (const raw of ['1,234', '1e9', '12abc', '1.23.4', '1.234.56', 'NaN', 'Infinity', '']) assert.ok(!parse(raw).ok, `${locale} accepted ${raw}`);
+    for (const raw of ['1e9', '12abc', '1.23.4', '1.234.56', 'NaN', 'Infinity', '']) assert.ok(!parse(raw).ok, `${locale} accepted ${raw}`);
     assert.equal(parse('1.234').value, locale === 'de-DE' ? 1234 : 1.234);
+    assert.equal(parse('1,234').value, locale === 'de-DE' ? 1.234 : 1234);
     if (locale === 'de-DE') for (const [raw, value] of [['1.234,5', 1234.5], ['12.345.678', 12345678], ['-1.234', -1234]]) assert.equal(parse(raw).value, value);
   }
   const refused = await quickAdd('1.23.4', 'de-DE');
