@@ -298,6 +298,7 @@ PURE.push('serve-tree-identity-audit.mjs'); // serveTree refuses a fixed port th
 PURE.push('pet-C-node-guard.mjs'); // Lane C: level thresholds/cap, production EQUIP cache, DPR replay/harness, known-species roster.
 PURE.push('r48-state-audit.mjs'); // R48-A: restored unknown artwork, real error-stream assertions and production fight-chip refresh; Node-only.
 PURE.push('r46-logging-audit.mjs'); // R46: history nutrition/search, accents/counts, midnight input and commit order, displayed budget, and bulk-close relog/history races; Node functions and DOM doubles.
+PURE.push('audit-completion-audit.mjs'); // N2: subprocess crash/row-count receipts, dependency disclosure, and real unavailable grading branches; no sockets.
 const BROWSER = [
   'pet-C-browser-audit.mjs', // Lane C: real EQUIP return paths and nine surfaces, 31 decoded Kennel images at DPR 2/3 on five phone sizes. Browser proof pending reviewer.
 
@@ -482,11 +483,18 @@ BROWSER.push(
 function run(file, args) {
   return new Promise(res => {
     const t0 = Date.now();
-    const p = spawn(process.execPath, [join(here, file), ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const p = spawn(process.execPath, ['--import', join(here, 'audit-lifecycle.mjs'), join(here, file), ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
     p.stdout.on('data', d => { out += d; });
     p.stderr.on('data', d => { out += d; });
-    p.on('close', code => res({ file, code, out, secs: Math.round((Date.now() - t0) / 1000) }));
+    p.on('error', error => { out += `\nAUDIT INCOMPLETE ${file}: spawn failed: ${error.message}\n`; });
+    p.on('close', (code, signal) => {
+      if (!out.includes(`AUDIT END ${file}:`)) {
+        out += `\nAUDIT INCOMPLETE ${file}: no final receipt; signal=${signal || 'none'}, exit=${code}\n`;
+        if (code === 0) code = 97;
+      }
+      res({ file, code, out, secs: Math.round((Date.now() - t0) / 1000) });
+    });
   });
 }
 
@@ -568,6 +576,8 @@ function failLines(out) {
 const HELPERS = new Set([
   'release-gate.mjs',  // this file
   'store-copy-scan.mjs', // shared reachability scanner for store-copy-lint and native submission preflight; no assertions of its own
+  'audit-lifecycle.mjs', // shared process receipt, preloaded for every tier
+  'dependency-observer.mjs', // passive browser dependency disclosure
   'godmode.js',        // the harness: boot, seed, serveTree
   'fight-sim.mjs',     // a sim library balance.mjs drives; no assertions of its own
   'badge-centre-lib.mjs', // the badge measurement badge-centre-audit.mjs drives; no assertions of its own
@@ -1349,6 +1359,8 @@ const results = [];
 const verdict = r => (r.code === 0 ? 'PASS ' : r.code === UNPROVEN ? 'UNPRV' : 'FAIL ');
 function report(r) {
   console.log(`${verdict(r)} ${r.file.padEnd(24)} ${r.secs}s`);
+  for (const line of r.out.split('\n').filter(l => /^(AUDIT |DEPENDENCY |INTERRUPTED )/.test(l)))
+    console.log(`        ${line}`);
   if (r.code === UNPROVEN) {
     const u = unprovenLines(r.out);
     console.log(`        ${u.rows} check(s) DID NOT RUN on this machine. Not a pass.`);

@@ -143,6 +143,10 @@ async function fakeBoot(env = {}, opts = {}, actualDpr) {
   const browser = { newPage: async () => page, close: async () => {} };
   const c = recorder({ process: { env }, reapStrandedBrowsers() {}, _trackBrowser() {},
     loadPuppeteer: async () => ({ launch: async o => { launch = o; viewport = o.defaultViewport; return browser; } }),
+    observeDependencies: (observed, base) => {
+      assert.equal(observed, page);
+      assert.equal(base, 'https://example.invalid');
+    },
     sandboxArgs: () => [], chromePath: () => '/unused', sleep: async () => {}, dismissOverlays: async () => {}, opts,
   });
   await vm.runInNewContext(`${bootSource}\n${widthSource}\nboot('https://example.invalid', opts);`, c);

@@ -30,6 +30,7 @@
  *
  * Usage: node tests/water-cache-audit.mjs [baseUrl]
  */
+import { discloseDependency } from './audit-lifecycle.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { boot, sleep, serveTree, unproven, unprovenReport, exitFor } from './godmode.js';
@@ -86,14 +87,14 @@ try {
     return { warm, tiles: pulled, reads, blanks, firstBlankAt, after: answer() };
   }, HOME);
 
-  ok('WARM   the tile under the player answers before anything else is measured',
-    r.warm !== undefined && r.warm !== 'never answered',
-    r.warm === 'never answered' ? 'HOME never resolved (tiles unreachable?)' : `isWater(HOME) = ${r.warm}`);
-
-  if (r.warm === 'never answered') {
+  const warm = r.warm !== undefined && r.warm !== 'never answered';
+  discloseDependency('WATER HOME tile', warm, warm ? `isWater(HOME) = ${r.warm}` : 'HOME never answered; cache behavior is unmeasurable');
+  if (!warm) {
+    unproven('WARM the tile under the player answers', 'HOME never answered');
     unproven('CHURN enough tiles were pulled to overflow the cache', 'HOME never answered, so nothing below was exercised');
     unproven('HOLD the tile under the player still answers after the cache churned', 'HOME never answered');
   } else {
+    ok('WARM   the tile under the player answers before anything else is measured', warm, `isWater(HOME) = ${r.warm}`);
     ok('CHURN  enough distinct tiles were pulled to overflow the cap and force the sweep',
       r.tiles > 64, `${r.tiles} points requested against MAX_TILES 64`);
     ok('HOLD   the tile under the player NEVER reads unknown again, on any pass',
@@ -107,6 +108,6 @@ try {
   if (srv) srv.close();
 }
 
-unprovenReport();
-console.log(fails ? `\nwater-cache: ${fails} FAILED` : '\nwater-cache: clean');
+unprovenReport('water-cache-audit.mjs');
+console.log(fails ? `\nwater-cache: ${fails} FAILED` : exitFor(fails) ? '\nwater-cache: UNPROVEN' : '\nwater-cache: clean');
 process.exit(exitFor(fails));

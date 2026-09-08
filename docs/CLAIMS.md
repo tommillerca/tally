@@ -2296,3 +2296,16 @@ commands and native integration proposal are in tests/wave-guards-report.md.
 4. PROOF: r46-logging-audit.mjs | REACH: Add's budget uses the same sum of rounded diary rows as Today. Five 100.4 kcal rows display and budget as 500 kcal, leaving 1500 against 2000.
 
 R46-7 is deferred with a proposed common diary-date definition for Trends and the logging streak. R46-9, R46-10, R46-11 and R46-12 lack finding details in the frozen plans and checkout reports located in this review; no behavior change is claimed for those items. No release or deployment is claimed by this section.
+
+
+## 2026-09-07: N2 audit completion and dependency disclosure
+
+1. PROOF: audit-completion-audit.mjs | REACH: Tiered release-gate children preload a shared receipt that names interrupted runs, retains emitted failures, and refuses zero exits with incomplete declared row counts. Direct Godmode audits load the same receipt. Legacy counts are explicitly undeclared, not fabricated. A SIGKILL leaves START without END and the parent reports INCOMPLETE.
+2. PROOF: audit-completion-audit.mjs | REACH: Godmode browser pages disclose external responses, HTTP status, failures, cache use and intercepted fixtures. Required Boneyard probes disclose both available and unavailable measurements, check a tile beyond TileJSON with bounded fetches, and mark subsequent required-host failures UNPROVEN without erasing real assertion failures. RAF and icon capability refusals and Water's unanswered HOME sample return 97 in Node fixtures.
+3. PROOF: audit-completion-audit.mjs, guard-debts-audit.mjs | REACH: Mimic retains the earlier empty-frame grading fix and declares all 38 current rows (the original 37 plus its added zero-frame control). Its actual row helpers produce a complete 38/38 receipt or preserve the partial count and earlier failure on a throw. These are Node regression proofs, not new screencast or browser measurements.
+
+Browser/server proofs were prohibited in this lane. The PURE array currently has
+64 files: 62 exited 0; unit.test.js and serve-tree-identity-audit.mjs were not run
+because they require local servers. This is not a claim that all PURE files or
+all browser audits passed. The advisory evidence and deviations are recorded in
+tests/n2-report.md.
