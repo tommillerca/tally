@@ -2,6 +2,7 @@
  * intentional cancellations are disclosed without changing verdicts. Required measurements
  * use discloseDependency in audit-lifecycle. CONTROL lives in audit-completion-audit.
  */
+import { observeMachine } from './audit-lifecycle.mjs';
 const watched = new WeakMap();
 export function requireDependencyHosts(page, urls, disclose) {
   const state = watched.get(page);
@@ -89,6 +90,7 @@ export function observePuppeteer(puppeteer) {
       }
       return async (...args) => {
         const browser = await target.launch(...args);
+        const launchOptions = args[0] || {};
         const wrapped = new WeakSet();
         const wrapPages = owner => {
           if (wrapped.has(owner)) return owner;
@@ -97,6 +99,7 @@ export function observePuppeteer(puppeteer) {
           owner.newPage = async (...args) => {
             const page = await newPage(...args);
             observeDependencies(page);
+            await observeMachine(page, browser, launchOptions);
             return page;
           };
           return owner;

@@ -304,6 +304,7 @@ PURE.push('r48-state-audit.mjs'); // R48-A: restored unknown artwork, real error
 PURE.push('r46-logging-audit.mjs'); // R46: history nutrition/search, accents/counts, midnight input and commit order, displayed budget, and bulk-close relog/history races; Node functions and DOM doubles.
 PURE.push('r46-diary-audit.mjs'); // M2: zero-calorie logged days, displayed budgets/copies, historical source dates and speech, and bounded Back control; real source functions in Node doubles, no browser claim.
 PURE.push('audit-completion-audit.mjs'); // N2: subprocess crash/row-count receipts, dependency disclosure, and real unavailable grading branches; no sockets.
+PURE.push('machine-character-audit.mjs'); // L1: Node controls drive browser observation, bounded cadence, trace history and per-row machine receipts; no browser or sockets.
 PURE.push('n3-deadpaths-audit.mjs'); // N3: real artifact path expressions stay outside this checkout; real News callback delivers the current outfit to the poster renderer. Node-only, no pixel claim.
 PURE.push('m5-prove-red.mjs'); // M5: throws away seven real-source reversions; requires failing children and restored green guards, Node-only.
 PURE.push('lookup-guard-lint.mjs'); // M5: bounded truth-only id/lookup scan, reviewed-site ratchet and positive controls; Node-only.

@@ -35,6 +35,7 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { boot, sleep, serveTree, setWidth } from './godmode.js';
+import { sampleMachineCadence } from './audit-lifecycle.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let srv = null, srvHandle = null;
@@ -768,12 +769,18 @@ await setWidth(page, 393, 852);  // restore, for the sections below
    The flick is the one moment that budget shows, so 340ms of fling plus a
    420ms rise played at 30fps, which is the "glitchy" he is describing.
 
-   R45 correction: burst drawArrays calls fell from 18 and 26 on v493 to
-   zero on v509 during the move. That mechanism improvement is real. The
-   cadence claim was not: across five runs per tree, gaps over 20ms were 2 to
-   10 and six of ten moves exceeded the existing <=6 bound. The FIRST flick
-   remained at half rate in four of five runs (12 to 20 frames); the second
-   was full rate every run. Never aggregate the two into a healthy average.
+   R45-5 correction: burst drawArrays calls fell from 18 and 26 on v493 to
+   zero on v509 during the move. Preserve that real v500 mechanism. R45's
+   12 to 20 first-flick samples in four of five runs describe that environment,
+   not a universal defect. The supplied v513 remeasurement, five fresh browser
+   processes/profiles with FLICK_TRACE_DIR enabled, saw first samples
+   49,46,59,58,47 and second samples 43,57,59,58,43; first over20 gaps
+   4,4,1,1,5, 81/81 rows passed. None reproduced the <=20 first flick;
+   the first sampled more than the second in three runs. These are supplied
+   observations, not measurements made in this lane. Trace adds overhead.
+   First-flick asymmetry is environment-specific pending a reproduction.
+   If Tom's QA rig still reproduces 12 to 20 frames, build and verify the fix
+   there. Do not guess a first-flick fix or undo v500 without that reproduction.
 
    Each 520ms window at 60Hz has about 31 frames, so the previous 47 to 59
    claim cannot describe that window at 60Hz. Keep over20 <=6 and additionally
@@ -796,6 +803,7 @@ await setWidth(page, 393, 852);  // restore, for the sections below
  */
 await browser.close();
 const traceDir = process.env.FLICK_TRACE_DIR;
+console.log('FLICK INTERPRETATION: preserve the v500 burst-pause mechanism. First-flick asymmetry is environment-specific pending reproduction. If Tom\'s QA rig reproduces 12 to 20 frames, build and verify the fix there. Compare MACHINE CHARACTER lines, including baseline and trace overhead.');
 if (traceDir) {
   mkdirSync(traceDir, { recursive: true });
   console.log('FLICK DIAGNOSTIC tracing enabled: cadence includes profiling overhead');
@@ -830,6 +838,7 @@ for (let run = 1; run <= 5; run++) {
         'disabled-by-default-devtools.timeline', 'disabled-by-default-devtools.timeline.layers'] });
     tracing = true;
   }
+  await sampleMachineCadence(page, `FLICK run ${run}: settled Crates tab before OPEN, after optional trace start`);
   await page.evaluate(trace => {
     window.__crateForce = 1;
     const M = window.__flick = { raf: [], long: [], counts: [], burstDraws: [], taps: [], glOps: [] };

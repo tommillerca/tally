@@ -193,6 +193,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { loadPuppeteer, chromePath, sandboxArgs, serveTree } from './godmode.js';
+import { discloseMachineRow } from './audit-lifecycle.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /* puppeteer is a real dependency of this repo now, resolved by godmode's
@@ -477,6 +478,7 @@ const fail = m => { failures.push(m); console.log('  FAIL: ' + m); };
   const COLD_FLOOR_MS = 200, WARM_CEILING_MS = 250;
   const cold = await timeImageLoad(PROBE_URL);
   const warm = await timeImageLoad(PROBE_URL);
+  discloseMachineRow('FX cache probe: cold and warm load-time bounds');
   console.log(`  cache probe: cold ${cold.ms}ms (floor ${COLD_FLOOR_MS}ms), warm ${warm.ms}ms (ceiling ${WARM_CEILING_MS}ms), decoded ${cold.w}x`);
   if (!cold.w || !warm.w) await bailSetup(`the cache probe could not even load ${PROBE_URL} (naturalWidth ${cold.w}/${warm.w}). The fixture is not serving the FX frames.`);
   if (cold.ms < COLD_FLOOR_MS) await bailSetup(`an uncached FX frame loaded in ${cold.ms}ms, under the ${COLD_FLOOR_MS}ms floor, so the 400ms-latency pipe is NOT in effect and the v245 race cannot happen here. This audit would pass no matter how broken the FX are, which is not a check (anti-regression rule 1).`);
