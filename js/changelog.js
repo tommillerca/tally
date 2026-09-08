@@ -4,6 +4,12 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 512, date: '2026-09-08', title: 'The Wardrobe stops disappearing', items: [
+    'Restoring a backup that mentioned a piece of gear this version does not recognise emptied your entire Wardrobe, with nothing on screen and nothing in the log to say why. It now skips what it cannot draw and shows you everything else.',
+    'Searching for food now finds the meals you have logged before, which is the thing you most want when you are logging something for the second time.',
+    'Food search no longer quietly hides most of what it found while telling you it found less than it did, and typing a word without its accent now finds the accented food.',
+    'Tapping Add twice in a row could put a food in your diary that you never picked. It cannot any more.',
+  ] },
   { n: 511, date: '2026-09-08', title: 'A tower you lost is a tower you lost', items: [
     'When somebody took one of your Spires, your phone never found out. It kept flying your name over it, kept offering to defend it, kept counting it towards your quest bonus, and would still hand you tribute from a tower somebody else owned. That is fixed, and a claim you make with no signal now waits, clearly, until the server agrees rather than pretending it went through.',
     'A reward the server sent you could be marked as paid a moment before it was actually paid. If the app closed in that gap the reward was skipped for good. The receipt and the payout are now one step, so it either all lands or none of it does.',

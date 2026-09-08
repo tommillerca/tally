@@ -419,6 +419,18 @@ the upload path and its guards.
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
 
+## v512
+1. Round 48's shipped defects plus round 46's logging lane, and the guard and submission work behind them. Its dated sections are further down, folded here. The pet balance re-tune was HELD OUT of this train: it conflicts with a shipped contract (Eternal Guard heals to 40%, the re-tune needs 20%) and that is Tom's ruling to make.
+
+2. PROOF: r48-state-audit.mjs, unit.test.js | REACH: restore a backup carrying an equipped gear id this build cannot resolve. A guard tested whether the equipped art id was MISSING; the case that occurs is an id that is present but unresolvable, which is truthy, so it walked through, reached `bhAsset(undefined)`, and `data/boneheadz.js` dereferenced `item.file`. Measured: a missing id renders 14,074 characters, an unresolvable one renders 0, and there is NO page error, so nothing in the console marks it. This is the seventh instance of one class in this project, and the round-48 ticket named the wrong guard: `js/app.js:16583` protects `previewEq()`, which never calls `bhAsset`, so repairing it would have been a no-op. A plan review caught that and the real four-hop path was verified before any code was written.
+
+3. PROOF: r46-logging-audit.mjs | REACH: the Add sheet and the Foods screen. Search could not see the player's own history (0 of 3: "Dinner out", present as 2 rows in their own log, returned 2 unrelated built-in foods), truncated silently while announcing a false total to a screen reader ("25 matches" for 93), and could not match an unaccented query against an accented food (3 of 3: creme, brulee, Cafe all returned 0). 
+
+
+5. PROOF: r46-logging-audit.mjs | REACH: tap Add twice quickly. Driven 5 times: 0 of 5 duplicated the intended entry, so the obvious defect was absent, but 1 of 5 logged an unintended item at 105 kcal and left the app on about:blank. Putting food in a diary the player did not choose, on a page they cannot read, is worse than a duplicate, so the fix is at the selection rather than a debounce over it.
+
+4. PROOF: unit.test.js | REACH: after any fight. `window.__refreshLevelChip` shipped in the production bundle, which round 48 filed as a test seam to gate behind the webdriver check. Gating it would have been a bug: production fight settlement calls it after both a win and a loss through optional chaining, so the calls would have silently done nothing and left the level and XP stale. A plan review caught this too. It is now a real production function called directly from both sites, with only the window alias gated.
+
 ## v511
 1. Round 47's economy and siege lane. The server half needs a Worker deploy, which Tom runs; the client half is live on merge. Its dated section is further down, folded here.
 
