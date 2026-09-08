@@ -27,8 +27,9 @@
  *
  * LIMITATION, stated rather than hidden: the module is not wired into openHollow
  * yet (Reggie owns that call site), so the rig below mounts its output into the
- * live app document rather than into #hlwStage. tests/hollow-audit.mjs is what
- * covers the shipped screen.
+ * live app document rather than into #hlwStage. UNREACHABLE: the Hollow lost
+ * its player doors on 2026-08-18; hollow-audit.mjs was deleted. These are
+ * module probes, not proof of a shipped screen.
  *
  * Usage:  node tests/hollow-beds-audit.mjs [width] [height]
  * Set HB_OUT to a directory to also write the screenshots and the raw JSON.

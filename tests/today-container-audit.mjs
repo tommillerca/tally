@@ -81,7 +81,7 @@
  * Usage: node tests/today-container-audit.mjs [baseUrl]   (serves this repo if
  * omitted, so a bare run can never grade production).
  */
-import { boot, serveTree, sleep } from './godmode.js';
+import { boot, serveTree, sleep, shotDir } from './godmode.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -129,7 +129,7 @@ async function tapDay(page, id, want) {
   return landed;
 }
 
-const shotPath = name => join(repo, '_feedback_shots', 'today-d2', name);
+const shotPath = name => join(shotDir('today-d2'), name);
 
 const { browser, page, errors } = await boot(base);
 

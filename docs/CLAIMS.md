@@ -2309,3 +2309,15 @@ Browser/server proofs were prohibited in this lane. The PURE array currently has
 because they require local servers. This is not a claim that all PURE files or
 all browser audits passed. The advisory evidence and deviations are recorded in
 tests/n2-report.md.
+## N3 dead paths and audit artifacts, 2026-09-07 (advisory)
+
+1. PROOF: n3-deadpaths-audit.mjs, today-container-audit.mjs | REACH: Today audit screenshots, the Today capture helper, the level-paid trace default and the figure decoder fixture resolve to temporary storage. Each original path was restored separately in a throwaway copy and failed the Node path guard; the restored fixes passed. Browser screenshot execution remains unproven. The sibling-owned serveTree still writes an identity marker into its served root, so this is not a claim that every audit is read-only.
+2. PROOF: race-audit.mjs, n3-deadpaths-audit.mjs | REACH: Today > News > The weekly step race now reads the equipped outfit before opening its poster. The browser row uses real controls after a masked reload and requires all seven decoded expected layers. Node execution of the real News callback through the real poster function to its renderer input failed on the original app.js with missing 5: H11-1 FW1 IL1-1 IR10-3 P1, then passed after restoration. Browser red/green remains pending independent review.
+3. PROOF: garden-closed-audit.mjs, hollow-beds-audit.mjs, hollow-backdrop-audit.mjs, figure-audit.mjs | REACH: UNREACHABLE. The Hollow's player doors were removed on 2026-08-18. Its feature code is retained for a product deletion decision; module probes are not player coverage. The figure register no longer cites the deleted hollow-audit.mjs as a live walkthrough.
+4. PROOF: mage-audit.mjs, reward-sop-audit.mjs | REACH: UNREACHABLE. The retired bestiaryBannerHtml probe now identifies itself in comments and printed row names. The reward register no longer claims a GROW door opens the Hollow and explicitly marks the Hollow payout as unreachable. Neither retired feature is reopened.
+
+The agreed unit command returned 362 passed, 1 failed at the socket-dependent
+serveTree lifetime check. Final PURE status is 62 of 64 exit 0; that unit failure
+and the prohibited serve-tree-identity server proof prevent an all-green claim.
+See docs/N3-REPORT.md for exact red/green output, the write-site sweep,
+file ownership blockers and proposed deviations. No release is claimed.

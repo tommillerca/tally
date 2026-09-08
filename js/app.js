@@ -14518,7 +14518,7 @@ const NEWS = [
        not a generic star (Tom: "doesn't have the right art in some of the drop
        downs") */
     thumb: eq => headshotHtml(eq, 52),
-    open: () => openRaceIntro() },
+    open: async () => { raceIntroFit = await equipped(); openRaceIntro(); } },
   { id: 'spire', date: 'Aug 6', title: 'Dark Spires',
     blurb: 'Take a tower and it pays you tribute for visiting.',
     thumb: () => `<img class="nw-img" src="assets/brand/tomb-192.png" alt="">`,
