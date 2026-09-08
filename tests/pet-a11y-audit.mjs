@@ -1,7 +1,7 @@
 /* P2, R44-9/6/11/24. Node-only: execute the production Kennel renderer and
  * click handlers with DOM doubles. CSS rows are source guards, NOT pixel proof.
  * The companion browser audit owns compositing, keyboard and text reflow.
- * CONTROL: zero, partial and full ownership must each render all 30 buttons.
+ * CONTROL: zero, partial and full ownership must each render all 36 buttons.
  * Prove red on a throwaway tree by restoring pre-P2 js/app.js and app.css.
  */
 import assert from 'node:assert/strict';
@@ -55,9 +55,9 @@ for (const state of ['zero', 'partial', 'full']) {
   const instances = state === 'zero' ? [] : state === 'partial' ? [{ sp: 'C1', morph: 'base' }]
     : species.flatMap(s => MORPHS.map(morph => ({ sp: s.id, morph })));
   const r = await render(instances);
-  check(`CONTROL ${state}: 30 real buttons`, () => assert.equal(r.cells.length, 30));
-  check(`NAMES ${state}: 30 distinct species/colourway labels`, () => {
-    assert.equal(new Set(r.cells.map(c => c.attrs['aria-label'])).size, 30);
+  check(`CONTROL ${state}: 36 real buttons`, () => assert.equal(r.cells.length, 36));
+  check(`NAMES ${state}: 36 distinct species/colourway labels`, () => {
+    assert.equal(new Set(r.cells.map(c => c.attrs['aria-label'])).size, 36);
     for (const c of r.cells) {
       assert(c.attrs['aria-label'].includes(BH_BY_ID[c.dataset.sp].name));
       assert(c.attrs['aria-label'].includes(c.dataset.morph === 'base' ? 'Base' : MORPH_LABEL[c.dataset.morph]));
@@ -77,15 +77,15 @@ for (const state of ['zero', 'partial', 'full']) {
       assert.equal(r.labels.get(c.dataset.sp).textContent, name);
     }
   });
-  check(`SWATCHES ${state}: five labelled colours before ownership`, () => {
+  check(`SWATCHES ${state}: six labelled colours before ownership`, () => {
     const headers = [...r.body.innerHTML.matchAll(/<span class="k-grid-head-cell">([\s\S]*?)<\/span>/g)];
-    assert.equal(headers.length, 5);
+    assert.equal(headers.length, MORPHS.length);
     headers.forEach((h, i) => { assert(h[1].includes('class="k-swatch"')); assert(h[1].includes(`data-morph="${MORPHS[i]}"`)); });
   });
   if (instances.length) check(`DOTS ${state}: colourway identity reaches each indicator`, () => {
     const dots = [...r.body.innerHTML.matchAll(/<i\b[^>]*class="k-dot[^>]*>/g)];
-    assert.equal(dots.length, state === 'full' ? 30 : 5);
-    dots.forEach((d, i) => assert.equal(attr(d[0])['data-morph'], MORPHS[i % 5]));
+    assert.equal(dots.length, state === 'full' ? 36 : MORPHS.length);
+    dots.forEach((d, i) => assert.equal(attr(d[0])['data-morph'], MORPHS[i % MORPHS.length]));
   });
   if (state === 'full') check('INTENT roster retains highest-tier portraits', () => {
     assert.equal(r.art.filter(a => a.src?.endsWith('/midnight')).length, 12);

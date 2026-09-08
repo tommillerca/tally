@@ -304,10 +304,10 @@ export function passivePct(level) { return 0.04 + (level - 1) * 0.008; }
  * assets/bh/C/morph/<species>__<morph>.png, and MORPH_ART/morphAsset below are
  * the gate every render path resolves through -- mirrors SHINY_ART (js/loot.js):
  * file exists (species is in MORPH_ART) -> use the variant PNG; else base. */
-export const MORPHS = ['base', 'ember', 'frost', 'toxic', 'midnight'];
-export const MORPH_WEIGHT = { base: 40, ember: 22, frost: 22, toxic: 10, midnight: 4 };
-export const MORPH_TIER = { base: 0, ember: 1, frost: 1, toxic: 2, midnight: 3 };
-export const MORPH_LABEL = { base: '', ember: 'Ember', frost: 'Frost', toxic: 'Toxic', midnight: 'Midnight' };
+export const MORPHS = ['base', 'ember', 'frost', 'toxic', 'rose', 'midnight'];
+export const MORPH_WEIGHT = { base: 40, ember: 22, frost: 22, toxic: 10, rose: 10, midnight: 4 };
+export const MORPH_TIER = { base: 0, ember: 1, frost: 1, toxic: 2, rose: 2, midnight: 3 };
+export const MORPH_LABEL = { base: '', ember: 'Ember', frost: 'Frost', toxic: 'Toxic', rose: 'Rose', midnight: 'Midnight' };
 export function isMorph(m) { return MORPHS.includes(m); }
 
 /* Which species carry per-morph PNG variants (mirrors SHINY_ART's shape: a
@@ -365,7 +365,7 @@ export function ownedPairs(instances) {
   return new Set((instances || []).map(x => `${x.sp}|${x.morph || 'base'}`));
 }
 // R39-10 (2026-09-06): how many of those pairs have a CELL in the Kennel grid.
-// owned.size counts CX (exempt, no cell) too: "31 / 30" with a full set.
+// owned.size counts CX (exempt, no cell) too: "37 / 36" with a full set.
 export function ownedCellCount(owned, speciesIds) {
   let n = 0;
   for (const sp of speciesIds) for (const m of MORPHS) if (owned.has(`${sp}|${m}`)) n++;
@@ -379,11 +379,11 @@ function weightedMorph(candidates) {
   return candidates[candidates.length - 1];
 }
 
-/* Fresh-first: prefer a morph for which SOME species is still an unowned (sp,
- * morph) pair, weighted among those candidates; once every pair is owned, fall
- * through to the plain weighted draw over all five. The species itself is not
- * decided here (grantEgg rolls the morph before the species is picked at hatch,
- * spec section 2.2) -- this only asks "is any species still fresh at this morph". */
+/* LEGACY ONLY: pure weighted helper for old tests and data tooling. Never
+ * import or call from a new reward/grant path. New eggs always grant Base.
+ * Retains fresh-first compatibility: prefer colours missing on any ordinary
+ * species, then use the full six-colour weighted table when all 36 are owned.
+ * Reads only the supplied ownership set and the existing crypto RNG. */
 export function rollMorph(owned) {
   const fresh = MORPHS.filter(m => MORPH_SPECIES.some(s => !owned.has(`${s}|${m}`)));
   return weightedMorph(fresh.length ? fresh : MORPHS);

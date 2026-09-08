@@ -7171,20 +7171,9 @@ test('KENNEL addPetInstance: shiny forces base even when a morph is explicitly r
   assert.equal(insts[0].morph, 'base');
 });
 
-/* SIM, spec section 2.6, re-scoped by KENNEL PALETTES (2026-09-05): 200 eggs
- * granted+hatched one after another for an owner of all SIX species (so every
- * hatch is a same-species dupe and the morph is the only thing left to
- * discover) must surface all 30 (species, morph) pairs -- Tom's own count,
- * "6 species x 5 morphs = 30 pairs" -- with no morph outside MORPHS ever
- * appearing. This used to own five species and require 25 pairs (Bumbleseal
- * was a 1% shop-exclusive, excluded from fresh-first accounting); her
- * hatchChance gate is gone (js/loot.js pickRandomPet, data/boneheadz.js), she
- * is an ordinary member of MORPH_SPECIES (js/pets.js) same as C1-C5, and this
- * sim now owns and grades her the same way. Real rng() throughout (unseeded):
- * re-probed at 200 draws with 6 species/30 pairs (this checkout), 0/30 trials
- * missed a single pair -- the extra species does not need more draws because
- * fresh-first the same identical mechanism, one more candidate deep. */
-test('KENNEL sim: 200 eggs from an owner of six species surface all 30 (sp, morph) pairs, no phantom morph', async () => {
+/* Laboratory foundation supersedes the old colour-discovery egg simulation.
+ * New eggs discover species in Base; existing coloured eggs are tested above. */
+test('LAB sim: 200 new eggs from an owner of six species hatch only Base', async () => {
   await import('./mem-idb.mjs');
   const dbm = await import('../js/db.js');
   dbm.useDbName('unit-kennel-sim-200eggs');
@@ -7198,10 +7187,8 @@ test('KENNEL sim: 200 eggs from an owner of six species surface all 30 (sp, morp
   const pairs = new Set(insts.map(x => `${x.sp}|${x.morph || 'base'}`));
   const phantom = [...pairs].filter(p => { const [sp, m] = p.split('|'); return !species.includes(sp) || !MORPHS.includes(m); });
   assert.equal(phantom.length, 0, `no morph outside MORPHS, and no species outside the hatch pool, got ${JSON.stringify(phantom)}`);
-  const required = species.flatMap(sp => MORPHS.map(m => `${sp}|${m}`));
-  const missing = required.filter(p => !pairs.has(p));
-  assert.equal(missing.length, 0,
-    `all 30 (species, morph) pairs among the six owned species must appear across 200 hatches, missing: ${missing.join(', ') || 'none'} (${pairs.size} total distinct pairs seen)`);
+  assert.equal(insts.length, 206, 'all 200 eggs must hatch and retain the six original pets');
+  assert.deepEqual([...pairs].sort(), species.map(sp => `${sp}|base`).sort());
 });
 
 /* SIM, spec section 2.6: two eggs granted the same "day" (before either
@@ -7246,7 +7233,7 @@ test('KENNEL sim: two eggs granted the same day for a player missing four specie
 const MORPH_ROOT = join(here, '..', 'assets', 'bh', 'C');
 const thumbPath = (tier, rel) => join(here, '..', 'assets', 'bh', 'thumb', String(tier), 'C', rel);
 
-test('KENNEL MORPH_ART: every one of the 30 (species, morph) pairs resolves to a real file at every tier', () => {
+test('KENNEL MORPH_ART: every one of the 36 (species, morph) pairs resolves to a real file at every tier', () => {
   const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
   const missing = [];
   for (const sp of species) {
@@ -7296,14 +7283,14 @@ test('KENNEL MORPH_ART: CX, an unknown morph, and an unlisted species all resolv
    PROVE-RED (2026-09-06): with ownedCellCount returning owned.size (the old
    counter) in a throwaway copy, this row alone failed: "a Founder's Lizard
    owner with one cell reads 1, not 2 / 2 !== 1", 336 passed, 1 failed. */
-test('KENNEL ownedCellCount: CX and an off-grid species never count; a full 6x5 set is exactly 30', () => {
+test('KENNEL ownedCellCount: CX and an off-grid species never count; a full 6x6 set is exactly 36', () => {
   const grid = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
   const one = ownedPairs([{ sp: 'CX', morph: 'base' }, { sp: 'C1', morph: 'ember' }]);
   assert.equal(one.size, 2, 'control: ownedPairs itself still counts CX (that is the bug the counter must not inherit)');
   assert.equal(ownedCellCount(one, grid), 1, 'a Founder\'s Lizard owner with one cell reads 1, not 2');
   const full = ownedPairs([{ sp: 'CX', morph: 'base' }, ...grid.flatMap(sp => MORPHS.map(m => ({ sp, morph: m })))]);
-  assert.equal(full.size, 31);
-  assert.equal(ownedCellCount(full, grid), 30, 'a full set reads 30 / 30, never 31');
+  assert.equal(full.size, 37);
+  assert.equal(ownedCellCount(full, grid), 36, 'a full set reads 36 / 36, never 37');
   // two copies of one pair are one cell
   assert.equal(ownedCellCount(ownedPairs([{ sp: 'C2', morph: 'frost' }, { sp: 'C2', morph: 'frost' }, { sp: 'C2' }]), grid), 2);
 });

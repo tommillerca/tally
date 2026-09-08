@@ -172,26 +172,26 @@ async function kennel(instances) {
     croppedPetImg: () => '<img>', morphSwatch: () => '#fff' });
   return body.innerHTML;
 }
-await test('CONTROL empty and partial Kennel still show 30 grid controls', async () => {
+await test('CONTROL empty and partial Kennel still show 36 grid controls', async () => {
   for (const instances of [[], [frost]]) {
     const html = await kennel(instances);
-    assert.equal([...html.matchAll(/class="k-cell/g)].length, 30);
+    assert.equal([...html.matchAll(/class="k-cell/g)].length, 36);
     assert(!html.includes('Your Kennel is complete.'));
   }
 });
-await test('R44-18 complete collection acknowledges 30/30 without locked-cell instructions', async () => {
+await test('R44-18 complete collection acknowledges 36/36 without locked-cell instructions', async () => {
   const all = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'].flatMap(sp => pets.MORPHS.map(morph => ({ sp, morph })));
   const html = await kennel(all);
-  assert(html.includes('Collection &middot; 30 / 30'));
-  assert(html.includes('Your Kennel is complete.'), '30/30 has no acknowledgement');
+  assert(html.includes('Collection &middot; 36 / 36'));
+  assert(html.includes('Your Kennel is complete.'), '36/36 has no acknowledgement');
   const lead = html.match(/<p class="k-lead">([^<]*)/)[1];
   assert(!/lock|hollow|not/i.test(lead), `complete grid still says: ${lead}`);
 });
 await test('R44-23 roster never asserts Base ownership without its cell', async () => {
   // Forward-version morph data can own the species while owning zero known cells.
   const html = await kennel([{ ...frost, morph: 'future' }]);
-  assert(html.includes('Collection &middot; 0 / 30'));
-  assert(!html.includes('Base owned'), 'roster asserts Base owned at 0 / 30');
+  assert(html.includes('Collection &middot; 0 / 36'));
+  assert(!html.includes('Base owned'), 'roster asserts Base owned at 0 / 36');
   assert(html.includes('No colourways owned'));
   const mixed = await kennel([frost, { ...frost, morph: 'base' }]);
   assert(mixed.includes('Base, Frost owned'), 'caption omits owned Base when Frost is also present');

@@ -7,7 +7,7 @@ import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneh
 import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SOLD, FOOTBALL_PETS, footballItemId, footballGrantIds, footballBundleIds, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { COMMON_INGREDIENT_IDS } from './cooking.js';
-import { isMorph, MORPH_LABEL, morphAsset, rollMorph, ownedPairs, isKnownPet, legalPicks, petLevel } from './pets.js';
+import { isMorph, MORPH_LABEL, morphAsset, isKnownPet, legalPicks, petLevel } from './pets.js';
 
 // Use the same colour identity as the art. Shinies and CX never wear morph art.
 export function petColourName(inst) {
@@ -1259,13 +1259,9 @@ export async function lifetimeStepsSum() {
    so it needs the row rather than the write, and building it here is what stops
    the two shapes drifting apart. */
 export async function eggRow(source, goal = EGG_GOAL_STEPS) {
-  /* Kennel Phase A, section 2.2: the MORPH is rolled here, at grant, not at hatch.
-     The species stays a hatch-time decision (rule 0.4, unchanged rng order in
-     hatchEgg below) so two eggs granted the same day cannot both mint the same
-     fresh species; the morph has no such constraint, and rolling it now is what
-     lets the egg's own shell carry a tint before it hatches (section 2.5). */
-  const morph = rollMorph(ownedPairs(await petInstances()));
-  return { id: newId(), kind: 'egg', stepsAtStart: await lifetimeStepsSum(), goal, source, morph, ts: Date.now() };
+  // Laboratory foundation: new eggs supply Base; species and shiny stay hatch-time.
+  return { id: newId(), kind: 'egg', stepsAtStart: await lifetimeStepsSum(), goal, source,
+    morph: 'base', morphPolicy: 'lab-final-v1', ts: Date.now() };
 }
 export async function grantEgg(source, goal = EGG_GOAL_STEPS) {
   const row = await eggRow(source, goal);
@@ -1382,7 +1378,9 @@ export async function hatchEgg(invId) {
   const shinyRoll = rng() < SHINY_CHANCE;
   const pick = pickRandomPet(owned);
   const isShiny = shinyRoll && SHINY_ART.includes(pick.id);
-  /* Kennel Phase A, section 2.3: the morph rides the EGG, read here, never a new
+  /* In-flight non-Base eggs keep their stored colour, including on import from
+     an old client. The Base-only grant policy never relabels existing rows.
+     The morph rides the EGG, read here, never a new
      rng() call (rule 0.4: the rng stream in hatchEgg is unchanged). Shiny forces
      base (rule 0.1/1.2); a row from before this field existed, or an unknown
      value, reads as base too. */
