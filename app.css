@@ -464,7 +464,14 @@ svg { display: block; }
 .sheet.full { height: calc(100vh - var(--sat) - 24px); }
 .sheet-grab { width: 38px; height: 4.5px; background: var(--line-strong); border-radius: 3px; margin: 9px auto 2px; flex: none; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px var(--pad) 10px; flex: none; }
-.sheet-head h2 { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* THE OVERHANG, NOT THE ADVANCE WIDTH. Tom spotted the Y in "The Laboratory"
+   sheared flat. These titles render in Bangers (see .page-h1 group below), a
+   SLANTED face whose Y, W, A and V extend past their own advance width.
+   `overflow: hidden` clips to the padding box, and scrollWidth never counts
+   glyph overhang, so a layout measurement reports no clipping while the pixels
+   are cut. The ellipsis protection for genuinely long titles stays; the padding
+   just gives the last glyph its overhang back. */
+.sheet-head h2 { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 0.14em; }
 /* 44px MINIMUM. Measured at 43.8 x 30.9 css px, under the project's own 40px
    floor, and on several sheets it is the ONLY way out. Padding alone could not
    fix the height because the line box is 19px; min-height plus centring does. */

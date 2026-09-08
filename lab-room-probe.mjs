@@ -46,7 +46,7 @@ if (found.doors) {
     return { chars: t.replace(/\s+/g,' ').length, lab: /laborator/i.test(t),
              animate: /animate/i.test(t), colours: /ember|frost|toxic|rose|midnight/i.test(t) };
   });
-  await page.screenshot({ path: '/tmp/lab-room.png', fullPage: false });
+  await page.screenshot({ path: '/tmp/lab-room-v2.png', fullPage: false });
 }
 console.log('room: ' + JSON.stringify(room));
 console.log('errors: ' + (errs.length ? errs.slice(0,3).join(' | ') : 'none'));
