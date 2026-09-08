@@ -1,3 +1,4 @@
+import { validateLabSave, mergeLabSave } from './laboratory.js';
 // Minimal promise wrapper over IndexedDB. Stores: foods, log, weights, kv, xp, health, inv.
 // IMPORTANT: upgrades must stay strictly ADDITIVE (create-if-missing only).
 // Existing user data must survive every version bump.
@@ -536,11 +537,11 @@ export function take(store, key) {
  * merge rule). The receipt is the primitive's job, not the caller's, so a
  * paying take cannot forget it and a receipt can never land without its
  * delete, or the other way round. */
-function atomic({ take = null, kv = {}, puts = [], dels = [] }, op) {
+function atomic({ take = null, kv = {}, puts = [], dels = [], snapshot = null, decide = null, currencyReceipts = {} }, op) {
   if (frozen) return Promise.reject(new Error(FROZEN_MSG));
   const kvKeys = Object.keys(kv);
   const receipts = [...(take && take.store === 'inv' ? [take.key] : []), ...dels.filter(d => d.store === 'inv').map(d => d.key)];
-  const stores = [...new Set([...(take ? [take.store] : []), ...(kvKeys.length || receipts.length ? ['kv'] : []),
+  const stores = [...new Set([...(take ? [take.store] : []), ...(kvKeys.length || receipts.length || snapshot ? ['kv'] : []), ...(snapshot?.stores || []),
     ...puts.map(p => p.store), ...dels.map(d => d.store)])];
   for (const s of stores) bumpStore(s);   // same stamp discipline as addIfAbsent
   const [label, labelKey] = take ? [take.store, take.key] : ['kv', kvKeys[0]];
@@ -553,7 +554,7 @@ function atomic({ take = null, kv = {}, puts = [], dels = [] }, op) {
       try {
         const os = kvKeys.length ? t.objectStore('kv') : null;
         for (const k of kvKeys) {
-          const record = currencyRecorder(os, k, take ? `take:${take.store}:${take.key}:${k}` : null);
+          const record = currencyRecorder(os, k, take ? `take:${take.store}:${take.key}:${k}` : currencyReceipts[k]);
           const g = os.get(k);
           g.onsuccess = () => {
             try {
@@ -575,7 +576,34 @@ function atomic({ take = null, kv = {}, puts = [], dels = [] }, op) {
         }
       } catch (e) { die(e); }
     };
-    if (take) {
+    // All snapshot requests finish inside this transaction. The callback is
+    // synchronous and may only write stores declared up front. No pre-read can
+    // authorize a spend. Existing callers retain their original payload shape.
+    const decideLive = () => {
+      const state = {}, rows = {};
+      const keys = snapshot.keys || [], names = snapshot.stores || [];
+      let left = keys.length + names.length;
+      const ready = () => {
+        if (--left > 0) return;
+        try {
+          const plan = decide(state, rows);
+          if (!plan || typeof plan.then === 'function') throw new Error('atomic decision must be synchronous');
+          row = plan.result;
+          kv = plan.kv || {}; kvKeys.splice(0, kvKeys.length, ...Object.keys(kv));
+          puts = plan.puts || []; dels = plan.dels || [];
+          currencyReceipts = plan.currencyReceipts || {};
+          receipts.push(...dels.filter(d => d.store === 'inv').map(d => d.key));
+          pay();
+        } catch (e) { die(e); }
+      };
+      for (const k of keys) { const g = t.objectStore('kv').get(k); g.onsuccess = () => { state[k] = g.result?.v; ready(); }; }
+      for (const name of names) { const g = t.objectStore(name).getAll(); g.onsuccess = () => { rows[name] = g.result; ready(); }; }
+      if (!left) { left = 1; ready(); }
+    };
+    if (snapshot) {
+      if (take || typeof decide !== 'function') die(new Error('invalid atomic snapshot request'));
+      else decideLive();
+    } else if (take) {
       const os = t.objectStore(take.store);
       const g = os.get(take.key);
       g.onsuccess = () => { row = g.result; if (row === undefined) return; os.delete(take.key); pay(); };
@@ -980,47 +1008,21 @@ export async function witnessServerDay(serverMs) {
   return cur;
 }
 
+// Shared synchronous decision. Laboratory applies writes with its own commit.
+export function dayDecision(key, hw, rawWitness, strict = false) {
+  const o = dayOrdinal(key), oh = dayOrdinal(hw), witness = Number(rawWitness) || 0;
+  if (!Number.isFinite(o) || (strict && !/^\d{4}-\d{2}-\d{2}$/.test(key))) return {fresh: !strict, reason:'unparseable', writes:{}};
+  if (!Number.isFinite(oh)) return {fresh:true, reason:'seeded', writes:{dayHighWater:key, ...(!witness ? {[DAY_WITNESS_KEY]:o} : {})}};
+  if (o < oh) return {fresh:false, reason:'backwards', highWater:hw, writes:{}};
+  if (o === oh) return {fresh:true, reason:'same-day', writes:{}};
+  if (witness && o > witness + WITNESS_GRACE) return {fresh:false, reason:'unwitnessed', highWater:hw, witness, ceiling:witness+WITNESS_GRACE, claimed:o, writes:{}};
+  return {fresh:true, reason:'advanced', writes:{dayHighWater:key, ...(!witness ? {[DAY_WITNESS_KEY]:o} : {})}};
+}
 export async function claimDay(key) {
-  const o = dayOrdinal(key);
-  if (!Number.isFinite(o)) return { fresh: true, reason: 'unparseable' };  // never judge what we cannot read
-
-  const hw = await kvGet('dayHighWater', null);
-  const oh = dayOrdinal(hw);
-
-  // FIRST RUN, or a mark we cannot read: seed and let the player through.
-  if (!Number.isFinite(oh)) {
-    await kvSet('dayHighWater', key);
-    // ...and rule 3's mark with it, if the server has never been seen. A device
-    // that has only ever been offline gets a ceiling from here, not a free run.
-    if (!(Number(await kvGet(DAY_WITNESS_KEY, 0)) || 0)) await kvSet(DAY_WITNESS_KEY, o);
-    return { fresh: true, reason: 'seeded' };
-  }
-
-  // RULE 1. Strictly before the mark is never a new day.
-  if (o < oh) return { fresh: false, reason: 'backwards', highWater: hw };
-
-  /* SAME DAY. Fresh, because the per-key ledger is what decides whether any
-     individual reward is still owed. Deliberately writes nothing: restamping
-     here is exactly the bug that made the rolling-window design refuse honest
-     evening-then-morning players. */
-  if (o === oh) return { fresh: true, reason: 'same-day' };
-
-  /* (Rule 2 stood here until QA round 26 O10. It could not fire: see the header.)
-
-     RULE 3. A day the SERVER has not reached, plus an offline allowance. The
-     one rule here that is not read off the clock being moved, so it is what
-     refuses the wild jumps (a decade-ahead RTC) as well as the patient
-     one-day-at-a-time walk. Seeds and lets through when there is nothing to
-     judge against; see the header. "A refusal writes nothing" is the property
-     that stops this guard latching, so nothing is committed until it has spoken. */
-  const witness = Number(await kvGet(DAY_WITNESS_KEY, 0)) || 0;
-  if (witness && o > witness + WITNESS_GRACE) {
-    return { fresh: false, reason: 'unwitnessed', highWater: hw, witness, ceiling: witness + WITNESS_GRACE, claimed: o };
-  }
-  if (!witness) await kvSet(DAY_WITNESS_KEY, o);
-
-  await kvSet('dayHighWater', key);
-  return { fresh: true, reason: 'advanced' };
+  return payAtomic({snapshot:{keys:['dayHighWater', DAY_WITNESS_KEY]}, decide:s=>{
+    const {writes, ...answer} = dayDecision(key, s.dayHighWater, s[DAY_WITNESS_KEY]);
+    return {kv:Object.fromEntries(Object.entries(writes).map(([k,v])=>[k,()=>v])), result:answer};
+  }});
 }
 
 /* Would rule 3 refuse `key` right now? Read-only, like dayGuardState below, so
@@ -1121,12 +1123,13 @@ const DEVICE_KV = ['identity', 'social', 'recoveryId', 'recoverySetAt', 'vaultCo
 // This is container validation, not a complete schema or an authenticity check.
 const RESTORE_ARRAY_KV = new Set(['invTaken', 'crateTaken', 'petTaken', 'paidlooks', 'looks',
   'redeemed', 'grantsSeen', 'petInst', 'outfits', 'giftbox', 'pantry', 'foodbuffs',
-  'cookq', 'routines', 'evq']);
+  'cookq', 'routines', 'evq', 'labSeen']);
 const RESTORE_MAP_KV = new Set(['equipped', 'gearloadout', 'transmog', 'petWear',
   'pets', 'petLvlSteps', 'petBonds', 'petNick', 'pettalents', 'buffs', 'ingredients',
-  'potions', 'potionsRev', 'pitEnergy', 'settings', 'notifPrefs', 'grantPresentation']);
+  'potions', 'potionsRev', 'pitEnergy', 'settings', 'notifPrefs', 'grantPresentation',
+  'labExperiments', 'labDaily', 'labIncubators', 'labIntents', 'labUi']);
 const RESTORE_NUMBER_KV = new Set(['coins', 'coinsRev', 'bonedust', 'dustRev',
-  'grantCursor', 'petLvlV', 'petStepCredit', 'petBreedCredit', 'potsOwned']);
+  'grantCursor', 'petLvlV', 'petStepCredit', 'petBreedCredit', 'potsOwned', 'labV']);
 const MERGE_RECEIPTS = ['invTaken', 'crateTaken', 'petTaken', 'paidlooks', 'looks', 'redeemed', 'grantsSeen'];
 function validateRestoreKv(rows) {
   const keys = new Set();
@@ -1242,7 +1245,8 @@ export async function importAll(data, { replace = true } = {}) {
      whole rule. A file with no version at all is treated as old. */
   const fileVersion = Number(data.version) || 0;
   if (fileVersion > DB_VERSION) throw new Error(`that backup was made by a newer version of the app (v${fileVersion}; this app reads v${DB_VERSION}). Update the app, then import it again. Your old data is unchanged.`);
-  if (Array.isArray(data.kv)) validateRestoreKv(data.kv);
+  if (Array.isArray(data.kv)) { validateRestoreKv(data.kv); validateLabSave(Object.fromEntries(data.kv.map(r=>[r.k,r.v]))); }
+  if ((data.inv || []).some(r => r.kind === 'egg' && r.morphPolicy === 'lab-final-v1' && r.morph !== 'base')) throw new Error('inconsistent Laboratory egg policy');
   if (Array.isArray(data.kv)) {
     const rows = new Map(data.kv.map(r => [r.k, r.v]));
     for (const k of Object.keys(CURRENCY)) {
@@ -1443,6 +1447,11 @@ export async function importAll(data, { replace = true } = {}) {
           }
           if (taken.size && declared.has('inv')) invRows = data.inv.filter(r => !(r && taken.has(r.id)));
         }
+        const localLab = Object.fromEntries(localKv.map(r=>[r.k,r.v]));
+        const fileLab = Object.fromEntries((data.kv||[]).map(r=>[r.k,r.v]));
+        const finalLab = Object.fromEntries([...(replace && declared.has('kv') ? [] : localKv), ...(kvRows||[]), ...keptKv].map(r=>[r.k,r.v]));
+        const labMerge = mergeLabSave(localLab, fileLab, finalLab, replace);
+        keptKv.push(...Object.entries(labMerge).map(([k,v])=>({k,v})));
         for (const s of STORES) {
           const os = t.objectStore(s);
           /* Clear and puts in one transaction, so they land together or not

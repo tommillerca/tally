@@ -31,6 +31,7 @@ import {
   buyPetItem,
   DUST_EGG, buyDustEgg, dustEggBought,
 } from './loot.js';
+import * as labLoot from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP, manualWalksToday, logManualWalk, MANUAL_WALKS_PER_DAY } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, collectReach, compassLabel, distanceM, bearingDeg } from './hunt.js';
@@ -542,7 +543,7 @@ const petWearsFootball = (petId, wear) => petWornTints(petId, wearOf(wear)).some
  * turned the cream shell blue for an EMBER egg (measured mean RGB 155,158,188).
  * Hues match scripts/build-pet-morphs-v2.py's absolute targets (ember 14deg,
  * frost 200deg, toxic 98deg, midnight 254deg). */
-const MORPH_SHELL = { ember: '#f0763a', frost: '#5fb8ec', toxic: '#8fd23c', midnight: '#6b4fc4' };
+const MORPH_SHELL = { ember: '#f0763a', frost: '#5fb8ec', toxic: '#8fd23c', rose: '#e878a5', midnight: '#6b4fc4' };
 function eggTint(morph) { return (morph && morph !== 'base' && MORPH_SHELL[morph]) || ''; }
 /* THE SWATCH COLOUR FOR A COLOURWAY, wherever one is drawn as a dot rather than
    as art: the Kennel's roster dots and the Stable door's strip. Same hues as the
@@ -1476,7 +1477,7 @@ function renderStorageUnavailable() {
 }
 
 async function boot() {
-  if (S.demo) { useDbName('tally-demo'); document.body.insertAdjacentHTML('beforeend', '<div class="demo-badge">DEMO</div>'); }
+  if (S.demo) { useDbName('tally-demo'); $('#app').insertAdjacentHTML('afterbegin', '<div class="demo-header"><span class="demo-badge">DEMO</span></div>'); }
   // Explain and stop before reads, migrations, cloud recovery, or lifecycle setup.
   if (!(await storageStatus()).ok) { renderStorageUnavailable(); return; }
   // Register before boot can write, including migrations and demo seeding.
@@ -3863,6 +3864,7 @@ function openSheet(html, { cls = '', onClose = null, name = null } = {}) {
      for every sheet in the app, not just this one. */
   const label = (name || (html.match(/<h2[^>]*>([^<]{1,60})<\/h2>/) || [])[1] || 'Panel').trim();
   wrap.innerHTML = `<div class="sheet-backdrop"></div><div class="sheet ${cls}" role="dialog" aria-modal="true" aria-label="${esc(label)}"><div class="sheet-grab"></div>${html}</div>`;
+  if (S.demo) $('.sheet-head', wrap)?.insertAdjacentHTML('beforeend', '<span class="demo-badge">DEMO</span>');
   $('#sheets').appendChild(wrap);
   /* Sheets are the app's other surface, and the heaviest ones (the Stable's ring,
      the Wardrobe, a pack reveal) are exactly the ones that used to assemble
@@ -4583,6 +4585,9 @@ async function renderToday(el) {
      to '' on a quiet day), so a kicker can never label an empty space. */
   const tsec = (label, html) => (html ? `<section class="tsec"><div class="tsec-h">${label}</div>${html}</section>` : '');
 
+  const labDiscovery = laboratoryEngine() ? await laboratoryEngine().snapshot({ inv, health: healthRows, log: allLog, xp: allXp, presentationOnly: true }).catch(() => null) : null;
+  const labToday = labDiscovery ? labTodayHtml(labDiscovery, { current: S.date === dateKey(), priorDay: labDiscovery.priorDay === true, hidden: labDiscovery.ui.todayHidden }) : '';
+  const interruptedFightCard = await kvGet('pitFight', null);
   el.innerHTML = `
   ${/* THE PAGE BACKDROP, and it has to live INSIDE the scrolled content. The
        scroller itself can only carry a background-COLOUR (see app.css: an image
@@ -4957,6 +4962,8 @@ async function renderToday(el) {
        this is not a warning), copy from habitGrantCard (js/game.js). The button
        is the dismissal: it records the card as seen and opens Training, where
        the N points are waiting. */''}
+  ${labToday}
+  ${labInterruptedFightHtml(interruptedFightCard)}
   ${rebal ? `
   <div class="card wb-back" id="habitGrantCard">
     <b>${esc(rebal.title)}</b>
@@ -5005,6 +5012,9 @@ async function renderToday(el) {
   tweenNumber($('#ringBig', el), prev.eatenShown ?? tot.kcal, tot.kcal, 650, v => Math.round(v).toLocaleString());
   S.ui = { ringPct: pct, eatenShown: tot.kcal, macroPcts };
 
+  wireLabLinks(el);
+  $('[data-lab-hide]', el)?.addEventListener('click', async () => { try { await laboratoryEngine().setUi({ todayHidden: true }); refresh(); } catch { toast('Could not save that setting. Try again.'); } });
+  $('[data-interrupted-pit]', el)?.addEventListener('click', () => openPit());
   $('#todaySettings', el)?.addEventListener('click', () => { location.hash = '#/settings'; });
   $('#prevDay').addEventListener('click', () => { if (S.date <= firstDate) return; S.date = addDays(S.date, -1); refresh(); });
   $('#nextDay').addEventListener('click', () => { S.date = addDays(S.date, 1); refresh(); });
@@ -14932,6 +14942,7 @@ async function renderSettings(el) {
     </div>`;
   el.innerHTML = `
   <h1 class="page-h1">Settings</h1>
+  <div class="settings-row"><div class="lab"><b>The Laboratory on Today</b><span>Show the row when a safe collection-building pair is available.</span></div><button class="btn ghost" id="labRestoreToday" ${laboratoryEngine() ? '' : 'disabled'}>Restore row</button></div>
 
   ${apiConfigured ? `
   <div class="card">
@@ -15099,6 +15110,7 @@ async function renderSettings(el) {
     Dialogue type: <a href="https://yukipixels.itch.io/boldpixels" target="_blank" rel="noopener">BoldPixels by YukiPixels</a>, used unmodified under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>
   </p>`;
 
+  $('#labRestoreToday', el)?.addEventListener('click', async () => { try { await laboratoryEngine().setUi({ todayHidden: false }); toast('The Laboratory row is restored when a safe pair is available.'); } catch { toast('Could not save that setting. Try again.'); } });
   $('#saveTargets').addEventListener('click', async () => {
     /* The target is the denominator of the calorie ring, the "left today"
        number and the over/under colour, so a nonsense target quietly recolours
@@ -16320,7 +16332,7 @@ function openHatchReveal(res, charWrap) {
        <div class="hatch-prize r-${item.rarity}${res.shiny ? ' is-shiny' : ''}">
          <canvas class="hatch-art" width="512" height="512"></canvas>
          <b>${esc(petInstanceName({ sp: item.id, morph: res.morph, shiny: res.shiny }))}${res.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</b>
-         <small>${res.shiny ? 'Ultra-rare variant · follows your bonehead' : res.dupe ? 'A duplicate · joins your crew as breeding stock' : 'Pet · follows your bonehead'}</small>
+         <small>${res.shiny ? 'Ultra-rare variant · follows your bonehead' : res.dupe ? 'A spare pet · keep it for recipes, melt it or breed' : 'Pet · follows your bonehead'}</small>
          <span class="rar-chip" style="color:${res.shiny ? 'var(--gold)' : RARITIES[item.rarity].color}">${res.shiny ? 'SHINY' : RARITIES[item.rarity].label}</span>
        </div>`
     : `<div class="lvl-stamp" style="font-size:26px">A FAMILIAR FRIEND</div>
@@ -16337,6 +16349,12 @@ function openHatchReveal(res, charWrap) {
         <button class="btn" id="hatchOk">${item ? 'Adopt' : 'Nice'}</button>
       </div>
     </div>`, { cls: 'takeover', onClose: () => setFxLayer() });
+  if (laboratoryEngine()) laboratoryEngine().snapshot({ presentationOnly: true }).then(s => {
+    if (!wrap2.isConnected || s.status !== 'ready' || s.remaining <= 0 || !s.hasSafeUsefulPair || s.collectionCount === labTotal()) return;
+    const link = document.createElement('button'); link.className = 'btn ghost'; link.textContent = 'Open Laboratory';
+    link.addEventListener('click', () => openLaboratory());
+    $('.reveal-foot', wrap2)?.appendChild(link);
+  }).catch(() => {});
   setFxLayer(305);
   const stage = $('#hatchStage', wrap2);
   const revealEl = $('.hatch-reveal', wrap2);
@@ -17825,6 +17843,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     const ownedPets = invAll.filter(r => r.kind === 'cos' && BH_BY_ID[r.itemId] && BH_BY_ID[r.itemId].slot === 'C').map(r => BH_BY_ID[r.itemId]);
     const pCountTotal = Object.values(pCounts).reduce((a, n) => a + n, 0);
     content.innerHTML = `
+      <div class="lab-egg-help"><p>Hatch eggs to discover species. Keep spare pets of the same species for The Laboratory. Its recipes show the path to new colours.</p><p>New eggs hatch Base pets, with the existing rare shiny chance. Colours are now made in The Laboratory. Your pets and the colours already stored in your eggs stay yours.</p><button class="btn ghost" data-lab-open>Explore Laboratory recipes</button></div>
       ${(pendingLoot || []).length ? `<div class="t3-sect" style="margin-top:2px"><b>Boss loot · keep one per drop</b><i></i></div>
       ${pendingLoot.map((p, i) => `
         <div class="loot-pending" data-lootkey="${esc(p.key)}">
@@ -18008,6 +18027,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         setTimeout(() => renderCharacter(wrap, 'crates'), 900);
       });
     });
+    wireLabLinks(content);
     $$('[data-hatch]', content).forEach(b => b.addEventListener('click', async () => {
       const res = await hatchEgg(b.dataset.hatch);
       if (!res.ready) { toast('Keep walking: this egg is not ready yet.'); return; }
@@ -20087,6 +20107,7 @@ async function openStable(opts = {}) {
     const [instsAll, bank, st, eqOwn, nicks, ownedCos] = await Promise.all([petInstances(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds()]);
     /* R44-1: use the same known-species boundary as every state reader. */
     const insts = instsAll.filter(x => x && isKnownPet(x.sp));
+    const labStock = laboratoryEngine() ? await laboratoryEngine().snapshot({ presentationOnly: true }).catch(() => null) : null;
     if (insts.length !== instsAll.length && !stableGhostWarned) { stableGhostWarned = true; console.warn('Stable: skipped unsupported pet row(s)', instsAll.filter(x => !x || !isKnownPet(x.sp))); }
     /* OUT WITH YOU means the C slot holds her. A petEquipped that the worn outfit
        does not agree with is a pet the Stable must still offer EQUIP for, or the
@@ -20456,20 +20477,23 @@ async function openStable(opts = {}) {
            answers the same kind of question and a second vocabulary would be
            the cost of a second idea. It carries NO scene: the Paddock's pitch
            is "not a list, a place", so its door shows the place; the Kennel is
-           a collection, so its door shows the collection -- the five colourway
+           a collection, so its door shows the collection -- the six colourway
            swatches, filled for the ones you own, which is the SAME reading rule
            the grid inside uses. That is the teaching, and it costs no image.
            The small line is the one-line explanation at the point of use, the
            way the Dressing Room and the Paddock's "Tap a pet to say hi" teach:
            no tutorial screen, no takeover. -->
       <button class="pdk-door kdoor" id="kennelBtn" type="button">
-        <span class="kdoor-sw" aria-hidden="true">${MORPHS.map(m => `<i class="${kennelMorphs.has(m) ? 'on' : ''}" style="--kc:${morphSwatch(m)}"></i>`).join('')}</span>
+        <span class="kdoor-sw" style="--kennel-columns:${MORPHS.length}" aria-hidden="true">${MORPHS.map(m => `<i class="${kennelMorphs.has(m) ? 'on' : ''}" style="--kc:${morphSwatch(m)}"></i>`).join('')}</span>
         <span class="pdk-door-tx">
           <b>THE KENNEL</b>
           <small>${kennelFound} of ${KENNEL_SPECIES.length * MORPHS.length} species colourways &middot; founder excluded</small>
         </span>
         <span class="pdk-door-go" aria-hidden="true">›</span>
       </button>
+      <button class="btn ghost lab-door" data-lab-open>The Laboratory · Build your collection</button>
+      <p class="lab-sinks">Melting clears the pile. Breeding builds strength. The Laboratory builds the collection.</p>
+      ${opts.labAction ? `<p role="status">${opts.labAction === 'melt' ? 'Choose a pet in the Stable, then use Destroy to melt that one pet for Bone Dust.' : 'Choose a keeper and a spare in the Stable, then review Breed to raise the keeper’s lineage.'}</p>` : ''}
       <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap">
         <span class="chip">${ICONS.dust(14)} ${st.dust.toLocaleString()}</span>
         <span class="chip" style="font-size:.6875rem">Only the active pet levels as you walk</span>
@@ -21096,6 +21120,15 @@ async function openStable(opts = {}) {
     $('#breedCancel', body)?.addEventListener('click', () => { sel = []; offSp = null; saveBreed(); render(); });
     $('#petsHelp', body)?.addEventListener('click', openPetsHelp);
     $('#stableToPaddock', body)?.addEventListener('click', () => openPaddock());
+    wireLabLinks(body);
+    if (labStock) {
+      const needed = labStock.pets.filter(p => p.neededFor && (p.iid === focused?.iid || sel.includes(p.iid)));
+      for (const p of needed) {
+        const note = document.createElement('p'); note.className = 'note lab-ingredient';
+        note.textContent = `${labName(p)}: Needed for ${p.neededFor}. Melting or breeding this pet spends that ingredient.`;
+        ($('.cf-acts', body) || body).appendChild(note);
+      }
+    }
     $('#kennelBtn', body)?.addEventListener('click', () => openKennel());
     /* THE BAR GETS A CONTAINING BLOCK, NOT SCROLL ROOM. See the long note above
        .breed-bar.sticky in app.css for the two fixes that came before this.
@@ -21139,25 +21172,16 @@ async function openStable(opts = {}) {
       // Only an untrained, plain duplicate keeps the quick two-tap action.
       const lastColour = insts.filter(x => x.sp === inst.sp && petColourName(x) === petColourName(inst)).length === 1;
       if (lastColour || steps > 0 || isShiny || (inst.lineage || 0) > 0) {
-        const wrap = openSheet(`
-          <div class="sheet-head">
-            <div class="hd"><h2>Destroy ${esc(nm)}?</h2><div class="sub">This cannot be undone</div></div>
-            <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
-          </div>
-          <div class="sheet-body">
-            <p class="note" style="margin-bottom:12px">${lastColour ? 'This is your last copy of this colour. ' : ''}<b>${esc(nm)}</b> has <b>${steps.toLocaleString()} banked steps</b>${inst.lineage ? ` and lineage ${inst.lineage}` : ''}. Its steps and lineage are lost. Destroying it pays <span class="dust-ico">${ICONS.dust(13)}</span><b>${dustVal} Bone Dust</b> and it does not come back.</p>
-            <div class="t1-field"><label>Type ${esc(nm.toUpperCase())} or DESTROY to confirm</label><input id="pdIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="DESTROY"></div>
-          </div>
-          <div class="t1-foot"><button class="btn danger-ish" id="pdGo" disabled>Destroy it</button></div>`, { cls: 't1', name: 'DestroyPet' });
-        const input = $('#pdIn', wrap), go = $('#pdGo', wrap);
-        const typedOk = () => { const t = input.value.trim().toUpperCase(); return t === 'DESTROY' || t === nm.toUpperCase(); };
-        input.addEventListener('input', () => { go.disabled = !typedOk(); });
-        go.addEventListener('click', async () => {
-          if (!typedOk()) return;   // belt and braces
-          go.disabled = true;
-          const done = await doSalvage();
-          history.back();   // close the confirm; the Stable is the sheet underneath
-          if (done) render();
+        openPetDestructionReview({
+          title: `Destroy ${nm}?`,
+          html: `<p>${lastColour ? 'This is your last copy of this colour. ' : ''}<b>${esc(nm)}</b> has <b>${steps.toLocaleString()} banked steps</b>${inst.lineage ? ` and lineage ${inst.lineage}` : ''}. Its steps and lineage are lost. Destroying it pays <b>${esc(dustVal)} Bone Dust</b> and it does not come back.</p>`,
+          typed: true, prompt: `Type ${nm.toUpperCase()} or DESTROY to confirm`,
+          accepts: value => ['DESTROY', nm.toUpperCase()].includes(value.trim().toUpperCase()),
+          action: 'Destroy it', commit: async () => {
+            const done = await doSalvage();
+            if (done) render();
+            return { close: done, message: done ? '' : 'Could not destroy that pet. Cancel and review it again.' };
+          },
         });
         return;
       }
@@ -21216,8 +21240,8 @@ async function openStable(opts = {}) {
 }
 
 /* THE SIX ORDINARY HATCH SPECIES, Kennel Phase A. Tom's ruling 2026-09-05:
-   Bumbleseal (C6) is a normal species now, so the collection grid is 6 x 5 =
-   30 cells, not the plan's original 25 -- she just never counts toward the
+   Bumbleseal (C6) is a normal species now. With Rose, the collection is
+   six species by six colours, 36 cells. She never counts toward the
    hatch-pool fresh-first bookkeeping in js/pets.js (unrelated, unchanged).
    CX stays exempt throughout (spec 0.7 / KENNEL.md rulings): no row, no cell,
    no swatch. Alphabetical by name, matching the plan's own wireframe order. */
@@ -21232,6 +21256,352 @@ const KENNEL_SPECIES = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6']
    opacity only, never a second image, so nothing here adds a decode beyond one
    thumb per roster species and one per grid cell (see the pixel-budget note in
    the plan; measured by tests/memory-census.mjs). */
+/* Laboratory UI boundary, 2026-09-08. The engine lane exports laboratory from
+ * loot.js. See docs/LAB-UI-BOUNDARY.md. This layer never resolves odds,
+ * draws an outcome, consumes an instance, or buys capacity itself. */
+function laboratoryEngine() {
+  const engine = labLoot.laboratory;
+  return engine?.version === 1 && ['snapshot', 'quote', 'animate', 'purchase', 'acknowledge', 'setUi'].every(k => typeof engine[k] === 'function') ? engine : null;
+}
+
+// LAB UI PURE BEGIN: these renderers consume the engine's coherent snapshot.
+const labRecipes = [
+  { id: 'base-base', inputs: ['base', 'base'], outputs: ['ember', 'frost'] },
+  { id: 'ember-frost', inputs: ['ember', 'frost'], outputs: ['toxic', 'rose'] },
+  { id: 'toxic-rose', inputs: ['toxic', 'rose'], outputs: ['midnight'] },
+];
+function labColour(m) { return m === 'base' ? 'Base' : MORPH_LABEL[m] || String(m); }
+function labSpecies(sp) { return BH_BY_ID[sp]?.name || sp; }
+function labCell(key) { const [sp, m] = key.split('|'); return `${labColour(m)} ${labSpecies(sp)}`; }
+function labTotal() { return KENNEL_SPECIES.length * MORPHS.length; }
+function labPair(a, b) {
+  if (!a || !b || a.iid === b.iid || a.sp !== b.sp || a.eligible !== true || b.eligible !== true) return null;
+  return labRecipes.find(r => [...r.inputs].sort().join('|') === [a.morph, b.morph].sort().join('|')) || null;
+}
+function labInvested(p) {
+  return p.bankedSteps > 0 || p.level > 1 || !!p.nickname || p.lineage > 0 || p.bond > 0 || p.talents.length > 0 || p.equipped;
+}
+function labName(p) { return `${p.nickname ? p.nickname + ' · ' : ''}${labColour(p.morph)} ${labSpecies(p.sp)}`; }
+function labPetDetails(p) {
+  return `<span class="lab-instance-art" aria-hidden="true">${petPortraitHtml(p.sp, 64, !!p.shiny, { morph: p.morph, wear: null, thumb: true })}</span><b>${esc(labName(p))}</b><span>Level ${esc(p.level)} · ${esc(p.bankedSteps.toLocaleString())} banked training steps</span><span>Nickname: ${esc(p.nickname || 'none')}. Lineage ${esc(p.lineage)}. Bond ${esc(p.bond)}/5. ${p.shiny ? 'Shiny' : 'Non-shiny'}.</span><span>Talent choices: ${esc(p.talents.join(', ') || 'none')}. ${p.equipped ? 'Equipped' : 'Not equipped'}.</span>`;
+}
+function labStateCopy(s, sp = '') {
+  if (s.status === 'unavailable') return 'The Laboratory is not available in this build. Explore the recipes, view Collection, or hatch eggs.';
+  if (s.status === 'read-error') return 'The Laboratory could not be read. Reopen the room to check your pets and experiments.';
+  if (s.status === 'unknown') return "The experiment's save could not be checked. Reopen The Laboratory to review it before trying again.";
+  if (s.status === 'clock-backwards') return 'Your device date is before your last experiment day. Check automatic date and time.';
+  if (s.status === 'unwitnessed-day') return "Connect briefly so the app can check today's date, then reopen The Laboratory.";
+  if (s.status === 'restore-conflict') return 'These saves contain conflicting experiments or incubator purchases. Your current save is unchanged. Keep both backups for recovery.';
+  if (!s.pets.length) return 'Hatch eggs to discover species. The recipe path is here when you have a pair.';
+  if (!s.hasEligiblePair) return 'Your pets do not match a recipe yet. Hatch eggs to discover species and build matching pairs.';
+  if (s.remaining === 0) return `You've used ${s.used}/${s.capacity} experiments today. Experiments reset at ${s.resetTime}, ${s.zone}.`;
+  if (s.collectionCount === labTotal()) return `All ${labTotal()} colours owned. Animate copies, melt spares for Bone Dust, or breed to raise lineage.`;
+  if (sp && s.species[sp]?.complete) return `${labSpecies(sp)} has all ${MORPHS.length} colours. Choose another species to build the collection, or make an optional extra copy.`;
+  if (sp && s.species[sp]?.hasEligiblePair === false) return `No matching pair for ${labSpecies(sp)} yet. Hatch eggs or choose another species. The recipes stay here.`;
+  if (!s.hasSafePair) return 'Keep one of each colour. You need two spare pets of the same species that match a recipe.';
+  return `${s.remaining} experiment${s.remaining === 1 ? '' : 's'} available today.`;
+}
+function labSinksHtml(next = '') {
+  return `<p class="lab-sinks">Melting clears the pile. Breeding builds strength. The Laboratory builds the collection.</p><p class="note">Clearing lots of spares? Melt them for Bone Dust. The Laboratory reduces your total by one pet per experiment.</p><nav class="lab-links" aria-label="Pet actions"><button class="btn ${next === 'collection' ? 'lab-next' : 'ghost'}" data-lab-nav="collection">Collection</button><button class="btn ghost" data-lab-nav="eggs">Eggs</button><button class="btn ghost" data-lab-nav="melt">Melt spares</button><button class="btn ghost" data-lab-nav="breed">Breed</button></nav>`;
+}
+function labCollected(s, sp, morph) {
+  return s.ownedCells ? s.ownedCells.includes(`${sp}|${morph}`) : s.pets.some(p => p.sp === sp && !p.shiny && p.morph === morph);
+}
+function labProgress(s, sp) {
+  const count = s.species[sp]?.count;
+  return count === 0 ? 'Six colours to collect' : count == null ? 'Collection count unknown' : `You have ${count} of ${MORPHS.length} colours`;
+}
+function labSpecimenHtml(s, sp, morph, px = 96) {
+  const owned = labCollected(s, sp, morph);
+  return `<figure class="lab-specimen" aria-label="${esc(labColour(morph))} ${esc(labSpecies(sp))}: ${owned ? 'owned' : 'not owned'}${morph === 'base' ? '. Need two Base pets' : ''}"><div class="lab-art" aria-hidden="true">${petPortraitHtml(sp, px, false, { morph, wear: null, thumb: true })}</div><figcaption><b>${esc(labColour(morph))}${morph === 'base' ? ' ×2' : ''}</b>${owned ? '<small>✓ Have</small>' : ''}</figcaption></figure>`;
+}
+function labSpeciesHtml(s, sp, expanded = false) {
+  if (KENNEL_SPECIES.some(x => x.id === sp) && !expanded) return `<section class="lab-identity" aria-label="Selected species"><span class="lab-art" aria-hidden="true">${petPortraitHtml(sp, 64, false, { morph: 'base', wear: null, thumb: true })}</span><span class="lab-identity-copy"><b>${esc(labSpecies(sp))}</b><small id="labSpeciesProgress">${esc(labProgress(s, sp))}</small></span><button class="link" data-lab-change-species>Change species</button></section>`;
+  return `<fieldset class="lab-species"><legend>${sp ? 'Change species <button class="link" data-lab-keep-species>Cancel</button>' : '<button class="btn lab-next" data-lab-choose-species>Choose a species</button>'}</legend>${KENNEL_SPECIES.map(x => `<label class="lab-species-choice"><input type="radio" name="labSpecies" id="labSpecies-${x.id}" value="${x.id}" ${sp === x.id ? 'checked' : ''}><span class="lab-species-tile"><span class="lab-art" aria-hidden="true">${petPortraitHtml(x.id, 96, false, { morph: 'base', wear: null, thumb: true })}</span><b>${esc(x.name)}</b><small>${esc(labProgress(s, x.id))}</small>${sp === x.id ? '<span class="lab-selected">✓ Selected</span>' : ''}</span></label>`).join('')}</fieldset>`;
+}
+function labRecipesHtml(s, sp) {
+  /* Protection is gone (Tom, 2026-09-08), so this list used to be derived from
+     a filter that never matches now and the odds note could never render.
+     The first two recipes are ALWAYS a coin flip, so they are the list. */
+  const coinFlipRecipes = labRecipes.filter(r => r.id !== 'toxic-rose').map(r => r.id);
+  const tier = morphs => `<div class="lab-tier">${morphs.map(m => sp ? labSpecimenHtml(s, sp, m) : `<b>${esc(labColour(m))}${m === 'base' ? ' ×2' : ''}</b>`).join('')}</div>`;
+  return `<section class="lab-path" aria-label="Recipe path"><header><h3>${sp ? esc(labSpecies(sp)) + ' colour path' : 'Colour path'}</h3>${sp ? `<small>Unmarked colours are still to collect.</small>` : ''}<p class="lab-repeat"><span aria-hidden="true">↶</span> Repeat to build a pair</p></header>${tier(['base'])}${labRecipes.map(r => {
+    const detail = s.species[sp]?.recipes?.[r.id];
+    // Missing engine details stay examples, never inferred odds or eligibility.
+    const dist = detail?.distribution || r.outputs.map(morph => ({ morph, weight: 1 }));
+    const weight = dist.reduce((n, d) => n + d.weight, 0);
+    const promise = `Make ${dist.map(d => labColour(d.morph)).join(' or ')}${dist.length === 1 ? '. Guaranteed.' : '.'}`;
+    const use = r.id === 'base-base' ? 'Use two Base pets.' : `Use ${r.inputs.map(labColour).join(' and ')}.`;
+    /* Tom, 2026-09-08: the missing-colour and ingredient filters are GONE from
+       the first two recipes. "you could make 3 frost before you make 1 ember
+       thats the risk part". Any copy promising an ordered outcome is a lie. */
+    return `<div class="lab-connection" data-recipe="${r.id}"${coinFlipRecipes.includes(r.id) ? ' aria-describedby="labCoinFlipOdds"' : ''}><p><span aria-hidden="true">↓</span> ${esc(use)} <b>${esc(promise)}</b></p><p class="lab-odds">${dist.map(d => `${Math.round(d.weight / weight * 100)}% ${esc(labColour(d.morph))}`).join(' · ')}</p>${r.id === 'toxic-rose' ? '<p>Midnight is the only output. Both pets are consumed.</p>' : sp ? '' : `<p>Example odds. Choose a species to see your chances.</p>`}${coinFlipRecipes[0] === r.id ? '<p id="labCoinFlipOdds">Always 50/50. Each coin flip can repeat a colour you already have.</p>' : ''}</div>${tier(r.outputs)}`;
+  }).join('')}</section>`;
+}
+function labIngredientCounts(s, sp, recipe) {
+  if (!sp || !recipe) return '';
+  return `<div class="lab-stock"><p>Spare pets: ${[...new Set(recipe.inputs)].map(m => `${esc(labColour(m))} ${s.species[sp]?.safeCounts?.[m] ?? 'Unknown'}. Need ${recipe.inputs.filter(x => x === m).length}.`).join(' ')}</p><small>Spare counts keep one of each colour and exclude invested pets.</small></div>`;
+}
+function labBranchesHtml(q) {
+  const total = q.distribution.reduce((n, d) => n + d.weight, 0);
+  const certain = q.distribution.length === 1;
+  return `<div class="lab-branches">${q.branches.map(b => {
+    const odds = Math.round(q.distribution.find(d => d.morph === b.morph).weight / total * 100);
+    const art = petSpriteHtml(q.species, 64, false, { morph: b.morph, shiny: false, wear: null, thumb: true });
+    return `<section class="lab-branch">${art}<b>${esc(labColour(b.morph))} ${esc(labSpecies(q.species))}: ${odds}%</b><p>${certain ? 'These' : `If ${esc(labColour(b.morph))} appears (${odds}%), these`} cells become empty: ${esc(b.lost.map(labCell).join(', ') || 'none')}. New cells: ${esc(b.gained.map(labCell).join(', ') || 'none')}. Collection after: ${b.afterCount}/${labTotal()}.</p><p>${b.gained.length ? 'New collection colour.' : `You already own ${esc(labColour(b.morph))}. This makes another copy and uses one experiment today.`} ${b.neededFor ? `Needed for ${esc(b.neededFor)}.` : !b.gained.length ? 'Optional extra copy.' : ''}</p>${b.counts ? `<small>${b.counts.map(c => `${esc(labCell(c.cell))}: ${c.before} to ${c.after} pets`).join(' · ')}</small>` : ''}</section>`;
+  }).join('')}</div>`;
+}
+function labQuoteSupported(q) {
+  const recipe = labRecipes.find(r => r.id === q?.recipe);
+  if (!recipe || !q.opId || q.inputs?.length !== 2 || !labPair(...q.inputs)) return false;
+  if (labPair(...q.inputs).id !== recipe.id || q.inputs.some(p => p.sp !== q.species)) return false;
+  if (!q.distribution?.length || !q.distribution.every(d => recipe.outputs.includes(d.morph) && Number.isFinite(d.weight) && d.weight > 0)) return false;
+  if (new Set(q.distribution.map(d => d.morph)).size !== q.distribution.length) return false;
+  if (q.recipe === 'toxic-rose' && (q.distribution.length !== 1 || q.distribution[0].weight !== 4 || q.protection !== 'none')) return false;
+  return q.branches?.length === q.distribution.length && q.distribution.every(d => q.branches.filter(b => b.morph === d.morph).length === 1);
+}
+function labInterruptedFightHtml(fight) {
+  if (fight?.phase !== 'open') return '';
+  return `<section class="lab-interruption"><b>Interrupted fight</b><p>Your last session ended with a fight against ${esc(fight.foe || 'The Pit')} still open. Open the Pit to review the result.</p><button class="btn ghost" data-interrupted-pit>Open the Pit</button></section>`;
+}
+function labNeedsTyped(q) { return q.inputs.some(labInvested) || q.branches.some(b => b.lost.length > 0); }
+function labConfirmationHtml(q) {
+  return `<p>Both pets are permanently consumed. Their training, names, lineage, bonds and talent choices do not transfer. The new pet starts at level 1, with 0 banked steps and lineage 0.</p>${q.inputs.map(p => `<section class="lab-loss">${labPetDetails(p)}<p>${esc(labName(p))} will be destroyed: level ${p.level}, ${p.bankedSteps.toLocaleString()} banked training steps. None of those steps transfer.</p>${p.nickname ? `<p>The name ${esc(p.nickname)} is removed with this pet.</p>` : ''}<p>${esc(labName(p))} loses lineage ${p.lineage} and bond ${p.bond}/5. The new pet starts with neither.</p>${p.talents.length ? `<p>${esc(labName(p))}'s talent choices are removed: ${esc(p.talents.join(', '))}. The new pet inherits none.</p>` : ''}${p.equipped ? `<p>${esc(labName(p))} is your equipped pet. The new level-1 pet will take its place.</p>` : ''}</section>`).join('')}${q.recipe === 'toxic-rose' ? '<p>Midnight: 100%. Both selected pets are permanently consumed. The new Midnight starts at level 1.</p>' : ''}${labBranchesHtml(q)}<p>Melting these two pets separately would pay ${q.salvageDust} Bone Dust. Animate pays no dust.</p>${labNeedsTyped(q) ? '<p>This cannot be undone. Type ANIMATE to destroy both pets and create one new pet.</p>' : '<p>This cannot be undone. Animate destroys both pets and creates one new pet.</p>'}`;
+}
+function labRevealHtml(r) {
+  const b = r.branches.find(x => x.morph === r.result.morph);
+  const certain = r.distribution.length === 1;
+  return `<div class="lab-reveal ${certain ? 'lab-direct' : 'lab-surprise'}" data-outcomes="${r.distribution.length}"><div data-lab-result-art>${petSpriteHtml(r.species, 144, false, { morph: r.result.morph, shiny: false, wear: null, thumb: true })}</div><h3>${esc(labColour(r.result.morph))} ${esc(labSpecies(r.species))}</h3><p role="status">${b.gained.length ? `Added to your collection. ${b.afterCount}/${labTotal()}.` : `Another copy. ${b.neededFor ? `Needed for ${esc(b.neededFor)}.` : 'Optional extra copy.'}`}</p><p>${certain ? r.recipe === 'toxic-rose' ? 'Midnight was guaranteed by this recipe.' : 'This saved experiment had a guaranteed result.' : 'Your experiment is saved.'}</p><p>Level 1. 0 banked steps. Lineage 0. Non-shiny. No inherited name, bond or talents.</p><p>${Number.isInteger(r.remaining) ? `${r.remaining} experiment${r.remaining === 1 ? '' : 's'} available today.` : 'Back to Laboratory to check remaining experiments.'}</p>${r.resultPresent === false ? '<p>This saved pet has since left your Stable. Reviewing this receipt does not recreate it.</p>' : ''}</div>`;
+}
+function labTodayVisible(s, { current, priorDay, hidden }) {
+  return current && priorDay && !hidden && s.status === 'ready' && s.remaining > 0 && s.hasSafeUsefulPair === true && s.collectionCount < labTotal();
+}
+function labTodayHtml(s, context) {
+  return labTodayVisible(s, context) ? `<section class="lab-today"><b>The Laboratory</b><p>Build your collection with a missing colour or needed ingredient. Two matching spare pets are consumed. ${s.remaining} experiments available today.</p><button class="btn ghost" data-lab-open>Open Laboratory</button><button class="link" data-lab-hide>Hide this</button></section>` : '';
+}
+function labIncubatorHtml(s) {
+  const n = s.capacity + 1, price = n === 2 ? 20000 : 40000;
+  if (n > 3) return '<p>All three incubators are available. Back to bench to choose your pets.</p>';
+  if (!s.hasExperiment) return '<p>Try the free daily experiment before adding an incubator. It supplies no pets. Back to bench to see the recipes.</p>';
+  const afford = s.coins >= price;
+  return `<p>Incubator ${n}: ${price.toLocaleString()} coins. Adds one experiment each day. It supplies no pets and does not change the odds.</p><p>Capacity: ${s.capacity} to ${n}. Today's remaining uses: ${s.remaining} to ${s.remaining + 1}.</p>${afford ? '' : `<p>Incubator ${n} costs ${price.toLocaleString()} coins. You have ${s.coins.toLocaleString()}; ${(price - s.coins).toLocaleString()} more needed. Earn coins from your daily activities, or use the bench with your current capacity.</p>`}<p>${s.used === 0 ? 'Your free daily experiment is available.' : 'Your free daily experiment has been used. It returns at the next experiment reset.'}</p><button class="btn" data-lab-buy="${n}" ${afford && s.status === 'ready' ? '' : 'disabled'}>Review incubator purchase</button>`;
+}
+function labPickerHtml(s, selected, slot, sp = '', colour = '') {
+  const other = s.pets.find(p => p.iid === selected[1 - slot]);
+  const rows = s.pets.filter(p => (!sp || p.sp === sp) && (!colour || p.morph === colour)).sort((a, b) => Number(!a.safeSurplus || labInvested(a)) - Number(!b.safeSurplus || labInvested(b)));
+  return rows.length ? rows.map(p => {
+    const reason = p.reason || (p.iid === other?.iid ? 'Choose a different pet.' : other && !labPair(p, other) ? 'Does not match this same-species recipe.' : '');
+    const tags = [p.safeSurplus && !labInvested(p) ? 'Untrained spare' : '', p.lastCopy ? 'Last collection copy' : '', p.bankedSteps > 0 || p.level > 1 ? 'Trained' : '', p.nickname ? 'Named' : '', p.bond > 0 ? 'Bonded' : '', p.lineage > 0 ? `Lineage ${p.lineage}` : '', p.equipped ? 'Equipped' : '', p.neededFor ? `Needed as an ingredient for ${p.neededFor}` : ''].filter(Boolean);
+    return `<button class="lab-pet" data-lab-pick="${esc(p.iid)}" ${p.eligible !== true || reason ? 'disabled' : ''}>${labPetDetails(p)}<small>${esc(tags.join(' · '))}</small>${reason ? `<small>${esc(reason)}</small>` : ''}</button>`;
+  }).join('') : '<p>No pets match these filters. Try another species or colour, or hatch eggs.</p>';
+}
+function labBenchHtml(s, selected, sp, q = null, choosingSpecies = false) {
+  const pets = selected.map(id => s.pets.find(p => p.iid === id));
+  const pair = labPair(...pets);
+  const canReview = s.status === 'ready' && s.remaining > 0 && pair;
+  const canWork = s.status === 'ready' && s.remaining > 0;
+  const empty = pets.findIndex(p => !p);
+  const nextSlot = empty < 0 ? 0 : empty;
+  const activeId = pair?.id || labRecipes.find(r => pets.some(p => p && r.inputs.includes(p.morph)))?.id || 'base-base';
+  const active = labRecipes.find(r => r.id === activeId);
+  const prompt = !sp ? 'Choose a species, then choose two pets.' : empty >= 0 ? `Choose ${empty === 0 ? 'first' : 'second'} pet to review a pair.` : !pair ? 'These pets do not match a recipe. Choose a different first or second pet.' : !canWork ? labStateCopy(s, sp) : 'Review shows the exact collection colours lost and gained before you confirm.';
+  const working = `<section class="lab-working"><h3>${pets.some(Boolean) ? `${active.inputs.map(labColour).join(' + ')}: choose your pair` : 'Choose your pair'}</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class="lab-slots">${[0, 1].map(i => { const p = pets[i]; return `<section><button class="lab-pet${sp && canWork && !canReview && nextSlot === i ? ' lab-next' : ''}" data-lab-slot="${i}">${p ? labPetDetails(p) : `Choose ${i === 0 ? 'first' : 'second'} pet`}</button>${p ? `<button class="link" data-lab-clear="${i}">Clear ${i === 0 ? 'first' : 'second'} pet</button>` : ''}</section>`; }).join('')}</div>${labIngredientCounts(s, sp, active)}${q ? labBranchesHtml(q) : ''}<p id="labPairHint">${esc(prompt)}</p><button class="btn ${canReview ? 'lab-next' : 'ghost'}" aria-describedby="labPairHint" data-lab-review ${canReview ? '' : 'disabled'}>Review pair</button></section>`;
+  const status = labStateCopy(s, sp);
+  const available = `${s.remaining} experiment${s.remaining === 1 ? '' : 's'} available today.`;
+  const recovery = s.unseen?.length ? '<section class="lab-recovery"><p>Your last session ended before you saw your experiment. The result is saved. Open it to review.</p><button class="btn ghost" data-lab-recover>Review saved experiment</button></section>' : '';
+  const noPair = !s.pets.length || !s.hasEligiblePair || (sp && s.species[sp]?.hasEligiblePair === false);
+  return `${recovery}<p>Make a new colour from two pets of the same species.</p>${labSpeciesHtml(s, sp, choosingSpecies)}<section class="lab-availability">${s.status === 'ready' ? `<details class="lab-clock"><summary>${s.remaining > 0 ? available : 'Experiment use details'}</summary><p>${s.used}/${s.capacity} experiments used</p><p>Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p></details>` : ''}${status !== available ? `<p role="status">${esc(status)}</p>` : ''}${s.status === 'ready' && s.remaining === 0 && !status.includes('Experiments reset at') ? `<p>You've used ${s.used}/${s.capacity} experiments today. Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p>` : ''}${noPair ? '<nav class="lab-links" aria-label="Find a pair"><button class="btn ghost" data-lab-nav="eggs">Eggs</button>' + (sp ? '<button class="btn ghost" data-lab-change-species>Change species</button>' : '') + '</nav>' : ''}</section>${working}<p>Every experiment removes two pets to make one.</p>${labRecipesHtml(s, sp)}
+<details id="labHelp" ${s.ui?.introRead ? '' : 'open'}><summary>How the recipes work</summary><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>
+<button class="${sp && !canWork ? 'btn lab-next' : 'link lab-collection'}" data-lab-nav="collection">Your collection: ${s.collectionCount} of ${labTotal()} colours</button><details class="lab-more"><summary>More pet actions</summary>${s.status !== 'ready' ? '<p>One experiment each day is free. Permanent incubators can add two more.</p>' : ''}<div class="lab-eggs">${s.eggs.length ? s.eggs.map(e => `<p>Egg: ${e.ready ? 'Ready to hatch' : `${e.steps.toLocaleString()}/${e.goal.toLocaleString()} steps`}. Open eggs to ${e.ready ? 'hatch it' : 'check progress'}.</p>`).join('') : '<p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p>'}</div>${labSinksHtml()}${s.hasEligiblePair && s.status === 'ready' ? '<button class="link" data-lab-incubators>Incubators</button>' : ''}</details>`;
+}
+// LAB UI PURE END
+
+async function labReadSnapshot(pre = null) {
+  const engine = laboratoryEngine();
+  if (engine) return engine.snapshot(pre || {});
+  // Read-only development overview. No substitute recipe/odds resolver.
+  const [pets, bank, nicks, bonds, talents, active, inv, steps] = await Promise.all([
+    kvGet('petInst', []), kvGet('petLvlSteps', {}), kvGet('petNick', {}), kvGet('petBonds', {}), kvGet('pettalents', {}), kvGet('petEquipped', null), inventory(), lifetimeStepsSum(),
+  ]);
+  const rows = pets.filter(p => p && typeof p.iid === 'string').map(p => {
+    const morph = p.morph == null || p.morph === '' ? 'base' : p.morph;
+    const reason = p.shiny ? 'Shiny pets cannot be used here.' : p.sp === 'CX' ? 'The Day One Lizard cannot be used here.' : !isMorph(morph) ? 'This saved colour is not supported.' : !KENNEL_SPECIES.some(s => s.id === p.sp) ? 'This species is not supported.' : 'Input selection needs the Laboratory engine.';
+    return { ...p, morph, eligible: false, reason, bankedSteps: bank[p.iid] || 0, level: petLevel(bank[p.iid] || 0), nickname: nicks[p.iid] || '', lineage: p.lineage || 0, bond: bonds[p.iid] || 0, talents: Array.isArray(talents[p.iid]) ? talents[p.iid] : [], equipped: p.iid === active };
+  });
+  const cells = ownedPairs(rows);
+  return { status: 'unavailable', pets: rows, collectionCount: ownedCellCount(cells, KENNEL_SPECIES.map(s => s.id)), species: Object.fromEntries(KENNEL_SPECIES.map(s => [s.id, { count: MORPHS.filter(m => cells.has(`${s.id}|${m}`)).length }])), eggs: inv.filter(r => r.kind === 'egg').map(e => { const p = eggProgress(e, steps); return { ready: p.ready, steps: p.walked, goal: p.goal }; }), ui: {}, unseen: [] };
+}
+
+/* Both salvage and Animate use this same review/typed-confirmation sheet.
+ * Text is never prefilled. Cancellation never invokes commit. */
+function openPetDestructionReview({ title, html, typed = false, accepts = t => t === 'ANIMATE', prompt = 'Type ANIMATE to confirm', action = 'Animate', commit, onClose = null }) {
+  let busy = false, finished = false;
+  const wrap = openSheet(`<div class="sheet-head"><h2>${esc(title)}</h2><button class="sheet-close">Cancel</button></div><div class="sheet-body lab-review">${html}${typed ? `<div class="t1-field"><label for="pdIn">${esc(prompt)}</label><input id="pdIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false"></div>` : ''}<p id="pdStatus" role="status"></p></div><div class="t1-foot"><button class="btn danger-ish" id="pdGo" ${typed ? 'disabled' : ''}>${esc(action)}</button></div>`, { cls: 't1 pet-a11y', name: 'PetDestruction', onClose });
+  const input = $('#pdIn', wrap), go = $('#pdGo', wrap), status = $('#pdStatus', wrap);
+  const typedOk = () => !typed || accepts(input.value);
+  input?.addEventListener('input', () => { go.disabled = busy || finished || !typedOk(); });
+  go.addEventListener('click', async () => {
+    if (busy || finished || !typedOk()) return;
+    busy = true; go.disabled = true;
+    status.textContent = action === 'Animate' ? 'Saving your experiment...' : 'Saving...';
+    try {
+      const result = await commit();
+      finished = true;
+      if (result?.message) status.textContent = result.message;
+      if (result?.close && wrap.isConnected) history.back();
+    } catch {
+      finished = true;
+      status.textContent = 'The save could not be checked. Reopen the room to review it before trying again.';
+    } finally { busy = false; }
+  });
+  return wrap;
+}
+
+function wireLabLinks(root) {
+  $$('[data-lab-nav]', root).forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.labNav === 'collection') openKennel();
+    else if (b.dataset.labNav === 'eggs') openCharacter('crates');
+    else openStable({ labAction: b.dataset.labNav });
+  }));
+  $$('[data-lab-open]', root).forEach(b => b.addEventListener('click', () => openLaboratory()));
+}
+let labUncertainOperation = null;
+async function openLaboratory() {
+  const origin = document.activeElement;
+  let selected = [null, null], species = '', choosingSpecies = false, snapshot, quote = null, generation = 0, observer;
+  const resume = () => { if (!document.hidden && sheetStack.at(-1)?.wrap === wrap) draw(); };
+  const wrap = openSheet('<div class="sheet-head"><h2>The Laboratory</h2><button class="sheet-close">Back</button></div><div class="sheet-body lab-room" id="labBody"><p role="status">Opening The Laboratory...</p></div>', { cls: 'full pet-a11y lab-sheet', name: 'Laboratory', onClose: () => { generation++; observer?.disconnect(); document.removeEventListener('visibilitychange', resume); window.removeEventListener('focus', resume); origin?.isConnected && origin.focus(); if (currentTab() === 'today') refresh(); } });
+  const body = $('#labBody', wrap);
+  observer = new MutationObserver(resume);
+  observer.observe($('#sheets'), { childList: true });
+  document.addEventListener('visibilitychange', resume);
+  window.addEventListener('focus', resume);
+  async function draw() {
+    const gen = ++generation;
+    quote = null;
+    try { snapshot = await labReadSnapshot(); }
+    catch { if (gen === generation && wrap.isConnected) body.innerHTML = '<p role="status">The Laboratory could not be read. Reopen the room to check your pets and experiments.</p><button class="btn ghost" data-lab-open>Reopen Laboratory</button>' + labSinksHtml(); wireLabLinks(body); return; }
+    if (gen !== generation || !wrap.isConnected) return;
+    // A coherent recovery read, including intent readback, is engine-owned.
+    if (labUncertainOperation && snapshot.recoveredOpIds?.includes(labUncertainOperation)) labUncertainOperation = null;
+    if (labUncertainOperation) snapshot = { ...snapshot, status: 'unknown' };
+    selected = selected.map(id => snapshot.pets.some(p => p.iid === id) ? id : null);
+    paint();
+  }
+  function paint() {
+    const focused = body.contains(document.activeElement) ? document.activeElement : null;
+    const focusId = focused?.id;
+    const focusSlot = focused?.getAttribute('data-lab-slot');
+    const focusReview = focused?.hasAttribute('data-lab-review');
+    const focusClear = focused?.getAttribute('data-lab-clear');
+    body.innerHTML = labBenchHtml(snapshot, selected, species, quote, choosingSpecies);
+    wireLabLinks(body);
+    $('#labHelp', body)?.addEventListener('toggle', e => { if (!e.target.open) laboratoryEngine()?.setUi({ introRead: true }).catch(() => {}); });
+    $$('input[name="labSpecies"]', body).forEach(radio => radio.addEventListener('change', e => { species = e.target.value; choosingSpecies = false; selected = [null, null]; quote = null; paint(); $('[data-lab-change-species]', body)?.focus(); }));
+    $('[data-lab-keep-species]', body)?.addEventListener('click', () => { choosingSpecies = false; paint(); $('[data-lab-change-species]', body)?.focus(); });
+    $$('[data-lab-change-species]', body).forEach(b => b.addEventListener('click', () => { choosingSpecies = true; paint(); $('input[name="labSpecies"]:checked', body)?.focus(); }));
+    $('[data-lab-choose-species]', body)?.addEventListener('click', () => $('input[name="labSpecies"]', body)?.focus());
+    $$('[data-lab-clear]', body).forEach(b => b.addEventListener('click', () => { selected[Number(b.dataset.labClear)] = null; quote = null; paint(); }));
+    $$('[data-lab-slot]', body).forEach(b => b.addEventListener('click', () => picker(Number(b.dataset.labSlot))));
+    $('[data-lab-review]', body).addEventListener('click', review);
+    $('[data-lab-incubators]', body)?.addEventListener('click', incubators);
+    $('[data-lab-recover]', body)?.addEventListener('click', () => reveal(snapshot.unseen[0]));
+    const restore = focusId ? document.getElementById(focusId) : focusSlot !== null && focusSlot !== undefined ? $('[data-lab-slot="' + focusSlot + '"]', body) : focusClear !== null && focusClear !== undefined ? $('[data-lab-slot="' + focusClear + '"]', body) : focusReview ? $('[data-lab-review]', body) : null;
+    restore?.focus({ preventScroll: true });
+  }
+  function picker(slot) {
+    let filterSp = species, filterColour = '';
+    const sheet = openSheet(`<div class="sheet-head"><h2>Choose ${slot === 0 ? 'first' : 'second'} pet</h2><button class="sheet-close">Cancel</button></div><div class="sheet-body lab-room"><p>Choose a specific pet. Both inputs will be destroyed.</p><label for="labPickSpecies">Species</label><select id="labPickSpecies"><option value="">All species</option>${[...KENNEL_SPECIES, { id: 'CX', name: 'The Day One Lizard' }].map(s => `<option value="${s.id}" ${filterSp === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select><label for="labPickColour">Colour</label><select id="labPickColour"><option value="">All colours</option>${MORPHS.map(m => `<option value="${m}">${labColour(m)}</option>`).join('')}</select><div id="labPickRows"></div><details><summary>More pet actions</summary>${labSinksHtml()}</details></div>`, { cls: 'full pet-a11y', name: 'LaboratoryPicker', onClose: () => $('[data-lab-slot="' + slot + '"]', body)?.focus() });
+    wireLabLinks(sheet);
+    const rows = $('#labPickRows', sheet);
+    const update = () => {
+      rows.innerHTML = labPickerHtml(snapshot, selected, slot, filterSp, filterColour);
+      $$('[data-lab-pick]', rows).forEach(b => b.addEventListener('click', () => {
+        selected[slot] = b.dataset.labPick;
+        species = snapshot.pets.find(p => p.iid === selected[slot]).sp;
+        quote = null; history.back(); paint(); updatePreview();
+      }));
+    };
+    $('#labPickSpecies', sheet).addEventListener('change', e => { filterSp = e.target.value; update(); });
+    $('#labPickColour', sheet).addEventListener('change', e => { filterColour = e.target.value; update(); });
+    update();
+  }
+  async function updatePreview() {
+    const engine = laboratoryEngine(), pair = [...selected];
+    if (!engine || !labPair(...pair.map(id => snapshot.pets.find(p => p.iid === id)))) return;
+    try {
+      const result = await engine.quote({ iids: pair });
+      if (!wrap.isConnected || pair.some((id, i) => id !== selected[i])) return;
+      if (result.ok && labQuoteSupported(result.quote)) { quote = result.quote; paint(); }
+      else { toast('Your pets or available experiments changed. Review the updated pair and odds.'); draw(); }
+    } catch { toast('Could not load the pair preview. Review the pair to try again.'); }
+  }
+  async function review() {
+    const button = $('[data-lab-review]', body), engine = laboratoryEngine();
+    if (!engine || button.disabled || labUncertainOperation) return;
+    button.disabled = true;
+    const pair = [...selected];
+    try {
+      await rollDayIfNeeded();
+      const result = await engine.quote({ iids: pair });
+      if (!wrap.isConnected || pair.some((id, i) => id !== selected[i])) return;
+      if (!result.ok || !labQuoteSupported(result.quote)) { toast('Your pets or available experiments changed. Review the updated pair and odds.'); await draw(); return; }
+      quote = result.quote;
+      paint();
+      const reviewed = quote;
+      openPetDestructionReview({ title: 'Animate these pets?', html: labConfirmationHtml(reviewed), typed: labNeedsTyped(reviewed), onClose: () => { quote = null; if (wrap.isConnected) draw(); }, commit: async () => {
+        await rollDayIfNeeded();
+        labUncertainOperation = reviewed.opId;
+        const result = await engine.animate({ quote: reviewed, acknowledgedRisk: labNeedsTyped(reviewed) ? 'ANIMATE' : 'reviewed' });
+        if (result.ok) {
+          labUncertainOperation = null;
+          selected = [null, null]; quote = null;
+          // Let the confirmation close before opening the saved receipt.
+          setTimeout(() => reveal(result.receipt), 350);
+          return { close: true };
+        }
+        const refused = ['confirmed-abort', 'stale-quote', 'ineligible', 'cap-reached', 'clock-backwards', 'unwitnessed-day', 'restore-conflict'].includes(result.reason);
+        if (refused) labUncertainOperation = null;
+        quote = null;
+        return { message: result.reason === 'confirmed-abort' ? 'That experiment did not save. Both pets and your experiment are still available. Cancel and review the pair to try again.' : !refused ? labStateCopy({ status: 'unknown' }) : 'Your pets or available experiments changed. Cancel and review the updated pair and odds.' };
+      } });
+    } catch { toast('The Laboratory could not be read. Reopen the room to check your pets and experiments.'); if (wrap.isConnected) await draw(); }
+  }
+  async function reveal(receipt) {
+    const sheet = openSheet(`<div class="sheet-head"><h2>Experiment saved</h2><button class="sheet-close">Back to Laboratory</button></div><div class="sheet-body lab-room">${labRevealHtml(receipt)}<p id="labImageStatus" role="status"></p><button class="btn ghost" id="labImageRetry" hidden>Retry image</button>${receipt.distribution.length > 1 ? '<button class="link" id="labSkip">Skip reveal</button>' : ''}<button class="btn" id="labViewPet" ${receipt.resultPresent === false ? 'disabled' : ''}>View pet</button></div>`, { cls: 'full pet-a11y', name: 'LaboratoryResult', onClose: () => { laboratoryEngine()?.acknowledge(receipt.opId).catch(() => {}); if (wrap.isConnected) draw(); } });
+    $('#labViewPet', sheet).addEventListener('click', () => openStable({ focusIid: receipt.result.iid }));
+    const result = $('.lab-reveal', sheet);
+    const decode = async () => {
+      try {
+        await Promise.all([...$$('img', result)].map(img => img.decode()));
+        $('#labImageStatus', sheet).textContent = '';
+        $('#labImageRetry', sheet).hidden = true;
+        if (receipt.distribution.length > 1 && !reducedMotion) result.classList.add('lab-play');
+      } catch {
+        $('#labImageStatus', sheet).textContent = 'Your pet is saved. Its image could not load. Retry the image or view the pet.';
+        $('#labImageRetry', sheet).hidden = false;
+      }
+    };
+    $('#labImageRetry', sheet).addEventListener('click', decode);
+    $('#labSkip', sheet)?.addEventListener('click', () => result.classList.remove('lab-play'));
+    await decode();
+  }
+  function incubators() {
+    const sheet = openSheet(`<div class="sheet-head"><h2>Incubators</h2><button class="sheet-close">Back to bench</button></div><div class="sheet-body lab-room">${labIncubatorHtml(snapshot)}<p id="labPurchaseStatus" role="status"></p></div>`, { cls: 'full pet-a11y', name: 'LaboratoryIncubators', onClose: () => { if (wrap.isConnected) draw(); } });
+    const buy = $('[data-lab-buy]', sheet);
+    buy?.addEventListener('click', async () => {
+      if (!buy.dataset.armed) { buy.dataset.armed = '1'; buy.textContent = `Buy incubator ${buy.dataset.labBuy} for ${Number(buy.dataset.labBuy) === 2 ? '20,000' : '40,000'} coins`; return; }
+      buy.disabled = true;
+      try {
+        await rollDayIfNeeded();
+        const result = await laboratoryEngine().purchase({ slot: Number(buy.dataset.labBuy), opId: newId(), snapshotToken: snapshot.token });
+        $('#labPurchaseStatus', sheet).textContent = result.ok ? 'Incubator saved. Back to bench to use the added capacity.' : 'The purchase could not be completed. Back to bench to check your coins and capacity before reviewing again.';
+      } catch { $('#labPurchaseStatus', sheet).textContent = 'The purchase save could not be checked. Back to bench to review your capacity before trying again.'; }
+    });
+  }
+  await draw();
+}
+
 async function openKennel() {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Kennel</h2><button class="sheet-close">Done</button></div>
@@ -21250,7 +21620,7 @@ async function openKennel() {
   const bestMorphFor = sp => MORPHS.filter(m => owned.has(`${sp}|${m}`))
     .sort((a, b) => MORPH_TIER[b] - MORPH_TIER[a])[0] || 'base';
   const dotLabel = (sp, m, name) =>
-    `${m === 'base' ? 'Base' : MORPH_LABEL[m]} ${name}${owned.has(`${sp}|${m}`) ? '' : '. Not hatched yet.'}`;
+    `${m === 'base' ? 'Base' : MORPH_LABEL[m]} ${name}${owned.has(`${sp}|${m}`) ? '' : '. Not owned yet.'}`;
   const rosterRow = s => {
     const morph = bestMorphFor(s.id);
     // R39-11: the dots are indicators, not controls (the grid cells are).
@@ -21304,9 +21674,10 @@ async function openKennel() {
      fold. It reads fine here: still the first thing under "Your pets", it is
      simply the first thing under the LAST row instead of the section header. */
   body.innerHTML = `
+    <button class="btn ghost" data-lab-open>The Laboratory · Build your collection</button>
     <p class="sect-h">Your pets</p>
     <div class="k-roster">${ownedSp.length ? ownedSp.map(rosterRow).join('') : '<p class="k-empty">Hatch an egg to start your collection.</p>'}</div>
-    <p class="k-gwart"><b>Gwart says:</b> It's paint, not power. Ember, Frost, Toxic, Midnight, same skeleton underneath.</p>
+    <p class="k-gwart"><b>Gwart says:</b> It's paint, not power. Ember, Frost, Toxic, Rose, Midnight, same skeleton underneath.</p>
     <p class="sect-h">Collection &middot; ${found} / ${total}</p>
     ${complete ? '<p class="k-complete">Every colour, every pet. Your Kennel is complete.</p>' : ''}
     <!-- HOW TO READ THE GRID, one line, at the point of use (v500: "How to use
@@ -21314,8 +21685,9 @@ async function openKennel() {
          to say hi" and the Dressing Room's lead already use: a sentence where
          the thing is, never a tutorial screen. It says the rule the colours
          encode AND names the one control the screen has. -->
-    <p class="k-lead">${complete ? 'All five colourways of every pet are yours. Tap a cell to read its name.' : 'Five colourways per pet, in column order. Filled dots are hatched; hollow dots and locked cells are not. Tap a cell to read its name.'}</p>
-    <div class="k-grid">${gridHead}${KENNEL_SPECIES.map(gridRow).join('')}</div>`;
+    <p class="k-lead">${complete ? 'All six colourways of every pet are yours. Tap a cell to read its name.' : 'Six colourways per pet, in column order. Filled dots are owned; hollow dots and locked cells are not. Tap a cell to read its name.'}</p>
+    <div class="k-grid" style="--kennel-columns:${MORPHS.length}">${gridHead}${KENNEL_SPECIES.map(gridRow).join('')}</div>`;
+  wireLabLinks(body);
   $$('.k-cell', body).forEach(c => c.addEventListener('click', () => {
     const { sp, morph: m } = c.dataset;
     const name = (BH_BY_ID[sp] || {}).name || sp;
@@ -23950,7 +24322,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v522'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v523'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

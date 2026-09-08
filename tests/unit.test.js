@@ -3484,16 +3484,25 @@ test('bondAfter only ever steps +1 into [0, BOND_MAX]', async () => {
   assert.equal(bondAfter(-3), 1, 'garbage below zero clamps to a first pet');
   assert.equal(bondAfter(99), BOND_MAX, 'garbage above max clamps to max');
 });
-test('bond writes are guarded: ghost iids refused, removals clean up', () => {
-  const src = readFileSync(join(here, '../js/loot.js'), 'utf8');
-  const up = src.slice(src.indexOf('export async function bondUp'), src.indexOf('async function clearBond'));
-  assert.ok(up.indexOf('petInstances()') < up.indexOf("kvSet('petBonds'"),
-    'bondUp must confirm the iid is a live instance BEFORE writing');
-  // both instance-removal paths take the bond row with them
-  const salv = src.slice(src.indexOf('export async function salvageInstance'));
-  assert.ok(/clearBond\(iid\)/.test(salv), 'salvage leaves an orphaned bond row');
-  const breedRegion = src.slice(src.indexOf('delete bank[feedIid]'));
-  assert.ok(/clearBond\(feedIid\)/.test(breedRegion.slice(0, 200)), 'breed-consume leaves an orphaned bond row');
+test('bond writes are guarded: ghost iids refused, removals clean up', async () => {
+  await import('./mem-idb.mjs');
+  const D = await import('../js/db.js');
+  const L = await import('../js/loot.js?unit-bond-cleanup');
+  D.useDbName('unit-live-bond-cleanup');
+  const a = {iid:'bond-a',sp:'C1',lineage:0,shiny:false,hatchedAtSteps:0};
+  const b = {...a,iid:'bond-b'}, c = {...a,iid:'bond-c'};
+  await D.kvSet('petInst',[a,b,c]);
+  await D.kvSet('petLvlV',2);
+  await D.kvSet('petLvlSteps',{});
+  await D.kvSet('pettalents',{__iidV:2});
+  assert.equal((await L.bondUp('ghost')).ok,false);
+  assert.equal((await L.bondUp(a.iid)).bond,1,'CONTROL: a live pet receives a bond');
+  assert.equal((await L.salvageInstance(a.iid)).ok,true);
+  assert.ok(!Object.hasOwn(await L.petBonds(),a.iid),'salvage leaves no bond');
+  assert.equal((await L.bondUp(a.iid)).ok,false,'a consumed IID stays gone');
+  await L.bondUp(c.iid);
+  assert.equal((await L.breedPets(b.iid,c.iid)).ok,true);
+  assert.ok(!Object.hasOwn(await L.petBonds(),c.iid),'breeding leaves no bond');
 });
 test('paddock names are deterministic, collision-free, order-independent', async () => {
   const { assignNames, PADDOCK_NAMES, flavorFor } = await import('../js/paddock.js');
@@ -4018,21 +4027,20 @@ test('nickname: cleanNick trims and collapses runs of whitespace, and that is AL
   assert.equal(cleanNick('<img src=x>'), '<img src=x>',
     'cleanNick does not sanitise markup: escaping belongs to the render layer (esc() in js/app.js) and doing it in both places would double-encode');
 });
-test('nickname: it is stored in its OWN kv map, never on the instance row or in kv equipped', () => {
-  const loot = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
-  /* WHY THIS IS A TEST AND NOT A COMMENT. socialSnapshot() uploads
-     `outfit: eq`, and equipped() builds that with `{ ...base, ...saved }` over
-     kv 'equipped'. Any key written into that object ships itself to every
-     friend, the leaderboard and the step race with no code change at all. The
-     nickname is private, so its storage SHAPE is the guard, and a guard that
-     nothing checks is a comment. */
-  assert.match(loot, /kvSet\('petNick'/, 'the nickname must live in its own kv key');
-  const from = loot.indexOf('export async function setPetNick');
-  const to = loot.indexOf('async function clearNick');
-  assert.ok(from > 0 && to > from, 'found no setPetNick body to inspect: this check has drifted, it has not passed');
-  const setter = loot.slice(from, to);
-  assert.doesNotMatch(setter, /kvSet\('equipped'|kvSet\('petInst'/,
-    'setPetNick must not write into either object that is uploaded wholesale to other players');
+test('nickname: it is stored in its OWN kv map, never on the instance row or in kv equipped', async () => {
+  await import('./mem-idb.mjs');
+  const D = await import('../js/db.js');
+  const L = await import('../js/loot.js?unit-nickname-private');
+  D.useDbName('unit-nickname-private');
+  const pet = {iid:'private-pet',sp:'C1',lineage:0,shiny:false,hatchedAtSteps:0};
+  const outfit = {C:'C1',H:'public-hat'};
+  await D.kvSet('petInst',[pet]);
+  await D.kvSet('equipped',outfit);
+  assert.deepEqual(await L.setPetNick(pet.iid,'PRIVATE'),{ok:true,nick:'PRIVATE'},
+    'CONTROL: the real setter saved a nickname');
+  assert.deepEqual(await D.kvGet('petNick'),{[pet.iid]:'PRIVATE'});
+  assert.deepEqual(await D.kvGet('petInst'),[pet],'private names never enter instance rows');
+  assert.deepEqual(await D.kvGet('equipped'),outfit,'private names never enter public outfits');
 });
 
 /* THE APP-WIDE NO-SELECT RULE, AND THE TWO EXEMPTIONS THAT MAKE IT SAFE.
@@ -7171,20 +7179,9 @@ test('KENNEL addPetInstance: shiny forces base even when a morph is explicitly r
   assert.equal(insts[0].morph, 'base');
 });
 
-/* SIM, spec section 2.6, re-scoped by KENNEL PALETTES (2026-09-05): 200 eggs
- * granted+hatched one after another for an owner of all SIX species (so every
- * hatch is a same-species dupe and the morph is the only thing left to
- * discover) must surface all 30 (species, morph) pairs -- Tom's own count,
- * "6 species x 5 morphs = 30 pairs" -- with no morph outside MORPHS ever
- * appearing. This used to own five species and require 25 pairs (Bumbleseal
- * was a 1% shop-exclusive, excluded from fresh-first accounting); her
- * hatchChance gate is gone (js/loot.js pickRandomPet, data/boneheadz.js), she
- * is an ordinary member of MORPH_SPECIES (js/pets.js) same as C1-C5, and this
- * sim now owns and grades her the same way. Real rng() throughout (unseeded):
- * re-probed at 200 draws with 6 species/30 pairs (this checkout), 0/30 trials
- * missed a single pair -- the extra species does not need more draws because
- * fresh-first the same identical mechanism, one more candidate deep. */
-test('KENNEL sim: 200 eggs from an owner of six species surface all 30 (sp, morph) pairs, no phantom morph', async () => {
+/* Laboratory foundation supersedes the old colour-discovery egg simulation.
+ * New eggs discover species in Base; existing coloured eggs are tested above. */
+test('LAB sim: 200 new eggs from an owner of six species hatch only Base', async () => {
   await import('./mem-idb.mjs');
   const dbm = await import('../js/db.js');
   dbm.useDbName('unit-kennel-sim-200eggs');
@@ -7198,10 +7195,8 @@ test('KENNEL sim: 200 eggs from an owner of six species surface all 30 (sp, morp
   const pairs = new Set(insts.map(x => `${x.sp}|${x.morph || 'base'}`));
   const phantom = [...pairs].filter(p => { const [sp, m] = p.split('|'); return !species.includes(sp) || !MORPHS.includes(m); });
   assert.equal(phantom.length, 0, `no morph outside MORPHS, and no species outside the hatch pool, got ${JSON.stringify(phantom)}`);
-  const required = species.flatMap(sp => MORPHS.map(m => `${sp}|${m}`));
-  const missing = required.filter(p => !pairs.has(p));
-  assert.equal(missing.length, 0,
-    `all 30 (species, morph) pairs among the six owned species must appear across 200 hatches, missing: ${missing.join(', ') || 'none'} (${pairs.size} total distinct pairs seen)`);
+  assert.equal(insts.length, 206, 'all 200 eggs must hatch and retain the six original pets');
+  assert.deepEqual([...pairs].sort(), species.map(sp => `${sp}|base`).sort());
 });
 
 /* SIM, spec section 2.6: two eggs granted the same "day" (before either
@@ -7246,7 +7241,7 @@ test('KENNEL sim: two eggs granted the same day for a player missing four specie
 const MORPH_ROOT = join(here, '..', 'assets', 'bh', 'C');
 const thumbPath = (tier, rel) => join(here, '..', 'assets', 'bh', 'thumb', String(tier), 'C', rel);
 
-test('KENNEL MORPH_ART: every one of the 30 (species, morph) pairs resolves to a real file at every tier', () => {
+test('KENNEL MORPH_ART: every one of the 36 (species, morph) pairs resolves to a real file at every tier', () => {
   const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
   const missing = [];
   for (const sp of species) {
@@ -7296,14 +7291,14 @@ test('KENNEL MORPH_ART: CX, an unknown morph, and an unlisted species all resolv
    PROVE-RED (2026-09-06): with ownedCellCount returning owned.size (the old
    counter) in a throwaway copy, this row alone failed: "a Founder's Lizard
    owner with one cell reads 1, not 2 / 2 !== 1", 336 passed, 1 failed. */
-test('KENNEL ownedCellCount: CX and an off-grid species never count; a full 6x5 set is exactly 30', () => {
+test('KENNEL ownedCellCount: CX and an off-grid species never count; a full 6x6 set is exactly 36', () => {
   const grid = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
   const one = ownedPairs([{ sp: 'CX', morph: 'base' }, { sp: 'C1', morph: 'ember' }]);
   assert.equal(one.size, 2, 'control: ownedPairs itself still counts CX (that is the bug the counter must not inherit)');
   assert.equal(ownedCellCount(one, grid), 1, 'a Founder\'s Lizard owner with one cell reads 1, not 2');
   const full = ownedPairs([{ sp: 'CX', morph: 'base' }, ...grid.flatMap(sp => MORPHS.map(m => ({ sp, morph: m })))]);
-  assert.equal(full.size, 31);
-  assert.equal(ownedCellCount(full, grid), 30, 'a full set reads 30 / 30, never 31');
+  assert.equal(full.size, 37);
+  assert.equal(ownedCellCount(full, grid), 36, 'a full set reads 36 / 36, never 37');
   // two copies of one pair are one cell
   assert.equal(ownedCellCount(ownedPairs([{ sp: 'C2', morph: 'frost' }, { sp: 'C2', morph: 'frost' }, { sp: 'C2' }]), grid), 2);
 });

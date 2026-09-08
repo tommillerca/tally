@@ -20,6 +20,7 @@ function render(cooldownLeft, picks) {
   const pair = picks === 2;
   const body = { innerHTML: '', scrollTop: 0 };
   const scope = {
+    opts: {}, // Existing Stable entry remains the default; Laboratory passes a navigation hint.
     body, st: { cooldownLeft, ready: cooldownLeft === 0, dust: 0 },
     pair, sel: [keeper.iid, spare.iid].slice(0, picks),
     insts: [keeper, spare], roster: [keeper, spare], keeper, spare,

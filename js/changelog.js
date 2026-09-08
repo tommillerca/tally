@@ -4,6 +4,15 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 523, date: '2026-09-08', title: 'The Laboratory is open', items: [
+    'Your spare pets are worth something now. Take two of the same creature down to The Laboratory and animate a new one in a colour you cannot hatch. Both pets that go in are consumed, and the new one starts at level 1.',
+    'Every creature has six looks instead of five. Rose is new, and it exists for all six of them.',
+    'Eggs have changed, and this is the part to read. They now hatch the ordinary version of a creature, plus the same rare shiny chance as before. Colours are made downstairs instead of rolled by an egg. Every colour you already own stays yours, and eggs you were already carrying still hatch the colour they were given.',
+    'The first two mixes are a straight coin flip and can hand you a colour you already have. Three Frost before your first Ember is possible. Toxic and Rose always makes Midnight.',
+    'One experiment a day. A second and third incubator can be bought with coins if you want to work faster.',
+    'Melting and breeding are unchanged. Dust for currency, breeding for strength, The Laboratory for the collection.',
+  ] },
+
   { n: 522, date: '2026-09-08', title: 'The line above the tab bar is gone', items: [
     'A strip of your bonehead\'s backdrop colour was showing along the bottom of Today, between the page and the tab bar. It reads as part of the bar again.',
   ] },

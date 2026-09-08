@@ -159,10 +159,13 @@ const GATED = {
   petLevelBank: { pin: /if \(bank && ver >= 2\) return bank;/, why: 'once per install (kv migration), then the cached bank' },
   // its own ownedCosmeticIds read sits AFTER the `Array.isArray(list)` branch returns: the first-run migration only
   // Lane H, 2026-09-07: filtering selectable instances moved the return shape.
+  // Laboratory: refreshed for the atomic duplicate-IID investment copy. Only
+  // KV reads were added inside the existing heal branch. Part C still proves
+  // warm assembly scans no stores.
   // Pin the entire comment-stripped body too: a new read before this suffix
   // must not inherit the exemption. Part C executes the real battle pet path.
   petInstances: { pin: /return \(await reclaimOwnedPets\(list\)\)\.filter\(selectablePetInstance\);\s*\}\s*const owned = await ownedCosmeticIds\(\);/,
-    sha256: '34893e1d84b1c3fa351146b26ee81bf1ee50ff301bf07ed0b0051fce4e68f4d2', why: 'once per install (petInst migration), then the kv list' },
+    sha256: '43be1671bbc1d5802e3e69bddb2ad46294499183f214e752ccfde792ec050bb7', why: 'once per install (petInst migration), then the kv list' },
 };
 function gateHolds(name) {
   const g = GATED[name], fn = FNS.get(name);
