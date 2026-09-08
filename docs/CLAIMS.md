@@ -1,5 +1,14 @@
 # What each patch note claims, and what backs it
 
+## M5: first-run disclosure and lookup guards (2026-09-07)
+
+1. PROOF: unit.test.js | REACH: Gwart retains his introduction and gives the exact anonymous-account disclosure. First run retains its intro, returning players skip it unless explicitly previewing. The four-job toast backlog cap remains. The three focused Node guards pass; the full unit command has one socket-dependent failure.
+2. PROOF: first-run-honesty-audit.mjs | REACH: Browser operation and screenshots are PENDING sandbox-free review. Expected 8/8 passed and exit 0; no browser or screenshot proof is claimed here. The older onboarding audit now waits for the retained intro to be dismissed before grading its CTA.
+3. PROOF: lookup-guard-lint.mjs | REACH: A bounded scan reports all four current candidates across 54 source files: two unresolved peer-pet boundaries and two upstream-validated false positives (50% of this sample). Downstream fallbacks prevent these boundary findings from establishing a crash. New or duplicated sites fail. This does not claim complete coverage of the guard class.
+4. PROOF: m5-prove-red.mjs | REACH: Seven throwaway source reversions exit 1, including both known lookup guards; restored first-run guards and lint exit 0. Full red/green output, scope limits and deviations are recorded in tests/m5-review.md.
+
+The required remote merge is blocked: origin/codex/cx-firstrun is absent and GitHub DNS resolution failed. The only local branch is rejected-round WIP commit 3c782c65. The frozen corrections were implemented directly; the completed branch was not merged or verified. No commit, push or publication was performed.
+
 ## WAVE: submission intent and store audit (2026-09-07)
 
 1. PROOF: submission-build-audit.mjs | REACH: GATED until Tom builds and installs the candidate. The scripted build now requires explicit SUBMISSION=1 or SUBMISSION=0, resolves its own checkout, separates artifacts, and refuses mismatched copied or archived submission content before export. Node-only fixture execution proves the branch outcomes and config restoration; six throwaway reversions went red. No native build or upload was run.
