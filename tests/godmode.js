@@ -692,11 +692,10 @@ export async function boot(base, opts = {}) {
          with it. Track the last applied viewport here instead. 2026-09-08. */
       let current = launchOpts.defaultViewport || null;
       page.setViewport = async viewport => {
-        const next = { ...viewport, deviceScaleFactor: dpr,
-          isMobile: viewport.isMobile ?? current?.isMobile ?? true,
-          hasTouch: viewport.hasTouch ?? current?.hasTouch ?? true };
-        await setViewport(next);
-        current = next;
+        const isMobile = viewport.isMobile ?? current?.isMobile ?? true;
+        const hasTouch = viewport.hasTouch ?? current?.hasTouch ?? true;
+        await setViewport({ ...viewport, deviceScaleFactor: dpr, isMobile, hasTouch });
+        current = { ...viewport, deviceScaleFactor: dpr, isMobile, hasTouch };
         const actual = await page.evaluate(() => window.devicePixelRatio);
         if (actual !== dpr) throw new Error(`DPR override requested ${dpr}, page reports ${actual}`);
       };
