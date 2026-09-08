@@ -992,6 +992,37 @@ export async function exportAll() {
  * about where this device's clock has been. */
 const DEVICE_KV = ['identity', 'social', 'recoveryId', 'recoverySetAt', 'vaultConflict', 'bootRestored', 'cloudOff', 'apiBase', 'backupVersion', DAY_WITNESS_KEY, 'dayHighWater'];
 
+// P3: refuse unreadable known containers before replacing any store. Unknown
+// keys and unknown fields remain opaque, so exporting cannot discard new data.
+// This is container validation, not a complete schema or an authenticity check.
+const RESTORE_ARRAY_KV = new Set(['invTaken', 'crateTaken', 'paidlooks', 'looks',
+  'redeemed', 'grantsSeen', 'petInst', 'outfits', 'giftbox', 'pantry', 'foodbuffs',
+  'cookq', 'routines', 'evq']);
+const RESTORE_MAP_KV = new Set(['equipped', 'gearloadout', 'transmog', 'petWear',
+  'pets', 'petLvlSteps', 'petBonds', 'petNick', 'pettalents', 'buffs', 'ingredients',
+  'potions', 'pitEnergy', 'settings', 'notifPrefs', 'grantPresentation']);
+const RESTORE_NUMBER_KV = new Set(['coins', 'coinsRev', 'bonedust', 'dustRev',
+  'grantCursor', 'petLvlV', 'petStepCredit', 'petBreedCredit', 'potsOwned']);
+const MERGE_RECEIPTS = ['invTaken', 'crateTaken', 'paidlooks', 'looks', 'redeemed', 'grantsSeen'];
+function validateRestoreKv(rows) {
+  const keys = new Set();
+  for (const row of rows) {
+    if (!row || typeof row.k !== 'string' || !row.k || !Object.hasOwn(row, 'v') || keys.has(row.k)) {
+      throw new Error('that backup file is damaged (invalid or duplicate kv key). Your old data is unchanged.');
+    }
+    keys.add(row.k);
+    const { k, v } = row;
+    if (v != null && ((RESTORE_ARRAY_KV.has(k) && !Array.isArray(v)) ||
+        (RESTORE_MAP_KV.has(k) && (typeof v !== 'object' || Array.isArray(v))) ||
+        (RESTORE_NUMBER_KV.has(k) && (typeof v !== 'number' || !Number.isFinite(v) || v < 0)))) {
+      throw new Error(`that backup file is damaged or unsupported (${k}). Update the app or use another backup. Your old data is unchanged.`);
+    }
+    if ((k === 'petLvlV' && v > 2) || (k === 'pettalents' && v?.__iidV > 2)) {
+      throw new Error(`that backup uses a newer ${k} format. Update the app, then import it again. Your old data is unchanged.`);
+    }
+  }
+}
+
 /* IMPORT IS ALL-OR-NOTHING. Tom, 2026-08-13, after Vlad's demonstration:
  * "sounds like a good fix youve suggested". Every row across every store
  * commits together in ONE multi-store transaction, or none of them do
@@ -1074,7 +1105,7 @@ export async function importAll(data, { replace = true } = {}) {
      trivially true on this path. A store key that is present but is not an
      array is a damaged file, not an old one, and the two cases deserve
      different answers: this one refuses, an absent key is skipped below. */
-  const damaged = STORES.filter(s => data[s] != null && !Array.isArray(data[s]));
+  const damaged = STORES.filter(s => Object.hasOwn(data, s) && !Array.isArray(data[s]));
   if (damaged.length) throw new Error(`that backup file is damaged (${damaged.join(', ')}). Your old data is unchanged.`);
   /* THE VERSION IS READ, AND A NEWER FILE IS REFUSED. QA round 25 M6: nothing
      anywhere read data.version, so a file stamped by a newer app carrying an
@@ -1087,6 +1118,7 @@ export async function importAll(data, { replace = true } = {}) {
      whole rule. A file with no version at all is treated as old. */
   const fileVersion = Number(data.version) || 0;
   if (fileVersion > DB_VERSION) throw new Error(`that backup was made by a newer version of the app (v${fileVersion}; this app reads v${DB_VERSION}). Update the app, then import it again. Your old data is unchanged.`);
+  if (Array.isArray(data.kv)) validateRestoreKv(data.kv);
   const idb = await open();
   const declared = new Set(STORES.filter(s => Array.isArray(data[s])));
   const skipped = STORES.filter(s => !declared.has(s));
@@ -1165,7 +1197,9 @@ export async function importAll(data, { replace = true } = {}) {
          B's own receipts vanished the moment it merged device A's blob, and
          the next blob still carrying B's spent row revived it. A merge can
          only ever ADD a receipt. */
-      for (const k of ['invTaken', 'crateTaken']) {
+      // Purchase and delivery receipts are also permanent on a merge. A stale
+      // backup must not un-buy a look or forget that a code/grant was handled.
+      for (const k of MERGE_RECEIPTS) {
         const local = localKv.find(r => r.k === k);
         const file = data.kv.find(r => r && r.k === k);
         if (!local) continue;

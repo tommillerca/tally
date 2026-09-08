@@ -2015,6 +2015,10 @@ export async function petLevelBank() {
 // equip (equipped.C) by picking the best instance of that species.
 export async function equippedPetIid() {
   let iid = await kvGet('petEquipped', null);
+  // A future instance exists but this build cannot use it. Do not replace its
+  // saved selection with a known pet (or null) just because a screen opened.
+  const stored = await kvGet('petInst', null);
+  if (iid && Array.isArray(stored) && stored.some(x => x?.iid === iid && !selectablePetInstance(x))) return null;
   const insts = await petInstances();
   let inst = iid ? insts.find(x => x.iid === iid) : null;
   if (!inst) {
@@ -2856,10 +2860,18 @@ export async function equipped({ raw = false } = {}) {
   const base = {};
   for (const s of BH_SLOTS) if (s.default) base[s.code] = s.default;
   const saved = await kvGet('equipped', {});
-  const eq = { ...base, ...saved };
-  // Hide unsupported companions without rewriting their saved rows or slot.
-  if (eq.C && !isKnownPet(eq.C)) delete eq.C;
-  if (raw) return eq;
+  // The Dressing Room needs the true saved id to explain an unavailable look.
+  // Keep the raw contract, including the existing unsupported-pet exclusion.
+  if (raw) {
+    const eq = { ...base, ...saved };
+    if (eq.C && !isKnownPet(eq.C)) delete eq.C;
+    return eq;
+  }
+  const eq = { ...base };
+  for (const s of BH_SLOTS) {
+    const id = saved?.[s.code], item = BH_BY_ID[id];
+    if (item && item.slot === s.code && (s.code !== 'C' || isKnownPet(id))) eq[s.code] = id;
+  }
   const tm = (await kvGet('transmog', {})) || {};
   const slots = Object.keys(tm);
   if (!slots.length) return eq;
@@ -2873,13 +2885,15 @@ export async function equipped({ raw = false } = {}) {
        transmogPrice. */
     if (!lo[slot] && !eq[slot]) continue;
     if (tm[slot] === TRANSMOG_HIDE) delete eq[slot];
-    else if (BH_BY_ID[tm[slot]] && (slot !== 'C' || isKnownPet(tm[slot]))) eq[slot] = tm[slot];
+    else if (BH_BY_ID[tm[slot]]?.slot === slot && (slot !== 'C' || isKnownPet(tm[slot]))) eq[slot] = tm[slot];
   }
   return eq;
 }
 
 export async function equip(slot, itemId, { keepGear = false } = {}) {
-  const eq = await equipped({ raw: true });
+  // Readers project renderable slots. Writers edit the stored map so changing
+  // a hat does not erase a future companion or an unknown earned appearance.
+  const eq = { ...((await kvGet('equipped', {})) || {}) };
   if (itemId == null) {
     const def = BH_SLOTS.find(s => s.code === slot)?.default || null;
     if (def) eq[slot] = def; else delete eq[slot];
@@ -2936,7 +2950,7 @@ export async function equipGear(slot, gearId) {
   const unpaidLook = tm[slot] && tm[slot] !== TRANSMOG_HIDE && !(await paidLooks()).has(paidKey(slot, tm[slot]));
   lo[slot] = gearId;
   await kvSet('gearloadout', lo);
-  const eq = await equipped({ raw: true });
+  const eq = { ...((await kvGet('equipped', {})) || {}) };
   eq[slot] = g.artId;
   await kvSet('equipped', eq);
   if (unpaidLook) await dropTransmog(slot);
