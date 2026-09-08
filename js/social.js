@@ -21,9 +21,12 @@
 // rewards, friend badges). Each has a unique key; we ingest through the same
 // idempotent award() as local play, so replays and re-pulls are harmless.
 
-import { db, kvGet, kvSet, kvUpdate, exportAll, importAll, witnessServerDay, dayIsUnwitnessed } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, exportAll, importAll, witnessServerDay, dayIsUnwitnessed, newId } from './db.js';
 import { awardOnce } from './game.js';
-import { coinsAdd, grantCrate, grantConsumable, grantGear, boneDustAdd, grantEgg, grantPet } from './loot.js';
+import { setSpireClock, forgetSpireAuthority } from './spires.js';
+import { crateRow, consumableRow, eggRow, gearRow, cosRow, petInstances, petLevelBank, petPicks, lifetimeStepsSum } from './loot.js';
+import { GEAR_BY_ID } from './gear.js';
+import { isKnownPet } from './pets.js';
 import { onAppHide } from './native.js';
 
 // Production API. Empty until the worker is deployed; the Go Online UI stays
@@ -849,11 +852,19 @@ export async function fetchSettledRace(weekKey) {
 
 export async function fetchMySpires() {
   try {
-    if (!(await isOnline())) return null;
+    if (!(await isOnline())) { forgetSpireAuthority(); return null; }
     const r = await signedFetch('GET', '/spires/mine');
-    if (!r.ok) return null;
-    return (await r.json()).spires || [];
-  } catch { return null; }
+    const body = await r.json();
+    if (!r.ok) {
+      forgetSpireAuthority();
+      await kvSet('spireFail', { reason: r.status === 401 && /stale timestamp/i.test(body.error || '') ? 'clock' : 'offline' });
+      return null;
+    }
+    if (!Array.isArray(body.spires)) throw new Error('Invalid ownership snapshot');
+    setSpireClock(body.serverNow);
+    await kvSet('spireFail', null);
+    return body.spires;
+  } catch { forgetSpireAuthority(); return null; }
 }
 
 /** Break a siege after winning the defense. {ok, level} or {ok:false, reason}. */
@@ -871,7 +882,7 @@ export async function defendSpireRemote(id) {
 export async function tendSpireRemote(id) {
   try {
     const r = await signedFetch('POST', `/spires/${encodeURIComponent(id)}/tend`, {});
-    return r.ok;
+    return r.ok && (await r.json()).ok === true;
   } catch { return false; }
 }
 
@@ -1149,9 +1160,8 @@ const GIFTBOX = 'giftbox';
  * ended with 200 coins. Every payload shape is affected, gifts, race prizes,
  * make-goods and welcome bonuses alike.
  *
- * awardOnce collapses the check and the act into one IndexedDB request
- * (db.addIfAbsent), so exactly one caller anywhere on the device is ever told
- * `claimed: true` for a key, and only that one runs the side effects below. */
+ * R47: awardOnce's pay argument now uses claimAndPay, so the receipt and
+ * every reward commit together. A crash cannot leave a receipt for an unpaid grant. */
 /* `sentAt` IS THE SERVER'S ts ON THE GRANT ROW, and it has always been on the
    wire (GET /grants selects it) and always been thrown away here. Every reader
    downstream had only the LEDGER row's ts, which awardOnce stamps at the moment
@@ -1174,32 +1184,51 @@ async function applyPayload(key, type, p, sentAt) {
     ? { cheer: Number.isFinite(+p.cheer) ? +p.cheer : null, cheerFrom: p.cheerFrom || null, from: p.from || null }
     : {};
   if (+sentAt > 0) extra.sentAt = +sentAt;
-  const claim = await awardOnce(key, type || 'social', p.xp || 0, p.note || 'From the Crew', undefined, extra);
-  if (!claim.claimed) return false;            // already ingested: skip side effects too
-  if (p.coins) await coinsAdd(p.coins);
-  if (p.dust) await boneDustAdd(p.dust);   // step-race podium pays dust; nothing else does yet
-  if (p.crate) await grantCrate(p.crate, 'social');
-  if (p.consumable) await grantConsumable(p.consumable, 'social');
-  // `egg: 'ready'` hands over one that can be cracked immediately (goal 0)
-  if (p.egg) await grantEgg('social', p.egg === 'ready' ? 0 : undefined);
-  /* A PET BY NAME. The make-good arm: /admin/grant can hand a named player back
-     a species they lost to a mistake or a bug, the Day One Lizard included, and
-     this is the only way that can happen (a redeem code lives in the client
-     bundle, so it would hand CX to everybody and destroy the exclusive).
-     ALWAYS AN EXPLICIT ID, never 'random': the server's allowlist refuses it, so
-     grantPet's exclusive filter on random grants is never reached from here and
-     is left exactly as it is. grantPet is additive in both places ownership
-     lives (a petInst copy plus the idempotent `cos` row) and only equips the pet
-     if the companion slot is EMPTY, so a make-good can never displace the pet
-     the player chose. */
-  if (p.pet) await grantPet(p.pet, 'social');
-  if (p.gearId) await grantGear(p.gearId, 'social');
-  /* A rename we owe the player (2026-08-08). Two people held one name because
-     /name had no uniqueness check. The later claimant by account age is asked to
-     pick again, and the apology gift rides the same payload so it lands whether
-     or not they read the notice. Stores the OLD name so the notice can say which
-     name it is about, and so the check can no-op once they have changed it. */
-  if (p.rename) await kvSet('renameRequired', String(p.rename));
+  // The receipt, every reward and its presentation queue commit together.
+  const pay = { kv: {}, puts: [] };
+  const bump = (k, rev, n) => {
+    if (!n) return;
+    pay.kv[k] = cur => Math.max(0, (Number(cur) || 0) + n);
+    pay.kv[rev] = cur => (Number(cur) || 0) + Math.max(1, Math.abs(n));
+  };
+  bump('coins', 'coinsRev', p.coins);
+  bump('bonedust', 'dustRev', p.dust);
+  const put = val => pay.puts.push({ store: 'inv', val });
+  if (p.crate) put(p.crate === 'egg' ? await eggRow('social') : crateRow(p.crate, 'social'));
+  if (p.consumable) put(consumableRow(p.consumable, 'social'));
+  if (p.egg) put(await eggRow('social', p.egg === 'ready' ? 0 : undefined));
+  const looks = [];
+  if (p.gearId) {
+    const gear = GEAR_BY_ID[p.gearId];
+    if (!gear) throw new Error('unknown gear');
+    if (!(await db.all('inv')).some(r => r.kind === 'gear' && r.gearId === p.gearId)) {
+      put(gearRow(p.gearId, 'social')); looks.push(gear.artId);
+    }
+  }
+  if (p.pet) {
+    if (!isKnownPet(p.pet)) throw new Error('unknown pet species');
+    // petInstancePay is private to loot.js, outside this lane. Use the same
+    // instance contract and public migration readers before composing the pay.
+    const instances = await petInstances();
+    await petLevelBank();
+    for (const inst of instances) await petPicks(inst.iid);
+    const anchor = await lifetimeStepsSum();
+    const inst = { iid: `grant-${newId()}`, sp: p.pet, lineage: 0, shiny: false, morph: 'base', hatchedAtSteps: anchor };
+    pay.kv.petInst = cur => [...(Array.isArray(cur) ? cur : []), inst];
+    pay.kv.pets = cur => ({ ...cur, [p.pet]: cur?.[p.pet] || { hatchedAtSteps: anchor } });
+    pay.kv.petLvlSteps = cur => ({ ...cur, [inst.iid]: 0 });
+    let equipNew = false;
+    pay.kv.equipped = cur => { equipNew = !cur?.C; return equipNew ? { ...cur, C: p.pet } : undefined; };
+    pay.kv.petEquipped = () => equipNew ? inst.iid : undefined;
+    if (!(await db.all('inv')).some(r => r.kind === 'cos' && r.itemId === p.pet)) put(cosRow(p.pet, 'social'));
+    looks.push(p.pet);
+  }
+  if (looks.length) pay.kv.looks = cur => [...new Set([...(cur || []), ...looks])];
+  if (p.rename) pay.kv.renameRequired = () => String(p.rename);
+  // Sealed gifts are presented by their explicit Open control.
+  if (type !== 'gift') pay.kv.grantPresentation = cur => ({ ...cur, [key]: { key, type, payload: p, ts: sentAt } });
+  const claim = await awardOnce(key, type || 'social', p.xp || 0, p.note || 'From the Crew', undefined, extra, pay);
+  if (!claim.claimed) return false;
   return true;
 }
 
@@ -1214,25 +1243,13 @@ export async function giftBox() { return (await kvGet(GIFTBOX, [])) || []; }
 /** Open one. Applies the reward at THIS moment, then hands back what was inside
  *  so the caller can play the reveal and name who sent it. */
 export async function openGift(key) {
-  /* Remove first: a double tap must not pay twice. The removal is now an
-     atomic read-modify-write of the box, because `const box = await giftBox();
-     ... await kvSet(GIFTBOX, box.filter(...))` is the same lost-update shape as
-     everything else here: two tabs opening the same present both read the box
-     with the gift in it, and each writes back a list computed from its own
-     stale copy, so a SECOND sealed gift in the box could be resurrected by the
-     loser's write. The payout itself is gated on applyPayload's atomic ledger
-     claim, so only one of them can pay regardless. */
-  let g = null;
-  await kvUpdate(GIFTBOX, list => {
-    const box = list || [];
-    g = box.find(x => x.key === key) || null;
-    return g ? box.filter(x => x.key !== key) : box;
-  }, []);
+  // Keep the sealed envelope until the atomic reward lands. A crash before
+  // removal leaves a harmless envelope whose ledger receipt prevents re-pay.
+  const g = (await giftBox()).find(x => x.key === key);
   if (!g) return null;
-  /* If applyPayload says no, this key was already ingested somewhere else and
-     nothing was paid, so there is nothing to reveal and the caller must not
-     play an unwrap for a present that paid nobody. */
-  if (!await applyPayload(g.key, g.type, g.payload || {}, g.ts)) return null;
+  const paid = await applyPayload(g.key, g.type, g.payload || {}, g.ts);
+  await kvUpdate(GIFTBOX, list => (list || []).filter(x => x.key !== key), []);
+  if (!paid) return null;
   return g;
 }
 
@@ -1260,6 +1277,30 @@ async function applyGrant(g) {
     return true;    // it landed: it is in your box, sealed
   }
   return applyPayload(g.key, g.type, p, g.ts);
+}
+
+/** Retained ledger notes recover the old cold-boot spire notices once. */
+export async function pendingGrantDelivery() {
+  if (!await kvGet('spirePresentationRecovered', false)) {
+    const rows = (await db.all('xp')).filter(r => r.type === 'spire');
+    await kvUpdate('grantPresentation', cur => {
+      const next = { ...cur };
+      for (const r of rows) if (!next[r.key]) next[r.key] = {
+        key: r.key, type: r.type, payload: { note: r.label }, ts: r.sentAt || r.ts,
+      };
+      return next;
+    }, {});
+    await kvSet('spirePresentationRecovered', true);
+  }
+  const appliedGrants = Object.values(await kvGet('grantPresentation', {}) || {});
+  return { applied: appliedGrants.length, appliedGrants };
+}
+export async function acknowledgeGrantDelivery(keys) {
+  await kvUpdate('grantPresentation', cur => {
+    const next = { ...cur };
+    for (const key of keys) delete next[key];
+    return next;
+  }, {});
 }
 
 export async function pullGrants() {

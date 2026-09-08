@@ -59,7 +59,7 @@ import { talkBoxHtml, runTalkBox } from './talkbox.js';
 import { BED_BOX, hlwBedArt, hlwChipHtml, hlwPriceSignHtml, hlwGhostBedHtml } from './hollow-beds.js';
 import { hollowBackdropHtml } from './hollow-scene.js';
 import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor,
-  setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
+  setSpireLevel, boonBonusFor, spireNow, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
   SPIRE_RADIUS_M, SPIRE_CAP, SPIRE_SHIELD_MS, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
   BOON_PER_SPIRE, BOON_SPIRE_CAP, TRIBUTE_PER_DAY, TRIBUTE_DUST_PER_DAY } from './spires.js';
 import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
@@ -1327,6 +1327,7 @@ function bindAppLifecycle() {
   setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
   // social: push the game snapshot + encrypted backup, pull server grants
   // (throttled, silent). initFromQuery + bootSync already ran above.
+  if (!NOSOCIAL) checkSieges();
   if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(cloudTroubleNotice).then(() => checkFriendRequests()).then(checkSieges);
   /* touchServerDay BEFORE rollDayIfNeeded: coming back to the app is exactly
      when a new day gets opened, and the day guard's ceiling (js/db.js rule 3)
@@ -7050,11 +7051,11 @@ async function openSpireInfoSheet(info, onAct = null) {
   const keeperPet = held
     ? petFrom(null, keeperFit && keeperFit.C)                       // yours: S.shinyPets knows
     : petFrom(rival && rival.defender && rival.defender.pet);       // theirs: the snapshot knows
-  const days = heldSince ? Math.floor((Date.now() - heldSince) / 86400000) : 0;
+  const days = heldSince ? Math.floor((spireNow() - heldSince) / 86400000) : 0;
   const wt = wardenTier(days);
   // The plate is a NAMEPLATE, so a tower you hold flies YOUR name, not "You hold it".
   const myName = held ? await social.displayName() : null;
-  const holder = held ? esc(myName || 'You') : rival ? esc(rival.ownerName || 'A rival') : dormant ? 'Gone dormant' : 'Nobody';
+  const holder = view.pending ? 'Ownership pending' : held ? esc(myName || 'You') : rival ? esc(rival.ownerName || 'A rival') : dormant ? 'Gone dormant' : 'Nobody';
   const standing = heldSince
     ? (days >= 1 ? `Standing ${days} day${days === 1 ? '' : 's'}` : 'Taken today')
     : 'Never been taken';
@@ -7069,7 +7070,7 @@ async function openSpireInfoSheet(info, onAct = null) {
     <div class="sheet-head">
       <div class="hd">
         <h2>${esc(s.name || 'Dark Spire')}</h2>
-        <div class="sub">${besieged ? 'Under siege' : held ? 'Your tower' : dormant ? 'Yours, gone dormant' : rival ? 'Rival territory' : 'Unclaimed'}</div>
+        <div class="sub">${view.pending ? 'Ownership pending' : besieged ? 'Under siege' : held ? 'Your tower' : dormant ? 'Yours, gone dormant' : rival ? 'Rival territory' : 'Unclaimed'}</div>
       </div>
       <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Close">${ICONS.close(17)}</button></div>
     </div>
@@ -7092,7 +7093,7 @@ async function openSpireInfoSheet(info, onAct = null) {
           <small>${esc(standing)}</small>
         </div>
       </div>
-      ${besieged ? `<div class="sp-siege">${esc(siegeName || 'Someone')} is laying siege. It falls in ${esc(fmtCookTime(Math.max(0, siegeUntil - Date.now())))} unless you break it.</div>` : ''}
+      ${besieged ? `<div class="sp-siege">${esc(siegeName || 'Someone')} is laying siege. It falls in ${esc(fmtCookTime(Math.max(0, siegeUntil - spireNow())))} unless you break it.</div>` : ''}
       ${t1Sect('The tower')}
       <div class="den-pays">
         ${facts.map(f => `<div class="p"><span>${f.ico}</span><b>${esc(f.big)}</b><small>${f.lab}</small></div>`).join('')}
@@ -7107,7 +7108,7 @@ async function openSpireInfoSheet(info, onAct = null) {
         <div><div class="d">${s.dist != null ? esc(fmtDist(s.dist)) : 'Nearby'}</div><small>${inRange ? 'You are close enough' : `Get within ${SPIRE_RADIUS_M} m to act`}</small></div>
       </div>
     </div>
-    ${inRange && onAct ? `<div class="t1-foot"><button class="btn" id="spireAct">${besieged && held ? 'Break the siege'
+    ${inRange && onAct && !view.pending ? `<div class="t1-foot"><button class="btn" id="spireAct">${besieged && held ? 'Break the siege'
       : rival ? `Take it from ${esc(rival.ownerName || 'them')}`
       : !held ? 'Take this tower'
       : view.tribute && view.tribute.days ? 'Collect the tribute'
@@ -7217,8 +7218,8 @@ async function openSpireSheet(s, view, rival = null) {
      shield that starts between the poll and the tap still gets through to the
      server refusal, and settle() hands the charge back there (foeCfg.charge). */
   const shieldUntil = rival && rival.claimedAt ? rival.claimedAt + SPIRE_SHIELD_MS : 0;
-  const shieldMins = Math.max(1, Math.ceil((shieldUntil - Date.now()) / 60000));
-  const shielded = shieldUntil > Date.now();
+  const shieldMins = Math.max(1, Math.ceil((shieldUntil - spireNow()) / 60000));
+  const shielded = shieldUntil > spireNow();
   /* This sheet is only ever opened for a tower you don't hold (js/app.js,
      the !view.held route into it), and settle() spends spireKey(...) on ANY
      outcome for that path (win, loss or draw), sieges and your own towers
@@ -7320,7 +7321,7 @@ function openSiegeSheet(s, view, siege) {
       </div>
       <div class="siege-clock">
         <span class="sc-name">${esc(siege.name)}</span>
-        <b class="sc-left">${fmtCookTime(Math.max(0, siege.until - Date.now()))}</b>
+        <b class="sc-left">${fmtCookTime(Math.max(0, siege.until - spireNow()))}</b>
         <span class="sc-lab">left to break it</span>
       </div>
       <ul class="spire-terms">
@@ -22724,7 +22725,7 @@ async function renderBoneyard(el) {
       // minute, immediately when the set of nearby spires changes, and always
       // right after a claim. Fails soft: no network means the local model drives.
       const key = near.map(s => s.id).join(',');
-      const stale = force || key !== spireFetchKey || Date.now() - spireFetchedAt > SPIRE_POLL_MS;
+      const stale = force || key !== spireFetchKey || spireNow() - spireFetchedAt > SPIRE_POLL_MS;
       if (stale && !spireFetching) {
         spireFetching = true;
         try {
@@ -22732,7 +22733,7 @@ async function renderBoneyard(el) {
           const rows = await social.fetchSpires(near.map(s => s.id)).catch(() => null);
           if (rows) {
             spireRemote = new Map(rows.map(r => [r.id, r]));
-            spireFetchedAt = Date.now(); spireFetchKey = key;
+            spireFetchedAt = spireNow(); spireFetchKey = key;
             // The server owns spire level. Mirror it onto my own records so the
             // pennant and the tribute multiplier agree with every other phone.
             for (const r of rows) if (r.mine && r.level) await setSpireLevel(r.id, r.level);
@@ -22750,7 +22751,8 @@ async function renderBoneyard(el) {
              before announcing. Both existed already; only the call site is new.
              Not awaited: this is a notification, and the marker refresh below
              must not wait on the network for it. */
-          if (!S.demo) checkSieges();
+          if (!S.demo) await checkSieges();
+          spireState_ = await spireState();
         } finally { spireFetching = false; }
       }
       const live = new Set(near.map(s => s.id));
@@ -22776,7 +22778,7 @@ async function renderBoneyard(el) {
         // back to the mirrored local copy between polls
         const siegeUntil = (remote && remote.siegeUntil) || (view.siege ? view.siege.until : 0);
         const siegeName = (remote && remote.siegeName) || (view.siege ? view.siege.name : '');
-        const besieged = !!(siegeUntil && siegeUntil > Date.now());
+        const besieged = !!(siegeUntil && siegeUntil > spireNow());
         // How long it has stood, from whoever's claim it is. A rival's tower shows
         // its age too, which is exactly the point: an old tower looks worth taking.
         // NOTE 2026-08-15: this used to gate on `held`, which flips false the
@@ -22786,7 +22788,7 @@ async function renderBoneyard(el) {
         // regardless of held. This preserves the app's own promise: "never lost,
         // just quiet".
         const heldSince = rival ? (rival.claimedAt || 0) : (spireState_[s.id]?.claimedAt || 0);
-        const ageTier = heldSince ? wardenTier(Math.floor((Date.now() - heldSince) / 86400000)).tier : 0;
+        const ageTier = heldSince ? wardenTier(Math.floor((spireNow() - heldSince) / 86400000)).tier : 0;
         rec.el.dataset.age = String(ageTier);
         rec.el.classList.toggle('besieged', besieged);
         rec.el.classList.toggle('mine', held);
@@ -22797,12 +22799,12 @@ async function renderBoneyard(el) {
         $('.spire-flag', rec.el).textContent = besieged ? 'UNDER SIEGE'
           : rival ? (rival.ownerName || 'RIVAL').toUpperCase()
           : held ? (myName ? myName.toUpperCase() : 'YOURS')
-          : dormant ? 'DORMANT' : 'UNCLAIMED';
+          : view.pending ? 'PENDING' : dormant ? 'DORMANT' : 'UNCLAIMED';
         // A tower's level is its history: every takeover and every repelled siege
         // adds one, and it pays more tribute. Worth reading from across the map.
         const lvl = rival ? (rival.level || 1) : (view.level || 1);
         rec.el.classList.toggle('levelled', lvl > 1);
-        const trib = besieged ? `⚔ ${fmtCookTime(siegeUntil - Date.now())}`
+        const trib = besieged ? `⚔ ${fmtCookTime(siegeUntil - spireNow())}`
           : held && view.tribute.coins ? `${ICONS.coin(16)} ${view.tribute.coins}` : '';
         $('.spire-lv', rec.el).textContent = lvl > 1 ? `LV ${lvl}` : '';
         $('.spire-tribute', rec.el).innerHTML = trib;
@@ -22822,9 +22824,9 @@ async function renderBoneyard(el) {
           // (breaking a siege), collecting tribute and tending are NOT gated:
           // they are not fights you can farm.
           const takeSpent = !view.held && spireSpentToday(s.id);
-          sb.disabled = takeSpent;
+          sb.disabled = takeSpent || view.pending;
           sb.classList.toggle('spent', takeSpent);
-          sb.textContent = siege && view.held ? `Break the siege at ${s.name}`
+          sb.textContent = view.pending ? `${s.name}: ownership pending` : siege && view.held ? `Break the siege at ${s.name}`
             : takeSpent ? `${s.name} holds you off until tomorrow`
             : rival ? `Take ${s.name} from ${rival.ownerName || 'them'}`
             : !view.held ? `Take ${s.name}`
@@ -23139,9 +23141,12 @@ async function renderBoneyard(el) {
     $('#mapSpire', body)?.addEventListener('click', async () => {   // same offline teardown as #mapCanvas above
       if (tooFastToAct()) return;
       if (!spireInRange) return;
+      await refreshSpires({ force: true });
+      if (!spireInRange) return;
       const { s, view, rival, siege } = spireInRange;
       // A SIEGE OUTRANKS EVERYTHING. There is a deadline on it, so a besieged tower
       // must never offer to be tended or milked instead of defended.
+      if (view.pending) { toast('Ownership pending. Reconnect to check this tower.'); return; }
       if (siege && view.held) return openSiegeSheet(s, view, siege);
       // belt as well as braces: the button is disabled, but a stale tap or a
       // second entry point must not get a free run at a tower again today.
@@ -23162,8 +23167,8 @@ async function renderBoneyard(el) {
         popSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.4, 16);
         toast(`${s.name} pays up: +${r.coins} coins, +${r.dust} Bone Dust.`, 3200);
       } else {
+        if (!await social.tendSpireRemote(s.id)) { toast('Reconnect to tend this tower.'); return; }
         await tendSpire(s.id);
-        social.tendSpireRemote(s.id).catch(() => {});
         toast(`${s.name} stands. Resolve restored.`, 2600);
       }
       await refreshSpires();
@@ -23628,7 +23633,22 @@ if (S.island) document.documentElement.classList.add('fx-island');
 const APP_BUILD = 'v510'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
-function presentGrantDelivery(r) {
+let grantDeliveryBusy = false;
+async function presentGrantDelivery(r) {
+  if (grantDeliveryBusy) return;
+  grantDeliveryBusy = true;
+  try {
+    const pending = await social.pendingGrantDelivery();
+    if (pending.applied) r = pending;
+    if (!r?.applied) return;
+    while (document.hidden || document.querySelector('#splash, .dw') || !document.documentElement.classList.contains('booted') || sheetStack.length) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    await drawGrantDelivery(r);
+    await social.acknowledgeGrantDelivery((r.appliedGrants || []).map(g => g.key));
+  } finally { grantDeliveryBusy = false; }
+}
+function drawGrantDelivery(r) {
   if (!r || !(r.applied > 0)) return;
   const cards = [];
   let coinsSum = 0, xpSum = 0;
@@ -23669,6 +23689,7 @@ function presentGrantDelivery(r) {
     if (p.gift && !hadCard && p.coins) coinGifts.push(`${p.from || 'A friend'} sent you ${p.coins} coins!`);
   }
   for (const p of spireNews) {
+    notifyNow('Dark Spires', p.note || 'One of your towers no longer flies your name.', 'siege').catch(() => {});
     cards.push({
       iconHtml: `<img src="assets/brand/tomb.png" style="width:110px;height:110px;object-fit:contain;filter:grayscale(1) brightness(.75)">`,
       name: 'Spire Lost', rarity: 'rare', kind: 'DARK SPIRE',
@@ -23692,7 +23713,7 @@ function presentGrantDelivery(r) {
   // crew news: same staggered treatment, queued after the cheers so two kinds
   // of Crew toast never land on top of each other
   crewNews.forEach((n, i) => setTimeout(() => toast(n, 4200), (cheers.length + i) * 900));
-  if (cards.length) { openPackReveal(cards, { coins: coinsSum, footerNote: xpSum ? `+${xpSum} XP` : '' }).then(refresh); return; }
+  if (cards.length) return openPackReveal(cards, { coins: coinsSum, footerNote: xpSum ? `+${xpSum} XP` : '' }).then(refresh);
   if (coinGifts.length) { toast(coinGifts[0] + (coinGifts.length > 1 ? ` (+${coinGifts.length - 1} more)` : ''), 4200); bgRefresh(); return; }
   if (coinsSum || xpSum) { toast(`Crew delivery: ${[coinsSum ? `+${coinsSum} coins` : '', xpSum ? `+${xpSum} XP` : ''].filter(Boolean).join(' · ')}.`, 3600); bgRefresh(); return; }
   if (cheers.length || crewNews.length) { bgRefresh(); return; } // already toasted, nothing else to reveal
@@ -23895,30 +23916,83 @@ async function socialSnapshot() {
    discovery push names its kind to notifyNow, the reminder is gated inside
    scheduleSiegeReminder. The in-app toast below is not a push and is not gated,
    because the player is looking at the app when it appears. */
+let siegePoll = null, siegeChecking = false, siegeClockNotice = false;
+let siegeBannerRows = [];
+function mountSiegeBanner() {
+  const screen = document.querySelector('#screen');
+  if (!screen) return;
+  let banner = document.querySelector('#activeSiegeBanner');
+  if (!siegeBannerRows.length) { banner?.remove(); return; }
+  if (!banner) { banner = document.createElement('div'); banner.id = 'activeSiegeBanner'; banner.style.cssText = 'flex:none;max-height:40vh;overflow:auto;padding:env(safe-area-inset-top, 0px) 12px 0'; screen.before(banner); }
+  const rows = siegeBannerRows.map(s => ({ ...s, siege: { ...s.siege, msLeft: Math.max(0, s.siege.until - spireNow()) } }));
+  const html = spireBannerHtml(rows);
+  if (banner._html === html) return;
+  const open = banner.querySelector('details')?.open;
+  banner.innerHTML = html; banner._html = html;
+  if (open) banner.querySelector('details').open = true;
+  banner.querySelector('#spireToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
+}
 async function checkSieges() {
+  if (siegeChecking) return;
+  siegeChecking = true;
   try {
     if (navigator.webdriver && !window.__siegeForce) return;
+    if (!siegePoll) {
+      siegePoll = setInterval(() => {
+        if (document.hidden) return;
+        checkSieges();
+        social.pullGrants().then(presentGrantDelivery).catch(() => {});
+      }, 15000);
+      setInterval(() => { if (!document.hidden) mountSiegeBanner(); }, 1000);
+    }
+    const before = await spireState();
     const rows = await social.fetchMySpires();
-    if (!rows) return;                       // offline: keep whatever we knew
-    const fresh = await syncSieges(rows);
+    if (rows === null) {
+      const fail = await kvGet('spireFail', null);
+      if (fail?.reason === 'clock' && !siegeClockNotice) {
+        siegeClockNotice = true;
+        toast('Your device clock is out of sync. Set time automatically to check your sieges.', 6000);
+      }
+      return;
+    }
+    siegeClockNotice = false;
+    await syncSieges(rows);
+    const ids = new Set(rows.map(r => r.id));
+    const rejected = Object.keys(before).find(id => before[id].pending && !ids.has(id));
+    if (rejected) toast(`The server did not confirm your claim on ${before[rejected].meta?.name || 'that tower'}. It is not yours.`, 5200);
+    const lost = Object.keys(before).filter(id => !ids.has(id) && !before[id].pending);
+    if (lost.length) toast(`${before[lost[0]].meta?.name || 'Your tower'} no longer flies your name. Tribute and Boon have stopped.`, 5200);
+    const expired = rows.find(r => before[r.id]?.siege && before[r.id].siege.until <= spireNow() && !r.siegeUntil);
+    if (expired) {
+      const note = `The siege broke through at ${expired.name}. Your tower is dormant. Walk back to take it again.`;
+      toast(note, 5200);
+      notifyNow('Siege ended', note, 'siege').catch(() => {});
+    }
     const live = await besiegedSpires();
+    siegeBannerRows = live;
+    mountSiegeBanner();
     if (!live.length) { await cancelSiegeReminder(); return; }
     const top = live[0];
-    await scheduleSiegeReminder(top.siege.name, top.name || 'your spire', top.siege.until);
-    if (!fresh.length) return;
+    await scheduleSiegeReminder(top.siege.name, top.name || 'your spire', Date.now() + top.siege.msLeft);
     const seen = new Set((await kvGet('siegeSeen', [])) || []);
-    const announce = fresh.filter(f => !seen.has(`${f.id}:${f.until}`));
+    const announce = live.map(s => ({ id: s.id, name: s.name, until: s.siege.until, siegeName: s.siege.name }))
+      .filter(f => !seen.has(`${f.id}:${f.until}`));
     if (!announce.length) return;
     for (const f of announce) seen.add(`${f.id}:${f.until}`);
     // keep the ledger small; only recent keys matter
     await kvSet('siegeSeen', [...seen].slice(-40));
     const a = announce[0];
-    const hrs = Math.max(1, Math.round((a.until - Date.now()) / 3600000));
+    const hrs = Math.max(1, Math.round((a.until - spireNow()) / 3600000));
     notifyNow('Your spire is under siege', `${a.siegeName || 'A siege'} is at ${a.name}. ${hrs}h to walk out and break it.`, 'siege').catch(() => {});
     toast(`${a.siegeName || 'A siege'} is at ${a.name}. ${hrs}h to defend it.`, 5200);
-    refresh();
+    if (!sheetStack.length) refresh();
+    mountSiegeBanner();
   } catch { /* never let a siege check break a boot */ }
+  finally { siegeChecking = false; }
 }
+
+// The browser guard supplies a snapshot, then operates the real banner controls.
+if (typeof window !== 'undefined' && navigator.webdriver) window.__checkSieges = checkSieges;
 
 // so friends see new gear within seconds. No-op when offline.
 let _profilePushT = null;
@@ -25834,10 +25908,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
            NO-OP guard in tests/unit.test.js while fixing the spire re-take, which
            is the same bug on the neighbouring branch. */
         const res = await social.defendSpireRemote(foeCfg.spire.id).catch(() => ({ ok: false, reason: 'offline' }));
-        const noSiege = !!(res && res.ok === false && res.reason !== 'offline');
+        const noSiege = !res || res.ok !== true;
         if (noSiege) {
           coins = 25;   // nothing was broken, so nothing is owed
-          toast(`${foeCfg.spire.name} is not under siege any more.`, 3600);
+          toast(res?.reason === 'offline' ? 'Defense pending. Reconnect to check the siege.' : `${foeCfg.spire.name} is not under siege any more.`, 3600);
         } else {
           coins = 50;
           // a uniquely-keyed ledger row, so the Siegebreaker badge has something to
@@ -25860,10 +25934,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // REMOTE FIRST. This used to write the local record before asking the
         // server, so a refused claim (cap, or now a shield) left the client
         // believing it owned a tower until the next 60s poll corrected it.
-        // Offline is the one case we still trust locally: that is the fail-soft
-        // rule the whole social layer is built on.
+        // An offline result is pending, with no ownership or takeover reward.
         const remote = await social.claimSpireRemote(foeCfg.spire).catch(() => ({ ok: false, reason: 'offline' }));
-        const refused = remote && remote.ok === false && remote.reason !== 'offline';
+        const pending = !remote || remote.reason === 'offline';
+        const refused = !pending && remote.ok !== true;
         /* A REFUSED TAKEOVER HANDS THE CHARGE BACK (QA round 20, R20-P2).
            A 409 (shielded, or the attacker at SPIRE_CAP) changes nothing on the
            server, so the Pit fight this player spent at the tap bought a state
@@ -25892,7 +25966,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
            since v389, has never existed in this repo. */
         const already = !!(remote && remote.ok === true && remote.already === true);
         const r = (refused || already) ? { ok: false, reason: already ? 'already' : remote.reason } : await claimSpire(foeCfg.spire);
-        if (already) {
+        if (pending) {
+          coins = 0;
+          toast('Claim pending. Reconnect to confirm ownership. No tribute or Boon until confirmed.', 4600);
+          dispatchEvent(new CustomEvent('bh-spire-claimed'));
+        } else if (already) {
           coins = 25;   // it is already yours: pocket change, no re-farm
           toast(`${foeCfg.spire.name} already flies your name. Come back to collect its tribute.`, 3800);
         } else if (refused && remote.reason === 'shielded') {
@@ -25903,6 +25981,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
           coins = 40;
           toast(`You already hold ${SPIRE_CAP} spires. Let one go dormant to take another.`, 4200);
         } else if (r.ok) {
+          const owned = await social.fetchMySpires();
+          if (owned !== null) await syncSieges(owned);
           coins = 80;
           // the server owns the level; mirror what it just told us
           if (remote && remote.ok && remote.level) await setSpireLevel(foeCfg.spire.id, remote.level);
