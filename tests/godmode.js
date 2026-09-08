@@ -688,11 +688,16 @@ export async function boot(base, opts = {}) {
     if (dpr != null) {
       const setViewport = page.setViewport.bind(page);
       page.setViewport = async viewport => {
-        await setViewport({ ...viewport, deviceScaleFactor: dpr });
+        const current = page.viewport();
+        await setViewport({ ...viewport, deviceScaleFactor: dpr,
+          isMobile: viewport.isMobile ?? current?.isMobile ?? true,
+          hasTouch: viewport.hasTouch ?? current?.hasTouch ?? true });
         const actual = await page.evaluate(() => window.devicePixelRatio);
         if (actual !== dpr) throw new Error(`DPR override requested ${dpr}, page reports ${actual}`);
       };
-      await page.setViewport(page.viewport());
+      const viewport = page.viewport();
+      await page.setViewport({ ...viewport,
+        isMobile: viewport?.isMobile ?? true, hasTouch: viewport?.hasTouch ?? true });
       console.log(`DPR OVERRIDE ${dpr} verified: boot and subsequent viewport changes`);
     }
     /* COLLECTED, NOT JUST PRINTED, AND HOOKED BEFORE THE FIRST goto. A suite that

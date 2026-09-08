@@ -1,4 +1,4 @@
-// Run: node tests/pet-C-node-guard.mjs [CHECKOUT] [C1|C2|C3|DPR|ROSTER]
+// Run: node tests/pet-C-node-guard.mjs [CHECKOUT] [C1|C2|C3|DPR|ROSTER|LINEAGE]
 // Default sources resolve relative to this test, never the invoking directory.
 // C2 tests the production listener in Node, not browser surfaces.
 // C3 replays supplied QA geometry, not new browser measurements.
@@ -90,12 +90,20 @@ await row('C3', async () => {
 await row('DPR', async () => {
   const { setWidth } = await mod('tests/godmode.js');
   const calls = [];
-  const page = { setViewport: async opts => calls.push(opts) };
+  // setWidth receives a Puppeteer Page. Model both its viewport getter and
+  // setter, including the current DPR retained by subsequent resizes.
+  const makePage = () => {
+    let viewport = { width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
+    return { viewport: () => viewport, setViewport: async opts => { viewport = opts; calls.push(opts); } };
+  };
+  const page = makePage();
   await setWidth(page, 402, 874, 3);
-  await setWidth(page, 430);
+  await setWidth(makePage(), 430);
+  await setWidth(page, 375);
   assert.deepEqual(calls[0], { width: 402, height: 874, deviceScaleFactor: 3, isMobile: true, hasTouch: true }, 'explicit DPR 3 must reach the viewport');
   assert.deepEqual(calls[1], { width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, 'legacy callers must retain DPR 2 and both mobile flags');
-  return 'setWidth forwards DPR 3; omitted DPR remains 2 with mobile/touch flags';
+  assert.deepEqual(calls[2], { width: 375, height: 932, deviceScaleFactor: 3, isMobile: true, hasTouch: true }, 'resize must retain the current DPR and mobile flags');
+  return 'setWidth forwards DPR 3; default pages retain DPR 2; resized DPR 3 pages retain DPR 3 and mobile/touch flags';
 });
 await row('ROSTER', async () => {
   const source = readFileSync(join(root, 'js/paddock.js'), 'utf8');
@@ -114,5 +122,29 @@ await row('ROSTER', async () => {
   assert.equal(rows.find(r => r.iid === 'one').morph, 'midnight');
   assert.equal(rows.find(r => r.iid === 'one').levelSteps, 182000, 'above-cap bank stays banked');
   return 'known species only; CX, instance morph and above-cap steps preserved';
+});
+await row('LINEAGE', async () => {
+  const ctx = vm.createContext({ ...pets });
+  vm.runInContext(cut('function petLineageStatsCopy(', 'function petPanelHtml('), ctx);
+  for (const sp of Object.keys(pets.PET_ASSIGN)) for (const shiny of [false, true]) {
+    for (const lineage of [0, 1, 3, 6, 10, 1000000]) {
+      ctx.inst = { sp, shiny, lineage };
+      const copy = vm.runInContext('petBreedStatsCopy(inst, 10)', ctx);
+      const before = pets.petBattleStats(sp, 10, shiny, lineage);
+      const after = pets.petBattleStats(sp, 10, shiny, lineage + 1);
+      const changed = ['power', 'marrow', 'wind', 'reflex', 'hp'].some(k => after[k] > before[k]);
+      assert.equal(copy.includes('This breed adds no combat stats.'), !changed, `${sp}/${shiny}/${lineage}: ${copy}`);
+      const mult = pets.petStatMultiplier(sp, shiny, lineage + 1);
+      assert(copy.includes(`${Number(mult.toFixed(6))}x / ${pets.PET_STAT_MULT_CAP}x cap`));
+      assert.equal(copy.includes('Further breeding adds no combat stats.'), mult >= pets.PET_STAT_MULT_CAP);
+    }
+  }
+  // CONTROL: a fresh common gains real stats, so a blanket no-gain warning fails.
+  assert(vm.runInContext("petBreedStatsCopy({ sp: 'C3', shiny: false, lineage: 0 }, 10)", ctx).includes('This breed: +2 PWR, +1 MAR, +2 WND, +3 REF, +3 HP.'));
+  assert(!/lineage\s*\*\s*5|offLineage\s*\*\s*5/.test(app), 'uncapped lineage percentages must not reach the UI');
+  assert(cut('function openPetBreedResult(', '\nfunction ').includes('petLineageStatsCopy(off.sp, off.shiny, off.lineage)'));
+  assert(app.includes('petBreedStatsCopy(keeper, petLevel(bank[keeper.iid] || 0))'), 'preview must grade the actual keeper and level');
+  assert(!app.includes('got stronger</div>'), 'a capped breed must not promise more power');
+  return '84 capped/uncapped previews match combat stats; keeper preview and neutral celebration wired';
 });
 process.exitCode = failed ? 1 : 0;
