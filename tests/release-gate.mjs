@@ -298,6 +298,7 @@ PURE.push('dayone-topup-audit.mjs');
 PURE.push('dish-worth-audit.mjs');
 PURE.push('serve-tree-identity-audit.mjs'); // serveTree refuses a fixed port that answers from another checkout; node-only
 PURE.push('pet-C-node-guard.mjs'); // Lane C: level thresholds/cap, production EQUIP cache, DPR replay/harness, known-species roster.
+PURE.push('r48-state-audit.mjs'); // R48-A: restored unknown artwork, real error-stream assertions and production fight-chip refresh; Node-only.
 const BROWSER = [
   'pet-C-browser-audit.mjs', // Lane C: real EQUIP return paths and nine surfaces, 31 decoded Kennel images at DPR 2/3 on five phone sizes. Browser proof pending reviewer.
 

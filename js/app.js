@@ -3693,7 +3693,7 @@ function fireDailyWheel() {
    OWN body (not just what runs synchronously in its render tick), so a
    closure defined in there reading xp counts as a second scan and that guard
    goes red (A1). Living out here, it is invisible to that walk. */
-window.__refreshLevelChip = async () => {
+async function refreshLevelChip() {
   const chip = $('#lvlChip'); if (!chip || !chip.isConnected) return;
   const lvl = levelFor(await totalXp());
   const row = $('.hero-lvrow', chip);
@@ -3701,7 +3701,8 @@ window.__refreshLevelChip = async () => {
   const xprow = $('.hero-xprow', chip);
   if (xprow) xprow.innerHTML = `<span class="hero-xpn">${lvl.into.toLocaleString()}/${lvl.need.toLocaleString()}</span>`
     + Array.from({ length: XP_PIPS }, (_, i) => `<i${i < Math.ceil(lvl.pct / (100 / XP_PIPS)) ? ' class="on"' : ''}></i>`).join('');
-};
+}
+if (navigator.webdriver) window.__refreshLevelChip = refreshLevelChip;
 /* set when a new service worker took over while a sheet was open, so the
    reload the toast promised happens the moment the last sheet closes */
 let updatePending = false;
@@ -16577,7 +16578,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
        otherwise the plain cosmetic actually equipped there. Everything below used
        to key off wornGear alone, so a slot holding a cosmetic showed no transmog
        panel at all, which is what Tom hit. */
-    const baseArtId = wornGear ? wornGear.artId : (rawEq[slot] || null);
+    // Resolve once at the Dressing Room boundary. Restored ids can be present
+    // but unknown to this build. Tiles, previews and controls share this baseline;
+    // keep the raw equipment intact so a newer build can still restore its art.
+    const ownArt = BH_BY_ID[wornGear ? wornGear.artId : rawEq[slot]];
+    const baseArtId = ownArt?.id || null;
     // a function, not a value: restageLook re-reads it after every look tap
     const previewEq = () => {
       const p = S.lookPreview;
@@ -16608,7 +16613,6 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const cost = (sel === '' || sel === TRANSMOG_HIDE) ? 0 : (lookPriceMap[sel] || 0);
       return { cur, sel, cost, afford: dustBal >= cost, changed: sel !== cur };
     };
-    const ownArt = BH_BY_ID[baseArtId];
     const nameOf = v => v === ''
       ? (wornGear ? `${wornGear.name}, its own look` : `${ownArt?.name || 'What you are wearing'}, as equipped`)
       : v === TRANSMOG_HIDE ? 'Nothing, slot hidden' : (BH_BY_ID[v]?.name || '');
@@ -26130,7 +26134,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       xp += badges.length * BADGE_XP;
       /* R41-16: after evaluateBadges, so the xp store already carries every
          row this win minted (badges included; awardOnce writes on the spot). */
-      window.__refreshLevelChip?.();
+      refreshLevelChip();
       confettiRain(90); levelSound(S.sounds);
       if (badges.length) queueCelebration({ newBadges: badges });
     } else if (fight.over.winner === 'f') {
@@ -26141,7 +26145,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       coins = foeCfg.mode === 'spar' ? (await claimSpar(fightId, false)).coins : 5;
       if (coins) await coinsAdd(coins);
       window.__refreshWalletPill?.();
-      window.__refreshLevelChip?.();   // R41-16: no xp on a loss, but stays true to "like the wallet pill does"
+      refreshLevelChip();   // R41-16: no xp on a loss, but stays true to "like the wallet pill does"
     }
     /* Spend the day's attempt on this tower, whatever the outcome. Outside the
        win/lose branches on purpose: a loss and a draw have to consume it too, or
