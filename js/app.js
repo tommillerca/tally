@@ -1,6 +1,6 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
 import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, storageStatus, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG, dayIsUnwitnessed } from './db.js';
-import { takeSaveInterruption, interruptionCopy, writeFailureCopy, ERASED_COPY } from './save-disclosure.js';
+import { takeSaveInterruption, interruptionCopy, writeFailureCopy, ERASED_COPY, stepSyncStatus, healthSyncInfo, healthSyncCopy } from './save-disclosure.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
@@ -4493,10 +4493,7 @@ async function renderToday(el) {
      appears on the same draw the points do. Two kv reads, no store scan. */
   const rebal = habitGrantCard(await kvGet(HABIT_GRANT_KEY, null), await kvGet(HABIT_GRANT_SEEN_KEY, false));
   const hkStale = await hkStaleInfo(healthRows);
-  if (hkStale && !(await kvGet('hkStaleNotified', false))) {
-    await kvSet('hkStaleNotified', true); // once per stall episode; cleared on the next good sync
-    notifyNow('Steps stopped syncing', 'Apple Health has gone quiet. Your walking is not counting. Open Boneheadz and tap the banner to fix it.', 'any').catch(() => {});
-  }
+  await discloseHealthSync(hkStale);
   const [y, m, d] = S.date.split('-').map(Number);
   const dObj = new Date(y, m - 1, d);
   const title = isToday ? 'Today' : dObj.toLocaleDateString(undefined, { weekday: 'long' });
@@ -4902,8 +4899,8 @@ async function renderToday(el) {
   <p class="note">${DAY_GUARD_COPY.unwitnessed}</p>` : ''}
   ${hkStale ? `
   <button class="card hk-stale" id="hkStaleFix">
-    <b>⚠️ Steps aren't syncing</b>
-    <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`}. Your walking isn't counting. Tap to fix.</span>
+    <b>⚠️ Steps need attention</b>
+    <span>${esc(healthSyncCopy({ health: hkStale, native: isNative() }))}</span>
   </button>` : ''}
 
   ${/* THE DAY IS ONE COLLAPSED BANNER UNTIL YOU ASK FOR IT. Tom, 2026-08-27:
@@ -5294,7 +5291,7 @@ async function renderToday(el) {
       const ok = await nativeSyncNow({ silent: false });
       if (ok) { toast('Steps are flowing again. All good.', 2600); refresh(); return; }
     }
-    location.hash = '#/settings'; // reconnect / re-run the Health setup from Settings
+    openHealthGuide();
   });
   S.justLogged = false;
   $$('[data-claim]').forEach(b => b.addEventListener('click', async ev => {
@@ -19485,23 +19482,31 @@ async function openCrateReveal(result) {
 
 /* ================= Apple Health bridge ================= */
 
-// Health-sync watchdog: Apple Health can silently stop delivering steps (Tom got
-// burned). Every successful steps ingest stamps hkLastSync; the home screen shows a
-// fix-it banner + fires one notification when the stamp goes stale while connected.
-const HK_STALE_MS = 36 * 3600e3;
-async function hkStaleInfo(healthRows = null) {   // `healthRows`: pre-read rows, QA round 28 G3
-  if (!S.settings.hkConnected) return null;
-  let last = await kvGet('hkLastSync', null);
-  if (!last) {
-    // pre-watchdog installs: seed from the newest day that has steps
-    const latest = (healthRows || await db.all('health')).filter(r => r.steps != null).map(r => r.date).sort().pop();
-    if (!latest) return null;
-    last = Date.parse(latest) + 24 * 3600e3;
-    await kvSet('hkLastSync', last);
+// Reuse v518's evidence-backed in-app disclosure, with a durable episode latch.
+// A data row's date is not a sync timestamp. Missing history starts observation
+// now without inventing a successful sync or diagnosing a revoked permission.
+async function hkStaleInfo(healthRows = null) {
+  if (!S.settings.hkConnected && !S.settings.hkNative) return null;
+  const last = await kvGet('hkLastSync', null);
+  let issue = await kvGet('hkSyncIssue', null);
+  if ((!Number.isFinite(last) || last <= 0) && !issue) {
+    issue = await kvUpdate('hkSyncIssue', value => value || { since: Date.now() });
   }
-  const ms = Date.now() - last;
-  if (ms < HK_STALE_MS) return null;
-  return { hours: Math.round(ms / 3600e3), days: Math.floor(ms / 86400e3) };
+  return healthSyncInfo({ connected: true, last, issue, now: Date.now() });
+}
+
+async function discloseHealthSync(health) {
+  const copy = healthSyncCopy({ health, native: isNative() });
+  if (!copy) return;
+  const claimed = await kvUpdate('hkStaleNotified', seen => seen ? undefined : true, false);
+  if (claimed) toast(copy, 10000, { error: true });
+}
+
+async function recordStepSyncIssue(status) {
+  await kvUpdate('hkSyncIssue', issue => ({
+    since: issue?.since || Date.now(),
+    failedAt: issue?.failedAt || (status === 'failed' ? Date.now() : null),
+  }));
 }
 
 async function ingestHealth(payload, { celebrate = true } = {}) {
@@ -19540,7 +19545,11 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
   if (payload.workouts != null) row.workouts = payload.workouts;
   if (payload.wtypes) row.wtypes = payload.wtypes;
   await db.put('health', row);
-  if (payload.steps != null) { await kvSet('hkLastSync', Date.now()); await kvSet('hkStaleNotified', false); }
+  if (Number.isFinite(payload.steps) && payload.steps >= 0) {
+    await kvSet('hkLastSync', Date.now());
+    await kvSet('hkSyncIssue', null);
+    await kvSet('hkStaleNotified', false);
+  }
   /* LIVE. Tom, 2026-08-10: "why isn't the bar in the steps part of trends
      updating in real time with steps for that day."
      Because nothing told it. Steps land here and this function announced nothing,
@@ -21386,10 +21395,11 @@ let lastNativeSync = 0;
 async function nativeSyncNow({ silent = false } = {}) {
   try {
     const r = await nativeQueryToday();
-    if (!r || (r.steps == null && r.activeKcal == null)) return false;
-    lastNativeSync = Date.now();
+    const stepStatus = stepSyncStatus(r);
+    if (stepStatus !== 'ok') await recordStepSyncIssue(stepStatus);
+    if (!r || r.error || (stepStatus !== 'ok' && r.activeKcal == null)) return false;
     const payload = {
-      date: r.date, steps: r.steps ?? null, activeKcal: r.activeKcal ?? null, weightKg: r.weightKg ?? null,
+      date: r.date, steps: stepStatus === 'ok' ? r.steps : null, activeKcal: r.activeKcal ?? null, weightKg: r.weightKg ?? null,
       exerciseMin: r.exerciseMin ?? null, cycleKm: r.cycleKm ?? null,
       workouts: r.workouts ?? null, wtypes: Array.isArray(r.wtypes) ? r.wtypes : null,
       restingHr: r.restingHr ?? null, hrv: r.hrv ?? null,
@@ -21403,13 +21413,19 @@ async function nativeSyncNow({ silent = false } = {}) {
       sleepAwakeMin: r.sleepAwakeMin ?? null, sleepStaged: r.sleepStaged ?? null,
       sleepDiag: r.sleepDiag ?? null,
     };
-    await ingestHealth(payload, { celebrate: !silent });
+    await ingestHealth(payload, { celebrate: !silent && stepStatus === 'ok' });
+    lastNativeSync = Date.now();
     if (!S.settings.hkConnected || S.settings.hkNative !== true) {
       S.settings.hkConnected = true; S.settings.hkNative = true;
       await saveSettings();
     }
-    return true;
-  } catch { return false; }
+    return stepStatus === 'ok';
+  } catch {
+    await recordStepSyncIssue('failed');
+    return false;
+  } finally {
+    await discloseHealthSync(await hkStaleInfo());
+  }
 }
 
 // Bump whenever the native HealthKit / Health Connect read set gains a type, so
@@ -21441,20 +21457,21 @@ async function nativeAutoSync() {
     try { await nativeRequestAuth(); } catch { /* best-effort */ }
   }
   if (Date.now() - lastNativeSync < 10 * 60e3) return; // at most every 10 min
-  const ok = await nativeSyncNow({ silent: true });
-  if (ok && currentTab() === 'today') bgRefresh();
+  await nativeSyncNow({ silent: true });
+  if (currentTab() === 'today') bgRefresh();
 }
 
 async function connectNativeHealth() {
   if (!(await nativeHealthAvailable())) { toast('Health is not available on this device'); return; }
   const granted = await nativeRequestAuth();
-  if (!granted) { toast('Health permission was not granted. You can enable it in iOS Settings > Health.', 3600); return; }
+  if (!granted) { toast('Health connection did not complete. Try Connect Apple Health again here.', 3600); return; }
   S.settings.hkConnected = true; S.settings.hkNative = true;
   await saveSettings();
   // (deliberately NOT advancing hkScopesV here: asking is not evidence of a grant.
   // ingestHealth advances it once sleep data actually arrives.)
-  await nativeSyncNow({ silent: false });
-  toast('Apple Health connected. Boneheadz now syncs automatically.', 3400);
+  const ok = await nativeSyncNow({ silent: false });
+  toast(ok ? 'Apple Health connected. Boneheadz now syncs automatically.'
+    : 'No step data synced. Try again here. An empty read does not confirm Health access.', 3400);
   closeAllSheetsViaHistory();
   setTimeout(refresh, 120);
 }

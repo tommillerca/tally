@@ -8230,6 +8230,12 @@ test('L6 silence disclosure guard includes a normal-session CONTROL', () => {
   assert.match(output, /PASS CONTROL normal session/);
 });
 
+test('h1 health disclosure guard includes healthy and zero-step controls', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'health-disclosure-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /0 failed/);
+  assert.match(output, /PASS CONTROL healthy step sync produces NONE/);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
