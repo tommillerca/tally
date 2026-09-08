@@ -131,9 +131,9 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
  * loss, silent and permanent. That format is not exotic either, it is the
  * format THIS APP prints: every kcal readout goes through toLocaleString().
  *
- * So the contract is: accept a plain decimal, accept ONE comma used as a
- * decimal point, and REFUSE everything else rather than guess at intent. A
- * refusal the player can see beats a number they can never find again.
+ * Accept plain decimals and a single decimal comma. In dot-grouping locales,
+ * read that locale's grouped output back as thousands (L4). Comma grouping
+ * keeps its existing explicit refusal because it overlaps decimal-comma input.
  *
  * `numParse` returns { ok, value } or { why } so callers can say WHICH kind of
  * wrong it was. `num` keeps the old null-or-number shape for the live-preview
@@ -143,9 +143,18 @@ const NUM_SHAPE = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/;
    the decimal-comma reading and the grouping reading disagree by 1000x. Never
    guessed, always refused. */
 const NUM_GROUPED = /^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?$/;
+// L4: the default Intl locale is also the one used by the app's readouts.
+const NUM_DOT_GROUPED = /^[+-]?\d{1,3}(?:\.\d{3})+(?:,\d+)?$/;
+const NUM_LOCALE_DOT_GROUP = new Intl.NumberFormat().formatToParts(1234.5)
+  .some(p => p.type === 'group' && p.value === '.');
 function numParse(v) {
+  if (typeof v === 'number') return isFinite(v) ? { ok: true, value: v } : { why: 'shape' };
   const s = String(v ?? '').trim();
   if (!s) return { why: 'empty' };
+  if (NUM_LOCALE_DOT_GROUP && NUM_DOT_GROUPED.test(s)) {
+    const value = Number(s.replace(/\./g, '').replace(',', '.'));
+    return isFinite(value) ? { ok: true, value } : { why: 'shape' };
+  }
   if (NUM_GROUPED.test(s)) return { why: 'grouped' };
   const commas = (s.match(/,/g) || []).length;
   const t = commas === 1 && !s.includes('.') ? s.replace(',', '.') : s;
@@ -11200,7 +11209,7 @@ async function renderTrends(el) {
         ${rate != null ? `<span class="trend-chip ${rate > 0.02 ? 'up' : ''}">${rate > 0 ? '+' : ''}${toUnit(rate).toFixed(1)} ${unit}/wk</span>` : ''}
       </div>
       <p class="note" style="margin-bottom:10px">Trend weight (smoothed). Last weigh-in: ${toUnit(latest.kg).toFixed(1)} ${unit}</p>
-      <div class="chart">${weightChart(trended.slice(-45), toUnit)}</div>` :
+      <div class="chart">${weightChart(trended, toUnit)}</div>` :
       '<p class="note" style="padding:6px 0 12px">Log your weight a few times a week. The smoothed trend line cuts through daily water-weight noise so you can see if your plan is working.</p>'}
     <div style="height:10px"></div>
     <button class="btn ghost" id="logWeight">Log weight</button>
@@ -11415,7 +11424,7 @@ function metricSeries(metricKey, rangeKey, health, weights) {
       /* `label` is the one-letter axis tick, which is all the chart needs; `full`
          is what the READOUT says. Tapping a year bucket used to print "J ·
          210,432 steps" and three different months answer to J. */
-      points.push({ label: 'JFMAMJJASOND'[dt.getMonth()], value: avg,
+      points.push({ label: 'JFMAMJJASOND'[dt.getMonth()], month: mk, value: avg,
         full: dt.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) });
     }
   } else {
@@ -11542,7 +11551,9 @@ async function openMetricDetail(metricKey) {
   const bodyHtml = (rangeKey) => {
     const pts = metricSeries(metricKey, rangeKey, health, weights);
     const vals = pts.map(p => p.value).filter(v => v != null);
-    if (!vals.length) return `<div class="trend-panel"><p class="note" style="text-align:center;padding:22px 0">No readings in this window yet. They will appear here as your watch syncs.</p></div>`;
+    const shownDays = dates.filter(d => pts.some(p => p.date === d || p.month === d.slice(0, 7))).length;
+    const historyCount = `<p class="note">Showing ${shownDays} of ${dates.length} recorded days${rangeKey === 'year' ? ', as monthly averages' : ''}.${shownDays < dates.length ? ' Some recorded days are outside this window.' : ''}</p>`;
+    if (!vals.length) return `${historyCount}<div class="trend-panel"><p class="note" style="text-align:center;padding:22px 0">No readings in this window yet. They will appear here as your watch syncs.</p></div>`;
     // stats exclude the in-progress current day for cumulative metrics (steps etc.)
     // so a partial today never drags the average/lowest down; the chart still shows it.
     const statPts = (cumulative && rangeKey !== 'year' && pts.length > 1) ? pts.slice(0, -1) : pts;
@@ -11558,7 +11569,7 @@ async function openMetricDetail(metricKey) {
       const exLbl = metric.goodLow ? 'Lowest' : 'Highest', exVal = metric.goodLow ? mn : mx;
       stats = stat('Average', `${metricNum(metricKey, avg)}<small> ${u}</small>`) + stat('Range', `${metricNum(metricKey, mn)}-${metricNum(metricKey, mx)}`) + stat(exLbl, `${metricNum(metricKey, exVal)}<small> ${u}</small>`);
     }
-    return `<div class="trend-panel">${metricDetailChart(pts, metricKey)}
+    return `${historyCount}<div class="trend-panel">${metricDetailChart(pts, metricKey)}
       <p class="bc-readout note">Tap any bar for that day.</p></div><div class="trend-stats">${stats}</div>${metricInsight(metricKey, pts)}`;
   };
 
@@ -11945,14 +11956,15 @@ const MY_FOODS_FILTER_AT = 15;
 
 async function renderFoods(el) {
   const customs = S.userFoods.filter(f => f.source === 'custom').sort(byLastUsedThenName);
-  const scanned = S.userFoods.filter(f => f.source !== 'custom').sort(byLastUsedThenName).slice(0, 12);
+  const allScanned = S.userFoods.filter(f => f.source !== 'custom').sort(byLastUsedThenName);
+  const scanned = allScanned.slice(0, 12);
   const favIds = S.userFoods.filter(f => f.favorite).map(f => f.id);
   const kvRows = await db.all('kv');
   const genFavs = kvRows.filter(r => r.k.startsWith('fav-') && r.v).map(r => GENERIC_FOODS.find(g => g.id === r.k.slice(4))).filter(Boolean);
   const favs = [...S.userFoods.filter(f => f.favorite), ...genFavs];
 
   el.innerHTML = `
-  <h1 class="page-h1">Foods<span class="sub">${GENERIC_FOODS.length} built-in · ${customs.length} custom · ${scanned.length ? scanned.length + ' scanned' : 'none scanned yet'}</span></h1>
+  <h1 class="page-h1">Foods<span class="sub">${GENERIC_FOODS.length} built-in · ${customs.length} custom · ${allScanned.length ? allScanned.length + ' scanned' : 'none scanned yet'}</span></h1>
   <div class="search-wrap">${ICONS.search}<input id="fq" class="input" type="search" placeholder="Search all foods" autocomplete="off"></div>
   <div id="fCount" class="note" aria-live="polite"></div>
   <div id="fList"></div>`;
@@ -11971,7 +11983,8 @@ async function renderFoods(el) {
       if (customs.length > MY_FOODS_FILTER_AT) html += `<div class="t1-search" style="margin-bottom:8px">${ICONS.searchIco()}<input id="myFoodsQ" type="search" placeholder="Filter my ${customs.length} foods" autocomplete="off"></div>`;
       html += `<div id="myFoodsList">${customs.map(foodRowHtml).join('')}</div>`;
     }
-    if (scanned.length) html += '<div class="sect-h">Recently scanned</div>' + scanned.map(foodRowHtml).join('');
+    if (scanned.length) html += `<div class="sect-h">Recently scanned · ${scanned.length} of ${allScanned.length}</div>` + scanned.map(foodRowHtml).join('');
+    if (scanned.length < allScanned.length) html += '<p class="note">Showing the most recent scans. Search finds the rest.</p>';
     if (!favs.length && !customs.length && !scanned.length) html += '<p class="note" style="text-align:center;padding:14px 20px 6px">Foods you scan, create, or favorite collect here.</p>';
     const sample = [...GENERIC_FOODS].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 40);
     html += `<div class="sect-h">Built-in library · ${GENERIC_FOODS.length}</div>` + sample.map(foodRowHtml).join('');
@@ -18039,6 +18052,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
   if (tab === 'progress') {
     const earned = await earnedBadgeIds();
     const todayRows = await xpForDate(dateKey());
+    const shownRows = todayRows.slice(0, 6);
     const todayXp = todayRows.reduce((a, r) => a + r.xp, 0);
     const keys = new Set(todayRows.map(r => r.key));
     const earnables = [];
@@ -18050,7 +18064,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
     content.innerHTML = `
       <p class="note" style="margin:4px 2px 2px">${lvl.into.toLocaleString()} / ${lvl.need.toLocaleString()} XP to level ${lvl.level + 1} · ${xp.toLocaleString()} XP total</p>
       <div class="sect-h">Today · ${todayXp} XP earned</div>
-      ${todayRows.slice(0, 6).map(r => `<div class="xp-row"><span>${esc(r.label)}</span><b>+${r.xp}</b></div>`).join('') || '<p class="note" style="padding:6px 2px">Nothing yet. Log something!</p>'}
+      ${shownRows.map(r => `<div class="xp-row"><span>${esc(r.label)}</span><b>+${r.xp}</b></div>`).join('') || '<p class="note" style="padding:6px 2px">Nothing yet. Log something!</p>'}
+      <p class="note">Showing ${shownRows.length} of ${todayRows.length} XP receipts for today.</p>
       <div class="sect-h">Still on the table today</div>
       ${earnables.slice(0, 4).map(e => `<div class="xp-row dim"><span>${esc(e)}</span></div>`).join('')}
       <div class="sect-h">Badges · ${earned.size}/${BADGES.length}</div>

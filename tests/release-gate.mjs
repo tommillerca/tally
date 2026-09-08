@@ -262,6 +262,7 @@ const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-ato
   'take-and-pay-audit.mjs'];   // 2026-09-06 lane 2: the take and its whole payout are one transaction; node-only, ~1s
 PURE.unshift('store-copy-lint.mjs');
 PURE.push('paddock-pack-audit.mjs');   // 2026-09-08 R44-12/20/25: the Paddock packer honours its own header contract at 200 pets (76 pairs overlapped >20px in both axes, worst 121x72, among the 50 drawn), a breeding-armed and an equipped pet are marked in the field, and the Stable copy row keeps its scroll position (2,160px lost per tap); node-only source and geometry proof, the real-render half is paddock-pack-browser-audit.mjs
+PURE.push('numbers-honesty-audit.mjs'); // L4: Node-driven numeric save handler, rendered counts, full weight SVG and history-window coverage.
 PURE.push('audit-output-audit.mjs'); // R3: Node filesystem refusal/control fixtures and serveTree identity source check; no browser or network.
 PURE.push('branch-graveyard-audit.mjs');   // 2026-09-08: the branch classifier only calls a branch shipped on merged-PR evidence and never on commit counts or three-dot diffs, both of which lie under squash-merge; node-only, no network
 PURE.push('store-runtime-audit.mjs'); // M4/K1: Node-only real web bundle, local paths, scheme condition, App Store refresh/background checks and web update controls.
