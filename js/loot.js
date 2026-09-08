@@ -2,7 +2,7 @@
 // Depends only on db + the generated cosmetics manifest, so the whole economy
 // stays portable (no DOM, no web-only APIs).
 
-import { db, kvGet, kvSet, kvBumpRevisioned, kvUpdate, newId, takeAndPay, payAtomic } from './db.js';
+import { db, kvGet, kvSet, kvBumpRevisioned, kvUpdate, kvUpdateMulti, newId, takeAndPay, payAtomic } from './db.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneheadz.js';
 import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SOLD, FOOTBALL_PETS, footballItemId, footballGrantIds, footballBundleIds, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
@@ -1164,6 +1164,7 @@ export async function salvagePet(petId) {
           if ((remaining === 0) !== last) throw gone();   // the roster moved under the plan: refuse, the retry re-plans
           return r.instances;
         },
+        petTaken: cur => [...new Set([...(cur || []), worst.iid])],
         ...bumpPay('bonedust', 'dustRev', dust),
         ...(last ? { pets: rec => { const p = { ...(rec || {}) }; delete p[petId]; return p; } } : {}),
       },
@@ -1509,13 +1510,15 @@ export async function breedPets(keepIid, feedIid) {
      re-read against the LIVE row, and it refuses (undefined) if either partner
      is no longer there. */
   let keep = null;
-  const next = await kvUpdate('petInst', raw => {
+  // The fed copy's receipt commits with the lineage it earns on the keeper.
+  const result = await kvUpdateMulti({ petInst: raw => {
     const cur = Array.isArray(raw) ? raw : list;
     if (!cur.some(x => selectablePetInstance(x) && x.iid === keepIid) || !cur.some(x => selectablePetInstance(x) && x.iid === feedIid)) return undefined;
     const bumped = cur.map(x => selectablePetInstance(x) && x.iid === keepIid ? { ...x, lineage: (x.lineage || 0) + 1 } : x);
     keep = bumped.find(x => selectablePetInstance(x) && x.iid === keepIid);
     return bumped.filter(x => !selectablePetInstance(x) || x.iid !== feedIid);
-  }, list);
+  }, petTaken: cur => keep ? [...new Set([...(cur || []), feedIid])] : undefined }, { petInst: list });
+  const next = result.petInst;
   if (!next) return { ok: false, reason: 'gone' };
   list = next;
   await kvSet('petBreedCredit', lifetime);
@@ -1858,6 +1861,7 @@ export async function salvageInstance(iid) {
           if ((speciesCount(next, inst.sp) === 0) !== last) throw Object.assign(new Error('gone'), { refused: true });   // roster moved under the plan
           return next;
         },
+        petTaken: cur => [...new Set([...(cur || []), iid])],
         ...bumpPay('bonedust', 'dustRev', dust),
         ...(last ? { pets: rec => { const p = { ...(rec || {}) }; delete p[inst.sp]; return p; } } : {}),
       },

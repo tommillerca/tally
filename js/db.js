@@ -995,15 +995,15 @@ const DEVICE_KV = ['identity', 'social', 'recoveryId', 'recoverySetAt', 'vaultCo
 // P3: refuse unreadable known containers before replacing any store. Unknown
 // keys and unknown fields remain opaque, so exporting cannot discard new data.
 // This is container validation, not a complete schema or an authenticity check.
-const RESTORE_ARRAY_KV = new Set(['invTaken', 'crateTaken', 'paidlooks', 'looks',
+const RESTORE_ARRAY_KV = new Set(['invTaken', 'crateTaken', 'petTaken', 'paidlooks', 'looks',
   'redeemed', 'grantsSeen', 'petInst', 'outfits', 'giftbox', 'pantry', 'foodbuffs',
   'cookq', 'routines', 'evq']);
 const RESTORE_MAP_KV = new Set(['equipped', 'gearloadout', 'transmog', 'petWear',
   'pets', 'petLvlSteps', 'petBonds', 'petNick', 'pettalents', 'buffs', 'ingredients',
-  'potions', 'pitEnergy', 'settings', 'notifPrefs', 'grantPresentation']);
+  'potions', 'potionsRev', 'pitEnergy', 'settings', 'notifPrefs', 'grantPresentation']);
 const RESTORE_NUMBER_KV = new Set(['coins', 'coinsRev', 'bonedust', 'dustRev',
   'grantCursor', 'petLvlV', 'petStepCredit', 'petBreedCredit', 'potsOwned']);
-const MERGE_RECEIPTS = ['invTaken', 'crateTaken', 'paidlooks', 'looks', 'redeemed', 'grantsSeen'];
+const MERGE_RECEIPTS = ['invTaken', 'crateTaken', 'petTaken', 'paidlooks', 'looks', 'redeemed', 'grantsSeen'];
 function validateRestoreKv(rows) {
   const keys = new Set();
   for (const row of rows) {
@@ -1191,6 +1191,74 @@ export async function importAll(data, { replace = true } = {}) {
          earned. 'dustRev' moves with 'bonedust' in the same transaction
          (kvBumpRevisioned above) and rides the same rule. */
       keepRevisionedBalance('bonedust', 'dustRev');
+      // Q1: each potion id is its own balance. Use the currency revision shape,
+      // so spending one kind cannot erase another kind earned on another device.
+      const localValue = k => localKv.find(r => r.k === k)?.v;
+      const fileValue = k => data.kv.find(r => r.k === k)?.v;
+      if (payloadKeys.has('potions')) {
+        const local = localValue('potions') || {}, file = fileValue('potions') || {};
+        const lr = localValue('potionsRev') || {}, fr = fileValue('potionsRev') || {};
+        const balance = {}, revisions = {};
+        for (const id of new Set([...Object.keys(local), ...Object.keys(file), ...Object.keys(lr), ...Object.keys(fr)])) {
+          const a = Number(lr[id]) || 0, b = Number(fr[id]) || 0;
+          const count = a > b ? (local[id] || 0) : b > a ? (file[id] || 0) : Math.max(local[id] || 0, file[id] || 0);
+          if (count > 0) balance[id] = count;
+          revisions[id] = Math.max(a, b);
+        }
+        keptKv.push({ k: 'potions', v: balance }, { k: 'potionsRev', v: revisions });
+      } else {
+        // A revision alone must not advance the ordering of an absent balance.
+        kvRows = kvRows.filter(r => r.k !== 'potionsRev');
+      }
+
+      // Ownership is a union by INSTANCE, minus permanent take receipts.
+      // Absence alone cannot distinguish a stale roster from a consumed copy.
+      const taken = new Set([...(localValue('petTaken') || []), ...(fileValue('petTaken') || [])]);
+      const roster = [...(localValue('petInst') || [])];
+      const matched = new Set();
+      const localCount = roster.length;
+      for (const row of fileValue('petInst') || []) {
+        // Match each local occurrence once, leaving corrupt duplicate iids for
+        // petInstances' existing healer instead of silently losing a copy.
+        const i = roster.findIndex((x, index) => index < localCount && !matched.has(index) &&
+          (row?.iid ? x?.iid === row.iid : JSON.stringify(x) === JSON.stringify(row)));
+        if (i < 0) {
+          roster.push(row);
+        } else {
+          matched.add(i);
+          const prior = roster[i];
+          roster[i] = row?.iid ? { ...prior, ...row } : row;
+          // Feeding earns lineage on the keeper, which a stale copy cannot undo.
+          if (typeof prior?.lineage === 'number' && typeof row?.lineage === 'number') {
+            roster[i].lineage = Math.max(prior.lineage, row.lineage);
+          }
+        }
+      }
+      const livePets = roster.filter(row => !taken.has(row?.iid));
+      if (payloadKeys.has('petInst') || taken.size) keptKv.push({ k: 'petInst', v: livePets });
+
+      // Steps are earned, never spent on a surviving iid. Keep the higher bank
+      // entry, like the existing high-water marks. Convert legacy species banks
+      // before comparing, or an old format marker would remigrate and zero iids.
+      const lv = Number(localValue('petLvlV')) || 0, fv = Number(fileValue('petLvlV')) || 0;
+      if (payloadKeys.has('petLvlSteps') || payloadKeys.has('petLvlV') || taken.size) {
+        const perInstance = Math.max(lv, fv) >= 2;
+        const normalize = (bank, version) => {
+          if (!perInstance || version >= 2) return bank || {};
+          return Object.fromEntries(livePets.filter(x => x?.iid && x?.sp && bank?.[x.sp] != null)
+            .map(x => [x.iid, bank[x.sp]]));
+        };
+        const local = normalize(localValue('petLvlSteps'), lv);
+        const file = normalize(fileValue('petLvlSteps'), fv);
+        const bank = { ...local };
+        for (const [iid, steps] of Object.entries(file)) bank[iid] = Math.max(bank[iid] || 0, steps);
+        if (perInstance) for (const iid of taken) delete bank[iid];
+        if (localValue('petLvlSteps') != null || fileValue('petLvlSteps') != null) keptKv.push({ k: 'petLvlSteps', v: bank });
+        keptKv.push({ k: 'petLvlV', v: Math.max(lv, fv) });
+      }
+      if (payloadKeys.has('petStepCredit')) keptKv.push({ k: 'petStepCredit',
+        v: Math.max(localValue('petStepCredit') || 0, fileValue('petStepCredit') || 0) });
+
       /* THE TOMBSTONES ARE A UNION, NEVER PAYLOAD-WINS (2026-09-06). 'invTaken'
          and 'crateTaken' are the receipts the inv filter below reads. Left as
          an ordinary kv row the payload overwrote them on every pull, so device
@@ -1238,7 +1306,8 @@ export async function importAll(data, { replace = true } = {}) {
      deliberately reverting to an older save, receipts and all, and must not
      be second-guessed. */
   let invRows = data.inv;
-  if (!replace && declared.has('inv')) {
+  const takenInv = new Set();
+  if (!replace) {
     /* R38-13 (2026-09-06): crateTaken above only ever covered openCrate. Every
        OTHER place this file deletes an 'inv' row outright (a spent
        consumable, a used Battle Charm, a pet's last cosmetic copy on
@@ -1248,13 +1317,13 @@ export async function importAll(data, { replace = true } = {}) {
        takeInv above, which deletes the row and writes 'invTaken' in one
        transaction, unbounded. The payload's own receipts count too (the union
        the kv merge above keeps), so a row the OTHER device took never lands. */
-    const taken = new Set();
+    const taken = takenInv;
     for (const k of ['crateTaken', 'invTaken']) {
       for (const id of ((await kvGet(k, [])) || [])) taken.add(id);
       const file = Array.isArray(data.kv) && data.kv.find(r => r && r.k === k);
       if (file && Array.isArray(file.v)) for (const id of file.v) taken.add(id);
     }
-    if (taken.size) invRows = data.inv.filter(r => !(r && taken.has(r.id)));
+    if (taken.size && declared.has('inv')) invRows = data.inv.filter(r => !(r && taken.has(r.id)));
   }
   return new Promise((resolve, reject) => {
     let t;
@@ -1275,6 +1344,9 @@ export async function importAll(data, { replace = true } = {}) {
         if (replace && declared.has(s)) os.clear();
         for (const row of (s === 'kv' ? (kvRows || []) : s === 'inv' ? (invRows || []) : (data[s] || []))) os.put(row);
         if (s === 'kv') for (const row of keptKv) os.put(row);
+        // A remote receipt also removes a LOCAL ownership row. Otherwise the
+        // next Stable boot can reclaim a pet whose instance was just removed.
+        if (s === 'inv') for (const id of takenInv) os.delete(id);
       }
       /* An import replaces the contents of every store, so every derived cache
          built on the old contents is now wrong. Stamp them all. */
