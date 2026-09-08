@@ -311,6 +311,7 @@ PURE.push('lookup-guard-lint.mjs'); // M5: bounded truth-only id/lookup scan, re
 // K1: lib/lookup-guard-scan.mjs is a helper imported by lookup-guard-lint.mjs.
 // It exports scanning functions and asserts nothing. Helpers under tests/lib
 // are outside the top-level runnable inventory; no top-level scanner exists.
+PURE.push('p1-r48-rest-audit.mjs'); // P1: executes art coverage grading on empty-surface controls, checks Hollow probe disclosure and landed race/reward rows; Node-only.
 const BROWSER = [
   'first-run-honesty-audit.mjs', // M5: real first-run disclosure/intro, capped toast dwell, returning daily reward and review screenshots.
   'orientation-audit.mjs', // N1: 393x852 -> 852x393 -> portrait, real rotateLock coverage and hit tests, plus Intl/timezone persistence on reload.
@@ -661,8 +662,8 @@ const DECLARED = {
   'coins-merge-tie-audit.mjs': ['fast', 'node-only: two devices that moved the ledger to the same coinsRev keep the HIGHER balance on merge, and spent consumables carry a taken receipt so a stale blob cannot revive them (R38-13). Red before: got 10, expected 25; the spent item reappears.'],
   'version-align-lint.mjs': ['fast', 'web versions (app.js APP_BUILD, sw.js VERSION, version.json) are consistent, and each native shell (iOS, Android) is marked with which web build it last wrapped via WRAPPED_WEB_BUILD comment. Node-only, sub-second. Pins version alignment so release notes and support can correlate tickets with the web version each native shell bundled.'],
   'garden-sim.mjs': ['skip', 'a balance MODEL, not a guard: 30 days x 60 seeded runs of the garden against the kitchen. It reports numbers for a decision and asserts nothing about the app. tests/garden-appetite-guard.mjs is the guard that pins the outcome.'],
-  'hollow-backdrop-audit.mjs': ['full', 'renders all three time bands and hit-tests an 800-point grid to prove the backdrop takes no taps. Slow by construction.'],
-  'hollow-beds-audit.mjs': ['full', 'renders every plot state and measures them apart by pixels. Slow by construction.'],
+  'hollow-backdrop-audit.mjs': ['full', 'UNREACHABLE module probe, zero player coverage; renders all three time bands and hit-tests an 800-point grid to prove the backdrop takes no taps. Slow by construction.'],
+  'hollow-beds-audit.mjs': ['full', 'UNREACHABLE module probe, zero player coverage; renders every plot state and measures them apart by pixels. Slow by construction.'],
   'arena-static-probe.mjs': ['skip', 'a PROBE by its own first line: it measures whether .arena shifts when the action tray changes button count, and prints the numbers. The guard for that behaviour is fight-layout-audit.mjs.'],
   'today-d2-shots.mjs': ['skip', "capture only: the four Today states at 390x844 dark, for review. tests/today-container-audit.mjs is the guard, and it is in FAST."],
   'badges-audit.mjs': ['skip', 'seeds the four Warden badges and shoots the wall for review; a screenshot script, not a regression guard.'],

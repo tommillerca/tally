@@ -116,9 +116,11 @@ const MAX_UP = 1.40;
 const seen = [];
 
 async function sweep(label) {
-  const rows = await page.evaluate(() => {
+  const rows = await page.evaluate(async selector => {
     const out = [];
-    for (const i of document.querySelectorAll('img')) {
+    const images = [...document.querySelectorAll(selector)];
+    await Promise.all(images.map(i => i.decode().catch(() => {})));
+    for (const i of images) {
       const src = i.getAttribute('src') || '';
       if (!/assets\/bh\//.test(src)) continue;
       if (!i.naturalWidth) continue;
@@ -129,7 +131,7 @@ async function sweep(label) {
                  pixelated: getComputedStyle(i).imageRendering === 'pixelated' });
     }
     return out;
-  });
+  }, label === 'crew' ? '#cfanDeck img' : '#screen img');
   for (const r of rows) seen.push({ ...r, screen: label });
 }
 
@@ -166,13 +168,10 @@ async function sweep(label) {
  *     modal (try-on, gift, crate open, transmog). Sheets are the biggest hole:
  *     the try-on stage draws 640 MASTERS at 385 CSS px and no row here sees it.
  *
- * AND CREW IS REACHED BUT STILL NOT MEASURED, which is a third state worth
- * naming: on the 2026-08-25 run REACH confirmed the Crew screen landed, and it
- * contributed ZERO gear layers, so SETUP reported five contributing screens out
- * of six landed. The demo profile has no friends to draw. REACH going green
- * there is honest -- we did get to the screen -- but nobody should read it as
- * "Crew's art is clean". It needs a fixture with a populated crew before it
- * grades anything, and until then it is closer to the NOT SWEPT list above.
+ * Crew uses the existing webdriver friend fixture and samples its fan only.
+ * Every declared surface must contribute decoded gear layers. A landed marker
+ * with no art is a SETUP failure, and cannot certify RESOLUTION or SMOOTH.
+ * Browser validation of the populated fixture is pending independent review.
  */
 const SURFACES = [
   // [hash, hub chip data-tab, label, a marker that proves we actually landed]
@@ -185,6 +184,16 @@ const SURFACES = [
 ];
 
 await page.setViewport({ width: 440, height: 956, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+// Fixture data enters the real Crew renderer through its existing test hook.
+// It is not player reachability evidence; REACH below checks the route marker.
+await page.evaluate(() => {
+  window.__testMe = { playerId: 'art-viewer', name: 'Art Viewer', handle: 'art', friendCode: 'BONE-ART' };
+  window.__testFriends = {
+    friends: [{ playerId: 'art-friend', name: 'Art Friend', lastSeen: Date.now(),
+      profile: { level: 12, levelName: 'Bonehead', outfit: { B: 'B0-1', SK: 'SK0-1', T: 'T3' } } }],
+    incoming: [], outgoing: [],
+  };
+});
 const reached = [], missed = [];
 for (const [hash, tab, label, marker] of SURFACES) {
   await page.evaluate(h => { location.hash = h; }, hash); await sleep(1100);
@@ -208,14 +217,17 @@ ok('REACH every surface in the sweep list was really landed on, proven by a mark
   missed.length === 0,
   missed.length ? `MISSED ${missed.join(',')} (reached ${reached.join(',') || 'none'})` : `${reached.join(', ')}`);
 
-ok('SETUP the sweep actually found gear art to measure (an empty sweep would pass every row below for free)',
-  seen.length >= 8 && new Set(seen.map(s => s.screen)).size >= 4,
-  `${seen.length} art layers across ${new Set(seen.map(s => s.screen)).size} CONFIRMED-LANDED screens: ${[...new Set(seen.map(s => s.screen))].join(', ')}`);
+const contributions = SURFACES.map(([, , label]) => ({
+  label, layers: seen.filter(s => s.screen === label).length,
+}));
+const setupReady = missed.length === 0 && seen.length >= 8 && contributions.every(s => s.layers > 0);
+ok('SETUP every declared surface contributes decoded gear art', setupReady,
+  `${seen.length} art layers; ${contributions.map(s => `${s.label}=${s.layers}`).join(', ')}; EMPTY ${contributions.filter(s => !s.layers).map(s => s.label).join(', ') || 'none'}`);
 
 const over = seen.filter(s => s.phys / s.nat > MAX_UP);
 ok(`RESOLUTION no gear art is drawn more than ${MAX_UP}x its source`,
-  over.length === 0,
-  over.length
+  setupReady && over.length === 0,
+  !setupReady ? 'UNPROVEN: incomplete surface samples' : over.length
     ? over.slice(0, 5).map(o => `${o.screen}:${o.src} src ${o.nat} drawn ${o.phys} = ${(o.phys / o.nat).toFixed(2)}x`).join(' | ')
     : `worst ${Math.max(...seen.map(s => s.phys / s.nat)).toFixed(2)}x`);
 
@@ -225,8 +237,8 @@ ok(`RESOLUTION no gear art is drawn more than ${MAX_UP}x its source`,
    the crate icons, the coin sequence, the 48px currency icons). */
 const wrongly = seen.filter(s => s.pixelated);
 ok('SMOOTH no continuous-tone gear art is rendered with nearest-neighbour',
-  wrongly.length === 0,
-  wrongly.length ? wrongly.slice(0, 4).map(w => `${w.screen}:${w.src}`).join(', ') : 'none');
+  setupReady && wrongly.length === 0,
+  !setupReady ? 'UNPROVEN: incomplete surface samples' : wrongly.length ? wrongly.slice(0, 4).map(w => `${w.screen}:${w.src}`).join(', ') : 'none');
 
 console.log(`\nart-resolution: ${fails.length ? fails.length + ' FAILED' : 'clean'}`);
 await browser.close(); await srv?.stop?.();
