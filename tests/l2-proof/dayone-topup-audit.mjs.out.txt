@@ -1,0 +1,13 @@
+ok   SETUP the grant and the floor are both readable  topup=40 floor=300
+ok   ONCE the welcome kit pays the day-one top-up  moved=40 want=40
+ok   ONCE exactly one 'dayone-topup' ledger row  rows=1
+ok   ONCE a second boot pays nothing  coins=40 after-day-one=40
+ok   ONCE still exactly one ledger row on day two  rows=1
+ok   REG429 the stub was actually reached and refused  calls=2 ok=false
+ok   REG429 the top-up survives a /register that answers 429  coins=90 topup-row=true
+ok   REG429 the existing local social-welcome is undisturbed  coins=90 want=90 welcome-row=true
+ok   SIM the median perfect first day clears the rack floor  min=288 median=308 max=324 floor=300 over 12 seeds
+ok   SIM a perfect first day does not clear the whole shelf  max=324 ceiling=900
+--  SIM the unluckiest seed of 12: 288 coins (12 short of the 300 floor)
+--  WALKER a light walker's first day: min=99 median=108 max=116 coins (reported, not asserted: a light day is not meant to clear 300)
+dayone-topup: all rows green

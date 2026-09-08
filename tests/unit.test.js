@@ -8200,6 +8200,11 @@ test('R43-12 Gwart does not scold a player returning after a long gap for an emp
     'the empty-ledger pool must still be a pool, not one line');
 });
 
+test('L2 independent offline currency earnings survive both backup entry paths', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'multidevice-earnings-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /17 passed, 0 failed/);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

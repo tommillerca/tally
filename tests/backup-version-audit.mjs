@@ -53,7 +53,7 @@ ok('SETUP  DB_VERSION read from js/db.js', Number.isInteger(DB_VERSION) && DB_VE
 const { db, exportAll, importAll, STORES } = await import(ROOT + '/js/db.js');
 
 /* ---- VERSION-DERIVED ---------------------------------------------------- */
-const exportLine = dbSrc.match(/return \{ app: 'tally', version: ([^,]+),/)?.[1];
+const exportLine = dbSrc.match(/(?:return|const snapshot =) \{ app: 'tally', version: ([^,]+),/)?.[1];
 ok('VERSION-DERIVED  exportAll stamps DB_VERSION, not a literal', exportLine === 'DB_VERSION', `exportAll still stamps ${JSON.stringify(exportLine)}`);
 ok('VERSION-DERIVED  the exported file carries that number', (await exportAll()).version === DB_VERSION);
 

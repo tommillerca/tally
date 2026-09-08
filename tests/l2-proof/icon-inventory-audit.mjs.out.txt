@@ -1,0 +1,398 @@
+======================== ICON INVENTORY ========================
+screen (enclosing fn)          file:line               drawer          concept              size  renders
+
+--- js/app.js ---
+petSpriteHtml                  js/app.js:782           sparkIco        sparkle                12  VECTOR-FALLBACK
+petSpriteHtml                  js/app.js:790           sparkIco        sparkle                14  VECTOR-FALLBACK
+petPortraitHtml                js/app.js:819           sparkIco        sparkle                12  VECTOR-FALLBACK
+mapLegendHtml                  js/app.js:1112          bhIcon          badge-skull            13  VECTOR
+mapLegendHtml                  js/app.js:1122          spawnIcon       spawn/?                24  VARIES
+mapLegendHtml                  js/app.js:1123          badgePixHtml    badge-skull          DYNAMIC  VARIES
+badgeIconHtml                  js/app.js:1237          bhIcon          ?                    DYNAMIC  VECTOR
+racePrizeHtml                  js/app.js:2236          ICONS.coin      coin                   13  VECTOR-FALLBACK
+racePrizeHtml                  js/app.js:2237          crateIcon       crate/?                14  VECTOR-FALLBACK
+racePrizeHtml                  js/app.js:2238          ICONS.dust      dust                   12  VECTOR-FALLBACK
+hydrateRaceResult              js/app.js:2263          badgePixHtml    badge-trophy           21  PIXEL
+spireBannerHtml                js/app.js:2534          ICONS.coin      coin                   12  VECTOR-FALLBACK
+spireBannerHtml                js/app.js:2534          ICONS.pit       pit                    11  VECTOR-FALLBACK
+gardenStagesHtml               js/app.js:2610          bhIcon          garden-seed            34  VECTOR
+gardenStagesHtml               js/app.js:2612          bhIcon          garden-water           34  VECTOR
+gardenStagesHtml               js/app.js:2614          bhIcon          garden-sprout          40  VECTOR
+gardenBannerHtml               js/app.js:2652          bhIcon          ?                      26  VECTOR
+dropRowIconHtml                js/app.js:2850          badgePixHtml    badge-crown            26  PIXEL
+revealGift                     js/app.js:3041          crateIcon       crate/?               130  PIXEL
+revealGift                     js/app.js:3046          ICONS.dust      dust                  120  PIXEL
+revealGift                     js/app.js:3052          ICONS.coin      coin                  120  PIXEL
+renderToday                    js/app.js:4545          ICONS.coin      coin                   16  PIXEL
+renderToday                    js/app.js:4546          ICONS.dust      dust                   16  PIXEL
+renderToday                    js/app.js:4547          ICONS.boltIco   boltIco                13  VECTOR-FALLBACK
+renderToday                    js/app.js:4548          crateIcon       crate/?                16  VECTOR-FALLBACK
+renderToday                    js/app.js:4610          ICONS.boltIco   boltIco                13  VECTOR-FALLBACK
+renderToday                    js/app.js:4626          pixCur          dumbbell               24  PIXEL
+renderToday                    js/app.js:4626          ICONS.trend     trend                  23  VECTOR
+renderToday                    js/app.js:4634          pixCur          crate                  24  PIXEL
+renderToday                    js/app.js:4634          ICONS.bone      bone                   23  PIXEL
+renderToday                    js/app.js:4635          pixCur          stable                 24  PIXEL
+renderToday                    js/app.js:4635          ICONS.paw       paw                    23  PIXEL
+renderToday                    js/app.js:4636          pixCur          kitchen                24  PIXEL
+renderToday                    js/app.js:4636          bhIcon          dish-broth             23  VECTOR
+renderToday                    js/app.js:4637          ICONS.pit       pit                    24  PIXEL
+renderToday                    js/app.js:4671          pixCur          scroll                 24  PIXEL
+renderToday                    js/app.js:4671          ICONS.quest     quest                  18  VECTOR
+renderToday                    js/app.js:4717          crateIcon       crate/?                12  VECTOR-FALLBACK
+renderToday                    js/app.js:4717          consumableIcon  ?                      12  VARIES
+renderToday                    js/app.js:4717          ingIconHtml     ingredient/?           12  VARIES
+renderToday                    js/app.js:4717          ICONS.coin      coin                   11  VECTOR-FALLBACK
+renderToday                    js/app.js:4717          ICONS.dust      dust                   13  VECTOR-FALLBACK
+renderToday                    js/app.js:4728          ICONS.check     check                  13  VECTOR
+renderToday                    js/app.js:4797          ICONS.chev      chev                   13  VECTOR
+renderToday                    js/app.js:5234          crateIcon       crate/?               120  PIXEL
+macroRow                       js/app.js:5345          ICONS.check     check                  11  VECTOR
+healthCardHtml                 js/app.js:6682          ICONS.check     check                  12  VECTOR
+healthCardHtml                 js/app.js:6685          ICONS.sneaker   sneaker                21  VECTOR
+healthCardHtml                 js/app.js:6696          ICONS.boltIco   boltIco                19  PIXEL
+healthCardHtml                 js/app.js:6698          pixCur          dumbbell               24  PIXEL
+healthCardHtml                 js/app.js:6698          bhIcon          badge-muscle           21  VECTOR
+wellnessCardHtml               js/app.js:6727          ICONS.check     check                  14  VECTOR
+wellnessCardHtml               js/app.js:6732          pixCur          water                  24  PIXEL
+wellnessCardHtml               js/app.js:6732          ICONS.water     water                  22  VECTOR
+wellnessCardHtml               js/app.js:6733          pixCur          bed                    24  PIXEL
+wellnessCardHtml               js/app.js:6733          ICONS.bed       bed                    22  VECTOR
+wellnessCardHtml               js/app.js:6741          ICONS.check     check                  20  VECTOR
+wellnessCardHtml               js/app.js:6744          ICONS.check     check                  14  VECTOR
+sleepRowHtml                   js/app.js:6768          pixCur          moon                   24  PIXEL
+sleepRowHtml                   js/app.js:6768          ICONS.moon      moon                   22  VECTOR
+sleepRowHtml                   js/app.js:6774          ICONS.check     check                  14  VECTOR
+walkRowHtml                    js/app.js:6789          badgePixHtml    badge-footprint        24  PIXEL
+walkRowHtml                    js/app.js:6797          ICONS.check     check                  14  VECTOR
+openSpireInfoSheet             js/app.js:7093          badgePixHtml    tombstone              20  PIXEL
+openSpireInfoSheet             js/app.js:7094          ICONS.star      star                   20  PIXEL
+openSpireInfoSheet             js/app.js:7095          ICONS.coin      coin                   20  PIXEL
+openSpireInfoSheet             js/app.js:7104          ICONS.close     close                  17  VECTOR
+openSpireInfoSheet             js/app.js:7111          badgePixHtml    badge-crown            16  PIXEL
+openSpireInfoSheet             js/app.js:7136          badgePixHtml    badge-signpost         20  PIXEL
+buildDenPin                    js/app.js:7176          bhIcon          badge-skull            13  VECTOR
+openDenSheet                   js/app.js:7184          crateIcon       crate/?                24  PIXEL
+openDenSheet                   js/app.js:7185          ICONS.coin      coin                   22  PIXEL
+openDenSheet                   js/app.js:7186          ICONS.star      star                   20  PIXEL
+openDenSheet                   js/app.js:7198          ICONS.close     close                  17  VECTOR
+openDenSheet                   js/app.js:7219          badgePixHtml    badge-signpost         20  PIXEL
+kitchenCardHtml                js/app.js:7421          bhIcon          garden-sprout          18  VECTOR
+kitchenCardHtml                js/app.js:7425          recipeIconHtml  recipe/?               18  VARIES
+gardenRowHtml                  js/app.js:7453          bhIcon          ?                      26  VECTOR
+openHollow                     js/app.js:7791          ICONS.coin      coin                   14  VECTOR-FALLBACK
+openHollow                     js/app.js:7859          bhIcon          garden-seed            20  VECTOR
+openGardenSheet                js/app.js:8051          bhIcon          garden-bed             40  VECTOR
+openGardenSheet                js/app.js:8055          bhIcon          ?                      40  VECTOR
+openGardenSheet                js/app.js:8079          bhIcon          garden-bed             36  VECTOR
+openGardenSheet                js/app.js:8080          ICONS.coin      coin                   12  VECTOR-FALLBACK
+openGardenSheet                js/app.js:8085          bhIcon          garden-seed            22  VECTOR
+openPlantSheet                 js/app.js:8173          bhIcon          garden-seed            26  VECTOR
+openCompostSheet               js/app.js:8218          bhIcon          garden-bed             30  VECTOR
+openCompostSheet               js/app.js:8226          ingIconHtml     ingredient/?           26  VARIES
+openCompostSheet               js/app.js:8231          ingIconHtml     ingredient/?           26  VARIES
+harvestBodyHtml                js/app.js:8272          bhIcon          garden-sprout          96  VECTOR
+harvestBodyHtml                js/app.js:8280          bhIcon          garden-sprout          96  VECTOR
+harvestBodyHtml                js/app.js:8285          bhIcon          garden-sprout          20  VECTOR
+openKitchen                    js/app.js:8386          ingIconHtml     ingredient/?           16  VARIES
+openKitchen                    js/app.js:8389          recipeIconHtml  recipe/?               26  VARIES
+openKitchen                    js/app.js:8395          pixCur          cauldron               26  PIXEL
+openKitchen                    js/app.js:8398          recipeIconHtml  recipe/?               26  VARIES
+openKitchen                    js/app.js:8424          recipeIconHtml  recipe/?               26  VARIES
+openKitchen                    js/app.js:8426          ICONS.coin      coin                   12  VECTOR-FALLBACK
+openKitchen                    js/app.js:8432          recipeIconHtml  recipe/?               26  VARIES
+openKitchen                    js/app.js:8435          recipeIconHtml  recipe/?               26  VARIES
+openKitchen                    js/app.js:8437          ICONS.close     close                  13  VECTOR
+openKitchen                    js/app.js:8440          recipeIconHtml  recipe/?               26  VARIES
+openKitchen                    js/app.js:8456          ingIconHtml     ingredient/?           26  VARIES
+openKitchen                    js/app.js:8485          ingIconHtml     ingredient/?           22  VARIES
+openKitchen                    js/app.js:8487          ingIconHtml     ingredient/?           22  VARIES
+openKitchen                    js/app.js:8496          ICONS.coin      coin                   13  VECTOR-FALLBACK
+openKitchen                    js/app.js:8498          ingIconHtml     ingredient/?           26  VARIES
+openKitchen                    js/app.js:8522          ICONS.close     close                  13  VECTOR
+onlineRowHtml                  js/app.js:8837          ICONS.searchIco searchIco              19  VECTOR
+openAdd                        js/app.js:8884          ICONS.close     close                  17  VECTOR
+openAdd                        js/app.js:8892          ICONS.barcodeIco barcodeIco             19  VECTOR
+openAdd                        js/app.js:8893          ICONS.labelIco  labelIco               19  VECTOR
+openAdd                        js/app.js:8894          ICONS.boltStroke boltStroke             19  PIXEL
+openAdd                        js/app.js:8895          ICONS.bone      bone                   19  PIXEL
+openAdd                        js/app.js:8898          ICONS.searchIco searchIco              18  VECTOR
+recentRowHtml                  js/app.js:9091          ICONS.chev      chev                   16  VECTOR
+openPortion                    js/app.js:9112          ICONS.star      star                 DYNAMIC  VARIES
+openPortion                    js/app.js:9113          ICONS.close     close                  17  VECTOR
+openPortion                    js/app.js:9304          ICONS.star      star                 DYNAMIC  VARIES
+openPortion                    js/app.js:9413          ICONS.star      star                 DYNAMIC  VARIES
+openTextSheet                  js/app.js:9430          ICONS.close     close                  17  VECTOR
+openQuickAdd                   js/app.js:9489          ICONS.close     close                  17  VECTOR
+openScanner                    js/app.js:9561          ICONS.crosshair crosshair              15  VECTOR
+openScanner                    js/app.js:9563          ICONS.close     close                  18  VECTOR
+openScanner                    js/app.js:9564          ICONS.torchIco  torchIco               18  VECTOR
+openScanner                    js/app.js:9569          ICONS.barcodeIco barcodeIco             17  VECTOR
+openScanner                    js/app.js:9660          ICONS.close     close                  17  VECTOR
+openScanner                    js/app.js:9666          ICONS.camera    camera                 18  VECTOR
+openScanner                    js/app.js:9682          ICONS.close     close                  17  VECTOR
+openScanner                    js/app.js:9686          ICONS.camera    camera                 18  VECTOR
+openLabelFlow                  js/app.js:9706          ICONS.close     close                  17  VECTOR
+openLabelFlow                  js/app.js:9718          ICONS.lock      lock                   15  VECTOR
+openFoodForm                   js/app.js:9864          ICONS.close     close                  17  VECTOR
+footballShelfHtml              js/app.js:10188         ICONS.coin      coin                   13  VECTOR-FALLBACK
+footballDropBodyHtml           js/app.js:10253         ICONS.coin      coin                   12  VECTOR-FALLBACK
+footballDropBodyHtml           js/app.js:10279         ICONS.coin      coin                   12  VECTOR-FALLBACK
+renderShop                     js/app.js:10361         ICONS.coin      coin                   13  VECTOR-FALLBACK
+renderShop                     js/app.js:10361         ICONS.dust      dust                   13  VECTOR-FALLBACK
+renderShop                     js/app.js:10363         ICONS.check     check                  13  VECTOR
+renderShop                     js/app.js:10429         ICONS.searchIco searchIco              15  VECTOR
+renderShop                     js/app.js:10447         ICONS.searchIco searchIco              15  VECTOR
+renderShop                     js/app.js:10450         ICONS.check     check                  13  VECTOR
+renderShop                     js/app.js:10501         ICONS.close     close                  17  VECTOR
+renderShop                     js/app.js:10632         ICONS.coin      coin                   13  VECTOR-FALLBACK
+renderShop                     js/app.js:10633         ICONS.dust      dust                   13  VECTOR-FALLBACK
+renderShop                     js/app.js:10659         ICONS.coin      coin                   13  VECTOR-FALLBACK
+renderShop                     js/app.js:10663         crateIcon       crate/daily            24  PIXEL
+renderShop                     js/app.js:10675         ICONS.coin      coin                   13  VECTOR-FALLBACK
+renderShop                     js/app.js:10690         ICONS.coin      coin                   12  VECTOR-FALLBACK
+renderShop                     js/app.js:10700         crateIcon       crate/daily            54  PIXEL
+renderShop                     js/app.js:10700         crateIcon       crate/golden           54  PIXEL
+renderShop                     js/app.js:10700         consumableIcon  ?                      48  VARIES
+renderShop                     js/app.js:10702         ICONS.coin      coin                   13  VECTOR-FALLBACK
+renderShop                     js/app.js:10716         crateIcon       crate/egg              54  PIXEL
+renderShop                     js/app.js:10718         ICONS.dust      dust                   13  VECTOR-FALLBACK
+renderShop                     js/app.js:10718         ICONS.check     check                  13  VECTOR
+renderShop                     js/app.js:10722         ICONS.dust      dust                   20  PIXEL
+renderShop                     js/app.js:10724         ingIconHtml     ingredient/graveroot   24  PIXEL
+renderTrends                   js/app.js:11167         ICONS.flame     flame                  13  VECTOR
+openMetricDetail               js/app.js:11539         ICONS.up        up                     11  VECTOR
+openMetricDetail               js/app.js:11539         ICONS.down      down                   11  VECTOR
+readinessHtml                  js/app.js:11710         ICONS.up        up                     10  VECTOR
+readinessHtml                  js/app.js:11710         ICONS.down      down                   10  VECTOR
+readinessHtml                  js/app.js:11711         ICONS.up        up                     10  VECTOR
+readinessHtml                  js/app.js:11711         ICONS.down      down                   10  VECTOR
+renderFoods                    js/app.js:11971         ICONS.searchIco searchIco              18  VECTOR
+openRenameNotice               js/app.js:12062         ICONS.coin      coin                   15  VECTOR-FALLBACK
+openRenameNotice               js/app.js:12063         ICONS.dust      dust                   15  VECTOR-FALLBACK
+crewCardHtml                   js/app.js:12264         ICONS.star      star                   15  VECTOR-FALLBACK
+crewCardHtml                   js/app.js:12269         badgePixHtml    tombstone              11  VECTOR-FALLBACK
+renderFriends                  js/app.js:12376         ICONS.close     close                  14  VECTOR
+renderFriends                  js/app.js:12389         ICONS.chev      chev                   16  VECTOR
+renderFriends                  js/app.js:12391         ICONS.chev      chev                   16  VECTOR
+renderFriends                  js/app.js:12513         crateIcon       crate/golden           30  PIXEL
+renderFriends                  js/app.js:12543         badgePixHtml    tombstone              20  PIXEL
+renderFriends                  js/app.js:12543         ICONS.coin      coin                   20  PIXEL
+renderFriends                  js/app.js:12543         ICONS.bone      bone                   20  PIXEL
+renderFriends                  js/app.js:12614         ICONS.bone      bone                   24  PIXEL
+renderFriends                  js/app.js:12779         ICONS.star      star                 DYNAMIC  VARIES
+renderFriends                  js/app.js:12798         ICONS.star      star                 DYNAMIC  VARIES
+renderFriends                  js/app.js:13164         ICONS.check     check                  11  VECTOR
+renderFriends                  js/app.js:13184         badgePixHtml    tombstone              11  VECTOR-FALLBACK
+renderFriends                  js/app.js:13256         ICONS.check     check                  11  VECTOR
+renderFriends                  js/app.js:13341         badgePixHtml    badge-footprint        24  PIXEL
+renderFriends                  js/app.js:13379         badgePixHtml    badge-footprint        24  PIXEL
+renderFriends                  js/app.js:13387         badgePixHtml    badge-trophy           22  PIXEL
+renderFriends                  js/app.js:13436         ICONS.coin      coin                   13  VECTOR-FALLBACK
+renderFriends                  js/app.js:13437         crateIcon       crate/?                15  VECTOR-FALLBACK
+renderFriends                  js/app.js:13438         ICONS.dust      dust                   12  VECTOR-FALLBACK
+openFriendProfile              js/app.js:13660         badgePixHtml    tombstone              13  VECTOR-FALLBACK
+openFriendProfile              js/app.js:13673         ICONS.pit       pit                    18  PIXEL
+openFriendProfile              js/app.js:13688         ICONS.coin      coin                   18  PIXEL
+openGiftSheet                  js/app.js:13775         ICONS.coin      coin                   16  PIXEL
+openGiftSheet                  js/app.js:13776         ICONS.check     check                  11  VECTOR
+openGiftSheet                  js/app.js:13780         ICONS.coin      coin                   14  VECTOR-FALLBACK
+newsBannerHtml                 js/app.js:14395         pixCur          scroll                 16  PIXEL
+newsBannerHtml                 js/app.js:14395         ICONS.quest     quest                  15  VECTOR
+newsBannerHtml                 js/app.js:14399         ICONS.chev      chev                   16  VECTOR
+newsBannerHtml                 js/app.js:14432         crateIcon       crate/?                24  PIXEL
+newsBannerHtml                 js/app.js:14447         ICONS.chev      chev                   11  VECTOR
+NEWS                           js/app.js:14505         badgePixHtml    badge-crown            34  PIXEL
+renderSettings                 js/app.js:15188         ICONS.close     close                  17  VECTOR
+renderSettings                 js/app.js:15250         ICONS.close     close                  17  VECTOR
+renderOnboarding               js/app.js:15544         ICONS.chev      chev                   18  VECTOR
+renderOnboarding               js/app.js:15587         ICONS.star      star                   18  PIXEL
+renderOnboarding               js/app.js:15591         pixCur          egg                    18  PIXEL
+renderOnboarding               js/app.js:15591         bhIcon          egg                    18  VECTOR
+renderOnboarding               js/app.js:15592         ICONS.pit       pit                    18  PIXEL
+celeStats                      js/app.js:15886         ICONS.bone      bone                   16  PIXEL
+celeStats                      js/app.js:15887         crateIcon       crate/egg              16  VECTOR-FALLBACK
+celeStats                      js/app.js:15888         ICONS.star      star                   16  PIXEL
+openCelebration                js/app.js:15950         sparkIco        sparkle                48  PIXEL
+openCelebration                js/app.js:15950         ICONS.star      star                   48  PIXEL
+openLevelUpMoment              js/app.js:16020         sparkIco        sparkle                16  VECTOR
+openLevelUpMoment              js/app.js:16038         ICONS.coin      coin                   16  PIXEL
+openLevelUpMoment              js/app.js:16039         crateChip       cratechip/golden       16  PIXEL
+openLevelUpMoment              js/app.js:16040         ICONS.dust      dust                   16  PIXEL
+openLevelUpMoment              js/app.js:16041         crateIcon       crate/egg              15  VECTOR-FALLBACK
+openHatchReveal                js/app.js:16184         sparkIco        sparkle                24  PIXEL
+openHatchReveal                js/app.js:16184         sparkIco        sparkle                24  PIXEL
+openHatchReveal                js/app.js:16187         sparkIco        sparkle                11  VECTOR-FALLBACK
+renderCharacter                js/app.js:16423         ICONS.coin      coin                   16  PIXEL
+renderCharacter                js/app.js:16424         ICONS.dust      dust                   16  PIXEL
+renderCharacter                js/app.js:16425         ICONS.bone      bone                   14  VECTOR-FALLBACK
+renderCharacter                js/app.js:16426         ICONS.boltIco   boltIco                14  VECTOR-FALLBACK
+renderCharacter                js/app.js:16435         sparkIco        sparkle                13  VECTOR-FALLBACK
+renderCharacter                js/app.js:16448         ICONS.coin      coin                   14  VECTOR-FALLBACK
+renderCharacter                js/app.js:16449         ICONS.dust      dust                   13  VECTOR-FALLBACK
+renderCharacter                js/app.js:16450         ICONS.bone      bone                   14  VECTOR-FALLBACK
+renderCharacter                js/app.js:16451         ICONS.boltIco   boltIco                14  VECTOR-FALLBACK
+renderCharacter                js/app.js:16461         pixCur          wardrobe               24  PIXEL
+renderCharacter                js/app.js:16461         ICONS.bone      bone                   21  PIXEL
+renderCharacter                js/app.js:16462         pixCur          crate                  24  PIXEL
+renderCharacter                js/app.js:16463         pixCur          shop                   24  PIXEL
+renderCharacter                js/app.js:16463         ICONS.coin      coin                   24  PIXEL
+renderCharacter                js/app.js:16464         pixCur          build                  24  PIXEL
+renderCharacter                js/app.js:16464         ICONS.pit       pit                    21  PIXEL
+renderCharacter                js/app.js:16641         ICONS.hidden    hidden                 18  VECTOR
+renderCharacter                js/app.js:16642         sparkIco        sparkle                11  VECTOR-FALLBACK
+renderCharacter                js/app.js:16645         ICONS.boltIco   boltIco                11  VECTOR-FALLBACK
+renderCharacter                js/app.js:16700         ICONS.dust      dust                   16  PIXEL
+renderCharacter                js/app.js:16705         ICONS.chev      chev                   18  VECTOR
+renderCharacter                js/app.js:16808         ICONS.lock      lock                    9  VECTOR
+renderCharacter                js/app.js:16822         ICONS.coin      coin                   12  VECTOR-FALLBACK
+renderCharacter                js/app.js:16855         ICONS.dust      dust                   11  VECTOR-FALLBACK
+renderCharacter                js/app.js:16856         ICONS.close     close                  12  VECTOR
+renderCharacter                js/app.js:16929         ICONS.boltIco   boltIco                11  VECTOR-FALLBACK
+renderCharacter                js/app.js:16951         ICONS.boltIco   boltIco                12  VECTOR-FALLBACK
+renderCharacter                js/app.js:17002         ICONS.hidden    hidden                 22  VECTOR
+renderCharacter                js/app.js:17097         ICONS.dust      dust                   12  VECTOR-FALLBACK
+renderCharacter                js/app.js:17459         ICONS.dust      dust                   16  PIXEL
+renderCharacter                js/app.js:17712         crateIcon       crate/?                56  PIXEL
+renderCharacter                js/app.js:17748         crateIcon       crate/egg              48  PIXEL
+renderCharacter                js/app.js:17759         consumableIcon  xp2                    24  PIXEL
+renderCharacter                js/app.js:17768         consumableIcon  vigor                  24  PIXEL
+renderCharacter                js/app.js:17773         consumableIcon  xp2                    14  VECTOR-FALLBACK
+renderCharacter                js/app.js:17781         recipeIconHtml  recipe/?               26  VARIES
+renderCharacter                js/app.js:17783         ingIconHtml     ingredient/?           26  VARIES
+renderCharacter                js/app.js:17786         ICONS.dust      dust                   13  VECTOR-FALLBACK
+renderCharacter                js/app.js:17823         ICONS.dust      dust                   13  VECTOR-FALLBACK
+renderCharacter                js/app.js:17846         ICONS.boltIco   boltIco                11  VECTOR-FALLBACK
+renderCharacter                js/app.js:17937         ICONS.dust      dust                   13  VECTOR-FALLBACK
+renderCharacter                js/app.js:18009         ICONS.dust      dust                   13  VECTOR-FALLBACK
+petPanelHtml                   js/app.js:18163         sparkIco        sparkle                10  VECTOR-FALLBACK
+petPanelHtml                   js/app.js:18163         ICONS.star      star                   11  VECTOR-FALLBACK
+packCardHtml                   js/app.js:18418         sparkIco        sparkle                16  PIXEL
+packCardHtml                   js/app.js:18418         sparkIco        sparkle                11  VECTOR-FALLBACK
+packCardHtml                   js/app.js:18418         sparkIco        sparkle                12  VECTOR-FALLBACK
+packCardHtml                   js/app.js:18418         sparkIco        sparkle                15  VECTOR-FALLBACK
+crateOpenHtml                  js/app.js:18763         crateIcon       crate/?               148  PIXEL
+openPackReveal                 js/app.js:19037         ICONS.coin      coin                   14  VECTOR-FALLBACK
+crateResultToCard              js/app.js:19292         consumableIcon  ?                     130  VARIES
+crateResultToCard              js/app.js:19293         ingIconHtml     ingredient/?          130  VARIES
+crateResultToCard              js/app.js:19296         ICONS.coin      coin                   11  VECTOR-FALLBACK
+crateResultToCard              js/app.js:19302         ICONS.coin      coin                   11  VECTOR-FALLBACK
+openPetLevelUp                 js/app.js:19450         sparkIco        sparkle                11  VECTOR-FALLBACK
+openPetLevelUp                 js/app.js:19450         ICONS.star      star                   11  VECTOR-FALLBACK
+openStable                     js/app.js:19940         ICONS.star      star                   12  VECTOR-FALLBACK
+openStable                     js/app.js:19951         sparkIco        sparkle                12  VECTOR-FALLBACK
+openStable                     js/app.js:20023         sparkIco        sparkle                 9  VECTOR-FALLBACK
+openStable                     js/app.js:20173         ICONS.lock      lock                    9  VECTOR
+openStable                     js/app.js:20292         ICONS.dust      dust                   14  VECTOR-FALLBACK
+openStable                     js/app.js:20351         ICONS.chev      chev                   20  VECTOR
+openStable                     js/app.js:20363         ICONS.warn      warn                   17  VECTOR
+openStable                     js/app.js:20962         ICONS.close     close                  17  VECTOR
+openStable                     js/app.js:20965         ICONS.dust      dust                   13  VECTOR-FALLBACK
+openStable                     js/app.js:20983         ICONS.dust      dust                   13  VECTOR-FALLBACK
+openKennel                     js/app.js:21108         ICONS.lock      lock                   14  VECTOR
+openPetBreedResult             js/app.js:21162         sparkIco        sparkle                11  VECTOR-FALLBACK
+renderBoneyard                 js/app.js:21904         ICONS.crosshair crosshair              18  VECTOR
+renderBoneyard                 js/app.js:21905         bhIcon          badge-map              19  VECTOR
+renderBoneyard                 js/app.js:22510         bhIcon          badge-skull            19  VECTOR
+renderBoneyard                 js/app.js:22534         badgePixHtml    badge-skull          DYNAMIC  VARIES
+renderBoneyard                 js/app.js:22551         ICONS.pit       pit                    15  VECTOR-FALLBACK
+renderBoneyard                 js/app.js:22934         ICONS.coin      coin                   16  PIXEL
+renderBoneyard                 js/app.js:23135         spawnIcon       spawn/?              DYNAMIC  VARIES
+renderBoneyard                 js/app.js:23188         ICONS.boltStroke boltStroke             24  PIXEL
+renderBoneyard                 js/app.js:23189         spawnIcon       spawn/?                24  VARIES
+renderBoneyard                 js/app.js:23418         ingIconHtml     ingredient/?          130  VARIES
+renderBoneyard                 js/app.js:23419         crateIcon       crate/?               130  PIXEL
+drawGrantDelivery              js/app.js:23807         crateIcon       crate/?               120  PIXEL
+drawGrantDelivery              js/app.js:23815         crateIcon       crate/egg             120  PIXEL
+drawGrantDelivery              js/app.js:23817         consumableIcon  ?                     120  VARIES
+renderPit                      js/app.js:24195         ICONS.pit       pit                    24  PIXEL
+renderPit                      js/app.js:24206         ICONS.coin      coin                   12  VECTOR-FALLBACK
+renderPit                      js/app.js:24206         ICONS.coin      coin                   12  VECTOR-FALLBACK
+renderPit                      js/app.js:24234         badgePixHtml    badge-skull            20  PIXEL
+renderPit                      js/app.js:24246         crateIcon       crate/golden           22  VECTOR-FALLBACK
+renderPit                      js/app.js:24247         ICONS.coin      coin                   12  VECTOR-FALLBACK
+renderPit                      js/app.js:24256         badgePixHtml    tombstone              22  PIXEL
+renderPit                      js/app.js:24264         ICONS.coin      coin                   12  VECTOR-FALLBACK
+renderPit                      js/app.js:24264         ICONS.coin      coin                   12  VECTOR-FALLBACK
+renderPit                      js/app.js:24269         ICONS.lock      lock                   20  VECTOR
+renderPit                      js/app.js:24300         badgePixHtml    tombstone              22  PIXEL
+renderPit                      js/app.js:24330         ICONS.boltIco   boltIco                13  VECTOR-FALLBACK
+renderPit                      js/app.js:24334         ICONS.boltIco   boltIco                20  PIXEL
+renderPit                      js/app.js:24343         pixCur          build                  24  PIXEL
+renderPit                      js/app.js:24343         ICONS.pit       pit                    20  PIXEL
+openFight                      js/app.js:24669         ICONS.bone      bone                   48  PIXEL
+openFight                      js/app.js:24670         ICONS.bone      bone                   48  PIXEL
+openFight                      js/app.js:25938         crateIcon       crate/?               120  PIXEL
+openFight                      js/app.js:25973         ingIconHtml     ingredient/?          120  VARIES
+openFight                      js/app.js:25982         ICONS.dust      dust                  112  PIXEL
+openFight                      js/app.js:26015         badgePixHtml    tombstone              96  PIXEL
+openFight                      js/app.js:26293         ICONS.coin      coin                   15  VECTOR-FALLBACK
+openFight                      js/app.js:26294         ICONS.star      star                   14  VECTOR-FALLBACK
+renderTalents                  js/app.js:26803         ICONS.star      star                   11  VECTOR-FALLBACK
+renderTalents                  js/app.js:26803         ICONS.check     check                  11  VECTOR
+
+--- js/paddock-cards.js ---
+heartsHtml                     js/paddock-cards.js:230 bhIcon          heart                  17  VECTOR
+burst                          js/paddock-cards.js:620 bhIcon          heart                  13  VECTOR
+
+--- js/wheel.js ---
+wheelIconsHtml                 js/wheel.js:91          pixPrizeImg     wheelprize             48  PIXEL
+wheelSvg                       js/wheel.js:181         iconAt          wheelprize/?           26  VECTOR
+wheelSvg                       js/wheel.js:181         pixPrizeImg     wheelprize             48  PIXEL
+maybeShowDailyWheel            js/wheel.js:352         iconHtml        wheelprize/?           40  VECTOR
+maybeShowDailyWheel            js/wheel.js:352         pixPrizeImg     wheelprize             48  PIXEL
+
+335 icon sites across 3 modules and 77 screens
+  PIXEL            103
+  VECTOR-FALLBACK  91   (pixel art EXISTS but the site asks below its floor)
+  VECTOR           107   (no pixel art exists; the vector is the finished icon)
+  VARIES           34   (the caller supplies the size or the concept, so it is decided at runtime)
+
+DECIDED AT RUNTIME (the caller supplies the concept, or the drawer serves art for
+some concepts and not others). Source alone cannot grade these; a browser can:
+  js/app.js:1122  mapLegendHtml  spawnIcon(spawn/?, 24)
+  js/app.js:1123  mapLegendHtml  badgePixHtml(badge-skull, DYNAMIC)
+  js/app.js:4717  renderToday  consumableIcon(?, 12)
+  js/app.js:4717  renderToday  ingIconHtml(ingredient/?, 12)
+  js/app.js:7425  kitchenCardHtml  recipeIconHtml(recipe/?, 18)
+  js/app.js:8226  openCompostSheet  ingIconHtml(ingredient/?, 26)
+  js/app.js:8231  openCompostSheet  ingIconHtml(ingredient/?, 26)
+  js/app.js:8386  openKitchen  ingIconHtml(ingredient/?, 16)
+  js/app.js:8389  openKitchen  recipeIconHtml(recipe/?, 26)
+  js/app.js:8398  openKitchen  recipeIconHtml(recipe/?, 26)
+  js/app.js:8424  openKitchen  recipeIconHtml(recipe/?, 26)
+  js/app.js:8432  openKitchen  recipeIconHtml(recipe/?, 26)
+  js/app.js:8435  openKitchen  recipeIconHtml(recipe/?, 26)
+  js/app.js:8440  openKitchen  recipeIconHtml(recipe/?, 26)
+  js/app.js:8456  openKitchen  ingIconHtml(ingredient/?, 26)
+  js/app.js:8485  openKitchen  ingIconHtml(ingredient/?, 22)
+  js/app.js:8487  openKitchen  ingIconHtml(ingredient/?, 22)
+  js/app.js:8498  openKitchen  ingIconHtml(ingredient/?, 26)
+  js/app.js:9112  openPortion  ICONS.star(star, DYNAMIC)
+  js/app.js:9304  openPortion  ICONS.star(star, DYNAMIC)
+  js/app.js:9413  openPortion  ICONS.star(star, DYNAMIC)
+  js/app.js:10700  renderShop  consumableIcon(?, 48)
+  js/app.js:12779  renderFriends  ICONS.star(star, DYNAMIC)
+  js/app.js:12798  renderFriends  ICONS.star(star, DYNAMIC)
+  js/app.js:17781  renderCharacter  recipeIconHtml(recipe/?, 26)
+  js/app.js:17783  renderCharacter  ingIconHtml(ingredient/?, 26)
+  js/app.js:19292  crateResultToCard  consumableIcon(?, 130)
+  js/app.js:19293  crateResultToCard  ingIconHtml(ingredient/?, 130)
+  js/app.js:22534  renderBoneyard  badgePixHtml(badge-skull, DYNAMIC)
+  js/app.js:23135  renderBoneyard  spawnIcon(spawn/?, DYNAMIC)
+  js/app.js:23189  renderBoneyard  spawnIcon(spawn/?, 24)
+  js/app.js:23418  renderBoneyard  ingIconHtml(ingredient/?, 130)
+  js/app.js:23817  drawGrantDelivery  consumableIcon(?, 120)
+  js/app.js:25973  openFight  ingIconHtml(ingredient/?, 120)
+===============================================================
+
+PASS  CONTROL the scan found icon sites, ICONS members and emitters to grade (an empty sample is a failure)  335 sites, 33 derived ICONS members, 81 emitters, 50 modules
+PASS  EMITTERS every function in js/ that draws a picture is declared as an icon drawer or as not-an-icon  81 declared
+PASS  EMITTERS and no declared emitter has been deleted without being un-declared
+PASS  SUBFLOOR every site that silently falls back to vector is declared with a reason  55 declared
+PASS  SUBFLOOR and no declared fallback has been fixed or deleted without being un-declared
+PASS  DRAWERS no drawer declared vector-only has quietly grown a pixCur call  3 vector-only drawers checked
+PASS  ASSETS every pixel file the drawers can ask for exists on disk  58 paths
+
+7/7 passed
+ICON INVENTORY VERIFIED

@@ -1,0 +1,54 @@
+ok   CONTROL a level-5 hound drives the pet arm  C6
+--  hound: baseline 97.0% over 2000 seeds (1941 wins)
+      Bone Broth              99.7%  delta [1.8, 3.5]pp  losses cut 88%  wins=1993
+      Hearty Hash             99.6%  delta [1.8, 3.4]pp  losses cut 86%  wins=1992
+      Marrow Stew             98.8%  delta [0.9, 2.7]pp  losses cut 59%  wins=1976
+      Hunter's Skewer         98.8%  delta [0.8, 2.6]pp  losses cut 58%  wins=1975
+      Necromancer's Feast    100.0%  delta [2.3, 3.8]pp  losses cut 100%  wins=2000
+      Bonemeal Kibble         98.6%  delta [0.7, 2.5]pp  losses cut 53%  wins=1972
+--  no pet: baseline 37.4% over 2000 seeds (747 wins)
+      Bone Broth              75.0%  delta [34.8, 40.5]pp  losses cut 60%  wins=1501
+      Hearty Hash             88.1%  delta [48.2, 53.3]pp  losses cut 81%  wins=1763
+      Marrow Stew             55.4%  delta [15.0, 21.1]pp  losses cut 29%  wins=1108
+      Hunter's Skewer         37.4%  delta [-3.0, 3.0]pp  losses cut 0%  wins=747
+      Necromancer's Feast     97.7%  delta [58.1, 62.5]pp  losses cut 96%  wins=1954
+      Bonemeal Kibble         37.4%  delta [-3.0, 3.0]pp  losses cut 0%  wins=747
+ok   CONTROL the hound baseline is a real fight, not a foregone one  baseline=97.0%
+ok   CONTROL the no pet baseline is a real fight, not a foregone one  baseline=37.4%
+ok   CONTROL every combat dish was measured  6 dishes x 2 configs
+ok   COVERAGE every combat dish is claimed or registered unclaimed  unhandled: none
+ok   COVERAGE nothing is both claimed and registered unclaimed  both: none
+ok   COVERAGE bone-broth selects exactly one measured claim  bands=1
+ok   COVERAGE hearty-hash selects exactly one measured claim  bands=1
+ok   COVERAGE necro-feast selects exactly one measured claim  bands=1
+ok   COVERAGE marrow-stew selects exactly one measured claim  bands=1
+ok   COVERAGE hunters-skewer selects exactly one measured claim  bands=1
+ok   COVERAGE bonemeal-kibble selects exactly one measured claim  bands=1
+ok   HALVED the halving claim is actually made by some dish  3 dishes
+ok   HALVED Bone Broth more than halves the fights you lose (hound)  2.9% -> 0.3% (cut 88%, needs >50%)
+ok   HALVED Bone Broth more than halves the fights you lose (no pet)  62.7% -> 25.0% (cut 60%, needs >50%)
+ok   HALVED Hearty Hash more than halves the fights you lose (hound)  2.9% -> 0.4% (cut 86%, needs >50%)
+ok   HALVED Hearty Hash more than halves the fights you lose (no pet)  62.7% -> 11.9% (cut 81%, needs >50%)
+ok   HALVED Necromancer's Feast more than halves the fights you lose (hound)  2.9% -> 0.0% (cut 100%, needs >50%)
+ok   HALVED Necromancer's Feast more than halves the fights you lose (no pet)  62.7% -> 2.3% (cut 96%, needs >50%)
+ok   SMALLER exactly one dish carries the weaker sentence  marrow-stew
+ok   SMALLER Marrow Stew cuts losses by a margin clear of zero (hound)  delta [0.9, 2.7]pp
+ok   SMALLER Marrow Stew is below Bone Broth (hound)  big dish minus stew [0.31, 1.46]pp
+ok   SMALLER Marrow Stew is below Hearty Hash (hound)  big dish minus stew [0.25, 1.41]pp
+ok   SMALLER Marrow Stew is below Necromancer's Feast (hound)  big dish minus stew [0.76, 1.78]pp
+ok   SMALLER Marrow Stew cuts losses by a margin clear of zero (no pet)  delta [15.0, 21.1]pp
+ok   SMALLER Marrow Stew is below Bone Broth (no pet)  big dish minus stew [16.74, 22.51]pp
+ok   SMALLER Marrow Stew is below Hearty Hash (no pet)  big dish minus stew [30.12, 35.32]pp
+ok   SMALLER Marrow Stew is below Necromancer's Feast (no pet)  big dish minus stew [40.01, 44.56]pp
+ok   PET the conditional claim is actually made  2 dishes
+ok   PET Hunter's Skewer cuts losses with a trained hound  delta [0.8, 2.6]pp
+ok   PET Hunter's Skewer gives no benefit without a pet  delta [-3.0, 3.0]pp
+ok   PET Bonemeal Kibble cuts losses with a trained hound  delta [0.7, 2.5]pp
+ok   PET Bonemeal Kibble gives no benefit without a pet  delta [-3.0, 3.0]pp
+ok   PLAIN bone-broth states no figure  Measured: against an even fight it more than halves the fights you lose.
+ok   PLAIN hearty-hash states no figure  Measured: against an even fight it more than halves the fights you lose.
+ok   PLAIN necro-feast states no figure  Measured: against an even fight it more than halves the fights you lose.
+ok   PLAIN marrow-stew states no figure  Measured: it cuts the fights you lose against an even foe, less than the big dishes do.
+ok   PLAIN hunters-skewer states no figure  Measured: with a trained hound at your side, more special attacks help you lose fewer fights against an even foe.
+ok   PLAIN bonemeal-kibble states no figure  Measured: with a trained hound at your side, a tougher, harder-hitting pet helps you lose fewer fights against an even foe.
+dish-worth: all rows green
