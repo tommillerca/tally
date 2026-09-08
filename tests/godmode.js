@@ -641,6 +641,29 @@ export async function maskWebdriver(page) {
   });
 }
 
+/* N1 environments are opt-in, with no suite-wide environment variable. Locale
+ * changes Chrome's Intl/Date formatting via CDP, not Node's locale or a number
+ * formatter stub. Call this before navigation for additional browser pages too.
+ * Existing audits keep their host timezone, locale and viewport byte for byte. */
+export async function emulateEnvironment(page, { timezone, locale, orientation } = {}) {
+  if (timezone != null) await page.emulateTimezone(timezone);
+  if (locale != null) {
+    const session = await page.createCDPSession();
+    await session.send('Emulation.setLocaleOverride', { locale });
+  }
+  if (orientation != null) await setOrientation(page, orientation);
+}
+
+// Phone dimensions in CSS pixels. Both mobile flags survive each rotation;
+// the boot DPR wrapper still owns any explicit physical-scale override.
+export async function setOrientation(page, orientation) {
+  if (orientation !== 'portrait' && orientation !== 'landscape')
+    throw new Error('orientation must be portrait or landscape');
+  const landscape = orientation === 'landscape';
+  await page.setViewport({ width: landscape ? 852 : 393, height: landscape ? 393 : 852,
+    deviceScaleFactor: 2, isMobile: true, hasTouch: true, isLandscape: landscape });
+}
+
 /* NO BASE MEANS THIS CHECKOUT, NEVER PRODUCTION. This default used to be the
    literal live URL, and that is a footgun that fired repeatedly.
 
@@ -669,7 +692,7 @@ export async function boot(base, opts = {}) {
   // R45-10: opt in per audit or across a suite with GODMODE_DPR=3.
   // Unset retains existing viewport defaults. An explicit run override also
   // applies to later setViewport calls, where legacy audits often hardcode 2.
-  const { deviceScaleFactor = process.env.GODMODE_DPR, ...launchOpts } = opts;
+  const { deviceScaleFactor = process.env.GODMODE_DPR, timezone, locale, orientation, ...launchOpts } = opts;
   const dpr = deviceScaleFactor == null ? null : Number(deviceScaleFactor);
   if (dpr != null && (!Number.isFinite(dpr) || dpr <= 0))
     throw new Error('GODMODE_DPR/deviceScaleFactor must be a positive finite number');
@@ -739,6 +762,9 @@ export async function boot(base, opts = {}) {
         isMobile: viewport?.isMobile ?? true, hasTouch: viewport?.hasTouch ?? true });
       console.log(`DPR OVERRIDE ${dpr} verified: boot and subsequent viewport changes`);
     }
+    // N1: explicit per-page opt-in only. Unchanged callers make no new calls.
+    if (timezone != null || locale != null || orientation != null)
+      await emulateEnvironment(page, { timezone, locale, orientation });
     /* COLLECTED, NOT JUST PRINTED, AND HOOKED BEFORE THE FIRST goto. A suite that
        attaches its own pageerror listener after boot() returns cannot see anything
        thrown during the very first load, which is exactly where a broken module
