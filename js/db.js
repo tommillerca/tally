@@ -66,7 +66,9 @@ export function useDbName(name) {
 function open() {
   if (!dbPromise) {
     dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(dbName, DB_VERSION);
+      let req;
+      try { req = indexedDB.open(dbName, DB_VERSION); }
+      catch (error) { reject(error); return; }
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains('foods')) {
@@ -99,6 +101,13 @@ function open() {
     });
   }
   return dbPromise;
+}
+
+// Boot needs an explicit outcome before starting any storage-dependent setup.
+// Keep ordinary database operations rejecting so failed writes never look saved.
+export async function storageStatus() {
+  try { await open(); return { ok: true }; }
+  catch (error) { return { ok: false, error }; }
 }
 
 /* ONE ACCOUNT, TWO TABS. Added 2026-08-17.

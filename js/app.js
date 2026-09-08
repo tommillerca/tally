@@ -1,5 +1,5 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG, dayIsUnwitnessed } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, storageStatus, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG, dayIsUnwitnessed } from './db.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
@@ -1439,8 +1439,25 @@ function renderAccountRecovery(status = saveRecoveryStatus) {
   });
 }
 
+function renderStorageUnavailable() {
+  const el = $('#screen');
+  el.innerHTML = `<div class="onb onb-in" role="alert"><div class="onb-scroll">
+    <h1>Storage is unavailable</h1>
+    <p class="onb-sub">Boneheadz cannot open this browser's local storage for saved progress. Private browsing, blocked site data, or a damaged store may be the cause.</p>
+    <p class="onb-sub">The app cannot continue until storage is available. Allow site data for this site, or reopen it outside private browsing, then reload. Avoid clearing site data if you have progress on this device.</p>
+    </div><div class="onb-foot"><button class="btn" id="storageRetry">Reload</button></div></div>`;
+  $('#tabbar').style.display = 'none';
+  const gear = $('#gearBtn'); if (gear) gear.hidden = true;
+  $('#storageRetry').addEventListener('click', () => location.reload());
+  el.scrollTop = 0;
+  el.classList.add('screen-in');
+  markBooted();
+}
+
 async function boot() {
   if (S.demo) { useDbName('tally-demo'); document.body.insertAdjacentHTML('beforeend', '<div class="demo-badge">DEMO</div>'); }
+  // Explain and stop before reads, migrations, cloud recovery, or lifecycle setup.
+  if (!(await storageStatus()).ok) { renderStorageUnavailable(); return; }
   saveWitness.settings ||= !!S.settings;
   S.settings = await kvGet('settings');
   saveWitness.settings ||= !!S.settings;

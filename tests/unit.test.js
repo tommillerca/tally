@@ -81,6 +81,12 @@ const approx = (a, b, tol = 0.02) => {
   assert.ok(Math.abs(a - b) <= Math.max(Math.abs(b) * tol, 0.01), `${a} !~ ${b}`);
 };
 
+test('R54-4 unavailable storage renders a disclosure; normal boot does not', () => {
+  const output = execFile_.execFileSync(process.execPath,
+    [join(here, 'storage-boot-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /4 passed, 0 failed/);
+});
+
 // ---- targets ----
 test('computeTargets male recomp', () => {
   const t = computeTargets({ sex: 'm', age: 32, heightCm: 180, weightKg: 84, activity: 'moderate', goal: 'recomp' });
