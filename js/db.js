@@ -241,7 +241,7 @@ const QUIET_KV = new Set([
   'lastOpenDay', 'wbReturnDay',
   // "when did I last do X" throttles: a lost timestamp costs one extra attempt
   'lastNudgeAt', 'racePushAt', 'socialSyncAt', 'crewSeenTs', 'hkLastSync',
-  'hkStaleNotified', 'hkSleepDiag', 'lastExportAt', 'backupAt', 'backupVersion', 'transmuteAt',
+  'hkStaleNotified', 'hkSyncIssue', 'hkSleepDiag', 'lastExportAt', 'backupAt', 'backupVersion', 'transmuteAt',
   // cloud-health diagnostics + their once-a-day nudge throttle: all three are
   // re-derived by the next push / the next /health, same class as backupAt
   'backupFail', 'clockSkewMs', 'cloudNudgeAt',

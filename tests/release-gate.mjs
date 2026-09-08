@@ -266,6 +266,7 @@ PURE.unshift('store-copy-lint.mjs');
 PURE.push('storage-boot-audit.mjs'); // R54-4: throwing IndexedDB boot and normal control, no browser or sockets.
 PURE.push('crate-cadence-audit.mjs'); // c1: exact browsing cadence, outgoing overlap and a rejected 790ms control; no browser or sockets.
 PURE.push('silence-disclosure-audit.mjs'); // L6: interrupted saves, failed writes and a normal-session control; no sockets.
+PURE.push('health-disclosure-audit.mjs'); // h1: failed/stale step sync, durable deduplication and healthy controls; Node only.
 PURE.push('paddock-pack-audit.mjs');   // 2026-09-08 R44-12/20/25: the Paddock packer honours its own header contract at 200 pets (76 pairs overlapped >20px in both axes, worst 121x72, among the 50 drawn), a breeding-armed and an equipped pet are marked in the field, and the Stable copy row keeps its scroll position (2,160px lost per tap); node-only source and geometry proof, the real-render half is paddock-pack-browser-audit.mjs
 PURE.push('numbers-honesty-audit.mjs'); // L4: Node-driven numeric save handler, rendered counts, full weight SVG and history-window coverage.
 PURE.push('locale-numbers-audit.mjs'); // R52-9: production parser round trips the app formatter across locales; Node only.
@@ -313,6 +314,7 @@ PURE.push('pet-C-node-guard.mjs'); // Lane C: level thresholds/cap, production E
 PURE.push('r48-state-audit.mjs'); // R48-A: restored unknown artwork, real error-stream assertions and production fight-chip refresh; Node-only.
 PURE.push('r46-logging-audit.mjs'); // R46: history nutrition/search, accents/counts, midnight input and commit order, displayed budget, and bulk-close relog/history races; Node functions and DOM doubles.
 PURE.push('r46-diary-audit.mjs'); // M2: zero-calorie logged days, displayed budgets/copies, historical source dates and speech, and bounded Back control; real source functions in Node doubles, no browser claim.
+PURE.push('zero-calorie-seam-audit.mjs'); // Z1: row-based display and paying streak, deletion, empty-day control and existing XP cap; Node only.
 PURE.push('audit-completion-audit.mjs'); // N2: subprocess crash/row-count receipts, dependency disclosure, and real unavailable grading branches; no sockets.
 PURE.push('machine-character-audit.mjs'); // L1: Node controls drive browser observation, bounded cadence, trace history and per-row machine receipts; no browser or sockets.
 PURE.push('n3-deadpaths-audit.mjs'); // N3: real artifact path expressions stay outside this checkout; real News callback delivers the current outfit to the poster renderer. Node-only, no pixel claim.
@@ -327,6 +329,7 @@ PURE.push('restore-debt-audit.mjs'); // Q1: stale restore must preserve pet owne
 PURE.push('p1-r48-rest-audit.mjs'); // P1: executes art coverage grading on empty-surface controls, checks Hollow probe disclosure and landed race/reward rows; Node-only.
 PURE.push('pet-a11y-audit.mjs'); // P2: production Kennel labels/clicks, swatch identity, relative pet-sheet type; Node-only, no pixel claim.
 PURE.push('kennel-copy-audit.mjs'); // R2: production Kennel/reveal/selection copy and destroy controls with real storage; Node-only, no browser or pixel claim.
+PURE.push('breed-lock-audit.mjs'); // B1: rendered cooldown disclosure and READY controls; no browser or sockets.
 PURE.push('device-loss-audit.mjs'); // L3: encrypted wipe/restore, initialization rewards, recovery choice and real IOError messages in Node doubles; no browser or network.
 PURE.push('multidevice-earnings-audit.mjs'); // L2: both offline currency histories, replay/spends, atomic import, encrypted push and simulated lifecycle; Node-only.
 const BROWSER = [

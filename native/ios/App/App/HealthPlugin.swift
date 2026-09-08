@@ -205,12 +205,18 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
 
         let group = DispatchGroup()
         var steps: Double = 0
+        var stepsRead = "empty"
         var active: Double = 0
         var weightKg: Double? = nil
 
         group.enter()
-        store.execute(HKStatisticsQuery(quantityType: stepsType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, stats, _ in
-            steps = stats?.sumQuantity()?.doubleValue(for: .count()) ?? 0
+        store.execute(HKStatisticsQuery(quantityType: stepsType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, stats, error in
+            if error != nil {
+                stepsRead = "failed"
+            } else if let quantity = stats?.sumQuantity() {
+                steps = quantity.doubleValue(for: .count())
+                stepsRead = "ok"
+            }
             group.leave()
         })
 
@@ -271,12 +277,13 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
             fmt.timeZone = TimeZone.current
             var out: [String: Any] = [
                 "date": fmt.string(from: Date()),
-                "steps": Int(steps.rounded()),
+                "stepsRead": stepsRead,
                 "activeKcal": Int(active.rounded()),
                 "workouts": workouts,
                 "exerciseMin": Int(exMin.rounded()),
                 "wtypes": wtypes,
             ]
+            if stepsRead == "ok" { out["steps"] = Int(steps.rounded()) }
             if restingHr > 0 { out["restingHr"] = Int(restingHr.rounded()) }
             if hrv > 0 { out["hrv"] = Int(hrv.rounded()) }
             if let s = sleep { for (k, v) in s { out[k] = v } }

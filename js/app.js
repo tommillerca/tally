@@ -1,11 +1,11 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
 import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, storageStatus, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG, dayIsUnwitnessed } from './db.js';
-import { takeSaveInterruption, interruptionCopy, writeFailureCopy, ERASED_COPY } from './save-disclosure.js';
+import { takeSaveInterruption, interruptionCopy, writeFailureCopy, ERASED_COPY, stepSyncStatus, healthSyncInfo, healthSyncCopy } from './save-disclosure.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
 import {
-  levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews, habitGrantCard,
+  levelFor, totalXp, streakDateSet, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews, habitGrantCard,
   initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, retireGardenIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
   awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats, claimSpar, sparBoardState,
@@ -4493,10 +4493,7 @@ async function renderToday(el) {
      appears on the same draw the points do. Two kv reads, no store scan. */
   const rebal = habitGrantCard(await kvGet(HABIT_GRANT_KEY, null), await kvGet(HABIT_GRANT_SEEN_KEY, false));
   const hkStale = await hkStaleInfo(healthRows);
-  if (hkStale && !(await kvGet('hkStaleNotified', false))) {
-    await kvSet('hkStaleNotified', true); // once per stall episode; cleared on the next good sync
-    notifyNow('Steps stopped syncing', 'Apple Health has gone quiet. Your walking is not counting. Open Boneheadz and tap the banner to fix it.', 'any').catch(() => {});
-  }
+  await discloseHealthSync(hkStale);
   const [y, m, d] = S.date.split('-').map(Number);
   const dObj = new Date(y, m - 1, d);
   const title = isToday ? 'Today' : dObj.toLocaleDateString(undefined, { weekday: 'long' });
@@ -4902,8 +4899,8 @@ async function renderToday(el) {
   <p class="note">${DAY_GUARD_COPY.unwitnessed}</p>` : ''}
   ${hkStale ? `
   <button class="card hk-stale" id="hkStaleFix">
-    <b>⚠️ Steps aren't syncing</b>
-    <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`}. Your walking isn't counting. Tap to fix.</span>
+    <b>⚠️ Steps need attention</b>
+    <span>${esc(healthSyncCopy({ health: hkStale, native: isNative() }))}</span>
   </button>` : ''}
 
   ${/* THE DAY IS ONE COLLAPSED BANNER UNTIL YOU ASK FOR IT. Tom, 2026-08-27:
@@ -5294,7 +5291,7 @@ async function renderToday(el) {
       const ok = await nativeSyncNow({ silent: false });
       if (ok) { toast('Steps are flowing again. All good.', 2600); refresh(); return; }
     }
-    location.hash = '#/settings'; // reconnect / re-run the Health setup from Settings
+    openHealthGuide();
   });
   S.justLogged = false;
   $$('[data-claim]').forEach(b => b.addEventListener('click', async ev => {
@@ -11233,20 +11230,10 @@ async function renderTrends(el) {
   const kmWk = stepsWk * 0.000762;
   const sleepWk = days7.filter(d => d.sleepHours != null);
   const avgSleep = sleepWk.length ? sleepWk.reduce((a, d) => a + d.sleepHours, 0) / sleepWk.length : null;
-  /* THE WHOLE HISTORY, NOT THE HEATMAP'S WINDOW. This counted backwards through
-     `days`, which is the 56-day heatmap slice, so every streak of 56 or more
-     rendered as exactly 56 forever: a verified 400-day run displayed 56. It is
-     the one number a long-term player is proudest of, and it was capped by an
-     array length that has nothing to do with streaks.
-     `log` and `health` are already the FULL stores here, so the set costs
-     nothing extra. streakFrom (js/nutrition.js) brings the same one-day grace
-     the loop hand-rolled: a day with no log YET is a streak waiting on today,
-     not a broken one, which is why this pill no longer reads 0 every morning
-     or all day after a westbound timezone hop.
-     Display only: streak milestone payouts still come off streakFrom in
-     js/game.js and are untouched. */
-  const activeDates = new Set(log.map(e => e.date));
-  for (const h of health) if ((h.steps || 0) >= 3000) activeDates.add(h.date);   // a walked day counts, as it always has here
+  /* Use the paying engine's full-history dates, including zero-calorie rows
+     and its legacy freeze protection. Walking alone is not a food log.
+     streakFrom retains yesterday's streak while today is still empty. */
+  const activeDates = streakDateSet(log, await db.all('xp'));
   const streak = streakFrom([...activeDates], dateKey());
   const streakGraced = streak > 0 && !activeDates.has(dateKey());
 
@@ -19495,23 +19482,31 @@ async function openCrateReveal(result) {
 
 /* ================= Apple Health bridge ================= */
 
-// Health-sync watchdog: Apple Health can silently stop delivering steps (Tom got
-// burned). Every successful steps ingest stamps hkLastSync; the home screen shows a
-// fix-it banner + fires one notification when the stamp goes stale while connected.
-const HK_STALE_MS = 36 * 3600e3;
-async function hkStaleInfo(healthRows = null) {   // `healthRows`: pre-read rows, QA round 28 G3
-  if (!S.settings.hkConnected) return null;
-  let last = await kvGet('hkLastSync', null);
-  if (!last) {
-    // pre-watchdog installs: seed from the newest day that has steps
-    const latest = (healthRows || await db.all('health')).filter(r => r.steps != null).map(r => r.date).sort().pop();
-    if (!latest) return null;
-    last = Date.parse(latest) + 24 * 3600e3;
-    await kvSet('hkLastSync', last);
+// Reuse v518's evidence-backed in-app disclosure, with a durable episode latch.
+// A data row's date is not a sync timestamp. Missing history starts observation
+// now without inventing a successful sync or diagnosing a revoked permission.
+async function hkStaleInfo(healthRows = null) {
+  if (!S.settings.hkConnected && !S.settings.hkNative) return null;
+  const last = await kvGet('hkLastSync', null);
+  let issue = await kvGet('hkSyncIssue', null);
+  if ((!Number.isFinite(last) || last <= 0) && !issue) {
+    issue = await kvUpdate('hkSyncIssue', value => value || { since: Date.now() });
   }
-  const ms = Date.now() - last;
-  if (ms < HK_STALE_MS) return null;
-  return { hours: Math.round(ms / 3600e3), days: Math.floor(ms / 86400e3) };
+  return healthSyncInfo({ connected: true, last, issue, now: Date.now() });
+}
+
+async function discloseHealthSync(health) {
+  const copy = healthSyncCopy({ health, native: isNative() });
+  if (!copy) return;
+  const claimed = await kvUpdate('hkStaleNotified', seen => seen ? undefined : true, false);
+  if (claimed) toast(copy, 10000, { error: true });
+}
+
+async function recordStepSyncIssue(status) {
+  await kvUpdate('hkSyncIssue', issue => ({
+    since: issue?.since || Date.now(),
+    failedAt: issue?.failedAt || (status === 'failed' ? Date.now() : null),
+  }));
 }
 
 async function ingestHealth(payload, { celebrate = true } = {}) {
@@ -19550,7 +19545,11 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
   if (payload.workouts != null) row.workouts = payload.workouts;
   if (payload.wtypes) row.wtypes = payload.wtypes;
   await db.put('health', row);
-  if (payload.steps != null) { await kvSet('hkLastSync', Date.now()); await kvSet('hkStaleNotified', false); }
+  if (Number.isFinite(payload.steps) && payload.steps >= 0) {
+    await kvSet('hkLastSync', Date.now());
+    await kvSet('hkSyncIssue', null);
+    await kvSet('hkStaleNotified', false);
+  }
   /* LIVE. Tom, 2026-08-10: "why isn't the bar in the steps part of trends
      updating in real time with steps for that day."
      Because nothing told it. Steps land here and this function announced nothing,
@@ -20422,6 +20421,7 @@ async function openStable(opts = {}) {
     const kennelMorphs = new Set([...kennelOwned].map(k => k.split('|')[1]));
     const kennelFound = ownedCellCount(kennelOwned, KENNEL_SPECIES.map(x => x.id));
     rememberKin(body);
+    const breedLockNote = st.ready ? '' : `<p class="note" data-breed-lock>Breeding is locked. Walk ${st.cooldownLeft.toLocaleString()} more ${st.cooldownLeft === 1 ? 'step' : 'steps'} to unlock it.</p>`;
     const bodyScroll = body.scrollTop;
     body.innerHTML = `
       <button class="pdk-door" id="stableToPaddock" type="button">
@@ -20500,6 +20500,7 @@ async function openStable(opts = {}) {
           <button class="btn ghost bw-cancel" id="breedCancel" type="button">Cancel</button>
         </div>` : ''}
       ${pair ? '' : `<p class="note" style="margin:2px 2px 10px"><b>Breed</b> feeds a spare pet into one you keep: the <b>keeper gains a lineage rank</b> (combat stats stop growing at the combined ${PET_STAT_MULT_CAP}x cap) and the spare is destroyed. <b>Destroy</b> trades a spare for Bone Dust instead.</p>`}
+      ${pair ? '' : breedLockNote}
       ${roster.length ? `
         <div class="cf${cfWasPanelled ? ' panelled' : ''}" data-want="${openIid || pair ? 'panelled' : 'open'}">
           <!-- The SVG motion-blur filter that used to live here is gone: measured
@@ -20548,7 +20549,7 @@ async function openStable(opts = {}) {
             Feed a plain spare in instead unless you are sure.</div>
           </div>` : ''}
           <div class="breed-pick"><span class="note">Which one are you keeping?</span><div class="breed-sp">${spChips}</div></div>
-          ${st.ready ? '' : `<p class="note">Walk ${st.cooldownLeft.toLocaleString()} more steps before breeding again.</p>`}
+          ${breedLockNote}
           <button class="btn" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Feed ${esc(petInstanceName(spare, bank[spare.iid] || 0))} in</button>
         </div>` : ''}`;
 
@@ -21394,10 +21395,11 @@ let lastNativeSync = 0;
 async function nativeSyncNow({ silent = false } = {}) {
   try {
     const r = await nativeQueryToday();
-    if (!r || (r.steps == null && r.activeKcal == null)) return false;
-    lastNativeSync = Date.now();
+    const stepStatus = stepSyncStatus(r);
+    if (stepStatus !== 'ok') await recordStepSyncIssue(stepStatus);
+    if (!r || r.error || (stepStatus !== 'ok' && r.activeKcal == null)) return false;
     const payload = {
-      date: r.date, steps: r.steps ?? null, activeKcal: r.activeKcal ?? null, weightKg: r.weightKg ?? null,
+      date: r.date, steps: stepStatus === 'ok' ? r.steps : null, activeKcal: r.activeKcal ?? null, weightKg: r.weightKg ?? null,
       exerciseMin: r.exerciseMin ?? null, cycleKm: r.cycleKm ?? null,
       workouts: r.workouts ?? null, wtypes: Array.isArray(r.wtypes) ? r.wtypes : null,
       restingHr: r.restingHr ?? null, hrv: r.hrv ?? null,
@@ -21411,13 +21413,19 @@ async function nativeSyncNow({ silent = false } = {}) {
       sleepAwakeMin: r.sleepAwakeMin ?? null, sleepStaged: r.sleepStaged ?? null,
       sleepDiag: r.sleepDiag ?? null,
     };
-    await ingestHealth(payload, { celebrate: !silent });
+    await ingestHealth(payload, { celebrate: !silent && stepStatus === 'ok' });
+    lastNativeSync = Date.now();
     if (!S.settings.hkConnected || S.settings.hkNative !== true) {
       S.settings.hkConnected = true; S.settings.hkNative = true;
       await saveSettings();
     }
-    return true;
-  } catch { return false; }
+    return stepStatus === 'ok';
+  } catch {
+    await recordStepSyncIssue('failed');
+    return false;
+  } finally {
+    await discloseHealthSync(await hkStaleInfo());
+  }
 }
 
 // Bump whenever the native HealthKit / Health Connect read set gains a type, so
@@ -21449,20 +21457,21 @@ async function nativeAutoSync() {
     try { await nativeRequestAuth(); } catch { /* best-effort */ }
   }
   if (Date.now() - lastNativeSync < 10 * 60e3) return; // at most every 10 min
-  const ok = await nativeSyncNow({ silent: true });
-  if (ok && currentTab() === 'today') bgRefresh();
+  await nativeSyncNow({ silent: true });
+  if (currentTab() === 'today') bgRefresh();
 }
 
 async function connectNativeHealth() {
   if (!(await nativeHealthAvailable())) { toast('Health is not available on this device'); return; }
   const granted = await nativeRequestAuth();
-  if (!granted) { toast('Health permission was not granted. You can enable it in iOS Settings > Health.', 3600); return; }
+  if (!granted) { toast('Health connection did not complete. Try Connect Apple Health again here.', 3600); return; }
   S.settings.hkConnected = true; S.settings.hkNative = true;
   await saveSettings();
   // (deliberately NOT advancing hkScopesV here: asking is not evidence of a grant.
   // ingestHealth advances it once sleep data actually arrives.)
-  await nativeSyncNow({ silent: false });
-  toast('Apple Health connected. Boneheadz now syncs automatically.', 3400);
+  const ok = await nativeSyncNow({ silent: false });
+  toast(ok ? 'Apple Health connected. Boneheadz now syncs automatically.'
+    : 'No step data synced. Try again here. An empty read does not confirm Health access.', 3400);
   closeAllSheetsViaHistory();
   setTimeout(refresh, 120);
 }
@@ -23941,7 +23950,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v519'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v520'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
