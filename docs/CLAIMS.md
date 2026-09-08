@@ -2276,3 +2276,11 @@ the three finding bodies and their reproductions, assign any app/native fixes
 to their owners, then add guards against those observed states. No defect or
 fix has been invented from an issue number. Detailed evidence, pending browser
 commands and native integration proposal are in tests/wave-guards-report.md.
+## R46 logging lane, 2026-09-07 (round two, advisory)
+
+1. PROOF: r46-logging-audit.mjs | REACH: Add and Foods search include saved diary portions, fold accents for comparison, and disclose the true match total with the visible limit. Selecting history keeps its saved nutrition; a restored portion draft resolves the original diary row. Proven with real source functions and Node DOM doubles, not a browser reload or screen-reader session.
+2. PROOF: r46-logging-audit.mjs, unit.test.js | REACH: Midnight advances the diary date and closes the prior day before a fresh row is written; edits retain their original date. Open sheet inputs survive because the router postpones teardown until the last sheet closes. R24-L17 is unchanged and passes. The complete unit command remains blocked by the local socket restriction in its serveTree check.
+3. PROOF: r46-logging-audit.mjs | REACH: Online completion binds only its own rows; late recents cannot replace a newer search. Completing Add retires every sheet before bulk history traversal, so the lower relog control cannot accept the next tap during that traversal. A Node model running the real close functions and relog handler reproduced Banana at 105 kcal and history index zero before the fix. Physical tap targeting and actual about:blank navigation still require browser review.
+4. PROOF: r46-logging-audit.mjs | REACH: Add's budget uses the same sum of rounded diary rows as Today. Five 100.4 kcal rows display and budget as 500 kcal, leaving 1500 against 2000.
+
+R46-7 is deferred with a proposed common diary-date definition for Trends and the logging streak. R46-9, R46-10, R46-11 and R46-12 lack finding details in the frozen plans and checkout reports located in this review; no behavior change is claimed for those items. No release or deployment is claimed by this section.
