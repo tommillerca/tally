@@ -40,7 +40,7 @@ const ok = (label, pass, detail = '') => {
 
 const srv = process.env.URL ? null : await serveTree(ROOT);
 const base = process.env.URL || srv.url;
-const { browser, page } = await boot(base);
+const { browser, page, errors } = await boot(base);
 
 try {
   await seed(page, { level: 20, coins: 20000 });
@@ -230,7 +230,7 @@ try {
     !!geo.kitRoom && geo.kitRoom.y < 852 && !!geo.firstTile && geo.firstTile.y > geo.kitRoom.y,
     geo.kitRoom ? `Kit Room at y ${geo.kitRoom.y}, first rack tile at y ${geo.firstTile ? geo.firstTile.y : 'MISSING'}` : 'no Kit Room shelf found');
 
-  ok('NO page errors', true);
+  ok('NO page errors', errors.length === 0, errors.join(' | '));
 } finally {
   await browser.close();
   srv?.close?.();

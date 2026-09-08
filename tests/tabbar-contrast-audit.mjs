@@ -39,7 +39,7 @@ const AA = 4.5;
 
 const srv = process.env.URL ? null : await serveTree(ROOT);
 const base = process.env.URL || srv.url;
-const { browser, page } = await boot(base);
+const { browser, page, errors } = await boot(base);
 
 try {
   await seed(page, { level: 20, coins: 9000 });
@@ -104,7 +104,7 @@ try {
   ok('FAB the centre button stays larger than any active tab plate', worstFab > 1.0,
     `smallest ratio ${worstFab.toFixed(2)}x across the four states`);
 
-  ok('NO page errors', true);
+  ok('NO page errors', errors.length === 0, errors.join(' | '));
 } finally {
   await browser.close();
   srv?.close?.();

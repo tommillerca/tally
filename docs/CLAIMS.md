@@ -1,5 +1,17 @@
 # What each patch note claims, and what backs it
 
+## WAVE: submission intent and store audit (2026-09-07)
+
+1. PROOF: submission-build-audit.mjs | REACH: GATED until Tom builds and installs the candidate. The scripted build now requires explicit SUBMISSION=1 or SUBMISSION=0, resolves its own checkout, separates artifacts, and refuses mismatched copied or archived submission content before export. Node-only fixture execution proves the branch outcomes and config restoration; six throwaway reversions went red. No native build or upload was run.
+2. PROOF: submission-preflight-audit.mjs | REACH: Both submission preflight calls require a content-bound submission marker, STORE_BUILD=true, no server key and clean reachable store strings. Internal markers are refused even with a correct digest.
+3. PROOF: store-copy-lint.mjs | REACH: Source store-copy proof passes. This does not establish bundled WKWebView operation, storage migration, signing, live backend compatibility or App Review readiness.
+
+Advisory evidence, changed files, red/green output, exclusions and deviations:
+[WAVE-STORE-PROOF.md](WAVE-STORE-PROOF.md). The current owner/status/evidence
+checklist and Tom's ordered tasks are in
+[SUBMISSION-CHECKLIST.md](SUBMISSION-CHECKLIST.md). No version, commit, push,
+publication, Worker or App Store Connect action was performed.
+
 ## Lane H: Today reads and guard integrity (2026-09-07)
 
 Advisory report for independent provider review. The supplied frozen plan SHA256
@@ -406,6 +418,18 @@ the upload path and its guards.
 
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
+
+## v512
+1. Round 48's shipped defects plus round 46's logging lane, and the guard and submission work behind them. Its dated sections are further down, folded here. The pet balance re-tune was HELD OUT of this train: it conflicts with a shipped contract (Eternal Guard heals to 40%, the re-tune needs 20%) and that is Tom's ruling to make.
+
+2. PROOF: r48-state-audit.mjs, unit.test.js | REACH: restore a backup carrying an equipped gear id this build cannot resolve. A guard tested whether the equipped art id was MISSING; the case that occurs is an id that is present but unresolvable, which is truthy, so it walked through, reached `bhAsset(undefined)`, and `data/boneheadz.js` dereferenced `item.file`. Measured: a missing id renders 14,074 characters, an unresolvable one renders 0, and there is NO page error, so nothing in the console marks it. This is the seventh instance of one class in this project, and the round-48 ticket named the wrong guard: `js/app.js:16583` protects `previewEq()`, which never calls `bhAsset`, so repairing it would have been a no-op. A plan review caught that and the real four-hop path was verified before any code was written.
+
+3. PROOF: r46-logging-audit.mjs | REACH: the Add sheet and the Foods screen. Search could not see the player's own history (0 of 3: "Dinner out", present as 2 rows in their own log, returned 2 unrelated built-in foods), truncated silently while announcing a false total to a screen reader ("25 matches" for 93), and could not match an unaccented query against an accented food (3 of 3: creme, brulee, Cafe all returned 0). 
+
+
+5. PROOF: r46-logging-audit.mjs | REACH: tap Add twice quickly. Driven 5 times: 0 of 5 duplicated the intended entry, so the obvious defect was absent, but 1 of 5 logged an unintended item at 105 kcal and left the app on about:blank. Putting food in a diary the player did not choose, on a page they cannot read, is worse than a duplicate, so the fix is at the selection rather than a debounce over it.
+
+4. PROOF: unit.test.js | REACH: after any fight. `window.__refreshLevelChip` shipped in the production bundle, which round 48 filed as a test seam to gate behind the webdriver check. Gating it would have been a bug: production fight settlement calls it after both a win and a loss through optional chaining, so the calls would have silently done nothing and left the level and XP stale. A plan review caught this too. It is now a real production function called directly from both sites, with only the window alias gated.
 
 ## v511
 1. Round 47's economy and siege lane. The server half needs a Worker deploy, which Tom runs; the client half is live on merge. Its dated section is further down, folded here.
@@ -2236,3 +2260,39 @@ note in a later build if he confirms it, and more work if he does not.
   and, on the second pass, still missing the route: the crew deck is a carousel
   and one tap only centres the card. Now written as two taps, with the empty state
   named.
+
+
+## 2026-09-07: R45 guard debts
+
+This section supersedes the crate performance numbers in the earlier v500
+crate-flick claim without changing that historical section. R45 measurements
+supplied with the work order show burst drawArrays calls during the move fell
+from 18 and 26 on v493 to zero on v509. That mechanism improvement stands.
+The reported dropped-frame counts were 2 to 10, and six of ten moves exceeded
+the audit's existing over20 <= 6 bound. The first flick still ran at half rate
+in four of five runs (12 to 20 frames); the second ran full rate in every run.
+A 520ms window contains about 31 frames at 60Hz, so 47 to 59 cannot describe
+that window at 60Hz. These are supplied R45 results, not new browser measurements.
+The first-flick app fix remains with the app lane.
+
+1. PROOF: mimic-audit.mjs | REACH: A zero-frame reveal now prints a named CONTROL failure, marks the three dependent pixel rows UNPROVEN, and continues through the remaining DOM, timing and arena checks to a verdict. Missing ground capture also continues. The Node regression exercises the actual grading block; the full browser audit was not executable in this lane.
+2. PROOF: boneyard-audit.mjs | REACH: ARRIVAL-SLOW requires the same ten-marker reveal-time sample as FAST. R45's one-marker sample is UNPROVEN, never a pass. Both laps explicitly force SwiftShader; their latency budget is now 400ms, stated in output as the 220ms fade plus 180ms software-compositor sampling slack, justified by R45's 260ms and 362ms readings. The 1200ms hold and missing visibility still fail. No phone timing claim is made.
+3. PROOF: guard-debts-audit.mjs | REACH: GODMODE_DPR=3 or boot(base, { deviceScaleFactor: 3 }) opts into DPR 3. The override applies to boot and later viewport changes on the returned page, even legacy explicit DPR 2 calls, and asserts window.devicePixelRatio after each change. Unset retains DPR 2 at boot; setWidth preserves the page's current DPR. Node checks use a stub browser, not rendered art proof.
+4. PROOF: crate-reveal-audit.mjs | REACH: FIRST FLICK 1->2 and SECOND FLICK 2->3 have independent cadence and burst-pause rows. Each 520ms window requires at least 25 rAF samples and retains over20 <= 6. A burst-draw control must see the actual canvas before the first tap; each move must record zero burst drawArrays calls. rAF samples are cadence evidence, not a count of compositor-rendered frames. Browser results remain unproven here.
+5. PROOF: submission-build-audit.mjs | REACH: Explicit artifact inspection requires SUBMISSION=1, a schema-1 submission marker matching both artifact SHA256 hashes, and the existing native store-content preflight. No-argument execution runs labeled synthetic self-tests in PURE and certifies no build. Creating the marker during sync and enforcing inspection before submission require native integration outside this lane; manual builds can still bypass an unintegrated test. Unmarked artifacts cannot pass this guard.
+6. PROOF: guard-debts-audit.mjs | REACH: Node-only regression checks execute the actual audit grading blocks with empty, undersampled and healthy fixtures. The pre-change grading code was restored on a throwaway copy and failed; restoring the changes passed. This does not substitute for the prohibited browser/server red-green runs.
+
+R45-7, R45-8 and R45-11 remain unspecified: neither this checkout's Markdown
+nor the frozen work order defines their defects. Proposed next step: recover
+the three finding bodies and their reproductions, assign any app/native fixes
+to their owners, then add guards against those observed states. No defect or
+fix has been invented from an issue number. Detailed evidence, pending browser
+commands and native integration proposal are in tests/wave-guards-report.md.
+## R46 logging lane, 2026-09-07 (round two, advisory)
+
+1. PROOF: r46-logging-audit.mjs | REACH: Add and Foods search include saved diary portions, fold accents for comparison, and disclose the true match total with the visible limit. Selecting history keeps its saved nutrition; a restored portion draft resolves the original diary row. Proven with real source functions and Node DOM doubles, not a browser reload or screen-reader session.
+2. PROOF: r46-logging-audit.mjs, unit.test.js | REACH: Midnight advances the diary date and closes the prior day before a fresh row is written; edits retain their original date. Open sheet inputs survive because the router postpones teardown until the last sheet closes. R24-L17 is unchanged and passes. The complete unit command remains blocked by the local socket restriction in its serveTree check.
+3. PROOF: r46-logging-audit.mjs | REACH: Online completion binds only its own rows; late recents cannot replace a newer search. Completing Add retires every sheet before bulk history traversal, so the lower relog control cannot accept the next tap during that traversal. A Node model running the real close functions and relog handler reproduced Banana at 105 kcal and history index zero before the fix. Physical tap targeting and actual about:blank navigation still require browser review.
+4. PROOF: r46-logging-audit.mjs | REACH: Add's budget uses the same sum of rounded diary rows as Today. Five 100.4 kcal rows display and budget as 500 kcal, leaving 1500 against 2000.
+
+R46-7 is deferred with a proposed common diary-date definition for Trends and the logging streak. R46-9, R46-10, R46-11 and R46-12 lack finding details in the frozen plans and checkout reports located in this review; no behavior change is claimed for those items. No release or deployment is claimed by this section.

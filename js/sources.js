@@ -2,6 +2,27 @@
 // Mappers are pure and unit-tested against real API fixtures.
 
 import { kcalConsistent } from './nutrition.js';
+import { searchFoods } from '../data/generic-foods.js';
+
+// Fold only the comparison copy. Names and saved nutrition stay untouched.
+export const foldFoodSearch = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+export function foodFromLog(e) {
+  return {
+    id: `history-${e.id}`, source: 'history', name: e.name, brand: e.brand,
+    perServing: Object.fromEntries(['kcal', 'p', 'c', 'f', 'fiber', 'sugar', 'sodium'].map(k => [k, e[k] || 0])),
+    servings: [{ label: e.portionLabel || '1 logged portion', g: null }],
+    historyEntry: e, useCount: 1,
+  };
+}
+export function searchLocalFoods(foods, entries, query, limit) {
+  const history = entries.map(foodFromLog);
+  const corpus = [...history, ...foods].map(food => ({
+    ...food, name: foldFoodSearch(food.name), brand: foldFoodSearch(food.brand),
+    kws: foldFoodSearch(food.kws), original: food,
+  }));
+  const matches = searchFoods(corpus, foldFoodSearch(query), Infinity).map(f => f.original);
+  return { items: matches.slice(0, limit), total: matches.length };
+}
 
 /* A LOOKUP THAT HANGS IS NOT A LOOKUP THAT FAILED, AND NEITHER IS "NOT FOUND".
  *

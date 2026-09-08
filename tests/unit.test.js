@@ -7958,12 +7958,12 @@ test('B14 app.js retries the wheel once the blocking sheet stack drains, and fir
    leveled you up (or just moved XP within the level) left #lvlChip reading
    its pre-fight numbers until the player left Today and came back, measured
    at chip 0/200 against a ledger of 65.
-   PROVE-RED: dropping either window.__refreshLevelChip?.() call below (win
+   PROVE-RED: dropping either refreshLevelChip() call below (win
    or loss) removes the only place that repaints the chip for that outcome,
    and this test goes red on the missing call. */
-test('R41-16 __refreshLevelChip exists and fires on both fight-settle outcomes, beside the wallet pill', () => {
+test('R41-16 refreshLevelChip exists and fires on both fight-settle outcomes, beside the wallet pill', () => {
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
-  const helper = app.match(/window\.__refreshLevelChip = async \(\) => \{[\s\S]*?\n\};\n/);
+  const helper = app.match(/\nasync function refreshLevelChip\(\) \{[\s\S]*?\n\}\n/);
   assert.ok(helper, '__refreshLevelChip is missing');
   // MUST live at module scope, not nested inside renderToday: today-reads-lint.mjs
   // (A1) walks every call reachable from renderToday's own body, so a closure
@@ -7971,7 +7971,7 @@ test('R41-16 __refreshLevelChip exists and fires on both fight-settle outcomes, 
   // would count as a second 'xp' scan and that guard goes red.
   const rt = app.match(/\nasync function renderToday\(el\) \{\n([\s\S]*?)\n\}\n/);
   assert.ok(rt, 'renderToday not found');
-  assert.ok(!rt[1].includes('window.__refreshLevelChip ='), '__refreshLevelChip must not be defined inside renderToday (today-reads-lint.mjs A1 would double-count its xp read)');
+  assert.ok(!rt[1].includes('function refreshLevelChip('), '__refreshLevelChip must not be defined inside renderToday (today-reads-lint.mjs A1 would double-count its xp read)');
   /* totalXp(), not a literal db.all('xp') here: cached, reuses the existing
      epoch check instead of re-scanning on every call. */
   assert.match(helper[0], /levelFor\(await totalXp\(\)\)/, '__refreshLevelChip must re-derive the level from a fresh xp total (totalXp(), not a stale in-memory one)');
@@ -7991,9 +7991,9 @@ test('R41-16 __refreshLevelChip exists and fires on both fight-settle outcomes, 
   const openFight = app.slice(ofStart, ofEnd);
   // bounded to the win branch's own few lines, so a removed call cannot be
   // masked by the loss branch's own (separate) call further down the file
-  const winSite = openFight.match(/window\.__refreshWalletPill\?\.\(\);[^\n]*\n\s*const badges = await evaluateBadges\(\);\n[\s\S]{0,900}?\n\s*window\.__refreshLevelChip\?\.\(\);\n\s*confettiRain\(90\);/);
+  const winSite = openFight.match(/window\.__refreshWalletPill\?\.\(\);[^\n]*\n\s*const badges = await evaluateBadges\(\);\n[\s\S]{0,900}?\n\s*refreshLevelChip\(\);\n\s*confettiRain\(90\);/);
   assert.ok(winSite, 'the win branch does not refresh the level chip after badges are evaluated (R41-16)');
-  const lossSite = openFight.match(/coins = foeCfg\.mode === 'spar'[\s\S]*?window\.__refreshWalletPill\?\.\(\);\n\s*window\.__refreshLevelChip\?\.\(\);/);
+  const lossSite = openFight.match(/coins = foeCfg\.mode === 'spar'[\s\S]*?window\.__refreshWalletPill\?\.\(\);\n\s*refreshLevelChip\(\);/);
   assert.ok(lossSite, 'the loss branch does not refresh the level chip beside the wallet pill (R41-16)');
 });
 
