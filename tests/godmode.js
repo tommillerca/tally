@@ -632,6 +632,13 @@ export async function maskWebdriver(page) {
    are short-lived test processes and every existing caller already owns its own
    teardown; giving boot() a second return value would mean editing all 26. */
 export async function boot(base, opts = {}) {
+  // R45-10: opt in per audit or across a suite with GODMODE_DPR=3.
+  // Unset retains existing viewport defaults. An explicit run override also
+  // applies to later setViewport calls, where legacy audits often hardcode 2.
+  const { deviceScaleFactor = process.env.GODMODE_DPR, ...launchOpts } = opts;
+  const dpr = deviceScaleFactor == null ? null : Number(deviceScaleFactor);
+  if (dpr != null && (!Number.isFinite(dpr) || dpr <= 0))
+    throw new Error('GODMODE_DPR/deviceScaleFactor must be a positive finite number');
   if (!base) {
     const own = await serveTree(ROOT_DIR);
     base = own.url;
@@ -660,7 +667,11 @@ export async function boot(base, opts = {}) {
     headless: process.env.HEADLESS_MODE || 'new',
     defaultViewport: { width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
     executablePath: chromePath(),
-    ...opts,
+    ...launchOpts,
+    ...(dpr == null ? {} : { defaultViewport: {
+      width: 430, height: 932, isMobile: true, hasTouch: true,
+      ...launchOpts.defaultViewport, deviceScaleFactor: dpr,
+    } }),
     args: [...rootArgs, ...(opts.args || [])],
   });
   /* TRACK THE BROWSER BEFORE ANYTHING ELSE CAN THROW.
@@ -674,6 +685,16 @@ export async function boot(base, opts = {}) {
   _trackBrowser(browser);
   try {
     const page = await browser.newPage();
+    if (dpr != null) {
+      const setViewport = page.setViewport.bind(page);
+      page.setViewport = async viewport => {
+        await setViewport({ ...viewport, deviceScaleFactor: dpr });
+        const actual = await page.evaluate(() => window.devicePixelRatio);
+        if (actual !== dpr) throw new Error(`DPR override requested ${dpr}, page reports ${actual}`);
+      };
+      await page.setViewport(page.viewport());
+      console.log(`DPR OVERRIDE ${dpr} verified: boot and subsequent viewport changes`);
+    }
     /* COLLECTED, NOT JUST PRINTED, AND HOOKED BEFORE THE FIRST goto. A suite that
        attaches its own pageerror listener after boot() returns cannot see anything
        thrown during the very first load, which is exactly where a broken module
@@ -947,8 +968,8 @@ export async function settle(page, ms = 250) {
  * pass them yourself and expect the reload. tests/unit.test.js enforces that any
  * direct setViewport call states both keys.
  */
-// Optional DPR is per call. Existing audits continue to request DPR 2.
-export async function setWidth(page, width, height = 932, deviceScaleFactor = 2) {
+// Preserve the current DPR on resize; an explicit boot override remains in force.
+export async function setWidth(page, width, height = 932, deviceScaleFactor = page.viewport()?.deviceScaleFactor ?? 2) {
   await page.setViewport({ width, height, deviceScaleFactor, isMobile: true, hasTouch: true });
 }
 

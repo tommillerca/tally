@@ -767,26 +767,19 @@ await setWidth(page, 393, 852);  // restore, for the sections below
    The flick is the one moment that budget shows, so 340ms of fling plus a
    420ms rise played at 30fps, which is the "glitchy" he is describing.
 
-   THE ROW. Over the 520ms of the move (fling .34s + crNext .42s) the reveal
-   must render without dropping frames. The bound is a COUNT OF DROPPED FRAMES,
-   from the measurement above rather than from taste:
-     unfixed (8 runs x 2 transitions): 8 to 16 gaps over 20ms per move
-     fixed   (5 runs x 2 transitions): 1 to 5
-   so 6 is the line.
+   R45 correction: burst drawArrays calls fell from 18 and 26 on v493 to
+   zero on v509 during the move. That mechanism improvement is real. The
+   cadence claim was not: across five runs per tree, gaps over 20ms were 2 to
+   10 and six of ten moves exceeded the existing <=6 bound. The FIRST flick
+   remained at half rate in four of five runs (12 to 20 frames); the second
+   was full rate every run. Never aggregate the two into a healthy average.
 
-   NOT "no gap over 34ms", which is what this row was first written as. Measured
-   on v481, the build named as the healthy reference, the 1->2 move carries one
-   34ms-plus gap of its own (worst 58 and 75 across two runs), and so does the
-   fixed tree (worst 42, reproducibly, at ~406ms into the move, on a Mac at load
-   average 13 rendering through swiftshader). A ceiling this tree cannot meet is
-   a red gate on healthy code, not a guard. The residual single hitch is left
-   MEASURED AND VISIBLE instead: `worst` and `worstAt` print on every run, so if
-   it grows, the detail line says so.
-
-   PROVE-RED, this file on origin/main v498 (d50820bc), burst never paused:
-     FAIL  FLICK 1->2 the card-to-card move renders without dropping frames  {"over20":14,"over34":2,"worst":92,"frames":18,"worstAt":490}
-     FAIL  FLICK 2->3 the card-to-card move renders without dropping frames  {"over20":13,"over34":0,"worst":25,"frames":25,"worstAt":70}
-   (18 and 25 frames in 520ms is 34 and 48fps; the fixed tree renders 47 and 59.)
+   Each 520ms window at 60Hz has about 31 frames, so the previous 47 to 59
+   claim cannot describe that window at 60Hz. Keep over20 <=6 and additionally
+   require at least floor(520 / (1000/60)) - 6 = 25 samples per move. A long
+   stall must not pass merely because it leaves few intervals to count.
+   rAF samples measure cadence, not a count of compositor-rendered frames.
+   The app fix for the first flick belongs to another lane.
  */
 {
   await page.evaluate(async () => {
@@ -807,7 +800,16 @@ await setWidth(page, 393, 852);  // restore, for the sections below
   await sleep(1200);
   await page.evaluate(() => {
     window.__crateForce = 1;
-    const M = window.__flick = { raf: [], long: [], counts: [] };
+    const M = window.__flick = { raf: [], long: [], counts: [], burstDraws: [] };
+    // CONTROL below must see this exact canvas draw before either move.
+    for (const C of [window.WebGLRenderingContext, window.WebGL2RenderingContext]) {
+      if (!C) continue;
+      const draw = C.prototype.drawArrays;
+      C.prototype.drawArrays = function (...args) {
+        if (this.canvas.closest('#packBurst')) M.burstDraws.push(performance.now());
+        return draw.apply(this, args);
+      };
+    }
     const tick = t => { M.raf.push(t); requestAnimationFrame(tick); };
     requestAnimationFrame(tick);
     try {
@@ -848,16 +850,23 @@ await setWidth(page, 393, 852);  // restore, for the sections below
   ok('FLICK CONTROL the real OPEN button dealt three cards and both taps advanced',
     flick.counts.join(',') === '1 of 3,2 of 3,3 of 3' && moves.every(Boolean),
     `counts=${JSON.stringify(flick.counts)} taps=${moves.filter(Boolean).length}`);
+  ok('FLICK CONTROL the burst draw instrument saw the real canvas before the first tap',
+    moves[0] != null && flick.burstDraws.some(t => t < moves[0]),
+    `${flick.burstDraws.length} burst drawArrays calls recorded`);
   moves.forEach((t0, n) => {
-    if (t0 == null) { ok(`FLICK ${n + 1}->${n + 2} the card-to-card move renders without dropping frames`, false, 'no card to tap'); return; }
+    const label = n === 0 ? 'FIRST FLICK 1->2' : 'SECOND FLICK 2->3';
+    if (t0 == null) { ok(`${label} cadence`, false, 'no card to tap'); return; }
     const w = gaps.filter(g => g.t >= t0 && g.t <= t0 + 520);
     const m = { over20: w.filter(g => g.d > 20).length, over34: w.filter(g => g.d > 34).length,
       worst: Math.round(Math.max(0, ...w.map(g => g.d))), frames: w.length,
       // where the worst one landed, in ms after the tap: a hitch at 0 is the
       // class swap, one at ~330 is the deck rebuild, one at ~480 the resume
       worstAt: w.length ? Math.round(w.reduce((a, b) => (b.d > a.d ? b : a)).t - t0) : null };
-    ok(`FLICK ${n + 1}->${n + 2} the card-to-card move renders without dropping frames`,
-      w.length > 0 && m.over20 <= 6, JSON.stringify(m));
+    const minFrames = Math.floor(520 / (1000 / 60)) - 6;
+    ok(`${label} cadence: >=${minFrames} rAF samples and <=6 gaps over 20ms`,
+      w.length >= minFrames && m.over20 <= 6, JSON.stringify(m));
+    const draws = flick.burstDraws.filter(t => t >= t0 && t <= t0 + 520).length;
+    ok(`${label} burst pauses during the move`, draws === 0, `${draws} drawArrays calls`);
   });
   /* WINDOWED. `buffered: true` hands back every long task this page has ever
      run, including the 44 rows above; counting those would grade the audit's

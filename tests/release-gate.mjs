@@ -260,6 +260,8 @@ const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-ato
   'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs',
   'take-and-pay-audit.mjs'];   // 2026-09-06 lane 2: the take and its whole payout are one transaction; node-only, ~1s
 PURE.unshift('store-copy-lint.mjs');
+PURE.push('submission-build-audit.mjs'); // R45-9: PURE runs refusal/control fixtures. Explicit artifact paths require SUBMISSION=1, hash-bound build marker and native store-content preflight; native producer integration remains out of lane.
+PURE.push('guard-debts-audit.mjs'); // R45: node-only regression checks execute the actual grading blocks on empty, undersampled and healthy controls, plus DPR plumbing.
 PURE.push('submission-preflight-audit.mjs');   // 2026-09-07: drives native/submission-preflight.mjs for real and proves it refuses all three (a bundle without STORE_BUILD=1, a synced config that still has a server URL, a reachable TestFlight string) with a healthy control; node-only, <1s
 PURE.push('pet-state-audit.mjs'); // Lane A: real pet exports, migration, unsupported rows, instance talent clicks and the input to battle construction; Node-only.
 PURE.push('pet-family-audit.mjs'); // Lane D: refuses incomplete family kits, validates species/picks and tree unlocks, checks cooldown agreement and exhaustive frozen combat outputs; Node-only.
