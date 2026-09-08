@@ -301,6 +301,7 @@ PURE.push('serve-tree-identity-audit.mjs'); // serveTree refuses a fixed port th
 PURE.push('pet-C-node-guard.mjs'); // Lane C: level thresholds/cap, production EQUIP cache, DPR replay/harness, known-species roster.
 PURE.push('r48-state-audit.mjs'); // R48-A: restored unknown artwork, real error-stream assertions and production fight-chip refresh; Node-only.
 PURE.push('r46-logging-audit.mjs'); // R46: history nutrition/search, accents/counts, midnight input and commit order, displayed budget, and bulk-close relog/history races; Node functions and DOM doubles.
+PURE.push('r46-diary-audit.mjs'); // M2: zero-calorie logged days, displayed budgets/copies, historical source dates and speech, and bounded Back control; real source functions in Node doubles, no browser claim.
 PURE.push('audit-completion-audit.mjs'); // N2: subprocess crash/row-count receipts, dependency disclosure, and real unavailable grading branches; no sockets.
 PURE.push('n3-deadpaths-audit.mjs'); // N3: real artifact path expressions stay outside this checkout; real News callback delivers the current outfit to the poster renderer. Node-only, no pixel claim.
 const BROWSER = [

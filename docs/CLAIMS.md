@@ -2351,3 +2351,215 @@ Network failure prevents a current remote inventory and PR-backed classification
 2. PROOF: store-runtime-audit.mjs | REACH: The real web producer in a temporary checkout copies 54 application/data modules and resolves 180 literal entry, CSS and import references. Its service-worker condition skips capacitor and admits the HTTPS control. These are Node checks, not native launch or pixel proof.
 3. PROOF: store-runtime-audit.mjs | REACH: BLOCKED. The actual bundled hardRefresh requests missing version.json and displays a false no-connection message. The final checkout exits 1 with 4/5 rows passing. An App Store explanation guard proposed only in a throwaway copy passes 5/5, fails when reverted to the actual defect, and passes when restored. The app.js owner must implement and operate the real control; no application fix is claimed here.
 4. PROOF: store-copy-lint.mjs, submission-preflight-audit.mjs | REACH: Existing store-copy and submission-preflight checks pass in this checkout. They do not establish an installed or submittable binary. Current metadata sources, remaining Tom actions, evidence and limitations are in docs/SUBMISSION-CHECKLIST.md and docs/M4-REPORT.md.
+## M2 diary consistency, 2026-09-07 (advisory)
+
+1. PROOF: r46-diary-audit.mjs | REACH: Progress counts a zero-calorie diary row as a logged day, including in the intake averages. The existing activity streak can also count a day with 3000 steps; that distinct rule and all rewards remain unchanged. Node executes the actual recap markup on a gapped ledger and after deleting the zero-calorie row.
+2. PROOF: r46-diary-audit.mjs | REACH: Add already uses Today's sum of rounded diary rows in this checkout. The existing fix is retained and verified with 872 displayed kcal and 1668 left. Copy chips now use that same displayed total while committed nutrition remains unrounded. Historical chips and completion toasts identify the actual source date. Node operates the real copy callback through commitLogEntry into storage doubles and renders the resulting meal.
+3. PROOF: r46-diary-audit.mjs | REACH: Historical empty meals and sign-offs describe the displayed day without today's time promises. Today's existing speech is retained. Every speech selector value is exercised in Node.
+4. PROOF: r46-diary-audit.mjs | REACH: Today's Back button disables and its callback stops at account creation, or an older imported diary row. Missing or invalid creation dates fall back to the first diary row or today. Node operates the actual arrow callback and evaluates its actual markup; browser hit testing remains unproven.
+
+R46-13 remains a design ruling for Tom: whether a meal started before midnight
+should retain that start date, warn, offer a move, or keep commit-time dating.
+No ruling, version stamp or release is made here. Browser/server proofs are
+prohibited; the advisory report records Node results and outstanding proofs.
+
+
+**Scope and files changed.** `js/app.js` (logging, Trends and day-arrow sites),
+`tests/r46-diary-audit.mjs` (new Node guard), `tests/release-gate.mjs` (one PURE
+registration with a description), and `docs/CLAIMS.md` (this single dated section).
+`js/nutrition.js` and `js/sources.js` needed no changes. Supporting guard,
+registration and CLAIMS edits implement the work order's explicit instructions;
+no sibling-owned runtime site was changed.
+
+The supplied plan file's SHA256 matched
+`eb17611b3c57e16bf553254eb5bbeba93f91782fb90133bb26de5a99b03cd346`.
+The checkout's root `CLAUDE.md` and round 46's full handoff text were read.
+`tally/CLAUDE.md` is absent in this checkout; the available root contract was
+used. Source edits and historical source reads used this checkout only. The
+external handoff was read, never edited.
+
+**Diagnosis and implementation choices.** A logged food day means at least one
+diary row, because the logging streak uses row dates and a zero-calorie drink
+is still a recorded entry. Trends' separate activity streak also counts walked
+days. That existing rule remains, so an activity streak is not a count of food
+logging alone. Copying on a historical date continues to copy the displayed
+date's preceding day, with that source date now named explicitly. The first
+navigable date is the earlier of creation and existing diary history, preserving
+older imports. Missing or invalid creation metadata falls back to the earliest
+row or today. These choices add no migration or reward change.
+
+**Red/green evidence.** The guard executes actual source functions, rendered
+HTML expressions and registered click callbacks. Database and DOM dependencies
+are Node doubles, not IndexedDB durability or browser interaction proof. Each
+run's exit status was saved directly to an `.exit` file, without a pipe.
+
+The unmodified starting `js/app.js` was copied into a throwaway tree, the new
+audit was run against it, and the fixed source was restored there and rerun.
+Original-source output: `1/6 guards passed`, exit 1. The sole green case was
+R46-8, already fixed before this work. Restored output: `6/6 guards passed`,
+exit 0. Exact failure excerpts:
+
+| Finding | Original-source failure |
+| --- | --- |
+| R46-7 | `zero-calorie day omitted from rendered 6/7 recap` |
+| R46-9 | `chip promises 722 kcal but copied meal displays 723` |
+| R46-10 | `historical chip must name 2026-08-28: ↺ Copy yesterday's Breakfast (722 kcal)` |
+| R46-11 | `historical Breakfast still uses today's empty copy: Nothing yet. The day is young and so are you, relatively.` |
+| R46-12 | `back arrow walked past account history to 2026-08-13` (expected `2026-08-28`) |
+
+Additional isolated reversions all exited 1, then exited 0 after restoring the
+fix on the same throwaway copy:
+
+- R46-8: restored `dayBudget`'s actual v511 (`fadb5cf7`) expression,
+  `const tot = dayTotals(entries);`. Failure: `Add used 870 instead of Today's 872`.
+  The corresponding displayed remaining budget is 1670 instead of 1668.
+- R46-10 completion toast alone: `historical toast must name 2026-08-28: Copied 3 items from yesterday`.
+- R46-11 sign-off alone: `The input did not match the regular expression /recorded for this day/. Input:` followed by `'Nothing written down yet. I will be here.'`.
+- R46-12 disabled markup alone: `The input did not match the regular expression /\sdisabled[\s>]/. Input:` followed by the original `prevDay` button without `disabled`.
+
+Final `node tests/r46-diary-audit.mjs` output, exit 0:
+
+```text
+PASS R46-7 zero-calorie row counts: 6/7 logged, streak 9; deletion gives 5/7 and 5
+PASS R46-8 Add and Today both show 1668 left after 872 displayed kcal
+PASS R46-9 copy chip and callback agree on source date, 723 kcal and stored meal
+PASS R46-10 copy chip and callback agree on source date, 723 kcal and stored meal
+PASS R46-11 past empty meals and sign-offs never speak as today, across every speech choice
+PASS R46-12 actual back-arrow callback stops at creation and marks its button disabled
+6/6 guards passed
+```
+
+The nine-day streak fixture has no entry today and a zero-calorie row six days
+back. Deleting that row leaves five prior consecutive logged days. It is an
+independent deterministic fixture of the reported disagreement, not a claim to
+have recreated the original browser save or its exact post-delete streak of 6.
+
+**Agreed proof.** `node tests/unit.test.js` was run without skips or weakened
+assertions. Exit 1, output:
+
+```text
+FAIL serveTree does not hold the event loop open after the script ends
+  serveTree kept node alive, so a self-serving audit can never exit: Command failed: /Users/tommiller/.nvm/versions/node/v22.22.2/bin/node --input-type=module -e import { serveTree } from "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/m2-r46rest/tests/godmode.js";
+    const own = await serveTree("/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/m2-r46rest");
+    process.once('exit', () => own.close());
+
+362 passed, 1 failed
+```
+
+The failure is in the embedded socket-dependent `serveTree` check. Its child
+stderr is suppressed by the existing unit test, so this run does not provide a
+more specific operating-system error. No all-green unit result is claimed.
+
+**Release proofs.** The actual PURE array, including its push/unshift entries,
+contains 68 files. Each permitted file was invoked directly with Node, with
+stdout/stderr and exit status saved separately. Results: 66 exit 0, the unit
+command above exit 1, and `serve-tree-identity-audit.mjs` not run because it
+requires local servers. The all-PURE-exit-0 success criterion is therefore
+unmet in this sandbox. `node tests/release-gate.mjs --coverage-only` exited 0:
+
+```text
+coverage: 311 audits on disk, 115 fast, 128 full, 68 skipped
+```
+
+PURE files that exited 0:
+
+```text
+version-align-lint.mjs  0
+no-debug-markers-lint.mjs  0
+store-copy-lint.mjs  0
+transmog-receipt-audit.mjs  0
+today-reads-lint.mjs  0
+kitchen-atomic-audit.mjs  0
+backup-encoder-audit.mjs  0
+backup-key-audit.mjs  0
+backup-version-audit.mjs  0
+backup-conflict-audit.mjs  0
+log-xp-farm-audit.mjs  0
+drip-badge-audit.mjs  0
+xp-key-provenance-lint.mjs  0
+facegate-audit.mjs  0
+garden-appetite-guard.mjs  0
+pit.test.js  0
+quest-daymore-audit.mjs  0
+quest-pick-audit.mjs  0
+first-fight-audit.mjs  0
+stat-source-audit.mjs  0
+bastions-rep-sim.mjs  0
+analytics-tag-audit.mjs  0
+icon-inventory-audit.mjs  0
+version-stamp-audit.mjs  0
+boneyard-supply-audit.mjs  0
+loot-fallback-audit.mjs  0
+guard-hygiene-lint.mjs  0
+guard-provenance-lint.mjs  0
+feedback-status-lint.mjs  0
+rack-theme-lint.mjs  0
+rack-rotate-audit.mjs  0
+pet-accessory-lint.mjs  0
+pet-pool-audit.mjs  0
+manifest-exports-audit.mjs  0
+xp-curve-audit.mjs  0
+live-api-register-lint.mjs  0
+claim-evidence-lint.mjs  0
+thumb-freshness-lint.mjs  0
+render-sink-lint.mjs  0
+lapse-witness-audit.mjs  0
+spawn-claim-atomic-audit.mjs  0
+wardrobe-family-audit.mjs  0
+football-kit-audit.mjs  0
+restore-latch-audit.mjs  0
+first-pet-audit.mjs  0
+currency-revision-lint.mjs  0
+inv-tombstone-audit.mjs  0
+take-and-pay-audit.mjs  0
+r47-rest-audit.mjs  0
+r47-economy-audit.mjs  0
+submission-build-audit.mjs  0
+harness-environment-audit.mjs  0
+guard-debts-audit.mjs  0
+submission-preflight-audit.mjs  0
+pet-state-audit.mjs  0
+pet-family-audit.mjs  0
+coins-merge-tie-audit.mjs  0
+routine-race-audit.mjs  0
+dayone-topup-audit.mjs  0
+dish-worth-audit.mjs  0
+pet-C-node-guard.mjs  0
+r48-state-audit.mjs  0
+r46-logging-audit.mjs  0
+r46-diary-audit.mjs  0
+audit-completion-audit.mjs  0
+n3-deadpaths-audit.mjs  0
+```
+
+**Blocked actions and deviations.** No commit, push, PR, publication, deployment,
+version stamp, changelog edit, native change, App Store Connect call or Worker
+operation was performed. The user's no-commit/no-push instruction overrides the
+plan's contradictory commit-and-push line. No automatic approval rejection was
+received. Browser/server proofs were prohibited by the work order and sandbox;
+no browser or standalone server proof was attempted. The explicitly requested
+unit command nevertheless contains the server check reported above.
+
+R46-8 required verification of an existing fix rather than another source edit.
+The missing nested contract and unachievable all-PURE-green criterion are
+reported above, not silently replaced. Proposed verification deviation: accept
+these Node results provisionally and have the independent reviewer run the
+remaining proofs in a socket-capable environment. No guard was weakened to
+make that criterion appear satisfied.
+
+Pending reviewer proofs, with expected results rather than measured passes:
+
+- `node tests/unit.test.js`: `363 passed, 0 failed`, exit 0, once its local server can start.
+- `node tests/serve-tree-identity-audit.mjs`: `PASS  WRONG-TREE`, exit 0.
+- Load `tests/ui-audit.js` in the running local app and call `await uiAudit()`:
+  expected `pass: true` and an empty `problems` array. Operate Back at creation,
+  an older imported date, and one date after each bound; confirm disabled
+  appearance, focus behavior and hit testing. Browser results remain unproven.
+- In the local app, seed a gapped ledger containing a zero-calorie row and
+  fractional portions. Read Progress before/after deleting the zero row,
+  operate historical Copy, and inspect stored rows and resulting meal after
+  reload. Expected chip total equals the rendered meal, source date equals the
+  named preceding date, and past empty-day text has no today-only promise.
+
+Raw logs and throwaway copies are in `/private/tmp/m2-r46-proof`. This report is
+advisory for independent review and is not release approval.
