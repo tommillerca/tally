@@ -9795,6 +9795,12 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .pdk-scene svg.pdk-ground { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* the herd */
 .pdk-pet { position: absolute; z-index: 5; }
+/* Instance states sit outside the facing/bob wrappers so their words stay upright. */
+.pdk-state { position: absolute; z-index: 1; bottom: 0; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; pointer-events: none;
+  font: 700 9px/1.3 var(--font-body, sans-serif); white-space: nowrap; }
+.pdk-state span { padding: 1px 4px; border-radius: 3px; background: #14131a; color: var(--accent); }
+.pdk-state .pdk-breeding { color: #ffd34d; }
 .pdk-pet .pdk-flip { display: block; width: 100%; height: 100%; }
 .pdk-pet .pdk-shadow { position: absolute; left: 14%; right: 14%; bottom: 2px; height: 9px;
   border-radius: 50%; background: rgba(10, 12, 8, .5); filter: blur(2px); }
@@ -9816,13 +9822,13 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    row of clouds drifts and bobs as one animal. Drift and bob run on different
    clocks (10s and 3s), so one offset desynchronises both. */
 .pdk-hover { animation: pdkDrift 10s ease-in-out infinite alternate; animation-delay: var(--pdk-phase, 0s); z-index: 4; }
-@keyframes pdkDrift { from { transform: translateX(-30px); } to { transform: translateX(30px); } }
+@keyframes pdkDrift { from { transform: translateX(0); } to { transform: translateX(var(--pdk-range, 0px)); } }
 .pdk-hover .pdk-bob { display: block; animation: pdkHoverBob 3s ease-in-out infinite alternate; animation-delay: var(--pdk-phase, 0s); }
 @keyframes pdkHoverBob { from { transform: translateY(-6px); } to { transform: translateY(6px); } }
 .pdk-hover.pdk-epic { filter: drop-shadow(0 0 7px rgba(155, 146, 232, .9)); }
 /* floppers: one flop per cycle, origin low so it pivots off the ground */
 .pdk-flop .pdk-bob { display: block; transform-origin: 50% 90%; animation: pdkFlop 4.8s ease-in-out infinite; animation-delay: var(--pdk-phase, 0s); }
-@keyframes pdkFlop { 0%, 64%, 84%, 100% { transform: none; } 72% { transform: translateY(-15px) rotate(-9deg); } }
+@keyframes pdkFlop { 0%, 64%, 84%, 100% { transform: none; } 72% { transform: translateY(-4px) rotate(-2deg); } }
 /* keeper: idle bob + moonlit rim (charcoal bones vanish on the dark scene without it) */
 /* THE KEEPER SWALLOWS ITS OWN TAPS. It was pointer-events: none because it is
    not a control, and the consequence was worse than a dead control: it is drawn

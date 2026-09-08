@@ -19608,7 +19608,7 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
            their duration, so it is deterministic (a pet drifts the same way every
            visit) and needs no randomness. Negative, so the animation starts
            mid-stride instead of pausing first. */
-        : `left:${p.x}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px;--pdk-phase:-${[...r.iid].reduce((a, c) => a + c.charCodeAt(0), 0) % 9}s`;
+        : `left:${p.x}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px;--pdk-range:${p.range || 0}px;--pdk-phase:-${[...r.iid].reduce((a, c) => a + c.charCodeAt(0), 0) % 9}s`;
     /* THE SPRITE NAMES THE COPY, not just the species. `data-pdk` alone meant the field
        was a species picker: tapping the fourth Bulldog opened the slider on the first
        one, so the animal you pressed and the card you got were different animals. The
@@ -19617,6 +19617,7 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
        unchanged: it has no card to open. */
     return `<div class="pdk-pet pdk-${p.kind}${glow}" data-pdk="${r.sp}" data-iid="${r.iid}" style="${pos}">
       <span class="pdk-flip"><span class="pdk-bob">${art}</span></span>
+      ${r.equipped || r.breeding ? `<span class="pdk-state">${r.equipped ? '<span>OUT WITH YOU</span>' : ''}${r.breeding ? '<span class="pdk-breeding">BREEDING</span>' : ''}</span>` : ''}
       ${p.kind === 'walk' || p.kind === 'flop' ? '<span class="pdk-shadow"></span>' : ''}
     </div>`;
   };
@@ -19692,8 +19693,12 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
  * fork per screen. The hanging sign stays. */
 async function openPaddock() {
   const { paddockRoster, paddockEggs, placePaddock, PDK_SCENE, rotHash } = await import('./paddock.js');
-  const [roster, eggs, eqOwn, ownedIds, petTapped] = await Promise.all([
+  const eqIid = await equippedPetIid();
+  const [rows, eggs, eqOwn, ownedIds, petTapped] = await Promise.all([
     paddockRoster(), paddockEggs(), equipped(), ownedCosmeticIds(), kvGet('pdkPetTapped', false)]);
+  const breeding = (S.settings || {}).stableBreed || {};
+  const roster = rows.map(r => ({ ...r, equipped: r.iid === eqIid && r.sp === eqOwn.C,
+    breeding: Array.isArray(breeding.iids) && breeding.iids.includes(r.iid) }));
   /* THE HERD TURNS OVER WHEN THE PLAYER'S DAY DOES. placePaddock's rotation seed
      defaults to toISOString(), which is UTC, and calling it with no day meant a
      collection past the walk cap swapped its herd at 17:00 local here while
@@ -19832,8 +19837,25 @@ async function choosePetTalent(iid, node) {
 }
 
 async function openStable(opts = {}) {
-  let sel = [];      // iids flagged for breeding
-  let offSp = null;
+  const savedBreed = (S.settings || {}).stableBreed || {};
+  let sel = Array.isArray(savedBreed.iids) ? [...new Set(savedBreed.iids)].slice(0, 2) : [];
+  let offSp = savedBreed.keep || null;
+  const saveBreed = () => {
+    S.settings = S.settings || {};
+    S.settings.stableBreed = { iids: [...sel], keep: offSp };
+    saveSettings();
+  };
+  const kinScroll = new Map();
+  const rememberKin = body => {
+    const kin = $('.cf-kin', body);
+    if (kin?.dataset.sp) kinScroll.set(kin.dataset.sp, kin.scrollLeft);
+  };
+  const restoreKin = (body, sp) => {
+    const kin = $('.cf-kin', body);
+    if (!kin || !sp) return;
+    kin.dataset.sp = sp;
+    kin.scrollLeft = kinScroll.get(sp) || 0;
+  };
   // which pet the carousel is parked on. Held by IID, not index, so it survives a
   // re-render that adds or removes a pet (breeding destroys one mid-session).
   let cfIid = opts.focusIid || null;
@@ -19940,6 +19962,9 @@ async function openStable(opts = {}) {
     // offspring under the feed model: the keeper is the same pet all the way
     // through, so the old "which one does it become?" question had no answer.
     if (pair && offSp !== a.iid && offSp !== b.iid) offSp = a.iid;
+    if (!pair) offSp = null;
+    const saved = (S.settings || {}).stableBreed || {};
+    if (JSON.stringify(saved.iids || []) !== JSON.stringify(sel) || (saved.keep || null) !== offSp) saveBreed();
     const keeper = pair ? (offSp === b.iid ? b : a) : null;
     const spare = pair ? (offSp === b.iid ? a : b) : null;
     const offLineage = keeper ? (keeper.lineage || 0) + 1 : 0;
@@ -20213,6 +20238,8 @@ async function openStable(opts = {}) {
     const kennelOwned = ownedPairs(insts);
     const kennelMorphs = new Set([...kennelOwned].map(k => k.split('|')[1]));
     const kennelFound = ownedCellCount(kennelOwned, KENNEL_SPECIES.map(x => x.id));
+    rememberKin(body);
+    const bodyScroll = body.scrollTop;
     body.innerHTML = `
       <button class="pdk-door" id="stableToPaddock" type="button">
         <span class="pdk-door-scene" aria-hidden="true">
@@ -20229,7 +20256,7 @@ async function openStable(opts = {}) {
         </span>
         <span class="pdk-door-tx">
           <b>THE PADDOCK</b>
-          <small>${insts.length} pet${insts.length === 1 ? '' : 's'} out in the field</small>
+          <small>${insts.length} pet${insts.length === 1 ? '' : 's'} in your collection</small>
         </span>
         <!-- the house disclosure arrow: a plain glyph in a span, as in .gbn-chev,
              .gd-arrow and .ul-chev. No ICONS ternary fallback here, per the note in
@@ -20256,7 +20283,7 @@ async function openStable(opts = {}) {
         <span class="kdoor-sw" aria-hidden="true">${MORPHS.map(m => `<i class="${kennelMorphs.has(m) ? 'on' : ''}" style="--kc:${morphSwatch(m)}"></i>`).join('')}</span>
         <span class="pdk-door-tx">
           <b>THE KENNEL</b>
-          <small>Every colour your pets come in &middot; ${kennelFound} of ${KENNEL_SPECIES.length * MORPHS.length}</small>
+          <small>${kennelFound} of ${KENNEL_SPECIES.length * MORPHS.length} species colourways &middot; founder excluded</small>
         </span>
         <span class="pdk-door-go" aria-hidden="true">›</span>
       </button>
@@ -20342,6 +20369,9 @@ async function openStable(opts = {}) {
           <button class="btn" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Feed ${esc((BH_BY_ID[spare.sp] || {}).name || spare.sp)} in</button>
         </div>` : ''}`;
 
+    body.scrollTop = bodyScroll;
+    restoreKin(body, focused?.sp);
+
     /* Bring the pet we came here for onto the screen, once. Opening its tree is
        not enough when it is the fourth card down: the sheet still lands at the
        top and the talent it just unlocked is off-screen. */
@@ -20394,7 +20424,7 @@ async function openStable(opts = {}) {
       /* 8px of clearance, not zero: scrolling by exactly the overflow lands the
          tile's bottom border ON the fold, where sub-pixel rounding eats it. */
       const over = pwTile.getBoundingClientRect().bottom + 8 - view.bottom;
-      if (over > 0) body.scrollTop += Math.min(over, pwFrame.getBoundingClientRect().top - view.top);
+      if (bodyScroll === 0 && over > 0) body.scrollTop += Math.max(0, Math.min(over, pwFrame.getBoundingClientRect().top - view.top));
     }
     /* The ring. Painted straight to the DOM because sixty transform updates a
        second is not a job for a re-render: render() rebuilds this whole body, so
@@ -20748,7 +20778,12 @@ async function openStable(opts = {}) {
       $$('.pet-wear', body).forEach(pwB => { pwB.hidden = pwB.dataset.pwsp !== inst.sp; });   // Football kit, 2026-09-04
       centreRail();
       const kin = $('.cf-kin', body);
-      if (kin) { kin.innerHTML = kinChips(inst); kin.setAttribute('aria-label', `Your ${it.name || inst.sp}s`); }
+      if (kin) {
+        rememberKin(body);
+        kin.innerHTML = kinChips(inst);
+        kin.setAttribute('aria-label', `Your ${it.name || inst.sp}s`);
+        restoreKin(body, inst.sp);
+      }
     }
 
     // No card-click-to-open-talents any more: on a carousel a tap means "bring
@@ -20865,7 +20900,7 @@ async function openStable(opts = {}) {
       if (sel.includes(iid)) sel = sel.filter(x => x !== iid);
       else if (sel.length < 2) sel.push(iid);
       else sel = [sel[1], iid];
-      offSp = null; render();
+      offSp = null; saveBreed(); render();
     }));
     /* THE FIRST PICK NOW SAYS WHAT TO DO NEXT. Tom, 2026-08-10: "Tapping breed
        doesn't make it clear what to do next to find the next pet and also hit
@@ -20874,7 +20909,7 @@ async function openStable(opts = {}) {
        which does not exist until there ARE two. The waiting bar fills that gap in
        the same place the real one will appear, so the answer is already where you
        are about to look. */
-    $('#breedCancel', body)?.addEventListener('click', () => { sel = []; offSp = null; render(); });
+    $('#breedCancel', body)?.addEventListener('click', () => { sel = []; offSp = null; saveBreed(); render(); });
     $('#petsHelp', body)?.addEventListener('click', openPetsHelp);
     $('#stableToPaddock', body)?.addEventListener('click', () => openPaddock());
     $('#kennelBtn', body)?.addEventListener('click', () => openKennel());
@@ -20979,7 +21014,7 @@ async function openStable(opts = {}) {
       const keepIid = offSp, feedIid = sel.find(x => x !== offSp);
       const res = await breedPets(keepIid, feedIid);
       if (!res.ok) { toast(BREED_ERR[res.reason] || 'Could not breed those.'); render(); return; }
-      sel = []; offSp = null;
+      sel = []; offSp = null; saveBreed();
       await render();                          // refresh the stable underneath
       openPetBreedResult(res.offspring);       // reveal on top (Stable stays open, no race)
     });
