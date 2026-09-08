@@ -106,8 +106,8 @@ import {
   lbToKg, kgToLb, ftInToCm, cmToFtIn, ACTIVITY_LEVELS, GOALS, kcalConsistent,
   activeCalorieBonus, assumedActiveBurn, manualTargets, gramsChipDefault,
 } from './nutrition.js';
-import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
-import { lookupBarcode, searchOnline } from './sources.js';
+import { GENERIC_FOODS } from '../data/generic-foods.js';
+import { lookupBarcode, searchOnline, searchLocalFoods, foodFromLog } from './sources.js';
 import { parseNutritionText } from './labelparse.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -1835,7 +1835,9 @@ async function rollDayIfNeeded() {
       await kvSet('lastOpenDay', today);
     }
     const closed = await awardDayCloseIfDue(S.settings.targets);
-    if (wasOnToday) route(); // a new day starts at the top, like a fresh open
+    // The router defers its repaint while inputs are open; the day and its
+    // close-out still roll before commitLogEntry writes a fresh row.
+    if (wasOnToday) route({ dayRoll: true });
     if (closed?.closed) setTimeout(() => toast(closed.gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned', 3400), 1400);
     else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts.' : "You logged yesterday. That counts.", 3600), 1400);
     else if (closed?.dayGuard) setTimeout(() => dayGuardToast(closed.dayGuard), 1400);   // QA round 26 O14
@@ -3446,7 +3448,25 @@ function routeFromHash() {
   route();
 }
 
+let _dayRefreshPending = false;
 function route({ keepScroll = false } = {}) {
+  const { dayRoll = false } = arguments[0] || {};
+  // Midnight changes the diary date immediately, but must not destroy input.
+  // The last sheet's close drains this repaint; an explicit navigation wins.
+  if (dayRoll && sheetStack.length) {
+    if (!_dayRefreshPending) {
+      const bottom = sheetStack[0], onClose = bottom.onClose;
+      bottom.onClose = () => {
+        try { onClose?.(); } finally {
+          setTimeout(() => { if (_dayRefreshPending && !sheetStack.length) route(); }, 0);
+        }
+      };
+    }
+    _dayRefreshPending = true;
+    toast('A new day started. New entries will be logged to today.', 3600);
+    return Promise.resolve();
+  }
+  _dayRefreshPending = false;
   // refresh() passes keepScroll: an in-place re-render, not a navigation
   const isNav = !keepScroll;
   /* AN UNCOMMITTED PREVIEW MUST NOT FOLLOW THE PLAYER OUT AND BACK IN (QA round
@@ -4039,7 +4059,7 @@ async function dayBudget() {
   const bonus = activeCalorieBonus(S.settings.profile, hk?.activeKcal);
   const targets = S.settings.targets || {};
   const target = (targets.kcal || 0) + (bonus > 0 ? bonus : 0);
-  const tot = dayTotals(entries);
+  const tot = shownTotals(entries);
   return {
     target, used: tot.kcal, left: target - tot.kcal,
     p: tot.p, pTarget: targets.p || 0,
@@ -8769,7 +8789,8 @@ async function restoreAddDraft() {
   /* Only a food findFood still resolves (built-in or custom): an online result
      lived in S.onlineCache, which the reload emptied. The query is kept either
      way, so the search is one Enter from being back. */
-  const food = d.sheet === 'portion' && d.foodId ? findFood(d.foodId) : null;
+  const historyEntry = d.sheet === 'portion' && d.historyEntryId ? await db.get('log', d.historyEntryId) : null;
+  const food = historyEntry ? foodFromLog(historyEntry) : d.sheet === 'portion' && d.foodId ? findFood(d.foodId) : null;
   if (food) openPortion(food, { meal, sel: d.sel || null });
 }
 
@@ -8815,8 +8836,13 @@ function localResultsHtml(local, q) {
    one place both chip sets (#mealChips, #pMealChips) are drawn and setChipOn
    keeps aria-pressed in step with the .on class the two handlers already
    toggled. No visual change: .on still does the painting. */
-function resultsCountText(n, q) {
-  return q ? `${n} ${n === 1 ? 'match' : 'matches'} for ${q}` : `${n} recent ${n === 1 ? 'food' : 'foods'}`;
+function resultsCountText(n, q, shown = n) {
+  const text = q ? `${n} ${n === 1 ? 'match' : 'matches'} for ${q}` : `${n} recent ${n === 1 ? 'food' : 'foods'}`;
+  return shown < n ? `${text}. Showing first ${shown}; refine your search to see the rest.` : text;
+}
+
+async function localFoodSearch(q, limit) {
+  return searchLocalFoods(allSearchableFoods(), await db.all('log'), q, limit);
 }
 function mealChipsHtml(on) {
   return MEALS.map((m, i) => `<button class="${i === on ? 'on' : ''}" aria-pressed="${i === on}" data-meal="${i}">${m}</button>`).join('');
@@ -8844,6 +8870,7 @@ function openAdd(meal = 0, q0 = '') {
       </div>
       <div style="height:12px"></div>
       <div class="t1-search">${ICONS.searchIco()}<input id="q" type="search" placeholder="Search ${GENERIC_FOODS.length}+ foods" autocomplete="off" enterkeyhint="search"></div>
+      <div id="visibleResultsCount" class="note" aria-hidden="true"></div>
       <div id="resultsCount" class="sr-only" aria-live="polite"></div>
       <div id="results" role="region" aria-label="Results"></div>
     </div>`, { cls: 'full t1', onClose: () => { clearAddDraft(); window.removeEventListener('online', onOnline); } });
@@ -8881,8 +8908,13 @@ function openAdd(meal = 0, q0 = '') {
   const input = $('#q', wrap);
   const count = $('#resultsCount', wrap);   // M17: the live count line, never re-rendered
 
+  let resultVersion = 0;
+  let searchItems = [];
   async function showDefault() {
+    const version = ++resultVersion;
     const recents = await recentFoods(8, curMeal);   // L4: ranked for the chip that is on
+    if (version !== resultVersion || input.value.trim() || !wrap.isConnected) return;
+    searchItems = [];
     const favs = allSearchableFoods().filter(f => f.favorite).slice(0, 6);
     let html = '';
     if (recents.length) {
@@ -8893,16 +8925,16 @@ function openAdd(meal = 0, q0 = '') {
     if (favs.length) html += t1Sect('Favorites') + favs.map(foodRowHtml).join('');
     if (!html) html = `<p class="note" style="text-align:center;padding:26px 20px">Search ${GENERIC_FOODS.length}+ built-in foods, or scan a barcode to add packaged food in seconds.</p>`;
     results.innerHTML = html;
-    count.textContent = resultsCountText(recents.length, '');   // M17: "8 recent foods"
+    $('#visibleResultsCount', wrap).textContent = count.textContent = resultsCountText(recents.length, '');   // M17: "8 recent foods"
     bindRows();
   }
 
-  function bindRows() {
-    $$('[data-food]', results).forEach(b => b.addEventListener('click', () => {
-      const f = findFood(b.dataset.food) || onlineById(b.dataset.food);
+  function bindRows(scope = results) {
+    $$('[data-food]', scope).forEach(b => b.addEventListener('click', () => {
+      const f = searchItems.find(f => f.id === b.dataset.food) || findFood(b.dataset.food) || onlineById(b.dataset.food);
       if (f) openPortion(f, { meal: curMeal });
     }));
-    $$('[data-relog]', results).forEach(b => b.addEventListener('click', async (ev) => {
+    if (scope === results) $$('[data-relog]', results).forEach(b => b.addEventListener('click', async (ev) => {
       const rows = await db.all('log');
       const src = rows.find(r => r.id === b.dataset.relog);
       if (!src) return;
@@ -8918,10 +8950,10 @@ function openAdd(meal = 0, q0 = '') {
       history.back();
       setTimeout(refresh, 60);
     }));
-    bindOnline(results);
+    bindOnline(scope);
     // M18: the empty result's create control; prefill is passed for the form to
     // pick up the name (it reads only nutrient keys from prefill today).
-    $$('[data-create]', results).forEach(b => b.addEventListener('click', () => openFoodForm({ meal: curMeal, prefill: { name: b.dataset.create } })));
+    $$('[data-create]', scope).forEach(b => b.addEventListener('click', () => openFoodForm({ meal: curMeal, prefill: { name: b.dataset.create } })));
   }
   /* Scoped, not results-wide: bindRows rebinds every [data-food] in #results,
      so re-running it for one row would double-bind the local list. */
@@ -8955,8 +8987,9 @@ function openAdd(meal = 0, q0 = '') {
       if (!sect) return;
       sect.innerHTML = t1Sect('Online results') +
         (foods.length ? foods.map(foodRowHtml).join('') : '<p class="note" style="padding:8px 2px">Nothing found online. Try the barcode or label scanner.</p>');
-      bindRows();
+      bindRows(sect);
     } catch (e) {
+      if (input.value.trim() !== q || !wrap.isConnected) return;
       const sect = $('#onlineSect', results);
       /* 'unreachable' is thrown only when NEITHER database answered, so this is
          the no-signal case and it gets the no-signal words. Everything else
@@ -8976,16 +9009,19 @@ function openAdd(meal = 0, q0 = '') {
   input.addEventListener('input', () => {
     clearTimeout(debounce);
     const q = input.value.trim();
+    const version = ++resultVersion;
     stampAddDraft({ sheet: 'add', q });   // M16
     if (!q) { showDefault(); return; }
-    debounce = setTimeout(() => {
-      const local = searchFoods(allSearchableFoods(), q, 25);
+    debounce = setTimeout(async () => {
+      const { items: local, total } = await localFoodSearch(q, 25);
+      if (version !== resultVersion || !wrap.isConnected) return;
+      searchItems = local;
       /* M17: the render target is #results and ONLY #results. #q is its sibling
          in the sheet, so a keystroke never replaces the node focus sits in;
          re-rendering the sheet body here would throw activeElement to BODY. */
       results.innerHTML = localResultsHtml(local, q) +
         `<div id="onlineSect">${q.length >= 3 ? onlineRowHtml(q, { offline: navigator.onLine === false }) : ''}</div>`;
-      count.textContent = resultsCountText(local.length, q);   // M17: "11 matches for banana"
+      $('#visibleResultsCount', wrap).textContent = count.textContent = resultsCountText(total, q, local.length);   // M17: "11 matches for banana"
       bindRows();
     }, 120);
   });
@@ -9038,7 +9074,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
   if (sel.mode === 'serving' && (!food.servings || !food.servings[sel.idx])) { sel.idx = 0; }
   let curMeal = entry ? entry.meal : meal;
   const editing = !!entry;
-  const srcLabel = { generic: 'Built-in', off: 'Open Food Facts', fdc: 'USDA', custom: 'My food' }[food.source] || '';
+  const srcLabel = { generic: 'Built-in', off: 'Open Food Facts', fdc: 'USDA', custom: 'My food', history: 'Your history' }[food.source] || '';
 
   const wrap = openSheet(`
     <div class="sheet-head">
@@ -9047,7 +9083,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
         <div class="sub">${esc(food.brand || '')}${food.brand ? ' · ' : ''}<span class="t1-tag">${srcLabel}</span></div>
       </div>
       <div class="t1-tools">
-        <button id="favBtn" class="t1-icon-btn${food.favorite ? ' gold' : ''}" aria-label="Favorite">${ICONS.star(!!food.favorite)}</button>
+        <button id="favBtn" ${food.source === 'history' ? 'disabled title="Saved diary portion"' : ''} class="t1-icon-btn${food.favorite ? ' gold' : ''}" aria-label="Favorite">${ICONS.star(!!food.favorite)}</button>
         <button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button>
       </div>
     </div>
@@ -9080,7 +9116,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
     /* M16: Cancel drops back to the add sheet, so the draft drops back with it.
        No-op when the flow is not live (edit from Today, My foods) or already
        committed (commit clears before the sheets close). */
-    onClose: () => { if (addDraft && !editing) stampAddDraft({ sheet: 'add', foodId: null, sel: null }); },
+    onClose: () => { if (addDraft && !editing) stampAddDraft({ sheet: 'add', foodId: null, historyEntryId: null, sel: null }); },
   });
 
   /* THE PAYOFF. Every row is an award onFoodLogged already pays; none of it was
@@ -9213,7 +9249,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
     renderPayoff(n || { kcal: 0, p: 0, c: 0, f: 0 });
     // M16: preview() runs on open and on every portion or meal change, so it is
     // the one place the draft learns about this sheet
-    if (addDraft && !editing) stampAddDraft({ sheet: 'portion', foodId: food.id, sel: { ...sel }, meal: curMeal });
+    if (addDraft && !editing) stampAddDraft({ sheet: 'portion', foodId: food.id, historyEntryId: food.historyEntry?.id || null, sel: { ...sel }, meal: curMeal });
   }
 
   $$('#servChips button', wrap).forEach(c => c.addEventListener('click', () => {
@@ -9237,6 +9273,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
   }));
 
   $('#favBtn', wrap).addEventListener('click', async () => {
+    if (food.source === 'history') return;
     food.favorite = !food.favorite;
     $('#favBtn', wrap).innerHTML = ICONS.star(!!food.favorite);
     $('#favBtn', wrap).classList.toggle('gold', !!food.favorite);
@@ -9293,7 +9330,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
       date: editing ? entry.date : S.date,
       meal: curMeal,
       ts: editing ? entry.ts : Date.now(),
-      foodId: food.id,
+      foodId: food.source === 'history' ? null : food.id,
       name: food.name, brand: food.brand || null,
       portionLabel: portionLabel(food, sel),
       sel: { ...sel },
@@ -9317,7 +9354,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
     food.lastPortion = { ...sel };
     /* Bookkeeping on a committed row: a failure here is reported by db.js's
        sink and must not re-open the sheet or re-arm Add. */
-    await persistFoodUse(food).catch(() => {});
+    if (food.source !== 'history') await persistFoodUse(food).catch(() => {});
     if (!editing) trackEvent('food_log', { via: via || 'search' });
     if (!editing && btn && btn.isConnected) {
       const r = btn.getBoundingClientRect();
@@ -9381,7 +9418,13 @@ function openTextSheet({ title, value = '', placeholder = '', cta = 'Save', note
 
 function closeAllSheetsViaHistory() {
   const n = sheetStack.length;
-  if (n > 0) history.go(-n);
+  if (n > 0) {
+    // A multi-entry traversal emits ONE popstate. Retire the whole flow now:
+    // otherwise that event exposes Add's relog row beneath the portion sheet,
+    // and a second tap can log it and Back past the app before refresh runs.
+    closeAllSheets();
+    history.go(-n);
+  }
 }
 
 async function openEntryEdit(entryId) {
@@ -11882,10 +11925,15 @@ async function renderFoods(el) {
   el.innerHTML = `
   <h1 class="page-h1">Foods<span class="sub">${GENERIC_FOODS.length} built-in · ${customs.length} custom · ${scanned.length ? scanned.length + ' scanned' : 'none scanned yet'}</span></h1>
   <div class="search-wrap">${ICONS.search}<input id="fq" class="input" type="search" placeholder="Search all foods" autocomplete="off"></div>
+  <div id="fCount" class="note" aria-live="polite"></div>
   <div id="fList"></div>`;
 
   const list = $('#fList', el);
+  const count = $('#fCount', el);
+  let searchItems = [], resultVersion = 0;
   function base() {
+    searchItems = [];
+    count.textContent = '';
     let html = '<button class="btn ghost" id="newFood" style="margin:4px 0 6px">+ Create a food</button>';
     if (favs.length) html += '<div class="sect-h">Favorites</div>' + favs.map(foodRowHtml).join('');
     if (customs.length) {
@@ -11904,7 +11952,7 @@ async function renderFoods(el) {
   }
   function bindRows(root) {
     $$('[data-food]', root).forEach(b => b.addEventListener('click', async () => {
-      const f = findFood(b.dataset.food);
+      const f = searchItems.find(f => f.id === b.dataset.food) || findFood(b.dataset.food);
       // L10: the meal you picked on the add sheet, not the clock (mealDefault owns the precedence)
       if (f) openPortion(f, { meal: await mealDefault() });
     }));
@@ -11922,10 +11970,14 @@ async function renderFoods(el) {
       bindRows(mine);
     });
   }
-  $('#fq', el).addEventListener('input', e => {
+  $('#fq', el).addEventListener('input', async e => {
     const q = e.target.value.trim();
+    const version = ++resultVersion;
     if (!q) { base(); return; }
-    const res = searchFoods(allSearchableFoods(), q, 40);
+    const { items: res, total } = await localFoodSearch(q, 40);
+    if (version !== resultVersion || !list.isConnected) return;
+    searchItems = res;
+    count.textContent = resultsCountText(total, q, res.length);
     list.innerHTML = res.length ? res.map(foodRowHtml).join('') : '<p class="note" style="text-align:center;padding:20px">No matches.</p>';
     bind();
   });
