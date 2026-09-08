@@ -8218,17 +8218,16 @@ test('L2 independent offline currency earnings survive both backup entry paths',
   assert.match(output, /17 passed, 0 failed/);
 });
 
-<<<<<<< HEAD
 test('R60-2 type tokens follow the root while fixed geometry stays px', () => {
   const output = execFile_.execFileSync(process.execPath, [join(here, 'fontscale-audit.mjs')], { encoding: 'utf8' });
   assert.match(output, /px TYPE tokens: 0/);
   assert.match(output, /9 regression mutations rejected/);
-=======
+});
+
 test('L6 silence disclosure guard includes a normal-session CONTROL', () => {
   const output = execFile_.execFileSync(process.execPath, [join(here, 'silence-disclosure-audit.mjs')], { encoding: 'utf8' });
   assert.match(output, /0 failed/);
   assert.match(output, /PASS CONTROL normal session/);
->>>>>>> 5098735e (lane: L6-silence)
 });
 
 await runAll();
