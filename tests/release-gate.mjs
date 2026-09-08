@@ -334,6 +334,8 @@ PURE.push('breed-lock-audit.mjs'); // B1: rendered cooldown disclosure and READY
 PURE.push('device-loss-audit.mjs'); // L3: encrypted wipe/restore, initialization rewards, recovery choice and real IOError messages in Node doubles; no browser or network.
 PURE.push('multidevice-earnings-audit.mjs'); // L2: both offline currency histories, replay/spends, atomic import, encrypted push and simulated lifecycle; Node-only.
 const BROWSER = [
+  'today-dock-pixels-audit.mjs', // v522: the Today dock band must not paint --hero-edge. Browser tier: it screenshots and samples real pixels, which is the only instrument that catches this class (the geometry measures correct either way). Its CONTROL-PIXELS row is deliberately UNPROVEN, see docs/CLAIMS.md v522.
+
   'device-loss-browser-audit.mjs', // L3 recovery choice, known-save retry, file replacement and Settings restore reachability; local disposable origin only.
   'multidevice-earnings-browser-audit.mjs', // L2: real IndexedDB and visibilitychange listener, encrypted two-device merge both directions; pending reviewer browser proof.
   'paddock-pack-browser-audit.mjs',

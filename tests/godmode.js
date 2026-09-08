@@ -759,8 +759,17 @@ export async function boot(base, opts = {}) {
         const actual = await page.evaluate(() => window.devicePixelRatio);
         if (actual !== dpr) throw new Error(`DPR override requested ${dpr}, page reports ${actual}`);
       };
-      const viewport = current;
+      /* `current` is launchOpts.defaultViewport, which is NULL whenever an audit
+         asks for a DPR override without also passing a viewport. Spreading null
+         gives {} and Chrome refuses the call with "Failed to deserialize
+         params.height - mandatory field missing", which killed
+         today-dock-pixels-audit. Fall back to the page's live viewport, then to
+         the harness default, so a DPR-only boot is a legal call. */
+      const live = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }))
+        .catch(() => null);
+      const viewport = current || live || { width: 393, height: 852 };
       await page.setViewport({ ...viewport,
+        width: viewport.width || 393, height: viewport.height || 852,
         isMobile: viewport?.isMobile ?? true, hasTouch: viewport?.hasTouch ?? true });
       console.log(`DPR OVERRIDE ${dpr} verified: boot and subsequent viewport changes`);
     }
