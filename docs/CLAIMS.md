@@ -2296,3 +2296,13 @@ commands and native integration proposal are in tests/wave-guards-report.md.
 4. PROOF: r46-logging-audit.mjs | REACH: Add's budget uses the same sum of rounded diary rows as Today. Five 100.4 kcal rows display and budget as 500 kcal, leaving 1500 against 2000.
 
 R46-7 is deferred with a proposed common diary-date definition for Trends and the logging streak. R46-9, R46-10, R46-11 and R46-12 lack finding details in the frozen plans and checkout reports located in this review; no behavior change is claimed for those items. No release or deployment is claimed by this section.
+
+## N1 harness environments, 2026-09-07 (advisory)
+
+1. PROOF: harness-environment-audit.mjs | REACH: Explicit boot options emulate timezone and Chrome Intl locale before navigation. Orientation selects 393x852 or 852x393 with mobile and touch flags. Unset options preserve the previous calls. Node doubles verify plumbing and negative controls; actual browser emulation remains unproven in this sandbox.
+2. PROOF: today-container-audit.mjs | REACH: This audit opts into Pacific/Kiritimati. Its SCROLL expectation subtracts a local calendar day without converting to UTC. The original expression fails the Node UTC+14 fixture; restoring the local expression passes. Browser SCROLL and its original scroll-reset mutation remain pending review.
+3. PROOF: two-tap-audit.mjs | REACH: This audit opts into de-DE and checks the exact price formatted in the page. The original comma-only predicate fails the German Node fixture. Browser taps remain pending review.
+4. PROOF: honest-surfaces-audit.mjs | REACH: The demo page opts into de-DE. Wallet toasts must contain the actual balance formatted in that page. The original comma-only predicate fails a correct German fixture. The separate cloud page retains its previous environment. Browser purchases remain pending review.
+5. PROOF: orientation-audit.mjs | REACH: New browser guard checks real Intl/timezone state before and after reload, landscape lock visibility, full viewport coverage and hit interception, portrait release, and a real Settings click. Node grading controls reject an absent landscape cover and a stuck portrait cover. Browser and server execution are prohibited here, so no rendered green or browser mutation proof is claimed.
+
+The agreed unit command reported 362 passed and 1 failed at its embedded serveTree check. The standalone serve-tree identity proof was not run because it requires a server. Full evidence and pending reviewer commands are in tests/n1-report.md. No release is claimed.

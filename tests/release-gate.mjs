@@ -262,6 +262,7 @@ const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-ato
 PURE.unshift('store-copy-lint.mjs');
 PURE.push('r47-economy-audit.mjs');   // 2026-09-08 round 47: a lost tower stops paying (measured 90 coins / 12 Bone Dust), an offline re-fight stays pending and cannot mint a rival's tower, a stale restore cannot resurrect the income, and a grant's receipt and payout commit together; mem-idb + the Worker source, no browser
 PURE.push('submission-build-audit.mjs'); // R45-9: PURE runs refusal/control fixtures. Explicit artifact paths require SUBMISSION=1, hash-bound build marker and native store-content preflight; native producer integration remains out of lane.
+PURE.push('harness-environment-audit.mjs'); // N1: Node execution of environment plumbing, default-call compatibility and timezone/locale grading controls.
 PURE.push('guard-debts-audit.mjs'); // R45: node-only regression checks execute the actual grading blocks on empty, undersampled and healthy controls, plus DPR plumbing.
 PURE.push('submission-preflight-audit.mjs');   // 2026-09-07: drives native/submission-preflight.mjs for real and proves it refuses all three (a bundle without STORE_BUILD=1, a synced config that still has a server URL, a reachable TestFlight string) with a healthy control; node-only, <1s
 PURE.push('pet-state-audit.mjs'); // Lane A: real pet exports, migration, unsupported rows, instance talent clicks and the input to battle construction; Node-only.
@@ -299,6 +300,7 @@ PURE.push('pet-C-node-guard.mjs'); // Lane C: level thresholds/cap, production E
 PURE.push('r48-state-audit.mjs'); // R48-A: restored unknown artwork, real error-stream assertions and production fight-chip refresh; Node-only.
 PURE.push('r46-logging-audit.mjs'); // R46: history nutrition/search, accents/counts, midnight input and commit order, displayed budget, and bulk-close relog/history races; Node functions and DOM doubles.
 const BROWSER = [
+  'orientation-audit.mjs', // N1: 393x852 -> 852x393 -> portrait, real rotateLock coverage and hit tests, plus Intl/timezone persistence on reload.
   'pet-C-browser-audit.mjs', // Lane C: real EQUIP return paths and nine surfaces, 31 decoded Kennel images at DPR 2/3 on five phone sizes. Browser proof pending reviewer.
 
   /* the raw-sink fix's STATE half. render-sink-lint pins the source, and this
