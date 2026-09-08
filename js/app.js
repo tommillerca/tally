@@ -19739,7 +19739,7 @@ async function openPaddock() {
            as 'mapLpHint' and 'map-seen'. */''}
       ${paddockSceneHtml({ roster, places, eggCount: eggs.count, eq: eqOwn, keeper: K, lurkSp, coach: petTapped ? null : 'Tap a pet to say hi' })}
       <div class="pdk-panel" id="pdkPanel"><!-- Lane W mounts here (walt/paddock-ui) --></div>
-    </div>`, { cls: 'sheet-paddock' });
+    </div>`, { cls: 'sheet-paddock pet-a11y' });
 
   /* Lane W's collection panel is the screen's lower half, not a tap target, so it is
      mounted as the sheet opens rather than on first interaction. Failure degrades to
@@ -19813,7 +19813,7 @@ async function openFriendPaddock(f) {
         <b>${yard.n} PET${yard.n === 1 ? '' : 'S'}</b>
         ${out < yard.n ? `<p class="note">${out} out in the field right now</p>` : ''}
       </div>
-    </div>`, { cls: 'sheet-paddock' });
+    </div>`, { cls: 'sheet-paddock pet-a11y' });
 }
 
 let stableGhostWarned = false;   // R39-31: one warning per session, not one per render
@@ -19871,7 +19871,7 @@ async function openStable(opts = {}) {
      handler and audit clicks. */
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Stable</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body" id="stableBody"></div>`, { cls: 'full', onClose: () => { if (currentTab() === 'today') refresh(); } });
+    <div class="sheet-body" id="stableBody"></div>`, { cls: 'full pet-a11y', onClose: () => { if (currentTab() === 'today') refresh(); } });
   async function render() {
     const body = $('#stableBody', wrap);
     if (!body) return;
@@ -20262,7 +20262,7 @@ async function openStable(opts = {}) {
       </button>
       <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap">
         <span class="chip">${ICONS.dust(14)} ${st.dust.toLocaleString()}</span>
-        <span class="chip" style="font-size:11px">Only the active pet levels as you walk</span>
+        <span class="chip" style="font-size:.6875rem">Only the active pet levels as you walk</span>
         <!-- no ICONS.info exists; the ternary fallback shipped a bare "?" glyph
              and hid the missing icon from readers but not from t2-audit's
              ICONS-RESOLVE guard, which is exactly what that guard is for.
@@ -21014,7 +21014,7 @@ const KENNEL_SPECIES = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6']
 async function openKennel() {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Kennel</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body" id="kennelBody"></div>`, { cls: 'full' });
+    <div class="sheet-body" id="kennelBody"></div>`, { cls: 'full pet-a11y' });
   const body = $('#kennelBody', wrap);
   if (!body) return;
   const insts = await petInstances();
@@ -21025,13 +21025,12 @@ async function openKennel() {
   // above toxic above ember/frost above base, matching Phase C's fusion order.
   const bestMorphFor = sp => MORPHS.filter(m => owned.has(`${sp}|${m}`))
     .sort((a, b) => MORPH_TIER[b] - MORPH_TIER[a])[0] || 'base';
-  const dotLabel = (sp, m, name) => owned.has(`${sp}|${m}`)
-    ? `${MORPH_LABEL[m] ? MORPH_LABEL[m] + ' ' : ''}${name}`
-    : 'Not hatched yet.';
+  const dotLabel = (sp, m, name) =>
+    `${m === 'base' ? 'Base' : MORPH_LABEL[m]} ${name}${owned.has(`${sp}|${m}`) ? '' : '. Not hatched yet.'}`;
   const rosterRow = s => {
     const morph = bestMorphFor(s.id);
     // R39-11: the dots are indicators, not controls (the grid cells are).
-    const dots = MORPHS.map(m => `<i class="k-dot${owned.has(`${s.id}|${m}`) ? ' on' : ''}" style="--kc:${morphSwatch(m)}"></i>`).join('');
+    const dots = MORPHS.map(m => `<i data-morph="${esc(m)}" class="k-dot${owned.has(`${s.id}|${m}`) ? ' on' : ''}" style="--kc:${morphSwatch(m)}"></i>`).join('');
     const morphNames = MORPHS.filter(m => owned.has(`${s.id}|${m}`) && m !== 'base').map(m => MORPH_LABEL[m]);
     return `<div class="k-row">
       <span class="k-thumb">${croppedPetImg(s.id, 48, false, morphAsset(s.id, morph) || null, undefined, true)}</span>
@@ -21072,7 +21071,7 @@ async function openKennel() {
   // one section-header idiom (.sect-h) so the grid reads as a table: which
   // colourway a column is, without repeating it 6 times per species.
   const morphColLabel = m => m === 'base' ? 'Base' : MORPH_LABEL[m];
-  const gridHead = `<div class="k-grid-head">${MORPHS.map(m => `<span class="k-grid-head-cell">${esc(morphColLabel(m))}</span>`).join('')}</div>`;
+  const gridHead = `<div class="k-grid-head">${MORPHS.map(m => `<span class="k-grid-head-cell"><i class="k-swatch" data-morph="${esc(m)}" style="--kc:${morphSwatch(m)}" aria-hidden="true"></i>${esc(morphColLabel(m))}</span>`).join('')}</div>`;
   /* GWART'S LINE SITS BELOW THE ROSTER, NOT ABOVE IT: the roster is the part
      that must fit one screen at 390x844 AND 320x568 with no scroll (up to six
      owned species, one row each), and a callout above it was budget the narrow
@@ -21090,7 +21089,7 @@ async function openKennel() {
          to say hi" and the Dressing Room's lead already use: a sentence where
          the thing is, never a tutorial screen. It says the rule the colours
          encode AND names the one control the screen has. -->
-    <p class="k-lead">In colour is one you've hatched. Greyed out with a lock is one you haven't. Tap any to name it.</p>
+    <p class="k-lead">Five colourways per pet, in column order. Filled dots are hatched; hollow dots and locked cells are not. Tap a cell to read its name.</p>
     <div class="k-grid">${gridHead}${KENNEL_SPECIES.map(gridRow).join('')}</div>`;
   $$('.k-cell', body).forEach(c => c.addEventListener('click', () => {
     const { sp, morph: m } = c.dataset;
@@ -23715,7 +23714,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v514'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v515'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

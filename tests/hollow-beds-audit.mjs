@@ -38,6 +38,8 @@
 import fs from 'node:fs';
 import { boot, serveTree, sleep, setWidth } from './godmode.js';
 
+console.log('UNREACHABLE Hollow: module probe only, zero player coverage. Product decision pending: docs/P1-R48-REPORT.md');
+
 const ROOT = process.env.HB_ROOT || decodeURIComponent(new URL('..', import.meta.url).pathname);
 const W = Number(process.argv[2]) || 390, H = Number(process.argv[3]) || 844;
 const OUT = process.env.HB_OUT || '';
