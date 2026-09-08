@@ -1819,14 +1819,10 @@ async function boot() {
    open across midnight rolls over on its own. */
 let _dayAnchor = dateKey();
 let _rolling = false;
-let _dayRefreshPending = false;
 async function rollDayIfNeeded() {
   if (_rolling || !S.settings) return false;
   const today = dateKey();
-  if (today === _dayAnchor) {
-    if (_dayRefreshPending && !sheetStack.length) { _dayRefreshPending = false; route(); }
-    return false;
-  }
+  if (today === _dayAnchor) return false;
   _rolling = true;
   try {
     // If you had deliberately paged back to an earlier day, stay there: only
@@ -1838,14 +1834,9 @@ async function rollDayIfNeeded() {
       await kvSet('lastOpenDay', today);
     }
     const closed = await awardDayCloseIfDue(S.settings.targets);
-    // route() destroys every sheet. Keep the actual input nodes alive while
-    // the date and rewards roll normally; the minute/resume timer repaints
-    // after the player closes the last sheet. Commits still follow today's date.
-    if (wasOnToday) {
-      _dayRefreshPending = sheetStack.length > 0;
-      if (!_dayRefreshPending) route();
-      else toast('A new day started. New entries will be logged to today.', 3600);
-    }
+    // The router defers its repaint while inputs are open; the day and its
+    // close-out still roll before commitLogEntry writes a fresh row.
+    if (wasOnToday) route({ dayRoll: true });
     if (closed?.closed) setTimeout(() => toast(closed.gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned', 3400), 1400);
     else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts.' : "You logged yesterday. That counts.", 3600), 1400);
     else if (closed?.dayGuard) setTimeout(() => dayGuardToast(closed.dayGuard), 1400);   // QA round 26 O14
@@ -3456,7 +3447,25 @@ function routeFromHash() {
   route();
 }
 
+let _dayRefreshPending = false;
 function route({ keepScroll = false } = {}) {
+  const { dayRoll = false } = arguments[0] || {};
+  // Midnight changes the diary date immediately, but must not destroy input.
+  // The last sheet's close drains this repaint; an explicit navigation wins.
+  if (dayRoll && sheetStack.length) {
+    if (!_dayRefreshPending) {
+      const bottom = sheetStack[0], onClose = bottom.onClose;
+      bottom.onClose = () => {
+        try { onClose?.(); } finally {
+          setTimeout(() => { if (_dayRefreshPending && !sheetStack.length) route(); }, 0);
+        }
+      };
+    }
+    _dayRefreshPending = true;
+    toast('A new day started. New entries will be logged to today.', 3600);
+    return Promise.resolve();
+  }
+  _dayRefreshPending = false;
   // refresh() passes keepScroll: an in-place re-render, not a navigation
   const isNav = !keepScroll;
   /* AN UNCOMMITTED PREVIEW MUST NOT FOLLOW THE PLAYER OUT AND BACK IN (QA round
@@ -9407,7 +9416,13 @@ function openTextSheet({ title, value = '', placeholder = '', cta = 'Save', note
 
 function closeAllSheetsViaHistory() {
   const n = sheetStack.length;
-  if (n > 0) history.go(-n);
+  if (n > 0) {
+    // A multi-entry traversal emits ONE popstate. Retire the whole flow now:
+    // otherwise that event exposes Add's relog row beneath the portion sheet,
+    // and a second tap can log it and Back past the app before refresh runs.
+    closeAllSheets();
+    history.go(-n);
+  }
 }
 
 async function openEntryEdit(entryId) {
