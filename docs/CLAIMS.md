@@ -419,6 +419,13 @@ the upload path and its guards.
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
 
+## v513
+1. Round 48's harness and reporting work plus the remainder of round 47. Its dated sections are further down, folded here.
+
+2. PROOF: r47-rest-audit.mjs | REACH: open a Spire defended by another player. `GET /spires` returned the defender's profile with nine more fields than `/leaderboard` does, including `weekSteps`, the `yard` pet roster, the full `gear` list and `plat`. That falsified the app's own stated invariant: `socialSnapshot` carries a comment saying `yard` "reaches accepted friends and nobody else", and a rival is not an accepted friend. Scoped honestly by the round that found it: `privacy.html` does not promise friends-only, so this was a source-level invariant violation rather than a broken user-facing promise, and it is closed either way. The response now carries only what a rival needs, guarded so the field list cannot quietly grow back, which is how it got here.
+
+3. PROOF: r47-rest-audit.mjs | REACH: lose a tower, then open the siege sheet. The lost-tower card contradicted itself in two lines and the siege sheet's clock did not tick.
+
 ## v512
 1. Round 48's shipped defects plus round 46's logging lane, and the guard and submission work behind them. Its dated sections are further down, folded here. The pet balance re-tune was HELD OUT of this train: it conflicts with a shipped contract (Eternal Guard heals to 40%, the re-tune needs 20%) and that is Tom's ruling to make.
 
