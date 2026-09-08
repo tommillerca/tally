@@ -1504,7 +1504,7 @@ export async function restoreWithPhrase(handle, phrase) {
     ? `/recovery/${encodeURIComponent(input.toUpperCase())}`
     : `/recovery/id/${encodeURIComponent(input.toLowerCase())}`;
   const base = await apiBase();
-  if (!base) return { ok: false, reason: 'No connection.' };
+  if (!base) return { ok: false, reason: 'Could not connect to the recovery server. Wait a few minutes and try again.' };
   let meta;
   try {
     const res = await apiFetch(base + url);
@@ -1516,7 +1516,7 @@ export async function restoreWithPhrase(handle, phrase) {
     if (res.status === 429) {
       const body = await res.json().catch(() => ({}));
       const ms = Number(body && body.retryAfterMs) || 0;
-      return { ok: false, reason: ms > 0 ? `Too many attempts. Wait ${fmtWaitMs(ms)} and try again.` : 'Too many attempts. Wait a few minutes.' };
+      return { ok: false, reason: ms > 0 ? `Too many attempts. Wait ${fmtWaitMs(ms)} and try again.` : 'Too many attempts. Wait a few minutes and try again.' };
     }
     /* R38-11 (2026-09-06): a correct friend code + a correct phrase used to come
        back here as "No account found for that friend code", which is false for
@@ -1531,13 +1531,21 @@ export async function restoreWithPhrase(handle, phrase) {
        cover both without claiming the account doesn't exist. The recovery-ID
        route (isCode false) has no such narrowing: its 404 really does mean no
        account, so that copy is unchanged. */
-    if (!res.ok) {
+    if (res.status === 404) {
       return { ok: false, reason: isCode
         ? 'No recovery data found for that friend code. If you have set a recovery ID, use that instead: a friend code only works for an account that never set one.'
         : 'No account found for that recovery ID.' };
     }
-    meta = await res.json();
-  } catch { return { ok: false, reason: 'Could not reach the server.' }; }
+    // A failed lookup says nothing about whether the account or save exists.
+    if (res.status >= 500 && res.status < 600) {
+      return { ok: false, reason: 'The recovery server could not check your account. Wait a few minutes and try again.' };
+    }
+    if (!res.ok) {
+      return { ok: false, reason: 'Could not check your account. The recovery server returned an unexpected response. Try again later.' };
+    }
+    try { meta = await res.json(); }
+    catch { return { ok: false, reason: 'The recovery server sent an unreadable response. Wait a few minutes and try again.' }; }
+  } catch { return { ok: false, reason: 'Could not reach the server to check your account. Wait a few minutes and try again.' }; }
   let bundle;
   try {
     const raw = b64ToU8(meta.wrapped);
