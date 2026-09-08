@@ -317,7 +317,9 @@ PURE.push('restore-debt-audit.mjs'); // Q1: stale restore must preserve pet owne
 // are outside the top-level runnable inventory; no top-level scanner exists.
 PURE.push('p1-r48-rest-audit.mjs'); // P1: executes art coverage grading on empty-surface controls, checks Hollow probe disclosure and landed race/reward rows; Node-only.
 PURE.push('pet-a11y-audit.mjs'); // P2: production Kennel labels/clicks, swatch identity, relative pet-sheet type; Node-only, no pixel claim.
+PURE.push('kennel-copy-audit.mjs'); // R2: production Kennel/reveal/selection copy and destroy controls with real storage; Node-only, no browser or pixel claim.
 const BROWSER = [
+  'kennel-copy-browser-audit.mjs', // R2: real copy/breed/destroy/Kennel controls, reveal dismissal, card-chip fit and hit tests; pending reviewer browser proof.
   'pet-a11y-pixels-audit.mjs', // P2: screenshot dot contrast, deuteranopia dE76, keyboard identity and 200% pet-sheet text.
   'first-run-honesty-audit.mjs', // M5: real first-run disclosure/intro, capped toast dwell, returning daily reward and review screenshots.
   'orientation-audit.mjs', // N1: 393x852 -> 852x393 -> portrait, real rotateLock coverage and hit tests, plus Intl/timezone persistence on reload.

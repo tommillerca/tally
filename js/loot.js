@@ -7,7 +7,18 @@ import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneh
 import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SOLD, FOOTBALL_PETS, footballItemId, footballGrantIds, footballBundleIds, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { COMMON_INGREDIENT_IDS } from './cooking.js';
-import { isMorph, rollMorph, ownedPairs, isKnownPet, legalPicks, petLevel } from './pets.js';
+import { isMorph, MORPH_LABEL, morphAsset, rollMorph, ownedPairs, isKnownPet, legalPicks, petLevel } from './pets.js';
+
+// Use the same colour identity as the art. Shinies and CX never wear morph art.
+export function petColourName(inst) {
+  if (inst.shiny) return 'Shiny';
+  return morphAsset(inst.sp, inst.morph) ? MORPH_LABEL[inst.morph] : 'Base';
+}
+
+export function petInstanceName(inst, steps) {
+  const name = `${petColourName(inst)} ${(BH_BY_ID[inst.sp] || {}).name || inst.sp}`;
+  return steps === undefined ? name : `${name} · Lv ${petLevel(steps)}`;
+}
 
 export const RARITIES = {
   common:    { label: 'Common',    color: '#9fac9f', w: 52, dupe: 10 },
