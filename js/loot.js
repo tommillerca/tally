@@ -2405,16 +2405,27 @@ export async function openCrate(invId) {
 export async function buyShopItem(shopId) {
   const s = SHOP.find(x => x.id === shopId);
   if (!s) throw new Error('unknown item');
-  /* THE MONEY DECIDES, not a read of the money. A consumable is bought over and
-     over, so there is no per-item receipt to claim the way buyRackItem does; the
-     debit itself has to be the gate. spendCoins refuses inside the transaction,
-     which is why the grant below can only ever follow a real payment. An earlier
-     pass met this same double-tap and fixed only the TOAST (the `owned` count
-     the comment below explains); the race underneath it was never touched, so
-     the wallet went on minting free Draughts. */
-  const left = await spendCoins(s.cost);
-  if (left === null) return { ok: false, reason: 'coins', need: s.cost, have: await coins() };
-  await grantConsumable(shopId, 'shop');
+  // A funded wallet becomes one purchased consumable. Debit, revision and
+  // goods commit together; a death after the debit cannot lose 90 coins.
+  let left;
+  try {
+    await payAtomic({
+      kv: {
+        coins: cur => {
+          const bal = Number(cur) || 0;
+          if (!Number.isFinite(s.cost) || s.cost < 0 || bal < s.cost) {
+            const e = new Error('insufficient-funds'); e.insufficientFunds = true; throw e;
+          }
+          return (left = bal - s.cost);
+        },
+        coinsRev: cur => (Number(cur) || 0) + Math.max(1, s.cost),
+      },
+      puts: [{ store: 'inv', val: consumableRow(shopId, 'shop') }],
+    });
+  } catch (e) {
+    if (e?.insufficientFunds) return { ok: false, reason: 'coins', need: s.cost, have: await coins() };
+    throw e;
+  }
   // Report WHAT was bought, what it cost, the new balance and how many you now
   // hold. The old bare {ok:true} left the UI with nothing to say beyond
   // "Purchased", which reads as a no-op when you tap twice, so people kept

@@ -74,6 +74,10 @@ const ok = (name, cond, detail = '') => {
  * `undriven` with a reason, and every one of those is printed on every run.
  * ======================================================================== */
 const ACTIONS = [
+  { id: 'js/game.js:finishPitWin', sites: 3,
+    transition: 'a recorded staked win receives its capped XP, first-clear or repeat payout, then badges',
+    authority: 'durable pitPending intent plus the existing capped and first-clear XP keys; coins and items ride in claimAndPay',
+    undriven: 'take-and-pay-audit.mjs executes the production settle source and next-open recovery in Node, including concurrent calls, repeats and four kill boundaries; browser arena presentation remains reviewer proof' },
   // ---- the ledger primitive itself -------------------------------------
   { id: 'js/game.js:award', sites: 1, drive: 'award',
     transition: 'a ledger key goes from unminted to minted; there is no other transition in the game',
@@ -200,9 +204,10 @@ const ACTIONS = [
      re-delivered or re-pulled pet grant lands exactly one copy. The server's own
      idempotency (INSERT OR IGNORE on grants(player_id, key)) is a second layer
      and neither one is load-bearing alone. */
-  { id: 'js/social.js:applyPayload', sites: 8, drive: 'grant',
+  // The checkout already stages every payload in one awardOnce(..., pay).
+  { id: 'js/social.js:applyPayload', sites: 1, drive: 'grant',
     transition: 'a server grant key goes from not-ingested to ingested',
-    authority: "awardOnce: the ledger row IS the receipt, and minting it is the claim" },
+    authority: 'awardOnce with pay: claimAndPay commits the receipt, payload and presentation together' },
   { id: 'js/game.js:grantLevelRewards', sites: 6, drive: 'levelRewards',
     transition: 'each level crossed goes from unpaid to paid, once ever',
     authority: "db.addIfAbsent of the levelpaid-<L> ledger row (the legacy `claimed` flag on levelup-<L> is still honoured so an already-collected level cannot be re-paid)" },
@@ -323,7 +328,7 @@ const ACTIONS = [
      this is not a currency ticket. Not fixed here: it needs the spend and the
      cap slot taken together, which is garden.js's lane. */
   { id: 'js/garden.js:compostIngredient', sites: 1, undriven: 'a conversion, not a payout, and the conversion is not atomic: the COMPOSTS_PER_DAY cap is read before mutate() writes the count, and the ingredient is debited with an unclamped grantIngredient(id, -1), so overlapping composts overshoot the cap and can drive the larder negative. It pays SEEDS, which cannot be planted since the Bone Garden left the path. OPEN' },
-  { id: 'js/loot.js:buyShopItem', sites: 1, undriven: 'a purchase: the second attempt is MEANT to charge again. Was 3 until 2026-08-25: crates came off the coin shop (S0), so the two grantCrate branches went with them and only grantConsumable is left' },
+  { id: 'js/loot.js:buyShopItem', sites: 1, undriven: 'repeat purchases are intentional; payAtomic commits the debit and consumable together. The crash and insufficient-wallet controls run in take-and-pay-audit.mjs' },
   /* js/loot.js:buyWithDust stood here with 3 sites (grantEgg / grantCrate /
      grantConsumable). The Bone Dust shop closed on 2026-08-25 and dust is a
      cosmetic-only currency, so all three sites went with it. */
@@ -437,7 +442,7 @@ const ACTIONS = [
      only create once, and both orders plus three-way concurrency are driven
      against a real IndexedDB by tests/mimic-audit.mjs and
      tests/wanderer-boneyard-audit.mjs (ONE-SHOT / ATOMIC). */
-  { id: 'js/app.js:openFight', sites: 18, undriven: 'the fight settlement: thirteen modes, every one of them delegating to a claim function registered above (claimFriendBattle, claimDenWin, claimMiniWin, claimGluttonWin) or gated on an award() key it reads before paying. The two remote branches are pinned by name by the NO-OP guards in tests/unit.test.js; tests/glutton-audit.mjs and tests/spire-phase3-audit.mjs drive the two that shipped exploits; and the two Boneyard ambushes (mimic, wanderer) are driven by tests/mimic-audit.mjs and tests/wanderer-boneyard-audit.mjs' },
+  { id: 'js/app.js:openFight', sites: 13, undriven: 'the fight settlement: thirteen modes, every one of them delegating to a claim function registered above (claimFriendBattle, claimDenWin, claimMiniWin, claimGluttonWin) or gated on an award() key it reads before paying. The two remote branches are pinned by name by the NO-OP guards in tests/unit.test.js; tests/glutton-audit.mjs and tests/spire-phase3-audit.mjs drive the two that shipped exploits; and the two Boneyard ambushes (mimic, wanderer) are driven by tests/mimic-audit.mjs and tests/wanderer-boneyard-audit.mjs' },
   { id: 'js/app.js:renderBoneyard', sites: 2, undriven: 'the map: the tribute button and the spawn button, both delegating to collectTribute and collectSpawn, which are driven above. Was 5 until 2026-08-18: a collect also paid a garden seed, and with the Bone Garden off the player\'s path a seed cannot be planted, so that grant came out. Was 4 until 2026-09-04 (QA round 28 Y5): the two remaining sites were the collect\'s OWN ingredient and feast bonus, paid here, two writes past the ledger claim that had already spent the spawn. They moved inside the claim\'s transaction in js/hunt.js and this function now only names what was delivered' },
   { id: 'js/app.js:openKitchen', sites: 2, undriven: 'awardCapped on a served dish (driven above), plus a coin-priced forage' },
 
