@@ -2,6 +2,8 @@
 // Run from the target checkout: node /tmp/r1-proof/r1-browser-audit.mjs http://127.0.0.1:PORT/
 // Serve precisely that checkout. Repeat against a throwaway pre-fix copy for red.
 import assert from 'node:assert/strict';
+import { shotDir } from './godmode.js';
+import { auditOutputPath } from './lib/audit-output.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -9,7 +11,10 @@ const base=process.argv[2];
 assert(base && ['127.0.0.1','localhost','[::1]'].includes(new URL(base).hostname),'explicit local checkout URL required');
 const {boot,seed,sleep,setWidth,dismissOverlays}=await import(pathToFileURL(path.resolve('tests/godmode.js')));
 const {browser,page,errors}=await boot(base);
-const shots=path.resolve(process.argv[3]||'/tmp/r1-proof/browser');fs.mkdirSync(shots,{recursive:true});
+/* Never write inside the checkout being graded: guard-hygiene's OUTPUT row
+   forbids it, and running the Today suite once dirtied a real checkout.
+   shotDir() owns that destination. 2026-09-08. */
+const shots = shotDir('paddock-pack');
 let failures=0, checks=0;
 const row=async(name,fn)=>{checks++;try{console.log('PASS '+name+' '+await fn());}catch(e){failures++;console.log('FAIL '+name+' '+e.message);}};
 const click=async selector=>{await page.waitForSelector(selector,{visible:true});await page.click(selector);await sleep(900);};
@@ -95,7 +100,7 @@ try {
       },selected);
       assert(states.visible&&states.eq.includes('OUT WITH YOU')&&states.breed.includes('BREEDING'),JSON.stringify(states));return JSON.stringify(states);
     });
-    await page.screenshot({path:path.join(shots,`paddock-${width}x${height}.png`)});
+    await page.screenshot({path:auditOutputPath(path.join(shots,`paddock-${width}x${height}.png`))});
     await close();
     // This is intentionally still red pending the Kennel lane's R44-21 fix.
     await page.$eval('#kennelBtn',el=>el.scrollIntoView({block:'center',behavior:'instant'}));await click('#kennelBtn');
@@ -112,7 +117,7 @@ try {
       });
       assert(m.belowFold<=0&&m.lost===0,JSON.stringify(m));return JSON.stringify(m);
     });
-    await page.screenshot({path:path.join(shots,`kennel-${width}x${height}.png`)});await close();await close();
+    await page.screenshot({path:auditOutputPath(path.join(shots,`kennel-${width}x${height}.png`))});await close();await close();
   }
   await row('runtime errors',()=>{assert.equal(errors.length,0,JSON.stringify(errors));return '0';});
 } finally {await browser.close();}
