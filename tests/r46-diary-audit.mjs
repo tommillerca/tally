@@ -12,6 +12,7 @@ import vm from 'node:vm';
 const root = process.argv[2] || fileURLToPath(new URL('..', import.meta.url));
 const app = readFileSync(`${root}/js/app.js`, 'utf8');
 const nutrition = await import(pathToFileURL(`${root}/js/nutrition.js`));
+const { streakDateSet } = await import(pathToFileURL(`${root}/js/game.js`));
 const today = '2026-09-07';
 const dateKey = d => d ? nutrition.dateKey(d) : today;
 function fn(name) {
@@ -46,6 +47,7 @@ function mealContext() {
 const mk = (id, date, kcal, meal = 0) => ({id, date, kcal, meal, name: id, p: 10, c: 20, f: 5, ts: 1});
 async function trends(log, health = []) {
   const c = load(['shownTotals','loggedAvg'], {
+    streakDateSet,
     db: {all: async store => store === 'log' ? log : store === 'health' ? health : []},
     totalXp: async () => 0, levelFor: () => ({level: 1, name: 'Bones', need: 100, into: 0, pct: 0}),
     earnedBadgeIds: async () => [], stepAvgWithToday: () => ({avg: 0, partial: false}),
@@ -73,10 +75,10 @@ await check('R46-7 zero-calorie row counts: 6/7 logged, streak 9; deletion gives
   const empty = await trends([]);
   assert.match(empty, /0<small>\/7<\/small>/);
   assert.match(empty, /·<\/span><span class="d">avg kcal/);
-  // Preserve the existing activity-streak rule; walking is not food logging.
+  // Tom's row rule: walking alone is not food logging or a paying streak day.
   const walked = await trends([], [{date: today, steps: 3000}]);
   assert.match(walked, /0<small>\/7<\/small>/);
-  assert.match(walked, /1<small><\/small>/);
+  assert.match(walked, /0<small><\/small>/);
 });
 await check('R46-8 Add and Today both show 1668 left after 872 displayed kcal', async () => {
   const entries = [174.6, 174.6, 174.6, 174.6, 171.6].map((kcal, i) => mk(`budget-${i}`, today, kcal));

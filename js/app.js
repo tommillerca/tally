@@ -5,7 +5,7 @@ import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
 import {
-  levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews, habitGrantCard,
+  levelFor, totalXp, streakDateSet, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews, habitGrantCard,
   initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, retireGardenIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
   awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats, claimSpar, sparBoardState,
@@ -11233,20 +11233,10 @@ async function renderTrends(el) {
   const kmWk = stepsWk * 0.000762;
   const sleepWk = days7.filter(d => d.sleepHours != null);
   const avgSleep = sleepWk.length ? sleepWk.reduce((a, d) => a + d.sleepHours, 0) / sleepWk.length : null;
-  /* THE WHOLE HISTORY, NOT THE HEATMAP'S WINDOW. This counted backwards through
-     `days`, which is the 56-day heatmap slice, so every streak of 56 or more
-     rendered as exactly 56 forever: a verified 400-day run displayed 56. It is
-     the one number a long-term player is proudest of, and it was capped by an
-     array length that has nothing to do with streaks.
-     `log` and `health` are already the FULL stores here, so the set costs
-     nothing extra. streakFrom (js/nutrition.js) brings the same one-day grace
-     the loop hand-rolled: a day with no log YET is a streak waiting on today,
-     not a broken one, which is why this pill no longer reads 0 every morning
-     or all day after a westbound timezone hop.
-     Display only: streak milestone payouts still come off streakFrom in
-     js/game.js and are untouched. */
-  const activeDates = new Set(log.map(e => e.date));
-  for (const h of health) if ((h.steps || 0) >= 3000) activeDates.add(h.date);   // a walked day counts, as it always has here
+  /* Use the paying engine's full-history dates, including zero-calorie rows
+     and its legacy freeze protection. Walking alone is not a food log.
+     streakFrom retains yesterday's streak while today is still empty. */
+  const activeDates = streakDateSet(log, await db.all('xp'));
   const streak = streakFrom([...activeDates], dateKey());
   const streakGraced = streak > 0 && !activeDates.has(dateKey());
 
