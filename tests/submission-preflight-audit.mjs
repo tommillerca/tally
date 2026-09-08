@@ -1,10 +1,11 @@
 /* PROVES native/submission-preflight.mjs GOES RED.
  *
  * The preflight is the only thing standing between a store archive and Apple,
- * and a guard that cannot fail is not a guard. Each of its three failure modes
+ * and a guard that cannot fail is not a guard. Each of its four failure modes
  * is driven here against a real invocation, plus the healthy case as a control,
  * so a preflight that silently stopped checking would be caught.
  */
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readdirSync, symlinkSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -27,12 +28,14 @@ const island = [
 const bundle = (flag, extra = '') =>
   `const STORE_BUILD = ${flag};\n${island}\n${extra}\n`;
 
-function run(slug, name, { app, config }, wantExit, wantText) {
+function run(slug, name, { app, config, marker }, wantExit, wantText) {
   const appPath = path.join(dir, `${slug}.js`);
   const cfgPath = path.join(dir, `${slug}.json`);
   writeFileSync(appPath, app);
   writeFileSync(cfgPath, JSON.stringify(config));
-  const r = spawnSync(process.execPath, [PREFLIGHT, appPath, cfgPath], { encoding: 'utf8' });
+  const markerPath = path.join(dir, `${slug}-submission.json`);
+  writeFileSync(markerPath, JSON.stringify(marker ?? { kind: 'submission', appSha256: createHash('sha256').update(app).digest('hex') }));
+  const r = spawnSync(process.execPath, [PREFLIGHT, appPath, cfgPath, markerPath], { encoding: 'utf8' });
   const out = `${r.stdout}${r.stderr}`;
   const ok = r.status === wantExit && (!wantText || out.includes(wantText));
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}  exit ${r.status} (want ${wantExit})  ${out.trim().split('\n')[0] || ''}`);
@@ -41,6 +44,10 @@ function run(slug, name, { app, config }, wantExit, wantText) {
 
 run('healthy', 'HEALTHY  a correct store bundle passes',
   { app: bundle('true'), config: { appId: 'com.boneheadz.gym' } }, 0);
+
+run('wrong-marker', 'MARKER   internal channel is refused even with a correct hash',
+  { app: bundle('true'), config: {}, marker: { kind: 'internal', appSha256: createHash('sha256').update(bundle('true')).digest('hex') } },
+  1, 'submission marker missing, wrong channel');
 
 run('flag', 'FLAG     a bundle built without STORE_BUILD=1 is refused',
   { app: bundle('false'), config: { appId: 'com.boneheadz.gym' } }, 1, 'does not declare STORE_BUILD = true');
@@ -86,4 +93,4 @@ coverage('unregistered runnable refused', 1, 'unregistered-store-fixture.mjs');
 
 rmSync(dir, { recursive: true, force: true });
 if (failures.length) { console.error(`\nsubmission-preflight: ${failures.length} FAILED`); process.exit(1); }
-console.log('\nsubmission preflight: refuses all three, passes the control');
+console.log('\nsubmission preflight: refuses marker, flag, server and copy defects; passes the control');
