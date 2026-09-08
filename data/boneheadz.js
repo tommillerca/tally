@@ -2030,7 +2030,11 @@ BH_ITEMS_ALL.push(...FOOTBALL_ITEMS);
 export const BH_ITEMS = BH_ITEMS_ALL.filter(i => !i.unreleased);
 export const BH_ITEMS_WITH_UNRELEASED = BH_ITEMS_ALL;
 export const BH_BY_ID = Object.fromEntries(BH_ITEMS_ALL.map(i => [i.id, i]));
-export function bhAsset(item) { return item.file || `assets/bh/${item.slot}/${item.id}.png`; }
+export function bhAsset(item) {
+  // An unresolved catalogue lookup must still yield drawable placeholder art.
+  if (!item) return 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2264%22 height=%2264%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%228%22 fill=%22%232b2933%22/%3E%3Ctext x=%2232%22 y=%2244%22 text-anchor=%22middle%22 font-size=%2240%22 fill=%22%23bbb6c9%22%3E%3F%3C/text%3E%3C/svg%3E';
+  return item.file || `assets/bh/${item.slot}/${item.id}.png`;
+}
 
 /* ================= WHICH ITEMS ARE THE SAME DRAWING =================
  *
