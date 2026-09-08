@@ -4,6 +4,12 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 520, date: '2026-09-08', title: 'The app notices when Apple Health stops', items: [
+    'Apple Health could stop sending your steps and nothing would say so, which meant your walking quietly stopped counting. There was already a warning built for exactly this, and it could never fire: a failed read arrived looking like a real day of zero steps, so the app kept marking the connection healthy. It can tell the difference now.',
+    'Breeding tells you why it is locked and how far off the unlock is, instead of just refusing.',
+    'A day you logged is a day you logged. The streak, the days-logged count and the reward engine now agree on that, so deleting one item cannot move one of them and not the others.',
+  ] },
+
   { n: 519, date: '2026-09-08', title: 'Your pet helps, it does not win the fight for you', items: [
     'A trained pet had stopped being an advantage and started being the whole fight: on the hardest rungs it turned a near-certain loss into a near-certain win. Pets still help a lot, and they no longer decide the fight before it starts.',
     'A fight with no pet is completely unchanged. This only touches what a pet contributes.',
