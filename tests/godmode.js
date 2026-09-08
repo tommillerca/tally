@@ -687,15 +687,20 @@ export async function boot(base, opts = {}) {
     const page = await browser.newPage();
     if (dpr != null) {
       const setViewport = page.setViewport.bind(page);
+      /* Puppeteer 24 removed the page.viewport() METHOD, so reading it threw
+         "page.viewport is not a function" and took every DPR-aware caller down
+         with it. Track the last applied viewport here instead. 2026-09-08. */
+      let current = launchOpts.defaultViewport || null;
       page.setViewport = async viewport => {
-        const current = page.viewport();
-        await setViewport({ ...viewport, deviceScaleFactor: dpr,
+        const next = { ...viewport, deviceScaleFactor: dpr,
           isMobile: viewport.isMobile ?? current?.isMobile ?? true,
-          hasTouch: viewport.hasTouch ?? current?.hasTouch ?? true });
+          hasTouch: viewport.hasTouch ?? current?.hasTouch ?? true };
+        await setViewport(next);
+        current = next;
         const actual = await page.evaluate(() => window.devicePixelRatio);
         if (actual !== dpr) throw new Error(`DPR override requested ${dpr}, page reports ${actual}`);
       };
-      const viewport = page.viewport();
+      const viewport = current;
       await page.setViewport({ ...viewport,
         isMobile: viewport?.isMobile ?? true, hasTouch: viewport?.hasTouch ?? true });
       console.log(`DPR OVERRIDE ${dpr} verified: boot and subsequent viewport changes`);
@@ -974,7 +979,7 @@ export async function settle(page, ms = 250) {
  * direct setViewport call states both keys.
  */
 // Preserve the current DPR on resize; an explicit boot override remains in force.
-export async function setWidth(page, width, height = 932, deviceScaleFactor = page.viewport()?.deviceScaleFactor ?? 2) {
+export async function setWidth(page, width, height = 932, deviceScaleFactor = 2) {
   await page.setViewport({ width, height, deviceScaleFactor, isMobile: true, hasTouch: true });
 }
 
