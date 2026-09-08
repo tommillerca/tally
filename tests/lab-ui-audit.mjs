@@ -1,16 +1,16 @@
 // Frozen BUILD 2b, 2026-09-08. Production UI renderers, no browser or sockets.
 // Each group has a nonempty CONTROL and a deliberately faulty variant.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import vm from 'node:vm';
-import { MORPHS, MORPH_LABEL, ownedPairs, ownedCellCount, petLevel, isMorph } from '../js/pets.js';
+import { MORPHS, MORPH_LABEL, ownedPairs, ownedCellCount, petLevel, isMorph, morphAsset } from '../js/pets.js';
 import { eggProgress } from '../js/loot.js';
 import { BH_BY_ID } from '../data/boneheadz.js';
 const source = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../app.css', import.meta.url), 'utf8');
 const pure = source.split('// LAB UI PURE BEGIN:')[1].split('\n').slice(1).join('\n').split('// LAB UI PURE END')[0];
 assert.ok(pure.length > 1000, 'CONTROL nonempty production renderers');
-const context = vm.createContext({ MORPHS, MORPH_LABEL, BH_BY_ID, KENNEL_SPECIES: ['C1','C2','C3','C4','C5','C6'].map(id => BH_BY_ID[id]), esc: x => String(x).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'), petSpriteHtml: (sp, px, ground, opts) => { assert.equal(typeof ground, 'boolean'); assert.equal(opts.shiny, false); assert.equal(opts.wear, null); return `<img src="${sp}-${opts.morph}.png" width="${px}">`; } });
+const context = vm.createContext({ MORPHS, MORPH_LABEL, BH_BY_ID, KENNEL_SPECIES: ['C1','C2','C3','C4','C5','C6'].map(id => BH_BY_ID[id]), esc: x => String(x).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'), morphSwatch: morph => ({ base: 'var(--text)', ember: '#f0763a', frost: '#5fb8ec', toxic: '#8fd23c', rose: '#e878a5', midnight: '#6b4fc4' })[morph], petPortraitHtml: (sp, px, shiny, opts) => { assert.equal(typeof shiny, 'boolean'); assert.equal(opts.wear, null); assert.equal(opts.thumb, true); return `<img data-portrait data-shiny="${shiny}" src="${sp}-${opts.morph}.png" width="${px}">`; }, petSpriteHtml: (sp, px, ground, opts) => { assert.equal(typeof ground, 'boolean'); assert.equal(opts.shiny, false); assert.equal(opts.wear, null); return `<img src="${sp}-${opts.morph}.png" width="${px}">`; } });
 vm.runInContext(pure, context);
 const ui = context;
 let passed = 0;
@@ -21,8 +21,80 @@ const state = (extra = {}) => ({ status: 'ready', used: 0, capacity: 1, remainin
 const quote = (extra = {}) => ({ opId: 'experiment-control', recipe: 'toxic-rose', species: 'C1', inputs: [pet('a','toxic'),pet('b','rose')], distribution: [{ morph: 'midnight', weight: 4 }], protection: 'none', branches: [{ morph: 'midnight', lost: ['C1|toxic','C1|rose'], gained: ['C1|midnight'], afterCount: 1, counts: [{ cell: 'C1|toxic', before: 1, after: 0 }, { cell: 'C1|rose', before: 1, after: 0 }, { cell: 'C1|midnight', before: 0, after: 1 }] }], salvageDust: 20, result: { iid: 'new', morph: 'midnight' }, ...extra });
 await check('bench has all three paths, empty slots, progress and every sink', () => {
   const html = ui.labBenchHtml(state(), [null,null], '');
-  const grade = h => { assert.equal((h.match(/data-recipe=/g)||[]).length, 3); assert.match(h,/Choose input 1/); assert.match(h,/Choose input 2/); assert.match(h,/data-lab-review disabled/); assert.match(h,/1\/36/); for (const dest of ['collection','eggs','melt','breed']) assert.match(h,new RegExp(`data-lab-nav="${dest}"`)); assert.match(h,/Melting clears the pile. Breeding builds strength. The Laboratory builds the collection./); assert.match(h,/1,250\/8,000 steps/); };
+  const grade = h => { assert.equal((h.match(/data-recipe=/g)||[]).length, 3); assert.match(h,/Choose first pet/); assert.match(h,/Choose second pet/); assert.match(h,/data-lab-review disabled/); assert.match(h,/1 of 36 colours/); for (const dest of ['collection','eggs','melt','breed']) assert.match(h,new RegExp(`data-lab-nav="${dest}"`)); assert.match(h,/Melting clears the pile. Breeding builds strength. The Laboratory builds the collection./); assert.match(h,/1,250\/8,000 steps/); };
   rejectsMutation(html, html.replace('data-recipe="toxic-rose"','removed'), grade);
+});
+await check('entry portraits precede odds and ledger, and native choices retain pet identity', () => {
+  const html = ui.labBenchHtml(state(), [null,null], '');
+  const grade = h => {
+    assert.equal((h.match(/data-portrait/g) || []).length, 6);
+    assert.equal((h.match(/type="radio" name="labSpecies"/g) || []).length, 6);
+    assert.doesNotMatch(h, / checked|Six Rose colours added/);
+    const art = h.indexOf('data-portrait'), odds = h.indexOf('class="lab-odds"');
+    assert.ok(art >= 0 && odds > art && h.indexOf('class="lab-clock"') > art);
+    for (let i = 1; i <= 6; i++) assert.match(h, new RegExp(`C${i}-base.png" width="144"`));
+    assert.match(h, /Not collected/);
+  };
+  rejectsMutation(html, html.replaceAll('data-portrait', 'missing-portrait'), grade);
+  rejectsMutation(html, '<p class="lab-odds">50%</p>' + html, grade);
+  const selected = ui.labBenchHtml(state(), [null,null], 'C1');
+  for (const morph of MORPHS) assert.match(selected, new RegExp(`C1-${morph}.png" width="144"`));
+  assert.match(selected, /Colour previews. Choose your own pets below/);
+  assert.match(selected, /✓ Selected/);
+  assert.ok(selected.indexOf('Colour previews') < selected.indexOf('class="lab-odds"'));
+  assert.match(css, /lab-species-choice input:focus-visible[^}]+outline: 2px solid var\(--accent\)/);
+});
+await check('exactly one lime next action follows selection, with no automatic pet choice', () => {
+  const cases = [
+    ['', [null,null], state(), 'data-lab-choose-species'],
+    ['C1', [null,null], state(), 'data-lab-slot="0"'],
+    ['C1', ['a',null], state(), 'data-lab-slot="1"'],
+    ['C1', [null,'b'], state(), 'data-lab-slot="0"'],
+    ['C1', ['a','b'], state(), 'data-lab-review'],
+    ['C1', ['a','b'], state({ remaining: 0 }), 'data-lab-nav="collection"'],
+    ['C1', [null,null], state({ status: 'unavailable' }), 'data-lab-nav="collection"'],
+    ['C1', ['a','b'], state({ pets: [pet('a'),pet('b','rose')] }), 'data-lab-slot="0"'],
+  ];
+  for (const [sp, pair, snapshot, target] of cases) {
+    const html = ui.labBenchHtml(snapshot, pair, sp);
+    const grade = h => {
+      const actions = h.match(/<button[^>]*class="[^"]*\blab-next\b[^"]*"[^>]*>/g) || [];
+      assert.equal(actions.length, 1);
+      assert.ok(actions[0].includes(target));
+      assert.doesNotMatch(actions[0], /disabled/);
+    };
+    rejectsMutation(html, html.replace('lab-next', 'ghost'), grade);
+    rejectsMutation(html, html + '<button class="lab-next">Extra</button>', grade);
+  }
+  rejectsMutation(css, css.replace('.lab-room .lab-next { background: var(--accent)', '.lab-room .lab-next { background: var(--surface)'), h => assert.match(h, /\.lab-room \.lab-next \{ background: var\(--accent\); color: var\(--accent-ink\)/));
+});
+await check('recipe progression uses engine distributions and preserves certain Midnight', () => {
+  const snapshot = state({ species: { C1: { recipes: { 'base-base': { distribution: [{ morph: 'frost', weight: 22 }], protection: 'collection', shortage: 'Need another Base pet.' }, 'ember-frost': { distribution: [{ morph: 'toxic', weight: 3 }, { morph: 'rose', weight: 1 }], protection: 'none' } } } } });
+  const html = ui.labRecipesHtml(snapshot, 'C1');
+  const grade = h => {
+    assert.ok(h.indexOf('data-recipe="base-base"') < h.indexOf('data-recipe="ember-frost"'));
+    assert.ok(h.indexOf('data-recipe="ember-frost"') < h.indexOf('data-recipe="toxic-rose"'));
+    for (const text of ['Make Frost. Guaranteed.', '100% Frost', 'Missing colours come first.', 'Need another Base pet.', '75% Toxic', '25% Rose', 'Make Midnight. Guaranteed.', '100% Midnight']) assert.ok(h.includes(text), text);
+    assert.doesNotMatch(h, /50%|roulette/);
+  };
+  rejectsMutation(html, html.replace('100% Midnight', '50% Midnight'), grade);
+  assert.match(ui.labRecipesHtml(state(), ''), /Example odds. Choose a species to see your chances./);
+  const counts = ui.labRecipesHtml(state(), 'C1');
+  rejectsMutation(counts, counts.replace('Have 2 spare Base pets', 'Have 0 spare Base pets'), h => { assert.match(h, /Have 2 spare Base pets. Need 2 Base pets/); assert.match(h, /Have \? spare Ember pets/); });
+});
+await check('all 36 preview files use the shipped morph resolver and suppress shiny and wear', () => {
+  const helper = source.slice(source.indexOf('function petPortraitHtml('), source.indexOf('async function refreshShinyPets'));
+  const portrait = Function('morphAsset', 'BH_BY_ID', 'bhAsset', 'croppedPetImg', `${helper}; return petPortraitHtml;`)(morphAsset, BH_BY_ID, p => `assets/bh/C/${p.id}.png`, (sp, px, ground, src, wear, thumb) => ({ sp, px, ground, src, wear, thumb }));
+  const paths = [];
+  for (let i = 1; i <= 6; i++) for (const morph of MORPHS) {
+    const sp = `C${i}`, art = portrait(sp, 144, false, { morph, wear: null, thumb: true });
+    assert.equal(art.src, morph === 'base' ? `assets/bh/C/${sp}.png` : morphAsset(sp, morph));
+    assert.ok(existsSync(new URL('../' + art.src, import.meta.url)), art.src);
+    assert.equal(art.wear, null); assert.equal(art.thumb, true); assert.equal(art.px, 144); paths.push(art.src);
+  }
+  rejectsMutation(paths, paths.slice(1), value => assert.equal(new Set(value).size, 36));
+  const shiny = ui.labPickerHtml(state({ pets: [pet('shiny', 'base', { shiny: true, eligible: false, reason: 'Shiny pets cannot be used here.' })] }), [null,null], 0);
+  rejectsMutation(shiny, shiny.replace('data-shiny="true"', 'data-shiny="false"'), h => { assert.match(h, /data-shiny="true"/); assert.match(h, /Shiny pets cannot be used here/); });
 });
 await check('empty and no-pair states are neutral and still explain eggs', () => {
   for (const [s, text] of [[state({ pets: [], hasEligiblePair: false, hasSafePair: false }), 'Hatch eggs to discover species. The recipe path is here when you have a pair.'],[state({ hasEligiblePair: false, hasSafePair: false }), 'Your pets do not match a recipe yet. Hatch eggs to discover species and build matching pairs.']]) {
@@ -45,8 +117,9 @@ await check('picker never selects a pet and trained ordinary partners stay selec
 await check('confirmation names every investment and exact pair-wide cell loss', () => {
   const q = quote({ inputs: [pet('a','toxic',{ nickname: '<Bite>', bankedSteps: 82001, level: 10, lineage: 4, bond: 3, talents: ['Fang'], equipped: true }),pet('b','rose',{ bankedSteps: 731, level: 1 })] });
   const html = ui.labConfirmationHtml(q);
-  const grade = h => { for (const text of ['&lt;Bite&gt;','level 10, 82,001 banked training steps','level 1, 731 banked training steps','lineage 4 and bond 3/5','Fang','Non-shiny','equipped pet','Type ANIMATE','Toxic','Rose','Midnight','Collection after: 1/36','20 Bone Dust','Animate pays no dust']) assert.ok(h.includes(text),text); assert.doesNotMatch(h,/<Bite>/); };
+  const grade = h => { for (const text of ['&lt;Bite&gt;','level 10, 82,001 banked training steps','level 1, 731 banked training steps','lineage 4 and bond 3/5','Fang','Non-shiny','equipped pet','Type ANIMATE','Toxic','Rose','Midnight','Collection after: 1/36','20 Bone Dust','Animate pays no dust','Both pets are permanently consumed.','will be destroyed:','The name &lt;Bite&gt; is removed with this pet.','This cannot be undone. Type ANIMATE to destroy both pets and create one new pet.']) assert.ok(h.includes(text),text); assert.doesNotMatch(h,/<Bite>/); };
   rejectsMutation(html,html.replace('82,001','82,000').replace('82,001','82,000'),grade);
+  rejectsMutation(html,html.replaceAll('will be destroyed:', 'will be changed:'),grade);
   assert.equal(ui.labNeedsTyped(q),true);
   assert.equal(ui.labNeedsTyped(quote({ branches: [{ morph: 'midnight', lost: [], gained: [], afterCount: 3 }] })),false);
   for (const extra of [{ bankedSteps: 1 },{ level: 2 },{ nickname: 'N' },{ lineage: 1 },{ bond: 1 },{ talents: ['Fang'] },{ equipped: true }]) assert.equal(ui.labNeedsTyped(quote({ inputs: [pet('a','toxic',extra),pet('b','rose')],branches: [{ lost: [] }] })),true);

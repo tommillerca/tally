@@ -144,7 +144,7 @@ console.log('PASS CONTROL: durable intent blocks submissions, recovery confirms 
 // counts.map call which fails if durable branch maps leak through unchanged.
 const pure=app.split('// LAB UI PURE BEGIN:')[1].split('\n').slice(1).join('\n').split('// LAB UI PURE END')[0];
 const ui=vm.createContext({MORPHS,MORPH_LABEL,BH_BY_ID,KENNEL_SPECIES:['C1','C2','C3','C4','C5','C6'].map(id=>BH_BY_ID[id]),
-  esc:x=>String(x).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),petSpriteHtml:()=>'<img>'});
+  esc:x=>String(x).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),petSpriteHtml:()=>'<img>',petPortraitHtml:()=>'<img data-portrait>',morphSwatch:()=> 'var(--text)'});
 vm.runInContext(pure,ui);
 assert.equal(ui.labQuoteSupported(q.quote),true);
 assert.match(ui.labConfirmationHtml(q.quote),/C|Ember|Frost/);
