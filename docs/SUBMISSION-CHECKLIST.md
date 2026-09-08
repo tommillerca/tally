@@ -1,178 +1,228 @@
-# First App Store submission: WAVE checklist
+# First App Store submission: M4 checklist
 
-Audited 2026-09-07 against this checkout and the Apple pages linked below.
-**Not ready for submission. The bundled iOS binary has never been built or
-booted, according to the frozen work order. This pass did neither.** Node
-fixtures prove build-script decisions, not WKWebView operation, signing, upload,
-or acceptance. Historical release/ASC statements below are explicitly attributed,
-not fresh remote observations. This is the single current checklist; older
-submission packs are source material, not instructions to paste verbatim.
+Audited 2026-09-07 against this checkout and the linked Apple documentation.
+**The submittable binary has never existed, according to the frozen work order.
+No store binary was built or booted in this audit.** Web file copying and Node
+fixtures do not establish WKWebView operation, signing, upload or acceptance.
 
-Owner **me** means the implementation lane. **Tom** means the person responsible
-for the remaining decision, external action, or device proof. Done means only
-what the evidence column establishes. Time estimates are hands-on estimates,
-exclude Apple review/processing, and grow if device testing finds defects.
+The earlier WAVE checklist was rechecked, not treated as evidence. All source
+paths below are relative to this checkout; line numbers identify the inspected
+revision. Historical claims are attributed to the plan or a named document.
+ASC state, deployed pages, credentials and the Worker were not queried.
+Tom owns every unchecked action below. Estimates are hands-on planning estimates,
+exclude installation/download delays and Apple processing, and exclude fixes
+unless expressly included.
 
-## Requirements and evidence
+## First-build findings
 
-| Item / actual requirement | Done? | Evidence and remaining work | Owner |
-|---|---|---|---|
-| Explicit submission intent and identifiable artifacts | Yes, script/fixture scope | `native/build-ios.sh` refuses unset, empty and invalid SUBMISSION before side effects. `1` selects submission; `0` preserves internal remote-shell testing. Separate `ios/App/build/submission/` and `ios/App/build/internal/` archive/export paths. `tests/submission-build-audit.mjs` exercises the script using fixture executables. | me |
-| Bundled code and store copy, [Review 2.2, 2.5.2](https://developer.apple.com/app-store/review/guidelines/) | Source guard done; binary unknown | `build-store.sh` builds STORE_BUILD=true, removes the server key and writes `www/submission.json` with the app.js SHA256. Preflight checks copied `ios/App/App/public` and the archived `App.app`, including marker, flag, config and reachable beta literals. `tests/store-copy-lint.mjs`, `tests/submission-preflight-audit.mjs`, `tests/submission-build-audit.mjs`. | me |
-| Working binary, [Review 2.1 and 4.2](https://developer.apple.com/app-store/review/guidelines/) | No | No native boot evidence. `index.html` imports the game; `HealthPlugin.swift` and `BhVault.swift` provide native functionality. See the concrete runtime findings and Tom's acceptance sequence below. A static-server render would not prove local-scheme compatibility or review acceptance. | Tom |
-| Current build SDK | Unknown | Apple requires Xcode 26+ and iOS 26 SDK+ for uploads since April 28, 2026. `project.pbxproj` uses SDKROOT=iphoneos and deployment target 15.0; deployment target does not establish build SDK. No Xcode inspection was run. [SDK requirement](https://developer.apple.com/news/upcoming-requirements/). | Tom |
-| Build dependencies, signing and export inputs | No in this checkout | `native/node_modules` and `native/build/exportOptions.plist` are absent. `CapApp-SPM/Package.swift` references native node_modules. Restore/install dependencies and supply a reviewed export options plist before running the upload script. Team, provisioning and signing validity need Tom's check. No secrets were read. | Tom |
-| ASC credentials / upload history | Established historically; validity today untested | Frozen plan says the key exists and builds have been uploaded. Key/issuer identifiers are wired in `native/build-ios.sh`. Prior checklist reported builds 11-20 on 2026-09-07; this pass did not query ASC or verify that list. Do not regenerate a key merely because `TESTFLIGHT.md` calls it the blocker. | Tom |
-| Privacy link and location permission text, [Review 5.1.1(i)](https://developer.apple.com/app-store/review/guidelines/) | Source done; new binary interaction unknown | Frozen plan records the v505 rejection closure. `js/app.js` Settings `privacyBtn` is ungated and relative; `build-www.sh` copies `privacy.html`; `Info.plist` has the revised location explanation. Tom must open the link in the installed store bundle. This does not certify the rest of the policy's accuracy. | Tom |
-| Functional support contact | No | `support.html` sends users to an unpublished listing for a nonexistent address; `privacy.html` repeats that loop. Publish a working address directly on both pages and test delivery. `support.html` also links `/privacy.html`, which resolves outside `/tally/` on the hosted site. Change to `privacy.html`. Both files are outside this lane. [Apple support/contact requirement](https://developer.apple.com/app-store/review/). | Tom |
-| App Privacy answers: all collected data and linkage | No | `TESTFLIGHT.md` says no collection; `docs/ASC-SUBMISSION.md` says all categories are unlinked. Both conflict with the paths below. Apple's definition includes linkage via device or account, not just a legal name. Tom must enter corrected types, purposes and linkage. [App Privacy definitions](https://developer.apple.com/app-store/app-privacy-details/). | Tom |
-| Permission purposes, HealthKit, denial paths | Source present; device proof no | `Info.plist` declares camera, photo, health, location and motion purposes. `App.entitlements` enables HealthKit. `HealthPlugin.swift` registers reads; sample writes are DEBUG-only and reject in Release. `BoneheadzViewController.swift` registers Health and BhVault. Test grant, deny, revoke and reopen on device. Review health/privacy wording against the public weekly steps path below. [Review 5.1.3](https://developer.apple.com/app-store/review/guidelines/). | Tom |
-| Fitness and nutrition claims, [Review 1.4](https://developer.apple.com/app-store/review/guidelines/) | Not fully verified | App food/target/health code and TESTFLIGHT marketing describe lifestyle tracking. Tom must verify calculations, source attribution, permission-denied behavior and accuracy of health claims in the installed version. The old pack's blanket assertion that every mode has an equivalent non-Health path needs operation, not repetition. | Tom |
-| Privacy manifests and required-reason APIs | Unknown | No tracked `PrivacyInfo.xcprivacy` exists under `native/ios`; dependency installation/SwiftPM resolution and archive inspection were not performed. This alone does not prove the archive lacks SDK manifests. Inspect the final privacy report, SDK manifests and applicable API reasons; fix genuine omissions. [Apple privacy manifests](https://developer.apple.com/documentation/bundleresources/privacy-manifest-files). | Tom |
-| In-app account deletion, [Review 5.1.1(v)](https://developer.apple.com/app-store/review/guidelines/) | Source present; live end-to-end no | Settings `delAcctBtn` / confirmation handler calls `social.deleteAccount()`; `server/src/index.js` `/account/delete` cascades records. Test typed DELETE, server removal, local wipe and keychain behavior using a disposable account. The separate local Erase is not this proof. | Tom |
-| Backend available during review | No current proof | `server/migrations/2026-09-05-week-freeze.sql` adds `last_week_key` and `last_week_steps`; `/profile` and `/steps/week` use them. Handoff says pending. Apply/verify migration before matching Worker deploy, then prove profile and week settlement. The earlier prev-names migration is recorded as applied, not reverified. [Review preparation](https://developer.apple.com/app-store/review/). | Tom |
-| Device family | Undecided | Both target configurations still have TARGETED_DEVICE_FAMILY="1,2". iPad UI has no proof. Choose iPhone-only or test and support iPad before capture. No project setting changed. | Tom |
-| Screenshots | No store set verified | Apple allows 1-10 JPEG/PNG screenshots, with no alpha. Supply the required iPhone size set and iPad set if applicable. Exact capture sizes below supersede old 6.1/6.7 and 10.9-inch instructions. [Screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/). | Tom |
-| Store icon | Source asset done; archive validation no | `Assets.xcassets/AppIcon.appiconset/Contents.json` references AppIcon-512@2x.png. PNG IHDR measured 1024x1024, 8-bit RGB (color type 2, no alpha); confirm asset-catalog processing and final appearance in the archive. | Tom |
-| Metadata and review access, [Review 2.3](https://developer.apple.com/app-store/review/guidelines/) | No | TESTFLIGHT subtitle/promo/keywords exist, but description/privacy answers/support URL need corrections. Old review notes name Home/Pit/Shop tabs, while `index.html` names Today/Boneyard/Crew/Bonehead. Rewrite navigation from the actual installed build and explain onboarding, optional Health, online review paths and deletion. Provide working reviewer contact and any resources needed to reach gated features. | Tom |
-| Age rating and content descriptors | No current ASC proof | Preserve Tom's tobacco content and infrequent/mild descriptors, including Rollie, Last Cigarette and Fat Cigar. The frozen 12+ wording cannot be treated as a selectable universal current rating: Apple's iOS 26 values include 13+ for infrequent tobacco references. Fill the current questionnaire truthfully; preserve legacy rating treatment where applicable. Do not rename content or lower descriptors. [Age ratings](https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions/). | Tom |
-| Gambling, loot and payments | Source reviewed; final UI no | Current crates/items use earned game currency; no StoreKit dependency or real-money purchase integration found in the reviewed app/native sources. `crateOdds()` disclosure is present. The old pack contradicts itself on simulated gambling: earned random loot is not by itself casino wagering. Answer separate loot-box and gambling questions based on actual mechanics. No paid-subscription EULA/paywall flow was found. [Review 3.1.1](https://developer.apple.com/app-store/review/guidelines/). | Tom |
-| Public content and moderation | Source constraints present; confirm scope | `js/names.js` and server curated-name validation build public names from indices; friend nicknames are local (`js/social.js`); survey/report free text is sent privately to the developer (`js/analytics.js`). No general public chat path found in these sources. Verify all shared surfaces remain within these constraints; if public free text is exposed, filtering/report/block/contact obligations apply. [Review 1.2](https://developer.apple.com/app-store/review/guidelines/). | Tom |
-| EULA choice | No Tom confirmation | No app Terms/EULA page found. Apple applies its standard EULA when no custom one is supplied; absence of a custom Terms page alone is not a free-app blocker. Confirm that choice in ASC App Information and record it in review preparation. Do not create legal terms silently. [Apple standard/custom EULA behavior](https://developer.apple.com/help/app-store-connect/manage-app-information/provide-a-custom-license-agreement/). | Tom |
-| Export compliance | Declaration present; determination unconfirmed | Info.plist sets ITSAppUsesNonExemptEncryption=false. `js/social.js` uses WebCrypto ECDSA, AES-GCM and PBKDF2. Standard algorithms alone do not establish the old pack's claimed statutory exemption. Assess use of OS-provided encryption and answer Apple's questionnaire for this binary/territories. [Apple export compliance](https://developer.apple.com/help/app-store-connect/manage-app-information/overview-of-export-compliance). | Tom |
-| Rights, territories, agreements and release controls | Unknown in ASC | Settings lists asset/font/data attributions. Tom must confirm distribution rights for art/music/fonts, app categories, pricing, territories, copyright, developer agreements and current EU trader status if distributing there. No ASC state was read. [Review 5.2](https://developer.apple.com/app-store/review/guidelines/), [EU trader requirement](https://developer.apple.com/news/upcoming-requirements/). | Tom |
-| Final build selection / review submission | No | Select the exact tested submission build, with recorded build number and artifact evidence. Old generic `build/App.xcarchive` / `build/export` artifacts are unclassified. TestFlight upload or group membership does not establish a store build or App Review approval. | Tom |
+The producer removes `server` at `native/build-store.sh:22`, retaining no custom
+local scheme override. `capacitor://localhost` is therefore the expected iOS
+URL, inferred from [Capacitor's configuration defaults](https://capacitorjs.com/docs/config).
+It has not been measured in an installed app.
 
-## Privacy answers that must be corrected before pasting
-
-These are code findings, not assumptions about a server inspected today:
-
-- **Fitness leaves the phone in plaintext:** `socialSnapshot()` in `js/app.js`
-  puts `weekSteps: wk.steps` into the snapshot; `js/social.js:syncProfile` sends
-  it to `/profile`; the Worker ranks it for the step race. The old claims that
-  all Health-derived metrics stay local or only leave encrypted are false.
-  Review fitness collection, account linkage, purpose and public disclosure.
-- **Usage and coarse location are linkable:** `js/analytics.js:flush` sends
-  persistent `device` and Crew `label`; `/events` stores events by device and
-  upserts label/country/region/city in `devices`. A random identifier does not
-  make this unlinked under Apple's definition.
-- **Survey contact data is linked:** `sendSurvey` sends `playerId`, device,
-  label, optional name/email and answers/context to `/survey`. Assess contact
-  information and user content. Do not claim no player/progress linkage, or
-  assume optional collection is automatically exempt from disclosure.
-- **Map data has multiple precision levels:** `sendReport` sends selected lat/lng
-  with device and label. Spire claims send tower lat/lng and player identity;
-  the app enforces an 80 m claim radius. These are different from coarse cell
-  lookups and IP geography. Assess precise-location collection for the actual
-  submitted coordinates; do not blanket-answer coarse only.
-- **Policy/description corrections:** change `TESTFLIGHT.md`'s absolute
-  "Your data stays on your device" and no-collection answers; reconcile
-  `privacy.html`'s contradictory health/social statements, analytics linkage,
-  retention and contact route. The encrypted full-save backup is separate from
-  plaintext social snapshots. Sources: `js/social.js`, `js/analytics.js`,
-  `server/src/index.js` `/profile`, `/events`, `/survey`, `/report` and deletion.
-  Public pages and TESTFLIGHT.md are outside this lane; Tom owns their revision.
-
-Apple asks for data types, purposes, tracking and linkage, including partner
-collection. No ad/IDFA integration was found here; that supports a proposed
-no-tracking answer, not a no-collection answer. The final questionnaire needs
-Tom's confirmation. [App Privacy guidance](https://developer.apple.com/app-store/app-privacy-details/).
-
-## What the bundled path actually assumes
-
-Expected iOS origin with the generated config is `capacitor://localhost`.
-The default local iOS scheme is capacitor; localhost is retained for secure-context
-APIs. This is a configuration inference, not a measured boot result.
-[Capacitor configuration](https://capacitorjs.com/docs/config).
-
-| Code path inspected | Finding and concrete failure condition | Action / owner |
+| Inspected path | Finding and consequence | Guard / remaining work |
 |---|---|---|
-| `js/app.js` service-worker registration; `build-www.sh` | Registration requires `location.protocol === 'https:'`; local capacitor scheme skips it. sw.js is not bundled. No unconditional boot registration defect found. Store diagnostics are gated off; hardRefresh catches registration errors. | Tom verifies no registration attempt at local boot. |
-| `index.html`, `app.css`, `js/map.js`, `js/ocr.js`, `js/graverise.js` | Entry assets are relative; module-based assets use `new URL(..., import.meta.url)`. No root-absolute boot asset URL found in the inspected entry/app sources. JS/data/vendor/icons/assets and privacy.html are copied. This is not proof every dynamic asset decodes. | Tom checks cold module load, images/fonts and every main tab. |
-| `js/app.js:latestBuild`, `checkForUpdate`, `hardRefresh` | Fetches relative `version.json`; build-www does not copy it. Missing/invalid JSON yields 0; update banner stays hidden and hardRefresh says no connection. Reload cannot download a new signed bundle. This is an actual misleading refresh path, not a demonstrated fatal boot error. | Outside lane: gate web update checks/actions in store mode and use a store-update explanation. Tom routes fix to app.js owner. |
-| `js/social.js:ensureIdentity`, signing, backup, recovery | Uses crypto.subtle without an alternate native implementation. If WKWebView does not expose it under the installed origin, identity generation/signing and backup/recovery fail. The code does not prove that this API is unavailable. | Tom tests key generation, signed profile, encrypted save and recovery on actual scheme. |
-| `js/db.js`; `BhVault.swift`; local origin change | IndexedDB/localStorage are origin-scoped. Switching from the remote shell to local origin does not move those web stores. BhVault can recover identity; it does not copy all food/game records. An in-place upgrade needs the cloud-restore path to work. | Tom tests both clean install and upgrade with a recoverable test save. Do not promise automatic data carryover from bundle ID alone. |
-| `js/social.js:apiBase/apiFetch`; Worker CORS constants | API uses absolute HTTPS Worker URL. Source allows `*`, OPTIONS and signed-request headers without cookies, compatible in intent with local origins. Actual deployed headers/schema are unverified. | Tom tests live signed requests after the ordered deploy. No Worker request made here. |
-| `js/map.js`; `assets/map/boneheadz-style.json`; `js/water.js` | MapLibre code/style are local, but tiles/TileJSON use `https://tiles.openfreemap.org/planet`. A bundled app still needs networking for map background/water data and shared spires. | Tom checks local-scheme loading, permission denial and network-loss behavior. |
-| `js/scanner.js`; `js/ocr.js`; `js/sources.js` | Camera uses getUserMedia. OCR creates a vendored worker/WASM loader under the local scheme. Food search uses OFF/USDA HTTPS APIs. Worker fetch/importScripts/WASM and camera permissions are unproven in WKWebView. | Tom scans a real barcode and label, tests manual entry with no network. |
-| `js/notify.js`; share/copy handlers in `js/app.js` | Notifications choose the native plugin before web service-worker fallback. Friend-code share/copy has a raw-code fallback. Plugin availability and clipboard permission still need device operation. | Tom tests notification denial/scheduling, share and copy. |
-| `native/capabilities.json`, package.json and CapApp-SPM | Haptics is required by the capability register, but no @capacitor/haptics dependency or SwiftPM product is present. This is a source wiring gap, not a proven archive crash. | Tom routes native capability repair and verifies physical feedback; no unrelated plugin install in this lane. |
-| `support.html` | `/privacy.html` resolves incorrectly on the hosted /tally/ site. Support is not copied into www; current Settings privacy link does not depend on it. | Tom fixes hosted relative link and direct email in the page's owning lane. |
+| `native/build-ios.sh:18`, export invocation later in that script | `native/build/exportOptions.plist` is absent. Previously this was discovered only at export, after bundling, sync, ASC lookup and archive. The new file-presence check refuses before those actions in both channels. | `submission-build-audit.mjs` proves refusal and valid-input continuation with fixture tools. Tom must supply reviewed export options; existence does not validate syntax, signing or distribution choices. |
+| `native/ios/App/CapApp-SPM/Package.swift:16`, `native/package.json:13` | Local SwiftPM dependencies resolve under `native/node_modules`, which is absent. Dependency installation/resolution is a prerequisite, not a verified build step. | Tom installs locked dependencies and resolves packages on the build machine. No installation or CLI sync attempted here. |
+| `js/app.js:11825`, `js/app.js:11849`, `js/app.js:14954`, `js/app.js:15265`; `native/build-www.sh:13` | Settings still offers Get latest. `latestBuild()` requests relative `version.json`, omitted from the bundle. Executing the actual refresh function against copied bundle files produces `No connection. Try again when you have signal`. This is a confirmed wrong store action, not a proven launch crash. | **`store-runtime-audit.mjs` is red on this defect.** App owner should return an App Store explanation before refresh fetch/reload, change the Settings label, and gate web version checks at `checkForUpdate` and the Settings `latestBuild()` call. Copying a static version file alone would still misrepresent a reload as a store update. No app.js edit made here. |
+| `js/app.js:1397`, registration at `js/app.js:1418` | Boot registration requires HTTPS; the capacitor scheme skips it. The producer deliberately excludes sw.js. No unconditional local-scheme registration defect found. | Runtime audit executes the actual condition for capacitor and HTTPS control cases. This is condition coverage, not full boot execution. |
+| `index.html:13`, `app.css`, all `js/*.js` and `data/*.js` | The actual web producer succeeds in a throwaway checkout. 54 modules and 180 literal entry/CSS/import references resolve without missing or root-absolute paths. | Runtime audit checks this inventory. It excludes computed paths, vendor internals, module export compatibility, CSS inside JS and image decoding. A copied file is not a decoded image. |
+| `js/social.js:187`, `js/social.js:210`, `js/social.js:219`, recovery WebCrypto calls in the same file | Identity, signing and encrypted backup require `crypto.subtle`. No alternate native crypto path found in this module. | Unknown whether the installed WKWebView exposes every required API. Test generate/sign/encrypt/decrypt/recover on the actual scheme. Do not call it unavailable without a device observation. |
+| `js/db.js:69`; `js/social.js:59`; `native/ios/App/App/BhVault.swift:26` | IndexedDB and web storage change origin when the remote shell becomes local. BhVault stores identity in Keychain, not the complete diary/game database. | Test a remote-shell upgrade with an existing recoverable save, then assert identity and diary/game contents. Bundle ID alone does not prove data migration. |
+| `js/social.js:34`; `server/src/index.js:7` | API requests use the explicit HTTPS Worker URL; source CORS permits `*`, OPTIONS and signature headers. No cookie authentication is assumed by those headers. | Source is compatible in intent with a local origin. Deployed CORS/schema and signed requests remain untested. |
+| `js/map.js:53`, `js/map.js:73`; `js/water.js:41`; `assets/map/boneheadz-style.json` | Map code/style are local; background tiles and water TileJSON use OpenFreeMap HTTPS resources. | Bundling does not make the map fully offline. Test permissions, live tile loads and network loss in WKWebView. |
+| `js/ocr.js:4`, `js/ocr.js:12`; `js/scanner.js:2`; `js/sources.js:145`, `js/sources.js:246` | OCR uses vendored worker/WASM/language assets; barcode scanning uses zbar and getUserMedia; online food search uses OFF/USDA. | Camera, worker/importScripts/WASM and external responses require device proof. Test barcode, photographed label and offline manual entry. |
+| `js/notify.js:108`, `js/notify.js:175`; `native/capabilities.json` | Notifications prefer the native plugin. The separate declared Haptics capability is explicitly marked NOT INSTALLED and absent from npm/SwiftPM wiring. | Test notifications on device. Haptics repair requires dependency installation, prohibited cap sync and rebuild, so remains pending. No hand edit to generated platform wiring. |
+| `support.html:28`, `support.html:56`, `privacy.html:155` | Contact points back to the listing; support's `/privacy.html` escapes the hosted `/tally/` directory. The plan establishes that the listing is unpublished and mailbox nonexistent; this audit verifies the loop in source only. | Page owner inserts Tom's working address directly in both pages and changes support href to `privacy.html`. These pages are outside M4 ownership. |
 
-## Tom's critical path
+Search denominator: `rg` inspected all application JS plus `index.html` and
+`app.css` for `location.origin`, bracket-form origin access, location
+protocol/host/href, `document.baseURI`, `document.URL`, serviceWorker, fetch,
+new URL, import.meta.url, workers and HTTPS literals. No location.origin read
+was found in that application scope. The location.href use at `index.html:190`
+preserves the current URL for the boot retry. Vendored minified runtime behavior
+was not exhaustively certified; the OCR/map rows above remain device checks.
+The Node inventory covers literal references only and prints nonzero sample
+counts. These limits replace the earlier broad claim about all boot assets.
 
-1. **Choose device family (5 minutes).** For iPhone-only, update both target
-   configurations to family 1 before the build. For universal, budget another
-   45-90 minutes for iPad operation and fixes beyond that. No choice made here.
-2. **Create/test the support mailbox and confirm standard EULA (15-30 minutes,
-   plus DNS/provider delay if needed).** Give the page owner the exact personal
-   support address. Publish it directly on support/privacy pages, fix the privacy
-   href, and set ASC Support URL to
-   `https://tommillerca.github.io/tally/support.html`. Confirm delivery and public
-   accessibility. EULA confirmation takes about 5 minutes of this estimate.
-3. **Prepare the build machine (15-30 minutes if Xcode is already installed).**
-   Confirm required Xcode/SDK, install locked native dependencies, resolve native
-   capability/manifest gaps, and supply `native/build/exportOptions.plist` with
-   reviewed signing/distribution choices. A missing plist will break export.
-4. **Apply week-freeze migration, then deploy the matching Worker (15-30 minutes).**
-   Verify both columns before deploying. Without them `/profile` and week
-   settlement can return `no such column: last_week_key`. Confirm both operations
-   after deploy and keep the backend available through review. No deploy command
-   has been run by this lane.
-5. **Build and boot the actual bundled candidate (45-90 minutes, excluding fixes
-   and Apple processing).** `SUBMISSION=1 native/build-ios.sh` is Tom's explicit
-   archive/export/upload/distribution command, resolved within his chosen
-   checkout. It is not a build-only preview. Record build number and archived
-   submission marker; install that build through Tom's existing device workflow.
-   Verify origin and no server URL, then cold launch offline; complete onboarding,
-   add/save/reopen food, operate all four tabs and Settings, open privacy, grant
-   and deny Health/location/camera/notifications, scan a label, test map, signed
-   social operations, backup/recovery and disposable-account deletion. Separately
-   upgrade a remote-shell install and assert the same account and saved progress.
-6. **Capture screenshots of that working candidate (30-60 minutes iPhone;
-   another 20-40 minutes iPad).** Prefer 1320x2868 portrait for the 6.9-inch set;
-   1290x2796 is also accepted. If omitting that set, Apple's 6.5-inch set is
-   required (1284x2778 or 1242x2688). With iPad support, provide the 13-inch set
-   (2064x2752 or 2048x2732). Use 3-5 honest app screens as an editorial choice,
-   not an invented Apple minimum. Capture from a device/simulator, no fabricated
-   mockups; remove alpha. [Apple size/count requirements](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/).
-7. **Correct and enter metadata/privacy/ratings (45-75 minutes).** Apply the
-   findings above, rewrite reviewer navigation from the tested app, confirm
-   standard EULA, encryption, rights, territories, trader status and agreements.
-   Do not paste the old submission pack verbatim. The current 13+ category
-   versus Tom's historical 12+ wording is a decision to acknowledge, not a
-   reason to alter content. Select the exact tested build and attach screenshots.
-8. **Submit only after failed/unknown rows are resolved (10-15 minutes).**
-   Preserve evidence for the selected build and monitor review. Approval time
-   is Apple's; no estimate of acceptance is claimed.
+## Store metadata and review checklist
 
-## Scope, deviations and proof limits
+- [ ] **SDK and working build.** Apple's upload minimum since April 28, 2026 is
+  Xcode 26 with iOS 26 SDK or later. `project.pbxproj:247` and `:250` declare
+  deployment target 15.0 and SDKROOT=iphoneos, which do not establish the build
+  SDK. Tom must check the build machine and installed candidate.
+  [Apple SDK requirement](https://developer.apple.com/news/upcoming-requirements/).
+- [x] **Submission path source checks.** `native/build-ios.sh:6` requires an
+  explicit channel, uses separate submission/internal artifact paths, restores
+  config and preflights copied resources and archive. `build-store.sh:24` writes
+  an app.js hash marker; `submission-preflight.mjs:43` checks it. The three
+  existing Node submission/copy audits pass here. Their fixtures do not produce
+  an iOS archive. The marker binds app.js only, not all assets/native code.
+- [ ] **Credentials and exact build selection.** The frozen plan establishes
+  an existing ASC key and historical uploads. Script references were inspected,
+  but current validity, uploaded build numbers and distribution state were not
+  reverified. Do not regenerate a key based on stale TESTFLIGHT.md instructions.
+  Select the tested submission candidate, not an arbitrary internal build.
+- [ ] **Privacy access and truthful policy.** The permanent Settings row at
+  `js/app.js:14951` is relative and outside the survey gate; the producer copies
+  privacy.html. The frozen plan records v505 closure, but the new native link
+  still needs an offline tap test. Policy contradictions are listed below.
+  [Apple privacy-link rule, 5.1.1(i)](https://developer.apple.com/app-store/review/guidelines/#privacy).
+- [ ] **Support.** Replace the contact loop described above. Set Support URL to
+  `https://tommillerca.github.io/tally/support.html` only after direct contact
+  details are published and tested. `TESTFLIGHT.md:46` currently points at the
+  app root. Apple's Support URL must reach actual contact information.
+  [Support field requirement](https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information/).
+- [ ] **Metadata fields.** `TESTFLIGHT.md:17` subtitle is 28 characters;
+  promotional text at `:20` is 145; keywords at `:43` are 98 UTF-8 bytes.
+  Name/subtitle limits are 30 characters, promo 170, description 4000;
+  keywords are **100 bytes**, not universally 100 characters. These current
+  strings fit, but the description's on-device-only claim is false. Description,
+  keywords and support are required; promo/marketing URL are optional. Verify
+  category, copyright and all localized fields in ASC. What’s New is not a
+  first-version field. [App fields](https://developer.apple.com/help/app-store-connect/reference/app-information/app-information),
+  [Version fields](https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information/).
+- [ ] **Reviewer contact/access.** Enter name, email and international-format
+  phone number; explain setup and how to reach online features, permissions and
+  account deletion. Supply demo credentials if login is required. Current tabs
+  are Today/Boneyard/Crew/Bonehead (`index.html:44` onward), not the old pack's
+  Home/Pit/Shop instructions. Verify every navigation step on the candidate.
+  [Review information fields](https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information/).
+- [ ] **Device family and screenshots.** `project.pbxproj:328` and `:351` still
+  declare `1,2`. iPad has no operation evidence. Apple accepts 1-10 JPEG/PNG
+  screenshots without alpha. A 6.9-inch set can use 1320x2868, 1290x2796 or
+  1260x2736 portrait; otherwise the required 6.5-inch set uses 1284x2778 or
+  1242x2688. If supporting iPad, supply the 13-inch set, 2064x2752 or 2048x2732.
+  No store screenshot set was verified here.
+  [Apple screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/).
+- [x] **Source icon format only.** The icon catalog's Contents.json references
+  AppIcon-512@2x.png. Its PNG IHDR was measured as 1024x1024, 8-bit RGB,
+  color type 2 without alpha. Asset catalog processing and final appearance
+  remain unchecked in the archive.
+- [ ] **Age rating.** `data/boneheadz.js:1439`, `:1445`, `:1979` include Rollie,
+  Last Cigarette and Fat Cigar. Answer the current questionnaire truthfully,
+  including health/wellness, violence and loot boxes. On OS 26+, infrequent
+  tobacco references are in the 13+ global category; earlier OS ratings include
+  12+. This is not a final rating determination or authorization to change
+  content. The earlier checklist's reference to a frozen 12+ instruction is
+  unsupported by M4's work order and removed.
+  [Current and legacy age ratings](https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions/).
+- [ ] **Payments, content and moderation.** `js/loot.js` implements earned
+  currency purchases and crate odds. No StoreKit, Purchases or inAppPurchase
+  integration was found in js/, native iOS source or native/package.json.
+  `js/names.js:13` and `server/src/index.js:2536` use curated public names;
+  `js/social.js:626` describes local friend nicknames; surveys/reports go to
+  private developer routes. These searches do not certify every shared UI.
+  Review actual loot/gambling descriptors and any public content obligations.
+  [Review rules 1.2 and 3.1.1](https://developer.apple.com/app-store/review/guidelines/).
+- [ ] **Permissions, fitness claims and deletion.** `Info.plist:29` onward
+  contains camera/health/location/motion/photo purposes; App.entitlements enables
+  HealthKit; `BoneheadzViewController.swift:12` registers Health and BhVault.
+  `HealthPlugin.swift:290` restricts sample writes to DEBUG and `:307` rejects
+  Release writes. Validate health/nutrition behavior and denial paths in the
+  installed candidate. Deletion runs from `js/app.js:15232` through
+  `js/social.js:519` and `server/src/index.js:3632`, then forgets identity and
+  erases local data. Operate and verify the complete deletion with a disposable
+  account. [Health and deletion rules](https://developer.apple.com/app-store/review/guidelines/#privacy).
+- [ ] **Privacy manifests.** No PrivacyInfo.xcprivacy exists under native/ios in
+  this checkout, and dependencies are not installed. That does not prove a
+  resolved archive lacks manifests. Capacitor is on Apple's required SDK list;
+  inspect the archive's manifests and required-reason API declarations.
+  [SDK requirements](https://developer.apple.com/support/third-party-SDK-requirements/),
+  [Manifest requirements](https://developer.apple.com/documentation/bundleresources/privacy-manifest-files?changes=_8).
+- [ ] **Backend readiness.** The frozen plan and
+  `docs/HANDOFF-CODEX-2026-09-05.md:44` identify week-freeze as pending. Migration
+  `server/migrations/2026-09-05-week-freeze.sql:32` adds both last-week columns;
+  `/profile` reads them at `server/src/index.js:2206` and settlement uses them
+  at `:3227`. Apply/verify migration before matching deploy, then verify profile
+  sync and settlement. No current deployment state is claimed.
+- [ ] **Standard EULA.** No root app HTML Terms/EULA page was found. Confirm
+  reliance on Apple's standard EULA in App Information. It applies when no
+  custom EULA is supplied, even though a license link then does not appear on
+  the product page. Do not invent custom terms or a subscription requirement.
+  [Apple EULA behavior](https://developer.apple.com/help/app-store-connect/manage-app-information/provide-a-custom-license-agreement/).
+- [ ] **Encryption, rights and distribution.** `Info.plist:25` declares no
+  non-exempt encryption; `js/social.js` uses ECDSA/AES-GCM/PBKDF2. Tom must
+  assess Apple's export questionnaire for this binary, not infer exemption
+  solely from algorithm names. Confirm rights for assets/fonts/data (Settings
+  attributions at `js/app.js:14960`), territories, agreements, pricing, release
+  controls and trader-status declaration (required even outside EU distribution).
+  Traders distributing in the EU must verify public contact details. No ASC
+  state was inspected.
+  [Export guidance](https://developer.apple.com/help/app-store-connect/manage-app-information/overview-of-export-compliance),
+  [EU trader requirements](https://developer.apple.com/help/app-store-connect/manage-compliance-information/manage-european-union-digital-services-act-trader-requirements/).
 
-- R45-9's silent default is intentionally removed. Existing internal callers
-  must now set SUBMISSION=0. This is necessary to assert the human's intent.
-- A local script cannot prevent manual ASC selection/upload through unrelated
-  tools. Proposed boundary: use this guarded path and require archived marker
-  plus preflight evidence for the exact submitted build. The marker binds
-  app.js, not every asset or native executable, and is not a signature or
-  Apple-enforced channel. No universal prevention is claimed.
-- Current age-rating values supersede the old literal 12+ instruction for newer
-  OS versions. Proposed resolution: preserve Tom's content/descriptors and use
-  Apple's resulting current rating after Tom acknowledges it. Nothing changed
-  in ASC or game content.
-- Old checklist assertions about static-server boot, live URL status and ASC
-  validity were replaced with qualified evidence. Its screenshot counts/sizes
-  were corrected; metadata is no longer labelled paste-ready. Historical
-  claims in `docs/ASC-SUBMISSION.md` and `TESTFLIGHT.md` remain visibly identified
-  here as stale. `native/ASC-SUBMISSION.md` was not touched.
-- `CLAUDE.md` was read in this checkout. No nested `tally/CLAUDE.md` exists here;
-  no original checkout was consulted or edited. Only native/, docs/ and tests/
-  changed. The current user prohibition overrides the plan's commit/push line.
-- Node proof and deliberate red reversions are recorded in
-  [WAVE-STORE-PROOF.md](WAVE-STORE-PROOF.md). Browser/server/native/device proofs
-  were not run. Their expected acceptance is the concrete step 5 outcome above,
-  not a promised test stdout or a claimed green. No Xcode, real cap sync, ASC,
-  Worker, deployment, commit, push, publication or PR action occurred.
+## Privacy corrections before pasting
 
-Until the real build runs, local-scheme WebCrypto, storage migration, plugin
-permissions, worker/WASM loading, signing and actual archive contents remain
-unknown. Passing Node checks does not close those unknowns.
+The checked client-to-server paths contradict the old pack's no-collection or
+all-unlinked answers. Apple's linkage includes account/device identifiers; an
+optional form is not automatically exempt. Tom must reconcile types, purposes,
+linkage, tracking and partner collection before submission.
+[Apple App Privacy definitions](https://developer.apple.com/app-store/app-privacy-details/).
+
+| Data path personally checked | Metadata/policy correction |
+|---|---|
+| `js/app.js:23963` snapshot weekSteps; `js/social.js:922` profile upload; `server/src/index.js:2187` storage | Weekly steps leave the device in the social snapshot, separate from encrypted backup. Review Health/Fitness and account linkage. `privacy.html:41` and `:61` cannot imply all health data stays local. |
+| `js/analytics.js:82`; `server/src/index.js:3714`, `:3786` | Events carry device and player label; stored device rows include country/region/city. Review usage, identifiers and coarse location linkage. |
+| `js/analytics.js:131`; `server/src/index.js:3830` | Survey sends player ID, device, label, optional name/email, feedback and context. Review contact info/user content and retention, not a blanket unlinked answer. |
+| `js/analytics.js:104`; `js/social.js:727`; `js/spires.js:21` | Reports send selected coordinates; signed spire claims send tower lat/lng and are range-gated at 80 m. Assess precise location separately from coarse cells. `Info.plist:36` says claiming sends only a map cell, which does not describe this payload completely. Proposed wording: location draws nearby content; shared spire actions send the spire location and cell, and location reports send the selected point. Review against the actual UI before changing purpose text. |
+| `TESTFLIGHT.md:40`; `privacy.html:155`; `support.html:28` | Replace the absolute on-device-only marketing claim and direct-contact loop. Validate retention/deletion statements against the installed and deployed paths. Public-page changes belong to their owner. |
+
+No IDFA/AdSupport/ATTracking integration was found in the searched application
+JS and native iOS source. This supports further assessment of a no-tracking
+answer; it does not establish no collection or certify third-party practices.
+
+## Tom's ordered list
+
+1. **Support mailbox: 15-30 minutes plus provider/DNS delays.** Create or choose
+   a real address, test receiving and replying, give it to the support/privacy
+   page owner, fix the relative privacy link and verify the published pages.
+2. **Device decision: 5 minutes.** Choose iPhone-only (both target family values
+   become 1) or iPhone+iPad. Budget 45-90 additional minutes for iPad operation,
+   plus any fixes. Decide before building or capturing screenshots.
+3. **Standard EULA confirmation: 5 minutes.** Record that Apple's standard
+   agreement is intended; confirm no custom EULA in ASC. No Terms page is
+   created by this lane.
+4. **Close source/build prerequisites: 20-45 minutes plus fixes/downloads.**
+   Route the refresh and privacy-copy findings to their owners; prepare native
+   dependencies, SDK, signing/export options and manifest review. Resolve
+   Haptics through normal sync/rebuild if required. Rerun the runtime guard;
+   its current red must not be waived as a passing store check.
+5. **Week-freeze migration then Worker deploy: 15-30 minutes.** Verify both
+   columns first, deploy matching code second, then assert profile updates and
+   weekly settlement. Keep the backend available for review. These are Tom's
+   future actions, not commands executed here.
+6. **Actual bundled build and device proof: 45-90 minutes plus fixes.** The
+   existing `SUBMISSION=1 native/build-ios.sh` command also queries ASC,
+   uploads and distributes; it is not a build-only preview. In an authorized
+   build session, record the candidate build number, archive marker and origin.
+   Install it, cold-launch offline, complete onboarding, save/reopen food,
+   operate all four tabs and Settings/privacy, deny/grant permissions, scan a
+   barcode/label, load the map, sync profile, back up/recover and delete a
+   disposable account. Separately upgrade an existing remote-shell save and
+   assert both identity and progress. Repeat applicable flows on iPad if kept.
+7. **Screenshots: 30-60 minutes iPhone, plus 20-40 iPad.** Capture the tested
+   candidate at accepted sizes above. Three to five honest screens is an
+   editorial suggestion, not Apple's minimum. Inspect pixels and remove alpha.
+8. **Paste corrected metadata into ASC: 45-75 minutes.** Use the checked field
+   constraints, accurate privacy/ratings answers, tested review instructions,
+   support/privacy URLs and screenshots. Confirm EULA, export declaration,
+   agreements and territories. Select the exact tested submission build.
+9. **Final review and submission: 10-15 minutes.** Resolve all failing/unknown
+   acceptance items first. Tom controls submission and release timing; neither
+   acceptance nor processing duration is promised.
+
+## Proof and boundaries
+
+[M4-REPORT.md](M4-REPORT.md) contains changed files, command output, red/restored
+green evidence and blocked actions. `store-copy-lint.mjs`,
+`submission-build-audit.mjs` and `submission-preflight-audit.mjs` pass.
+`store-runtime-audit.mjs` is deliberately **not green**: its real refresh
+failure remains outside this lane's source ownership. A throwaway-only proposed
+handler fix demonstrates a possible green; it is not part of this checkout.
+
+No browser/server/native/device proof ran. No Xcode, real cap sync, altool,
+asc.py, Wrangler, Worker request, commit, push, publication, version stamp,
+changelog edit or PR occurred. The missing nested tally/CLAUDE.md was reported;
+this checkout's CLAUDE.md was read. The explicit user instruction overrides the
+plan's contradictory commit/push instruction. No original checkout was edited.
