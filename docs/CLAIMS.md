@@ -428,6 +428,21 @@ the upload path and its guards.
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
 
+## v514
+1. The round-46 diary remainder, the first-run disclosure that had been finished and unmerged, the store-build update copy, and the machine-character disclosure. Its dated sections are further down, folded here.
+
+   Not player-visible, so it carries no changelog item: a store build no longer fetches `version.json` and no longer tells the player "No connection. Try again when you have signal" when an update is unavailable. An App Store build updates through the App Store, so that message was both wrong and the kind of thing a reviewer reads as a broken app. Gated on the existing STORE_BUILD flag; the web build's behaviour is byte-identical, because it genuinely does update over the web. PROOF: store-runtime-audit.mjs.
+
+   Also not player-visible: timing rows now disclose the machine they ran on. PROOF: flick-disclosure guard in crate-reveal-audit.mjs. R45-5 reported the first crate flick running at half rate in 4 of 5 runs, 12 to 20 frames. Re-measured here on v513 across five fresh browser processes: first flick 49, 46, 59, 58, 47 rAF samples against second flick 43, 57, 59, 58, 43, with ZERO of five runs at or below the 20-frame ceiling and the first flick sampling MORE frames than the second in 3 of 5. 81/81 rows passed. Both reports are honest and the machines differ, which is the third instance of this class after boneyard-audit gave rounds 43, 45 and 48 three different correct verdicts. No first-flick fix was built, because a fix without a reproduction is a guess; v500's mechanism stays (burst draw calls 0 on v509 against 18 and 26 on v493) and the audit now records that the fix belongs on whichever machine reproduces it.
+
+2. PROOF: first-run-honesty-audit.mjs | REACH: the first screen of onboarding. An anonymous account is created at first run and the only disclosure was inside the optional survey, so a player who skipped it was never told. Gwart now says it in his own voice while keeping his introduction, and points at the permanent Privacy policy row v505 shipped. Three earlier attempts were rejected and their corrections hold: the splash is gated on RETURNING only so a new player keeps the intro, the toast backlog cap survives, and Gwart's introduction is intact.
+
+3. PROOF: r46-diary-audit.mjs | REACH: Trends against the streak pill. The two surfaces disagreed about what counts as a logged day, so the same question returned two answers depending where it was asked.
+
+4. PROOF: r46-diary-audit.mjs | REACH: the copy-yesterday chip, and a day more than a week old. The chip promised one number and delivered another, and old empty days spoke as though they were today.
+
+5. PROOF: r46-diary-audit.mjs | REACH: the day arrow at the start of an account's history. It walked off the end of the account's own history.
+
 ## v513
 1. Round 48's harness and reporting work plus the remainder of round 47. Its dated sections are further down, folded here.
 

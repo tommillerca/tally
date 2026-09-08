@@ -4,6 +4,12 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 514, date: '2026-09-08', title: 'A few things the app was telling you wrong', items: [
+    'Gwart now says, on your very first screen, that he is keeping an anonymous account for you: no email, no password, no sign-up. The app was always doing that and never mentioned it.',
+    'Trends and your streak used to disagree about what counted as a logged day, so the same question got two answers depending on where you asked it.',
+    'The copy-yesterday chip now does what it says it will do, and days from over a week ago stop talking as though they were today.',
+    'The day arrow no longer walks off the end of your own history.',
+  ] },
   { n: 513, date: '2026-09-08', title: 'Your profile stops travelling', items: [
     'Looking at a Spire told you far more about the player defending it than it should have: their week of steps, their whole pet roster, their full gear list. A rival is not a friend, and the app already said so in its own notes. Only what a rival needs is sent now.',
     'The card shown after you lose a tower no longer contradicts itself, and the siege sheet\'s clock actually ticks.',
