@@ -9,7 +9,20 @@ const source = read('js/paddock.js').replace(/^import .*;\n/gm,'');
 const P = await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 let failed = 0;
 async function check(name, fn) { try { console.log('PASS '+name+' '+await fn()); } catch(e) { failed++;console.log('FAIL '+name+' '+e.message); } }
-const motions = ['hover','fly','flop','walk','walk','walk','walk'];
+
+
+/* CONTROL, 2026-09-08. This audit reads source and re-runs the packer in a VM,
+   so it can pass while pointed at the wrong tree or at a file that no longer
+   contains the packer. Fail loudly if the three files it grades are not the ones
+   it thinks: a paddock source with no packer, an app.js with no Stable copy row,
+   or a stylesheet with no rules at all means every row below is vacuous. */
+await check('CONTROL the three graded files are really the ones this audit thinks', async () => {
+  assert.ok(/export function placePaddock\s*\(/.test(source) && /export function assignRows\s*\(/.test(source),
+    'js/paddock.js carries neither placePaddock nor assignRows, so there is no packer to grade');
+  assert.ok(app.length > 100000, `js/app.js is ${app.length} bytes, too small to be the real app`);
+  assert.ok(css.length > 10000, `app.css is ${css.length} bytes, too small to be the real stylesheet`);
+  return `paddock ${source.length}B, app ${app.length}B, css ${css.length}B`;
+});const motions = ['hover','fly','flop','walk','walk','walk','walk'];
 const roster = Array.from({length:200},(_,i)=>({iid:'pet-'+i,sp:['C1','C2','C3','C4','C5','C6','CX'][i%7],motion:motions[i%7]}));
 await check('R44-12 packing', () => {
   // Conservative motion envelopes, from production placement and CSS, not DOM measurements.
