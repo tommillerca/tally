@@ -729,7 +729,13 @@ body:has(#sheets .sheet) .toast { top: calc(var(--sat) + 110px); bottom: auto; }
 .onb .feature span { color: var(--text-3); font-size: 13.5px; }
 .onb .spacer { flex: 1; }
 
-.demo-badge { position: fixed; bottom: calc(var(--sab, 0px) + 86px); left: 10px; z-index: 90; background: var(--amber); color: #201500; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 999px; opacity: 0.92; pointer-events: none; }
+/* Demo labels occupy layout space, including beside a sheet's Back control. */
+.demo-header { flex: none; padding: calc(var(--sat, 0px) + 4px) 64px 4px var(--pad); }
+.demo-badge { position: static; display: inline-block; flex: none; align-self: center; background: var(--amber); color: #201500; font-size: .625rem; line-height: 1.5; font-weight: 800; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 999px; pointer-events: none; }
+.sheet-head:has(> .demo-badge) { flex-wrap: wrap; }
+.sheet-head:has(> .demo-badge) h2 { flex: 1 1 10rem; white-space: normal; overflow-wrap: anywhere; }
+.sheet-head:has(> .demo-badge) .sheet-close { margin-left: auto; max-width: 100%; overflow-wrap: anywhere; }
+.sheet-head > .demo-badge { order: -1; }
 
 .spin { width: 16px; height: 16px; border: 2px solid var(--line-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -11898,10 +11904,12 @@ button.t3-price::before {
 .lab-room select { width: 100%; min-height: 44px; color: var(--text); background: var(--surface-2); border: 2px solid var(--ink); border-radius: 16px; padding: 10px; }
 .lab-species, .lab-specimens { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--pad); }
 .lab-species { min-width: 0; margin: 0; padding: 0; border: 0; }
+.lab-species { gap: 8px; }
 .lab-species legend { margin-bottom: var(--pad); }
 .lab-species-choice { position: relative; min-width: 0; cursor: pointer; }
-.lab-species-choice input { position: absolute; top: 12px; left: 12px; width: 20px; height: 20px; margin: 0; accent-color: var(--text); z-index: 1; }
-.lab-species-tile { display: flex; flex-direction: column; align-items: center; gap: 8px; height: 100%; padding: 12px; border: 2px solid var(--ink); border-radius: 20px; background: var(--surface-2); box-shadow: var(--sh); text-align: center; overflow-wrap: anywhere; }
+/* Keep the native radio focus and arrow keys; the tile carries its visible state. */
+.lab-species-choice input { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.lab-species-tile { display: flex; flex-direction: column; align-items: center; gap: 2px; height: 100%; min-height: 44px; padding: 4px; border: 2px solid var(--ink); border-radius: 20px; background: var(--surface-2); box-shadow: var(--sh); text-align: center; overflow-wrap: anywhere; }
 .lab-species-choice input:checked + .lab-species-tile { border-color: var(--text-2); }
 .lab-species-choice input:focus-visible + .lab-species-tile { outline: 2px solid var(--accent); outline-offset: 3px; }
 .lab-selected, .lab-species-tile small, .lab-species-tile > span:not(.lab-art), .lab-specimen small { color: var(--text-2); font-size: var(--fs-3); line-height: 1.5; }
@@ -11944,8 +11952,9 @@ button.t3-price::before {
 .lab-loss { margin: 12px 0; border-color: var(--danger); }
 .lab-reveal { text-align: center; }
 .lab-reveal [data-lab-result-art] { display: grid; place-items: center; min-height: 160px; }
-.lab-surprise.lab-play [data-lab-result-art] { animation: lab-result-arrive .65s ease-out both; }
-@keyframes lab-result-arrive { from { transform: scale(.65); opacity: .15; } 65% { transform: scale(1.06); opacity: 1; } to { transform: scale(1); opacity: 1; } }
+.lab-surprise.lab-play [data-lab-result-art] { animation: lab-result-arrive .24s ease-out both; }
+/* Colour is the reward here. No rarity glow or opacity fade over Cam's art. */
+@keyframes lab-result-arrive { from { transform: scale(.96); } to { transform: scale(1); } }
 .lab-today, .lab-interruption, .lab-egg-help { padding: 14px 0; border-top: 1px solid var(--line-strong); margin-top: 16px; }
 .lab-today p, .lab-interruption p, .lab-egg-help p { color: var(--text-2); line-height: 1.5; margin: 8px 0; }
 .lab-today .link { min-height: 44px; padding: 10px 14px; }

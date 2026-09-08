@@ -33,7 +33,7 @@ await check('entry portraits precede odds and ledger, and native choices retain 
     const art = h.indexOf('data-portrait'), odds = h.indexOf('class="lab-odds"');
     assert.ok(art >= 0 && odds > art && h.indexOf('class="lab-clock"') > art);
     for (let i = 1; i <= 6; i++) assert.match(h, new RegExp(`C${i}-base.png" width="144"`));
-    assert.match(h, /Not collected/);
+    assert.match(h, /Base colour: not owned/);
   };
   rejectsMutation(html, html.replaceAll('data-portrait', 'missing-portrait'), grade);
   rejectsMutation(html, '<p class="lab-odds">50%</p>' + html, grade);
@@ -43,6 +43,112 @@ await check('entry portraits precede odds and ledger, and native choices retain 
   assert.match(selected, /✓ Selected/);
   assert.ok(selected.indexOf('Colour previews') < selected.indexOf('class="lab-odds"'));
   assert.match(css, /lab-species-choice input:focus-visible[^}]+outline: 2px solid var\(--accent\)/);
+});
+// Polish guards pin source contracts. Layout, glyph ink and motion still need pixels.
+const rule = (text, selector) => {
+  const start = text.indexOf(selector + ' {');
+  assert.ok(start >= 0, `CONTROL rule exists: ${selector}`);
+  return text.slice(start, text.indexOf('}', start) + 1);
+};
+await check('Base ownership names the colour even when another colour of the species is owned', () => {
+  const grade = h => { assert.match(h, /Base colour: not owned/); assert.match(h, /C1-base.png/); assert.match(h, /1 of 6 colours/); assert.doesNotMatch(h, /Not collected|Base ·/); };
+  const html = ui.labSpeciesHtml(state({ pets: [pet('rose', 'rose')] }), 'C1');
+  rejectsMutation(html, html.replace('Base colour: not owned', 'Base · Not collected'), grade);
+  const owned = ui.labSpeciesHtml(state(), 'C1');
+  rejectsMutation(owned, owned.replace('Base colour: owned', 'Base colour: not owned'), h => assert.match(h, /Base colour: owned/));
+  const empty = ui.labSpeciesHtml(state({ pets: [], species: {} }), '');
+  assert.equal((empty.match(/Base colour: not owned/g) || []).length, 6);
+  assert.doesNotMatch(empty, /Base colour: owned/);
+  // The coherent engine collection takes precedence over the fallback roster.
+  assert.match(ui.labSpeciesHtml(state({ pets: [], ownedCells: ['C1|base'] }), 'C1'), /Base colour: owned/);
+});
+await check('radio circles are visually hidden while native focus and selected text survive', () => {
+  const grade = text => {
+    const input = rule(text, '.lab-species-choice input');
+    assert.match(input, /clip-path: inset\(50%\)/);
+    assert.doesNotMatch(input, /display:\s*none|visibility:\s*hidden/);
+    assert.match(rule(text, '.lab-species-choice input:focus-visible + .lab-species-tile'), /outline: 2px solid var\(--accent\)/);
+    assert.match(rule(text, '.lab-species-choice input:checked + .lab-species-tile'), /border-color: var\(--text-2\)/);
+  };
+  rejectsMutation(css, css.replace('clip-path: inset(50%)', 'clip-path: none'), grade);
+  rejectsMutation(css, css.replace('clip-path: inset(50%)', 'display: none; clip-path: inset(50%)'), grade);
+  const html = ui.labSpeciesHtml(state(), 'C2');
+  const radios = html.match(/<input[^>]+>/g);
+  assert.equal(radios.length, 6);
+  assert.equal(radios.filter(r => / checked/.test(r)).length, 1);
+  assert.match(radios[1], /value="C2" checked/);
+  assert.ok(radios.every(r => /type="radio" name="labSpecies"/.test(r) && !/tabindex|disabled|aria-hidden/.test(r)));
+  assert.equal((html.match(/✓ Selected/g) || []).length, 1);
+  assert.equal((html.match(/Choose species/g) || []).length, 5);
+});
+await check('species tile spacing contracts without shrinking the 144px portraits or text', () => {
+  const grade = text => {
+    const tile = rule(text, '.lab-species-tile');
+    assert.match(tile, /gap: 2px/); assert.match(tile, /padding: 4px/);
+    assert.match(tile, /min-height: 44px/);
+    assert.doesNotMatch(tile, /max-height|overflow:\s*hidden|font-size|transform/);
+    assert.match(text, /\.lab-species \{ gap: 8px; \}/);
+    assert.match(rule(text, '.lab-selected, .lab-species-tile small, .lab-species-tile > span:not(.lab-art), .lab-specimen small'), /font-size: var\(--fs-3\); line-height: 1.5/);
+  };
+  rejectsMutation(css, css.replace('gap: 2px; height: 100%; min-height: 44px; padding: 4px;', 'gap: 8px; height: 100%; min-height: 44px; padding: 12px;'), grade);
+  const html = ui.labSpeciesHtml(state(), '');
+  rejectsMutation(html, html.replaceAll('width="144"', 'width="64"'), h => assert.equal((h.match(/width="144"/g) || []).length, 6));
+});
+await check('reveal settles in 240ms at full opacity without rarity effects', () => {
+  const grade = text => {
+    assert.match(rule(text, '.lab-surprise.lab-play [data-lab-result-art]'), /animation: lab-result-arrive \.24s ease-out both/);
+    const motion = text.slice(text.indexOf('@keyframes lab-result-arrive'), text.indexOf('.lab-today, .lab-interruption'));
+    assert.match(motion, /from \{ transform: scale\(\.96\); \} to \{ transform: scale\(1\); \}/);
+    assert.doesNotMatch(motion, /opacity|filter|box-shadow/);
+    assert.doesNotMatch(rule(text, '.lab-reveal [data-lab-result-art]'), /filter|box-shadow|opacity/);
+    assert.match(text, /@media \(prefers-reduced-motion: reduce\).*lab-surprise[^}]+animation: none/s);
+  };
+  rejectsMutation(css, css.replace('lab-result-arrive .24s', 'lab-result-arrive .65s'), grade);
+  rejectsMutation(css, css.replace('from { transform: scale(.96); }', 'from { transform: scale(.65); opacity: .15; }'), grade);
+  const reveal = source.slice(source.indexOf('  async function reveal(receipt)'), source.indexOf('  function incubators()'));
+  assert.match(reveal, /await Promise.all\([^;]+img.decode\(\)/);
+  assert.match(reveal, /receipt.distribution.length > 1 && !reducedMotion/);
+  assert.match(reveal, /id="labSkip">Skip reveal/);
+  assert.match(reveal, /classList.remove\('lab-play'\)/);
+  assert.match(reveal, /Its image could not load. Retry the image or view the pet/);
+});
+await check('DEMO occupies shell and wrapping sheet headers only in demo mode', () => {
+  const bootLine = source.split('\n').find(line => line.includes("useDbName('tally-demo')"));
+  const sheetLine = source.split('\n').find(line => line.includes("if (S.demo) $('.sheet-head', wrap)"));
+  assert.ok(bootLine && sheetLine, 'CONTROL production demo placement sites exist');
+  const render = (demo, boot = bootLine) => {
+    const calls = [], wrap = {};
+    const $ = (selector, parent) => {
+      assert.ok(selector === '#app' || selector === '.sheet-head');
+      if (selector === '.sheet-head') assert.equal(parent, wrap);
+      return { insertAdjacentHTML: (position, html) => calls.push({ selector, position, html }) };
+    };
+    vm.runInNewContext(boot + '\n' + sheetLine, { S: { demo }, $, wrap, useDbName: name => assert.equal(name, 'tally-demo') });
+    return calls;
+  };
+  const calls = render(true);
+  rejectsMutation(calls, calls.slice(1), value => {
+    assert.equal(value.length, 2);
+    assert.deepEqual(value.map(x => [x.selector, x.position]), [['#app', 'afterbegin'], ['.sheet-head', 'beforeend']]);
+    assert.match(value[0].html, /class="demo-header"/);
+    assert.ok(value.every(x => /class="demo-badge">DEMO/.test(x.html)));
+  });
+  assert.deepEqual(render(false), []);
+  const grade = text => {
+    const badge = rule(text, '.demo-badge');
+    assert.match(badge, /position: static/); assert.match(badge, /background: var\(--amber\); color: #201500/);
+    assert.doesNotMatch(badge, /bottom:|left:|z-index:|opacity:/);
+    assert.match(rule(text, '.demo-header'), /flex: none/);
+    assert.match(rule(text, '.sheet-head:has(> .demo-badge)'), /flex-wrap: wrap/);
+    assert.match(rule(text, '.sheet-head:has(> .demo-badge) h2'), /white-space: normal/);
+    assert.match(rule(text, '.sheet-head:has(> .demo-badge) .sheet-close'), /max-width: 100%; overflow-wrap: anywhere/);
+  };
+  rejectsMutation(css, css.replace('position: static; display: inline-block; flex: none;', 'position: fixed; display: inline-block; flex: none;'), grade);
+  rejectsMutation(css, css.replace('.sheet-head:has(> .demo-badge) { flex-wrap: wrap;', '.sheet-head:has(> .demo-badge) { flex-wrap: nowrap;'), grade);
+});
+await check('Bangers heading retains the ink overhang padding, which requires pixel review', () => {
+  const grade = text => assert.match(rule(text, '.sheet-head h2'), /padding-right: 0\.14em/);
+  rejectsMutation(css, css.replace('padding-right: 0.14em', 'padding-right: 0'), grade);
 });
 await check('exactly one lime next action follows selection, with no automatic pet choice', () => {
   const cases = [

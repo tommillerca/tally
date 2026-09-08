@@ -1477,7 +1477,7 @@ function renderStorageUnavailable() {
 }
 
 async function boot() {
-  if (S.demo) { useDbName('tally-demo'); document.body.insertAdjacentHTML('beforeend', '<div class="demo-badge">DEMO</div>'); }
+  if (S.demo) { useDbName('tally-demo'); $('#app').insertAdjacentHTML('afterbegin', '<div class="demo-header"><span class="demo-badge">DEMO</span></div>'); }
   // Explain and stop before reads, migrations, cloud recovery, or lifecycle setup.
   if (!(await storageStatus()).ok) { renderStorageUnavailable(); return; }
   // Register before boot can write, including migrations and demo seeding.
@@ -3864,6 +3864,7 @@ function openSheet(html, { cls = '', onClose = null, name = null } = {}) {
      for every sheet in the app, not just this one. */
   const label = (name || (html.match(/<h2[^>]*>([^<]{1,60})<\/h2>/) || [])[1] || 'Panel').trim();
   wrap.innerHTML = `<div class="sheet-backdrop"></div><div class="sheet ${cls}" role="dialog" aria-modal="true" aria-label="${esc(label)}"><div class="sheet-grab"></div>${html}</div>`;
+  if (S.demo) $('.sheet-head', wrap)?.insertAdjacentHTML('beforeend', '<span class="demo-badge">DEMO</span>');
   $('#sheets').appendChild(wrap);
   /* Sheets are the app's other surface, and the heaviest ones (the Stable's ring,
      the Wardrobe, a pack reveal) are exactly the ones that used to assemble
@@ -21310,7 +21311,7 @@ function labSpecimenHtml(s, sp, morph, px = 144) {
   return `<figure class="lab-specimen"><div class="lab-art" aria-hidden="true">${petPortraitHtml(sp, px, false, { morph, wear: null, thumb: true })}</div><figcaption><b><i class="lab-swatch" style="--lab-colour:${morphSwatch(morph)}" aria-hidden="true"></i>${esc(labColour(morph))}</b><span>${esc(labSpecies(sp))}</span><small>${labCollected(s, sp, morph) ? 'Collected' : 'Not collected'}</small></figcaption></figure>`;
 }
 function labSpeciesHtml(s, sp) {
-  return `<fieldset class="lab-species"><legend>${sp ? 'Choose a species' : '<button class="btn lab-next" data-lab-choose-species>Choose a species</button>'}</legend>${KENNEL_SPECIES.map(x => `<label class="lab-species-choice"><input type="radio" name="labSpecies" id="labSpecies-${x.id}" value="${x.id}" ${sp === x.id ? 'checked' : ''}><span class="lab-species-tile"><span class="lab-art" aria-hidden="true">${petPortraitHtml(x.id, 144, false, { morph: 'base', wear: null, thumb: true })}</span><b>${esc(x.name)}</b><span>Base · ${labCollected(s, x.id, 'base') ? 'Collected' : 'Not collected'}</span><small>${s.species[x.id]?.count ?? '?'} of ${MORPHS.length} colours</small><span class="lab-selected">${sp === x.id ? '✓ Selected' : 'Choose species'}</span></span></label>`).join('')}</fieldset>`;
+  return `<fieldset class="lab-species"><legend>${sp ? 'Choose a species' : '<button class="btn lab-next" data-lab-choose-species>Choose a species</button>'}</legend>${KENNEL_SPECIES.map(x => `<label class="lab-species-choice"><input type="radio" name="labSpecies" id="labSpecies-${x.id}" value="${x.id}" ${sp === x.id ? 'checked' : ''}><span class="lab-species-tile"><span class="lab-art" aria-hidden="true">${petPortraitHtml(x.id, 144, false, { morph: 'base', wear: null, thumb: true })}</span><b>${esc(x.name)}</b><span>Base colour: ${labCollected(s, x.id, 'base') ? 'owned' : 'not owned'}</span><small>${s.species[x.id]?.count ?? '?'} of ${MORPHS.length} colours</small><span class="lab-selected">${sp === x.id ? '✓ Selected' : 'Choose species'}</span></span></label>`).join('')}</fieldset>`;
 }
 function labRecipesHtml(s, sp) {
   return `<div class="lab-recipes" aria-label="Recipe path">${labRecipes.map((r, index) => {
