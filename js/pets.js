@@ -200,6 +200,13 @@ export const SHINY_STAT_MULT = 1.08;
 export const PET_STAT_MULT_CAP = 1.5; // combined rarity, shiny and lineage budget
 export const PET_LINEAGE_STEP = 0.05; // +5% per lineage tier
 
+// Shared by combat and lineage copy so rarity and shiny consume the same cap.
+export function petStatMultiplier(petId, shiny = false, lineage = 0) {
+  const lin = Math.max(0, Math.floor(lineage || 0));
+  const p = PET_STATS[petId] || { mult: 1 };
+  return Math.min(PET_STAT_MULT_CAP, p.mult * (shiny ? SHINY_STAT_MULT : 1) * (1 + lin * PET_LINEAGE_STEP));
+}
+
 // The single source of truth for a battle-pet's intrinsic stat line (engine AND
 // UI read this). `hp` is the pet's own HP floor; makePetBody adds a slice of the
 // owner's Marrow on top. Commons at level 1 (lineage 0, no shiny) retain the
@@ -209,7 +216,7 @@ export function petBattleStats(petId, level = 1, shiny = false, lineage = 0) {
   const lin = Math.max(0, Math.floor(lineage || 0));
   const p = PET_STATS[petId] || { rarity: 'common', mult: 1, tilt: {} };
   const t = p.tilt || {};
-  const m = Math.min(PET_STAT_MULT_CAP, p.mult * (shiny ? SHINY_STAT_MULT : 1) * (1 + lin * PET_LINEAGE_STEP));
+  const m = petStatMultiplier(petId, shiny, lin);
   return {
     power:  Math.round((10 + L * 4) * m * (t.power  || 1)),
     marrow: Math.round(20            * m * (t.marrow || 1)),

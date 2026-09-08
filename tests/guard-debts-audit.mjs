@@ -170,6 +170,21 @@ await check('DPR 3 reaches launch, legacy setViewport and setWidth; option overr
 await check('DPR refuses a page that reports the wrong physical scale', async () => {
   await assert.rejects(fakeBoot({ GODMODE_DPR: '3' }, {}, 2), /requested 3, page reports 2/);
 });
+await check('DPR override preserves mobile flags and deliberate desktop flags', async () => {
+  for (const mobile of [true, false]) {
+    const { page } = await fakeBoot({}, { deviceScaleFactor: 3,
+      defaultViewport: { width: 430, height: 932, isMobile: mobile, hasTouch: mobile } });
+    assert.equal(page.viewport().isMobile, mobile, 'boot preserves the chosen layout');
+    assert.equal(page.viewport().hasTouch, mobile, 'boot preserves the chosen input');
+    await page.setViewport({ width: 402, height: 874, isMobile: undefined, hasTouch: undefined });
+    assert.equal(page.viewport().isMobile, mobile, 'unspecified flags retain the current layout');
+    assert.equal(page.viewport().hasTouch, mobile, 'unspecified flags retain the current input');
+    assert.equal(page.viewport().deviceScaleFactor, 3);
+    await page.setViewport({ width: 430, height: 932, isMobile: !mobile, hasTouch: !mobile });
+    assert.equal(page.viewport().isMobile, !mobile, 'explicit layout changes remain possible');
+    assert.equal(page.viewport().hasTouch, !mobile, 'explicit input changes remain possible');
+  }
+});
 await check('DPR invalid values fail before launching', async () => {
   for (const value of ['', '0', '-1', 'NaN', 'Infinity'])
     await assert.rejects(fakeBoot({ GODMODE_DPR: value }), /positive finite/);
