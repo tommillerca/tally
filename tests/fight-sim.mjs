@@ -18,7 +18,7 @@
  *   node tests/fight-sim.mjs              # the standard board
  *   node tests/fight-sim.mjs --seeds 400  # tighter numbers, slower
  */
-import { realpathSync } from 'node:fs';
+import { realpathSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import {
   makeFighter, createFight, endTurn, aiTakeTurn,
@@ -290,21 +290,30 @@ function printPetBoard() {
   }
 }
 
-// Advisory stress board. Food and player talent combinations are separate from
-// the no-player-talents pet envelope. Skewer now shortens recovery by one turn.
-function printPetStress() {
-  console.log('\nSTRESS EXCEPTIONS (not covered by the ordinary pet envelope): ' + FOES.map(f => f.key).join('/'));
-  for (const id of Object.keys(PET_ASSIGN)) for (const kind of ['petFree', 'Crow Lord', 'Crow Lord + Skewer']) {
+// Shared stress cells for the advisory board and the PURE regression guard.
+export const PET_STRESS_KINDS = ['Skewer', 'Crow Lord', 'Crow Lord + Skewer'];
+export function petStressBuilds() {
+  return Object.keys(PET_ASSIGN).flatMap(id => PET_STRESS_KINDS.map(kind => {
     const picks = id === 'C1' ? ['i-jinx', 'i-doublehex', 'i-mark', 'i-deephex', 'i-havoc'] : petPicks(id, 10);
-    const build = { ...(kind.includes('Crow Lord') ? BUILDS.find(b => b.name.includes('Crow Lord')) : BUILDS[0]),
+    return { ...(kind.includes('Crow Lord') ? BUILDS.find(b => b.name.includes('Crow Lord')) : BUILDS[0]),
+      name: `${id} ${kind}`, id, kind,
       pet: buildBattlePet(id, 10, picks, { shiny: true, lineage: HIGH_LINEAGE }),
-      food: kind !== 'Crow Lord' ? { petFree: true } : null };
-    const rates = FOES.map(foeCfg => measurePet(build, { foeCfg }).winRate);
-    console.log(`${id} ${kind}: ${rates.map(r => (100 * r).toFixed(1)).join('/')} ${rates.some(r => r >= 0.95) ? 'FLAG >=95%' : ''}`);
-  }
+      food: kind.includes('Skewer') ? { petFree: true } : null };
+  }));
+}
+export function petStressCells({ seeds = SEEDS } = {}) {
+  return petStressBuilds().flatMap(build => FOES.map(foeCfg => ({
+    key: `${build.name}/${foeCfg.key}`, id: build.id, kind: build.kind, foe: foeCfg.key, seeds,
+    ...measurePet(build, { foeCfg, seeds }),
+    control: measurePet({ ...build, pet: null }, { foeCfg, seeds }),
+  })));
+}
+function printPetStress() {
+  console.log('PET STRESS: win% [95% Wilson interval], paired no-pet win%, seeds');
+  for (const cell of petStressCells()) console.log(JSON.stringify(cell));
 }
 
-// Frozen advisory report; run with --report for the complete handoff.
+// Historical T1 report retained for provenance. --report reads the current T2 handoff.
 export const WAVE_REPORT = `T1 advisory work-order report, 2026-09-07
 
 Scope and provenance
@@ -556,8 +565,9 @@ This report is advisory for independent review, not release certification.
 // so the naive compare silently never matched and the script printed nothing.
 const isMain = !!process.argv[1] && process.argv[1] !== '-' && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
 if (isMain) {
-  if (process.argv.includes('--report')) { console.log(WAVE_REPORT); process.exit(0); }
+  if (process.argv.includes('--report')) { console.log(readFileSync(new URL('../docs/t2-balance-report.md', import.meta.url), 'utf8')); process.exit(0); }
   if (!Number.isInteger(SEEDS) || SEEDS < 1) throw new Error('seeds must be a positive integer');
+  if (process.argv.includes('--stress-only')) { printPetStress(); process.exit(0); }
   if (process.argv.includes('--envelope-only')) { printEnvelope(); process.exit(0); }
   printPetBoard();
   printEnvelope();

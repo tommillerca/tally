@@ -11,7 +11,7 @@
  * THE INSTRUMENT is tests/fight-sim.mjs against a MIRROR (foe at 100% of the
  * player's own stats), no talents, both arms on the same seed list, in TWO
  * configurations: with a level-5 Hound, and with no pet at all. The hound
- * baseline now wins 91.8%: pet actions fire through smartPlayerTurn's call to
+ * T2 baseline wins 85.8%: pet actions fire through smartPlayerTurn's call to
  * smartPetTurn before endTurn, matching app.js's body -> pet -> end sequence.
  * Sizes depend on configuration, so the copy contains no percentage.
  *
@@ -24,7 +24,7 @@
  *   PET      the trained-hound claim has an edge clear of zero with that pet;
  *            without a pet, the dish leaves the result unchanged.
  *   NOCLAIM  any explicitly unclaimed dish must still span zero in both arms.
- *            None remain today. Keep this fail-upward path for future dishes.
+ *            T2 Skewer is unclaimed. This path fails upward if its edge returns.
  *   CONTROL  nonempty measurements and unsaturated baselines.
  *
  * DIRECTION OF FAILURE: HALVED and PET fail when a claim loses its edge;
@@ -48,7 +48,7 @@ const PET_EDGE = 'with a trained hound at your side';
 /* The dishes that deliberately carry NO worth sentence, and why. Registered
    here rather than inferred from an absent key, so "nobody wrote one yet" and
    "we measured and cannot say" are different states. */
-const UNCLAIMED = {};
+const UNCLAIMED = { 'hunters-skewer': 'T2 hound comparison: 1716 vs 1750 wins in 2000 seeds; difference interval [-0.4, 3.8]pp spans zero.' };
 
 let fails = 0;
 const ok = (m, cond, detail = '') => {

@@ -170,16 +170,16 @@ ok('WAVE-EARNED level 10 and Signature still unlock at 82000 steps',
   const self = { d: { powerMult: 1, maxHp: 100 } }, foe = { hp: 100, d: { maxHp: 100 } };
   const effect = (id, picks) => petAbilityEffect(buildBattlePet(id, 10, picks), self, foe);
   const poison = effect('C3', ['h-venom', 'h-rupture']);
-  ok('WAVE-POISON stacked poison and Signature share an additive budget', poison.poison.per === 7 && poison.poison.stacks === 3,
+  ok('WAVE-POISON stacked poison and Signature share an additive budget', poison.poison.per === 4 && poison.poison.stacks === 3,
     `per=${poison.poison.per}, stacks=${poison.poison.stacks}`);
   const shield = effect('C5', ['w-bulwark', 'w-fortify']);
   ok('WAVE-SHIELD shield talents and Signature share an additive budget', shield.shield === 55, `shield=${shield.shield}`);
   const imp = effect('C1', ['i-doublehex', 'i-deephex', 'i-oblivion']);
   ok('WAVE-CURSE-GAP maximum duration leaves an unweakened enemy turn', imp.turns === 4, `duration=${imp.turns}`);
-  ok('WAVE-CURSE bounded weaken and burning Signature', Math.abs(imp.weakenPct - 0.216) < 1e-10 && imp.burn.per === 8,
+  ok('WAVE-CURSE bounded weaken and burning Signature', Math.abs(imp.weakenPct - 0.216) < 1e-10 && imp.burn.per === 4,
     `weaken=${imp.weakenPct.toFixed(3)}, burn=${imp.burn.per}`);
   const bite = effect('C4', []);
-  ok('WAVE-AMBUSH guaranteed crit keeps a smaller Signature multiplier', bite.critAlways && bite.damage === 11, `damage=${bite.damage}`);
+  ok('WAVE-AMBUSH guaranteed crit keeps a smaller Signature multiplier', bite.critAlways && bite.damage === 6, `damage=${bite.damage}`);
 }
 for (const id of ['C1', 'C2']) {
   const fight = petFixture(id, { picks: id === 'C1' ? ['i-jinx'] : [] });

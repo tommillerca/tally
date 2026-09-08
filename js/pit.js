@@ -1353,12 +1353,12 @@ function actForEnemy(fight, who, events) {
   const f = fighterOf(fight, who), p = fight.p;
   f._sweptThisTurn = false;
   const petUp = () => fight.pAux && !fight.pAux.fainted && fight.pAux.hp > 0 && p.pet;
-  // pick a target for this turn: usually the player, but often go after a living
-  // pet to strip its aura (more tempting the lower the pet already is)
+  // T2 stress tuning: pressure the living pet to limit sustained free actions.
+  // Target it half the time, more often when low, to strip its aura.
   fight.fTarget = 'p';
   if (petUp()) {
     const petLow = fight.pAux.hp <= fight.pAux.d.maxHp * 0.4;
-    if (fight.rng() < (petLow ? 0.45 : 0.18)) fight.fTarget = 'pa';
+    if (fight.rng() < (petLow ? 0.65 : 0.50)) fight.fTarget = 'pa';
   }
   let guard = 0;
   while (!fight.over && fight.active === who && fight.ap > 0 && guard++ < 6) {
