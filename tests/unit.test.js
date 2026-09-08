@@ -3367,24 +3367,8 @@ test('no browser test changes the viewport without isMobile and hasTouch', () =>
     + 'Use setWidth(page, w, h) from godmode.js, or state both keys if you really do want the reload.');
 });
 
-/* A SELF-SERVED AUDIT HAS TO BE ABLE TO EXIT. serveTree's python child, and the
-   two piped stdio sockets, are refed handles: an audit that falls off the end of
-   its file after browser.close() then stays alive forever and has to be SIGTERMed,
-   which reports as exit 143 and reads as a red audit. contrast-audit.mjs sat like
-   that in the FULL tier of the release gate. Run for real rather than grepped for
-   unref(): the assertion is that the process ENDS, which is the thing that broke.
-   Goes red on the unfixed serveTree (measured: killed at the 20s cap, exit 143). */
-test('serveTree does not hold the event loop open after the script ends', () => {
-  const script = `import { serveTree } from ${JSON.stringify(join(here, 'godmode.js'))};
-    const own = await serveTree(${JSON.stringify(join(here, '..'))});
-    process.once('exit', () => own.close());`;
-  try {
-    execFile_.execFileSync(process.execPath, ['--input-type=module', '-e', script],
-      { timeout: 20000, stdio: 'ignore' });
-  } catch (e) {
-    assert.fail(`serveTree kept node alive, so a self-serving audit can never exit: ${e.signal || e.message}`);
-  }
-});
+// The socket-dependent serveTree exit proof lives in serve-tree-identity-audit.mjs.
+// PURE must remain executable on machines that cannot bind local sockets.
 
 /* ===== PLUGIN PARITY =====================================================
  * @capacitor/haptics was missing for weeks and nothing could notice, because a

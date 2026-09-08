@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* PROVES native/submission-preflight.mjs GOES RED.
  *
  * The preflight is the only thing standing between a store archive and Apple,
@@ -14,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PREFLIGHT = path.join(HERE, '..', 'native', 'submission-preflight.mjs');
-const dir = mkdtempSync(path.join(tmpdir(), 'submission-preflight-'));
+const dir = mkdtempSync(auditOutputPath(path.join(tmpdir(), 'submission-preflight-')));
 const failures = [];
 
 /* The scanner blanks the invitation island between these two markers, so a
@@ -31,10 +32,10 @@ const bundle = (flag, extra = '') =>
 function run(slug, name, { app, config, marker }, wantExit, wantText) {
   const appPath = path.join(dir, `${slug}.js`);
   const cfgPath = path.join(dir, `${slug}.json`);
-  writeFileSync(appPath, app);
-  writeFileSync(cfgPath, JSON.stringify(config));
+  writeFileSync(auditOutputPath(appPath), app);
+  writeFileSync(auditOutputPath(cfgPath), JSON.stringify(config));
   const markerPath = path.join(dir, `${slug}-submission.json`);
-  writeFileSync(markerPath, JSON.stringify(marker ?? { kind: 'submission', appSha256: createHash('sha256').update(app).digest('hex') }));
+  writeFileSync(auditOutputPath(markerPath), JSON.stringify(marker ?? { kind: 'submission', appSha256: createHash('sha256').update(app).digest('hex') }));
   const r = spawnSync(process.execPath, [PREFLIGHT, appPath, cfgPath, markerPath], { encoding: 'utf8' });
   const out = `${r.stdout}${r.stderr}`;
   const ok = r.status === wantExit && (!wantText || out.includes(wantText));
@@ -75,10 +76,10 @@ for (const [slug, extra, wantExit] of [
 // CONTROL: run the gate's real coverage check, then add a runnable file in a
 // throwaway tests directory. No fixture touches the checkout or starts a server.
 const coverageDir = path.join(dir, 'tests');
-mkdirSync(coverageDir);
+mkdirSync(auditOutputPath(coverageDir));
 for (const file of readdirSync(HERE)) {
-  if (file === 'release-gate.mjs') copyFileSync(path.join(HERE, file), path.join(coverageDir, file));
-  else symlinkSync(path.join(HERE, file), path.join(coverageDir, file));
+  if (file === 'release-gate.mjs') copyFileSync(path.join(HERE, file), auditOutputPath(path.join(coverageDir, file)));
+  else symlinkSync(path.join(HERE, file), auditOutputPath(path.join(coverageDir, file)));
 }
 function coverage(name, wantExit, wantText) {
   const r = spawnSync(process.execPath, [path.join(coverageDir, 'release-gate.mjs'), '--coverage-only'], { encoding: 'utf8' });
@@ -88,9 +89,9 @@ function coverage(name, wantExit, wantText) {
   if (!ok) failures.push(`coverage ${name}`);
 }
 coverage('registered helper', 0, 'coverage:');
-writeFileSync(path.join(coverageDir, 'unregistered-store-fixture.mjs'), 'process.exit(0);\n');
+writeFileSync(auditOutputPath(path.join(coverageDir, 'unregistered-store-fixture.mjs')), 'process.exit(0);\n');
 coverage('unregistered runnable refused', 1, 'unregistered-store-fixture.mjs');
 
-rmSync(dir, { recursive: true, force: true });
+rmSync(auditOutputPath(dir), { recursive: true, force: true });
 if (failures.length) { console.error(`\nsubmission-preflight: ${failures.length} FAILED`); process.exit(1); }
 console.log('\nsubmission preflight: refuses marker, flag, server and copy defects; passes the control');

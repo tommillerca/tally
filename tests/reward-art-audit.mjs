@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* The victory screen's gear reward card rendered EMPTY. A card-exists check would
  * pass on the bug, so this reads the canvas PIXELS: a hydrated card has non-blank
  * pixels, an unhydrated one is fully transparent. */
@@ -101,7 +102,7 @@ if (cards.pixels.length > 0) {
   }
 }
 const el = await page.$('.fight-over');
-await el.screenshot({ path: `${DIR}/victory-cards.png` });
+await el.screenshot({ path: auditOutputPath(`${DIR}/victory-cards.png`) });
 console.log('shot victory-cards');
 await browser.close();
 console.log(bad ? `\n${bad} FAILED` : '\nVICTORY REWARD ART PAINTS');

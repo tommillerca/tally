@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* Pre-push sweep of every screen the Tier 1 work did NOT target.
  *
  * WHY. v272 changes two things globally: `--ink` moved from #100c14 to the deck's
@@ -93,7 +94,7 @@ for (const r of ROUTES) {
      own heading and some real text. */
   ok(`route #/${r} rendered`, !info.missing && !!info.heading && info.text > 40,
      info.missing ? 'no .screen at all' : `"${info.heading}" · ${info.text} chars, ${info.nodes} nodes`);
-  if (shots) await page.screenshot({ path: path.join(shots, `sweep-${r}.png`) });
+  if (shots) await page.screenshot({ path: auditOutputPath(path.join(shots, `sweep-${r}.png`)) });
 }
 
 /* the six hub tabs share one shell; each has its own content */
@@ -109,7 +110,7 @@ for (const label of tabs) {
   await sleep(1700);
   const nodes = await page.evaluate(() => document.querySelectorAll('.screen *').length);
   ok(`hub tab ${label} rendered`, clicked && nodes > 20, `${nodes} nodes`);
-  if (shots) await page.screenshot({ path: path.join(shots, `sweep-hub-${label.replace(/\W+/g, '')}.png`) });
+  if (shots) await page.screenshot({ path: auditOutputPath(path.join(shots, `sweep-hub-${label.replace(/\W+/g, '')}.png`)) });
 }
 
 /* a couple of sheets that use the LEGACY .field / .chips recipes, which Tier 1
@@ -135,7 +136,7 @@ const legacy = await page.evaluate(async () => {
 ok('legacy .field sheet still opens and is styled',
    !legacy.reason && legacy.opened && legacy.fields >= 2 && !/^0px/.test(legacy.border || '0px'),
    JSON.stringify(legacy));
-if (shots) await page.screenshot({ path: path.join(shots, 'sweep-legacy-sheet.png') });
+if (shots) await page.screenshot({ path: auditOutputPath(path.join(shots, 'sweep-legacy-sheet.png')) });
 
 ok('NO page or console errors', errors.length === 0, errors.slice(0, 4).join(' | '));
 

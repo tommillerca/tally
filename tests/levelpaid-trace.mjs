@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* FULL-TRACE PROBE for the levelpaid-2 anomaly (docs/LEVELPAID-TRACE-RESULTS.md).
  *
  * WHAT HAPPENED, ONCE. On 2026-08-28 a gate run of tests/boot-backfill-audit.mjs
@@ -54,7 +55,7 @@ const arg = (name, dflt) => {
 };
 const RUNS = Number(arg('--runs', 10));
 const OUT = path.resolve(arg('--out', shotDir('levelpaid-trace-out')));
-fs.mkdirSync(OUT, { recursive: true });
+fs.mkdirSync(auditOutputPath(OUT), { recursive: true });
 
 const DAYS = 365, PER_DAY = 5, THROTTLE = 6;
 
@@ -301,7 +302,7 @@ try {
     run.traceRecords = { cold: coldTrace.length, resume: resumeTrace.length };
     run.asyncChainVisible = coldTrace.some(t => /async runInitBackfill/.test(t.stack));
 
-    fs.writeFileSync(path.join(OUT, `run-${String(r + 1).padStart(2, '0')}.json`), JSON.stringify({ ...run, coldTrace, resumeTrace }, null, 1));
+    fs.writeFileSync(auditOutputPath(path.join(OUT, `run-${String(r + 1).padStart(2, '0')}.json`)), JSON.stringify({ ...run, coldTrace, resumeTrace }, null, 1));
     runs.push(run);
     console.log(`run ${r + 1}/${RUNS}: cold ${run.ledger.coldRows} rows/${run.ledger.coldXp} xp/${run.ledger.coldCoins} coins, ` +
       `resume ${run.ledger.resumeRows} rows/${run.ledger.resumeXp} xp/${run.ledger.resumeCoins} coins, ` +
@@ -319,7 +320,7 @@ try {
   try { srv.close(); } catch { /* gone */ }
 }
 
-fs.writeFileSync(path.join(OUT, 'summary.json'), JSON.stringify({ RUNS, THROTTLE, DAYS, PER_DAY, fatal, runs }, null, 1));
+fs.writeFileSync(auditOutputPath(path.join(OUT, 'summary.json')), JSON.stringify({ RUNS, THROTTLE, DAYS, PER_DAY, fatal, runs }, null, 1));
 const bad = runs.filter(r => r.anomaly);
 const blind = runs.filter(r => !r.asyncChainVisible || !r.traceRecords.cold || !r.traceRecords.resume);
 console.log(`\n${runs.length} runs complete; ${bad.length} anomalous; ${blind.length} with a blind or empty trace (a blind trace is a FAILURE)`);

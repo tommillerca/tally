@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* Tier 1 (daily-loop) audit. Drives the REAL controls through the whole
  * add-food flow and asserts what the player ends up looking at.
  *
@@ -104,7 +105,7 @@ const tap = async (sel, label = sel) => {
   return true;
 };
 const count = sel => page.evaluate(s => document.querySelectorAll(s).length, sel);
-const shot = async name => { if (shots) await page.screenshot({ path: path.join(shots, `live-t1-${name}.png`) }); };
+const shot = async name => { if (shots) await page.screenshot({ path: auditOutputPath(path.join(shots, `live-t1-${name}.png`)) }); };
 
 // a pinned footer button that sits below the fold is unusable, and the sheet
 // looks completely correct in a screenshot of the top half.

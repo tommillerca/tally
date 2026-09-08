@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 import { boot, sleep, shotDir } from './godmode.js';
 const D = shotDir('tally-shots');  // machine-local, see godmode shotDir
 /* argv FIRST, env.URL second: the convention error-telemetry-audit and
@@ -61,11 +62,11 @@ await sleep(600);
    open. The verdict is the evidence; a camera that fails says so and the run
    still ends on its own count. */
 try {
-  await page.screenshot({ path:`${D}/ledger-close.png`, clip:{x:0,y:380,width:430,height:520} });
+  await page.screenshot({ path:auditOutputPath(`${D}/ledger-close.png`), clip:{x:0,y:380,width:430,height:520} });
   // an empty meal
   await page.evaluate(() => [...document.querySelectorAll('section.meal')].find(m=>/Dinner/.test(m.textContent))?.scrollIntoView({block:'center'}));
   await sleep(600);
-  await page.screenshot({ path:`${D}/ledger-empty.png`, clip:{x:0,y:300,width:430,height:420} });
+  await page.screenshot({ path:auditOutputPath(`${D}/ledger-empty.png`), clip:{x:0,y:300,width:430,height:420} });
   console.log('shots written');
 } catch (e) { console.log(`shots FAILED (reading only, verdict below stands): ${String(e).split('\n')[0]}`); }
 await browser.close();

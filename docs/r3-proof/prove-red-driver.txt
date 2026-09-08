@@ -1,0 +1,27 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import assert from 'node:assert/strict';
+import {spawnSync, execFileSync} from 'node:child_process';
+const temp=fs.mkdtempSync(path.join(os.tmpdir(),'r3-red-'));
+fs.cpSync('tests',path.join(temp,'tests'),{recursive:true});
+fs.copyFileSync('package.json',path.join(temp,'package.json'));
+const proof='/tmp/r3-red-output'; fs.mkdirSync(proof,{recursive:true});
+function run(name,file,want){
+ const r=spawnSync(process.execPath,[path.join(temp,'tests',file)],{encoding:'utf8',timeout:120000});
+ fs.writeFileSync(path.join(proof,name+'.txt'),(r.stdout||'')+(r.stderr||''));
+ fs.writeFileSync(path.join(proof,name+'.exit'),String(r.status));
+ console.log(name, r.status);assert.equal(r.status,want);
+}
+function mutate(file,old,next){
+ const p=path.join(temp,file),s=fs.readFileSync(p,'utf8');
+ assert.equal(s.split(old).length-1,1,'mutation must apply exactly once');fs.writeFileSync(p,s.replace(old,next));return ()=>fs.writeFileSync(p,s);
+}
+let restore=mutate('tests/today-container-audit.mjs',"auditOutputPath(shotPath('d2-7-pastday-quests.png'))", "join(repo, '_feedback_shots', 'today-d2', 'd2-7-pastday-quests.png')");
+run('today-unguarded-red','guard-hygiene-lint.mjs',1);restore();run('today-restored-green','guard-hygiene-lint.mjs',0);
+restore=mutate('tests/lib/audit-output.mjs','if (inside(root, lexical) || inside(root, actual) || inside(actual, root)) {','if (false) {');
+run('refusal-reverted-red','audit-output-audit.mjs',1);restore();run('refusal-restored-green','audit-output-audit.mjs',0);
+const god=path.join(temp,'tests/godmode.js'),fixed=fs.readFileSync(god,'utf8');
+fs.writeFileSync(god,execFileSync('git',['show','HEAD:tests/godmode.js']));
+run('serve-write-reverted-red','audit-output-audit.mjs',1);fs.writeFileSync(god,fixed);run('serve-restored-green','audit-output-audit.mjs',0);
+fs.writeFileSync(path.join(proof,'throwaway-path.txt'),temp+'\n');

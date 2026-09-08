@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* tests/looks-door-audit.mjs: THE LOOKS COLLECTION HAS A DOOR.
  *
  * WHY THIS EXISTS. v395 removed the LOOKS card from the Backpack hub. That card
@@ -119,7 +120,7 @@ check('COUNT the door shows the collected tally', pillN >= 0 && /\d+\s*\/\s*\d+\
    a stack: on a tree with no door the whole point is to read four red rows
    naming the regression, not a puppeteer selector error. */
 if (door.found) {
-  await page.screenshot({ path: SHOT.replace(/\.png$/, '-wardrobe.png') });
+  await page.screenshot({ path: auditOutputPath(SHOT.replace(/\.png$/, '-wardrobe.png')) });
   await page.click('.ward-head [data-tab="looks"]');
   await page.waitForFunction(() => !!document.querySelector('[data-look-info], [data-fam-toggle], [data-look-locked]'),
     { timeout: 20000, polling: 100 }).catch(() => {});
@@ -147,7 +148,7 @@ check('OPENS locked pieces render', coll.locked > 0, `${coll.locked} [data-look-
 check('COUNT a per-slot "N of M" tally is on screen', coll.tallies > 0, coll.heads.join(' | '));
 check('COUNT the tiles drawn match the tally the door advertised', coll.tiles === pillN, `tiles ${coll.tiles}, door said ${pillN}`);
 
-await page.screenshot({ path: SHOT });
+await page.screenshot({ path: auditOutputPath(SHOT) });
 console.log('shots:', SHOT.replace(/\.png$/, '-wardrobe.png'), 'and', SHOT);
 console.log(bad ? `\nFAIL (${bad} of ${ran})` : `\nall green, ${ran} checks`);
 await done(bad ? 1 : 0);

@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* Show the badge wall with the four Warden badges EARNED, so Tom sees them as a
  * player would rather than greyed out. */
 import { boot, sleep, serveTree, shotDir } from './godmode.js';
@@ -86,7 +87,7 @@ await page.evaluate(() => {
 });
 await sleep(600);
 const grid = await page.$('.badge-grid');
-if (grid) { await grid.screenshot({ path: `${DIR}/badges.png` }); console.log('shot badges'); }
+if (grid) { await grid.screenshot({ path: auditOutputPath(`${DIR}/badges.png`) }); console.log('shot badges'); }
 await browser.close();
 srv?.close();
 console.log(bad ? `\n${bad} FAILED` : '\nWARDEN BADGES RENDER AS DRAWN ICONS');

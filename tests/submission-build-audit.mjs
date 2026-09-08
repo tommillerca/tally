@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* Node-only shell integration guard. All platform/network commands are local
  * fixture executables. No Xcode, Capacitor CLI, ASC client or sockets are used.
  * CONTROL cases corrupt the copied resources and the archive independently:
@@ -20,7 +21,7 @@ if (source.includes('/Users/') || !source.includes('BASH_SOURCE[0]')) {
   console.error('FAIL build-ios.sh must resolve its own checkout before fixture execution');
   process.exit(1);
 }
-const temp = mkdtempSync(path.join(tmpdir(), 'submission-build-'));
+const temp = mkdtempSync(auditOutputPath(path.join(tmpdir(), 'submission-build-')));
 const island = "const TESTFLIGHT_URL = 'https://testflight.apple.com/join/HIDDEN';\n"
   + '// Test hook (webdriver only), same reasoning as __community above.\n';
 const shim = `#!${process.execPath}
@@ -58,28 +59,28 @@ let runId = 0;
 function run(mode, fault = '') {
   const dir = path.join(temp, String(++runId));
   const native = path.join(dir, 'native');
-  for (const rel of ['native/ios/App/App.xcodeproj', 'native/build', 'tests', 'bin']) mkdirSync(path.join(dir, rel), { recursive: true });
-  if (fault !== 'missing-export-options') writeFileSync(path.join(native, 'build/exportOptions.plist'), '<plist version="1.0"><dict/></plist>');
-  symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'));
-  for (const file of ['build-store.sh', 'submission-preflight.mjs']) copyFileSync(path.join(root, 'native', file), path.join(native, file));
-  copyFileSync(path.join(root, 'tests/store-copy-scan.mjs'), path.join(dir, 'tests/store-copy-scan.mjs'));
-  writeFileSync(path.join(native, 'build-ios.sh'), source);
+  for (const rel of ['native/ios/App/App.xcodeproj', 'native/build', 'tests', 'bin']) mkdirSync(auditOutputPath(path.join(dir, rel)), { recursive: true });
+  if (fault !== 'missing-export-options') writeFileSync(auditOutputPath(path.join(native, 'build/exportOptions.plist')), '<plist version="1.0"><dict/></plist>');
+  symlinkSync(path.join(root, 'node_modules'), auditOutputPath(path.join(dir, 'node_modules')));
+  for (const file of ['build-store.sh', 'submission-preflight.mjs']) copyFileSync(path.join(root, 'native', file), auditOutputPath(path.join(native, file)));
+  copyFileSync(path.join(root, 'tests/store-copy-scan.mjs'), auditOutputPath(path.join(dir, 'tests/store-copy-scan.mjs')));
+  writeFileSync(auditOutputPath(path.join(native, 'build-ios.sh')), source);
   // Build-store is real. Only the large web copy is replaced with a tiny bundle.
-  writeFileSync(path.join(native, 'build-www.sh'), `#!/bin/bash\nset -e\nnode - <<'JS'\nconst fs=require('fs');\nfs.rmSync('www',{recursive:true,force:true}); fs.mkdirSync('www/js',{recursive:true});\nfs.writeFileSync('www/js/app.js', 'const STORE_BUILD = ' + (process.env.STORE_BUILD === '1') + ';\\n' + ${JSON.stringify(island)});\nJS\n`, { mode: 0o755 });
+  writeFileSync(auditOutputPath(path.join(native, 'build-www.sh')), `#!/bin/bash\nset -e\nnode - <<'JS'\nconst fs=require('fs');\nfs.rmSync('www',{recursive:true,force:true}); fs.mkdirSync('www/js',{recursive:true});\nfs.writeFileSync('www/js/app.js', 'const STORE_BUILD = ' + (process.env.STORE_BUILD === '1') + ';\\n' + ${JSON.stringify(island)});\nJS\n`, { mode: 0o755 });
   const originalConfig = '{"appId":"com.boneheadz.gym","server":{"url":"https://example.invalid"}}\n';
-  writeFileSync(path.join(native, 'capacitor.config.json'), originalConfig);
-  writeFileSync(path.join(native, 'ios/App/App.xcodeproj/project.pbxproj'), 'CURRENT_PROJECT_VERSION = 20;\n');
+  writeFileSync(auditOutputPath(path.join(native, 'capacitor.config.json')), originalConfig);
+  writeFileSync(auditOutputPath(path.join(native, 'ios/App/App.xcodeproj/project.pbxproj')), 'CURRENT_PROJECT_VERSION = 20;\n');
   const logPath = path.join(dir, 'calls.log');
-  for (const name of ['npx', 'python3', 'sed', 'xcodebuild', 'xcrun']) writeFileSync(path.join(dir, 'bin', name), shim, { mode: 0o755 });
-  symlinkSync(process.execPath, path.join(dir, 'bin/node'));
+  for (const name of ['npx', 'python3', 'sed', 'xcodebuild', 'xcrun']) writeFileSync(auditOutputPath(path.join(dir, 'bin', name)), shim, { mode: 0o755 });
+  symlinkSync(process.execPath, auditOutputPath(path.join(dir, 'bin/node')));
   const env = { ...process.env, PATH: `${dir}/bin:/usr/bin:/bin`, FIXTURE_NATIVE: native, FIXTURE_LOG: logPath, FAULT: fault };
   delete env.SUBMISSION;
   delete env.STORE_BUILD;
   if (mode !== undefined) env.SUBMISSION = mode;
   const result = spawnSync('/bin/bash', [path.join(native, 'build-ios.sh')], { cwd: dir, env, encoding: 'utf8' });
   const output = `${result.stdout || ''}${result.stderr || ''}`;
-  writeFileSync(path.join(dir, 'output.txt'), output);
-  writeFileSync(path.join(dir, 'exit.txt'), String(result.status));
+  writeFileSync(auditOutputPath(path.join(dir, 'output.txt')), output);
+  writeFileSync(auditOutputPath(path.join(dir, 'exit.txt')), String(result.status));
   return { status: result.status, output,
     calls: existsSync(logPath) ? readFileSync(logPath, 'utf8') : '',
     restored: readFileSync(path.join(native, 'capacitor.config.json'), 'utf8') === originalConfig,
@@ -118,7 +119,7 @@ try {
     check(r.status === status && r.restored && !r.calls.includes('xcrun '), `CONTROL ${fault} restores config and stops upload`);
   }
 } finally {
-  rmSync(temp, { recursive: true, force: true });
+  rmSync(auditOutputPath(temp), { recursive: true, force: true });
 }
 if (failures.length) { console.error(`submission build: ${failures.length} FAILED`); process.exit(1); }
 console.log('ok submission build: explicit modes, separate artifacts, copied and archived content guarded (fixture tools only)');

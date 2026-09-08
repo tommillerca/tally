@@ -1,0 +1,6 @@
+today-unguarded-red 1
+today-restored-green 0
+refusal-reverted-red 1
+refusal-restored-green 0
+serve-write-reverted-red 1
+serve-restored-green 0

@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* Node-only bundled-path audit. Runs only the web file-copy producer in a
  * throwaway checkout. No native build, browser, sockets or external requests.
  * A failing store refresh row is a release blocker, not an allowed exception.
@@ -11,7 +12,7 @@ import vm from 'node:vm';
 import esprima from 'esprima';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const temp = mkdtempSync(path.join(tmpdir(), 'store-runtime-'));
+const temp = mkdtempSync(auditOutputPath(path.join(tmpdir(), 'store-runtime-')));
 let failed = 0, rows = 0;
 const check = (ok, name) => { rows++; if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`); };
 const read = p => readFileSync(p, 'utf8');
@@ -39,17 +40,17 @@ function files(dir) {
 }
 try {
   for (const name of ['index.html', 'app.css', 'manifest.webmanifest', 'privacy.html', 'version.json', 'js', 'data', 'vendor', 'icons', 'assets']) {
-    cpSync(path.join(root, name), path.join(temp, name), { recursive: true });
+    cpSync(path.join(root, name), auditOutputPath(path.join(temp, name)), { recursive: true });
   }
-  mkdirSync(path.join(temp, 'native'));
+  mkdirSync(auditOutputPath(path.join(temp, 'native')));
   for (const name of ['build-www.sh', 'build-store.sh', 'capacitor.config.json']) {
-    cpSync(path.join(root, 'native', name), path.join(temp, 'native', name));
+    cpSync(path.join(root, 'native', name), auditOutputPath(path.join(temp, 'native', name)));
   }
   const built = spawnSync('/bin/bash', ['build-store.sh'], {
     cwd: path.join(temp, 'native'), encoding: 'utf8', env: { ...process.env, STORE_BUILD: '1' },
   });
-  writeFileSync(path.join(temp, 'build-output.txt'), `${built.stdout || ''}${built.stderr || ''}`);
-  writeFileSync(path.join(temp, 'build-exit.txt'), String(built.status));
+  writeFileSync(auditOutputPath(path.join(temp, 'build-output.txt')), `${built.stdout || ''}${built.stderr || ''}`);
+  writeFileSync(auditOutputPath(path.join(temp, 'build-exit.txt')), String(built.status));
   check(built.status === 0, 'real web bundle producer completes in throwaway checkout');
   if (built.status !== 0) throw new Error(read(path.join(temp, 'build-output.txt')));
   const www = path.join(temp, 'native/www');
@@ -156,7 +157,7 @@ try {
 } catch (error) {
   check(false, `audit could not complete: ${error.message}`);
 } finally {
-  rmSync(temp, { recursive: true, force: true });
+  rmSync(auditOutputPath(temp), { recursive: true, force: true });
 }
 console.log(`store runtime: ${rows - failed}/${rows} passed`);
 process.exit(failed ? 1 : 0);

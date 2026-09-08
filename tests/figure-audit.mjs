@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* THE FIGURE CONTRACT: every screen that draws a Bonehead and a pet draws them
  * the same way, and this is the thing that fails when one of them does not.
  *
@@ -452,9 +453,9 @@ try {
     px[(y * W + x) * 4 + 0] = 200; px[(y * W + x) * 4 + 3] = 255;
   }
   const tmp = path.join(shotDir('figure-audit'), `gate-${process.pid}.png`);
-  writeFileSync(tmp, synthPng(W, H, px, [0, 1, 2, 3, 4]));
+  writeFileSync(auditOutputPath(tmp), synthPng(W, H, px, [0, 1, 2, 3, 4]));
   let got;
-  try { got = pngAlphaBox(tmp); } finally { unlinkSync(tmp); }
+  try { got = pngAlphaBox(tmp); } finally { unlinkSync(auditOutputPath(tmp)); }
   const want = { w: W, h: H, x0: 1, y0: 1, x1: 5, y1: 4 };
   if (JSON.stringify(got) !== JSON.stringify(want)) {
     throw new Error(`decoder is wrong: ${JSON.stringify(got)}, expected ${JSON.stringify(want)}`);

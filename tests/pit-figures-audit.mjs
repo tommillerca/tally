@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* THE THREE FIGURES IN THE PIT, GRADED IN PAINTED PIXELS.
  *
  * Tom, 2026-08-22, after one fight with the Wanderer and Bumbleseal equipped:
@@ -241,7 +242,7 @@ try {
         rec.foe = await inkOf('#foeStage', clip);
         rec.you = await inkOf('#youStage', clip);
         rec.arena = arena;
-        if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/pit-wanderer-${k}.png` });
+        if (process.env.SHOT) await page.screenshot({ path: auditOutputPath(`${process.env.SHOT}/pit-wanderer-${k}.png`) });
       }
       seen[k].pets[sp] = rec;
       await closeFoe();

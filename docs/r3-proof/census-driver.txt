@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+const source=fs.readFileSync('tests/release-gate.mjs','utf8');
+const part=source.slice(source.indexOf('const PURE ='),source.indexOf('/* COVERAGE, BEFORE A SINGLE BROWSER STARTS.'));
+const c=await vm.runInNewContext('(async()=>{'+part+'; return {PURE,BROWSER,DECLARED,helpers:[...HELPERS],onDisk};})()', {here:'tests',readdir:async()=>fs.readdirSync('tests')});
+const files=fs.readdirSync('tests').filter(f=>fs.statSync('tests/'+f).isFile());
+const mjs=files.filter(f=>f.endsWith('.mjs'));
+const names=[...new Set([...c.PURE,...c.BROWSER,...Object.keys(c.DECLARED)])];
+const tiers=f=>c.PURE.filter(x=>x===f).length+c.BROWSER.filter(x=>x===f).length+(c.DECLARED[f]?.[0]==='full'?1:0);
+const report={topLevelFiles:files.length,mjs:mjs.length,gateVisible:c.onDisk.length,exactlyOneTier:c.onDisk.filter(f=>tiers(f)===1).length,pure:c.PURE.length,browser:c.BROWSER.length,full:c.onDisk.filter(f=>c.DECLARED[f]?.[0]==='full').length,uniqueNamed:names.length,mjsOnly:mjs.filter(f=>!names.includes(f)).sort(),namesOnly:names.filter(f=>!mjs.includes(f)).sort(),missing:c.onDisk.filter(f=>tiers(f)===0),duplicated:c.onDisk.filter(f=>tiers(f)>1)};
+fs.writeFileSync('/tmp/r3-census.json',JSON.stringify(report,null,2)+'\n');console.log(report);

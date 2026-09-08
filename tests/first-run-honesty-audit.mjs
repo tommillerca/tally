@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* M5 frozen order, 2026-09-07. Adapted from the available cx-firstrun WIP:
  * preserve the first-run intro and four-job toast backlog cap. Browser proof
  * is pending in the authoring sandbox. Expected: 8/8 passed, exit 0.
@@ -48,7 +49,7 @@ try {
     const images = [...document.querySelectorAll('#splash img')];
     return images.length > 0 && images.every(img => img.complete && img.naturalWidth > 0);
   }, { timeout: 15000 });
-  await fresh.screenshot({ path: path.join(shots, 'first-run-intro.png') });
+  await fresh.screenshot({ path: auditOutputPath(path.join(shots, 'first-run-intro.png')) });
   ok('FIRST-INTRO first run retains its unforced splash', await fresh.evaluate(() => window.__m5Splashes === 1));
   await fresh.click('#splash');
   await fresh.waitForSelector('#splash', { hidden: true });
@@ -56,7 +57,7 @@ try {
   const disclosure = await fresh.$eval('.onb', el => el.innerText);
   const expected = "New bones. I'm Gwart. You eat, the skeleton earns. I keep an anonymous account for you. No email, password, or sign-up. The Privacy policy tells the long version.";
   ok('DISCLOSURE Gwart introduces himself and names the anonymous account', disclosure.includes(expected));
-  await fresh.screenshot({ path: path.join(shots, 'first-run-disclosure.png') });
+  await fresh.screenshot({ path: auditOutputPath(path.join(shots, 'first-run-disclosure.png')) });
   const go = await fresh.$('#onbGo');
   await go.click();
   await fresh.waitForSelector('#onbName', { visible: true });
@@ -95,7 +96,7 @@ try {
   const returning = await pageFor(returnContext);
   await returning.goto(base + '?demo', { waitUntil: 'domcontentloaded' });
   await returning.waitForSelector('#dwSpin', { visible: true, timeout: 20000 });
-  await returning.screenshot({ path: path.join(shots, 'returning-reward.png') });
+  await returning.screenshot({ path: auditOutputPath(path.join(shots, 'returning-reward.png')) });
   await returning.click('#dwSpin');
   await sleep(80);
   if (await returning.$('#dwSpin')) await returning.click('#dwSpin');

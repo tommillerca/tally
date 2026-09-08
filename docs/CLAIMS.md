@@ -1,5 +1,18 @@
 # What each patch note claims, and what backs it
 
+## R3: operational debt (2026-09-07)
+
+1. PROOF: unit.test.js | REACH: The hotfix registerKey/goOnline regions and strengthened R37-24 guard are byte-identical to locally available origin/main. The current unit suite checks the failed retry, welcome receipt and successful later signup. Branch left intact; no live-wallet measurement is claimed.
+2. PROOF: audit-output-audit.mjs, guard-hygiene-lint.mjs | REACH: Recognized audit write destinations reject the checkout, traversal and symlink aliases; the remaining serveTree proof file moved into memory. Three throwaway reversions went red and restored copies went green. This is bounded source/path evidence, not an OS-level guarantee for opaque subprocesses or a browser proof.
+3. PROOF: serve-tree-identity-audit.mjs | REACH: Real wrong-port, read-only directory and child-exit proofs remain pending on a socket-permitted machine. The socket-dependent checks now belong to FULL, preserving their assertions. Initial inherited PURE execution received listen EPERM and did not grade any row.
+
+Four verdicts, files, exact proof output, denials and deviations are recorded in
+[R3-REPORT.md](R3-REPORT.md). Current census/machine limits are in
+[RELEASE-GATE-STATUS.md](RELEASE-GATE-STATUS.md). [TESTFLIGHT-STATE.md](TESTFLIGHT-STATE.md)
+attributes the supplied snapshot and marks current remote verification blocked
+by the contradictory ASC instruction. No commit, push or publication occurred.
+
+
 ## M5: first-run disclosure and lookup guards (2026-09-07)
 
 1. PROOF: unit.test.js | REACH: Gwart retains his introduction and gives the exact anonymous-account disclosure. First run retains its intro, returning players skip it unless explicitly previewing. The four-job toast backlog cap remains. The three focused Node guards pass; the full unit command has one socket-dependent failure.

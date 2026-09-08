@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* tests/wardrobe-family-grid-audit.mjs — THE COLLAPSED GRID, IN PIXELS.
  *
  * WHY THIS EXISTS. QA round 23 F6 measured the ceiling on this screen: 57
@@ -290,7 +291,7 @@ check('HEIGHT and it fits inside three phone-heights, which the flat one did not
   `${geo.after}px against a 844px viewport`);
 
 await quiet();
-await page.screenshot({ path: `${DIR}/fam-grid-collapsed.png` });
+await page.screenshot({ path: auditOutputPath(`${DIR}/fam-grid-collapsed.png`) });
 
 /* ---- SCROLL: how far the thumb travels to the last tile ------------------
    QA round 23 F6 measured this slot at 1,420px and found that "past tile 36 the
@@ -385,7 +386,7 @@ check('RAIL every variant is hit-testable once scrolled to',
   R.reachable === R.n, `${R.reachable}/${R.n} returned their own tile from elementFromPoint`);
 
 await quiet();
-await page.screenshot({ path: `${DIR}/fam-grid-rail.png` });
+await page.screenshot({ path: auditOutputPath(`${DIR}/fam-grid-rail.png`) });
 
 /* ---- WORN: the collapsed tile draws what you put on --------------------- */
 await page.evaluate(() => {
@@ -455,7 +456,7 @@ check('WORN exactly the tapped variant is ringed in the rail',
   JSON.stringify(after.railRing));
 
 await quiet();
-await page.screenshot({ path: `${DIR}/fam-grid-worn.png` });
+await page.screenshot({ path: auditOutputPath(`${DIR}/fam-grid-worn.png`) });
 
 /* ---- SECOND: a different family, and only ever one rail -----------------
    ONE FAMILY IS AN ANECDOTE. The rows above all ran on the H10 headbands; this
@@ -503,7 +504,7 @@ check('SECOND exactly one rail is open, and it belongs to exactly one tile',
   `${sOut.rails} rails, tiles marked open: ${JSON.stringify(sOut.expanded)} (the first was ${second.first})`);
 
 await quiet();
-await page.screenshot({ path: `${DIR}/fam-grid-second.png` });
+await page.screenshot({ path: auditOutputPath(`${DIR}/fam-grid-second.png`) });
 console.log(`shots in ${DIR}`);
 await browser.close();
 console.log(bad ? `\n${bad} FAILED` : '\nWARDROBE FAMILIES: ONE TILE PER DRAWING, THE RAIL HOLDS THE REST, THE TILE SHOWS WHAT IS ON');

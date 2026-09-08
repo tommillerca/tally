@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* Onboarding audit: the launch funnel, driven for real on a FRESH profile.
  *
  * WHY. Onboarding is the highest-leverage screen for going public (Tom's stated
@@ -66,7 +67,7 @@ async function freshPage() {
   await sleep(2400);
   return p;
 }
-const shot = async (p, n) => { if (sh) await p.screenshot({ path: path.join(sh, `onb-${n}.png`) }); };
+const shot = async (p, n) => { if (sh) await p.screenshot({ path: auditOutputPath(path.join(sh, `onb-${n}.png`)) }); };
 
 /* ---------- run 1: the full happy path ---------- */
 let p = await freshPage();
@@ -364,7 +365,7 @@ for (const vp of [{ w: 375, h: 667 }, { w: 320, h: 568 }, { w: 393, h: 852 }]) {
     reached.length >= 3 && reached.every(r => r.self),
     reached.filter(r => !r.self).map(r => `${r.t} hits ${r.tag}`).join(', ') || `${reached.length}/${reached.length}`);
 
-  if (sh) await pv.screenshot({ path: path.join(sh, `onb-plan-${vp.w}x${vp.h}.png`) });
+  if (sh) await pv.screenshot({ path: auditOutputPath(path.join(sh, `onb-plan-${vp.w}x${vp.h}.png`)) });
   await ctx.close();
 }
 

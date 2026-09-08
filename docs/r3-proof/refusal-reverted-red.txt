@@ -1,0 +1,9 @@
+PASS CONTROL external output is written and read back
+FAIL CHECKOUT absolute, relative, traversal and URL destinations are refused: Missing expected exception.
+FAIL SYMLINK existing and nonexistent leaves cannot alias the checkout: Missing expected exception.
+PASS DANGLING symlink fails closed
+PASS CONTROL sibling sharing checkout prefix remains outside
+FAIL GRADED another served tree is also protected: Missing expected exception.
+PASS CONTROL sink scan sees real writes, aliases and screenshot paths
+PASS SERVE identity uses memory and cannot create a proof file in the tree
+audit-output: 5 passed, 3 failed

@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* THE UPGRADE PATH: what a returning player actually gets when a release lands.
  *
  * WHY THIS EXISTS. Every fix in this repo reaches a player through exactly one
@@ -285,8 +286,8 @@ const OLD_REF = '96c1104a';
 const OLD_ROOT = (() => {
   const dir = path.join(os.tmpdir(), `tally-sw-upgrade-old-${OLD_REF}`);
   if (!fs.existsSync(path.join(dir, 'sw.js'))) {
-    fs.rmSync(dir, { recursive: true, force: true });
-    fs.mkdirSync(dir, { recursive: true });
+    fs.rmSync(auditOutputPath(dir), { recursive: true, force: true });
+    fs.mkdirSync(auditOutputPath(dir), { recursive: true });
     execFileSync('sh', ['-c', `git -C "${ROOT}" archive --format=tar ${OLD_REF} | tar -x -C "${dir}"`], { stdio: 'inherit' });
   }
   return dir;
@@ -412,7 +413,7 @@ function certs() {
   const key = path.join(dir, 'key.pem'), crt = path.join(dir, 'cert.pem');
   const fresh = fs.existsSync(crt) && (Date.now() - fs.statSync(crt).mtimeMs) < 12 * 3600e3;
   if (!fresh) {
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(auditOutputPath(dir), { recursive: true });
     try {
       execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-keyout', key, '-out', crt,
         '-days', '2', '-nodes', '-subj', '/CN=tally.test',

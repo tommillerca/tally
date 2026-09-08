@@ -1,3 +1,4 @@
+import { auditOutputPath } from './lib/audit-output.mjs';
 /* L1 CONTROL: execute the real page wrapper, probe and receipt in Node doubles.
  * This proves disclosure, not browser cadence or app performance. The missing
  * receipt is proven red by restoring the pre-L1 lifecycle on a throwaway tree.
@@ -9,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import vm from 'node:vm';
 
-const temp = mkdtempSync(join(tmpdir(), 'l1-machine-'));
+const temp = mkdtempSync(auditOutputPath(join(tmpdir(), 'l1-machine-')));
 const lifecycle = new URL('./audit-lifecycle.mjs', import.meta.url).href;
 const observer = new URL('./dependency-observer.mjs', import.meta.url).href;
 let failures = 0, cases = 0;
@@ -20,7 +21,7 @@ function check(name, fn) {
 }
 function run(mode) {
   const fixture = join(temp, 'fixture.mjs');
-  writeFileSync(fixture, `
+  writeFileSync(auditOutputPath(fixture), `
     import { EventEmitter } from 'node:events';
     import vm from 'node:vm';
     import { observePuppeteer } from ${JSON.stringify(observer)};
@@ -85,8 +86,8 @@ function run(mode) {
     console.log('EVENTS '+JSON.stringify(events));
   `);
   const r = spawnSync(process.execPath, [fixture], { encoding:'utf8', timeout:10000 });
-  writeFileSync(join(temp, 'last.exit'), String(r.status));
-  writeFileSync(join(temp, 'last.out'), r.stdout + r.stderr);
+  writeFileSync(auditOutputPath(join(temp, 'last.exit')), String(r.status));
+  writeFileSync(auditOutputPath(join(temp, 'last.out')), r.stdout + r.stderr);
   assert.ifError(r.error);
   assert.equal(r.status, mode === 'explicit' ? 0 : mode === 'failed-row' ? 1 : 97, r.stdout + r.stderr);
   const lines = r.stderr.split('\n').filter(l => l.startsWith('MACHINE CHARACTER '));
@@ -153,6 +154,6 @@ try {
     assert.equal(pure.filter(f=>f==='machine-character-audit.mjs').length,1);
     assert.equal((s.match(/'machine-character-audit.mjs'/g)||[]).length,1);
   });
-} finally { rmSync(temp,{recursive:true,force:true}); }
+} finally { rmSync(auditOutputPath(temp),{recursive:true,force:true}); }
 console.log(`machine-character: ${cases-failures}/${cases} passed, ${failures} FAILED`);
 process.exitCode = failures ? 1 : 0;

@@ -1,0 +1,20 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import { spawnSync } from 'node:child_process';
+const gate = fs.readFileSync('tests/release-gate.mjs','utf8');
+const init = gate.match(/const PURE = (\[[\s\S]*?\]);/)[0];
+const mutations = [...gate.matchAll(/^PURE\.(?:push|unshift)\([^;]+\);/gm)].map(m=>m[0]);
+const files = vm.runInNewContext(init+'\n'+mutations.join('\n')+'\nPURE');
+fs.mkdirSync('/tmp/r3-pure',{recursive:true});
+const results = [];
+for (const file of files) {
+ const r = spawnSync(process.execPath, ['tests/'+file], {encoding:'utf8', timeout:180000,maxBuffer:16*1024*1024});
+ const out = (r.stdout||'')+(r.stderr||'')+(r.error?'\n'+r.error:'');
+ fs.writeFileSync('/tmp/r3-pure/'+file+'.out',out);
+ fs.writeFileSync('/tmp/r3-pure/'+file+'.exit',String(r.status));
+ results.push({file,code:r.status,signal:r.signal});
+ fs.writeFileSync('/tmp/r3-pure/results.json',JSON.stringify(results,null,2)+'\n');
+ console.log(`${r.status===0?'PASS':'FAIL'} ${file} exit=${r.status}`);
+ if(r.status!==0) console.log(out.split('\n').filter(l=>/FAIL|Error|Cannot|ENOENT|EPERM|EACCES/.test(l)).join('\n').slice(0,2500));
+}
+console.log(`${results.filter(r=>r.code===0).length}/${files.length} PURE files exit 0`);

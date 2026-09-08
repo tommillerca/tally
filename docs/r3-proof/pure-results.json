@@ -1,0 +1,392 @@
+[
+  {
+    "file": "version-align-lint.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "no-debug-markers-lint.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "store-copy-lint.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "transmog-receipt-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "today-reads-lint.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "kitchen-atomic-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "backup-encoder-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "backup-key-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "backup-version-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "backup-conflict-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "unit.test.js",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "log-xp-farm-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "drip-badge-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "xp-key-provenance-lint.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "facegate-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "garden-appetite-guard.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "pit.test.js",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "quest-daymore-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "quest-pick-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "first-fight-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "stat-source-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "bastions-rep-sim.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "analytics-tag-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "icon-inventory-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "version-stamp-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "boneyard-supply-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "loot-fallback-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "guard-hygiene-lint.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "guard-provenance-lint.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "feedback-status-lint.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "rack-theme-lint.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "rack-rotate-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "pet-accessory-lint.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "pet-pool-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "manifest-exports-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "xp-curve-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "live-api-register-lint.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "claim-evidence-lint.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "thumb-freshness-lint.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "render-sink-lint.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "lapse-witness-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "spawn-claim-atomic-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "wardrobe-family-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "football-kit-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "restore-latch-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "first-pet-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "currency-revision-lint.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "inv-tombstone-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "take-and-pay-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "audit-output-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "branch-graveyard-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "store-runtime-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "r47-rest-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "r47-economy-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "submission-build-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "harness-environment-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "guard-debts-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "submission-preflight-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "pet-state-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "pet-family-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "coins-merge-tie-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "routine-race-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "dayone-topup-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "dish-worth-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "pet-C-node-guard.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "r48-state-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "r46-logging-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "r46-diary-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "audit-completion-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "machine-character-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "n3-deadpaths-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "m5-prove-red.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "lookup-guard-lint.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "restore-state-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "restore-debt-edges-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "restore-debt-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "p1-r48-rest-audit.mjs",
+    "code": 0,
+    "signal": null
+  },
+  {
+    "file": "pet-a11y-audit.mjs",
+    "code": 0,
+    "signal": null
+  }
+]
