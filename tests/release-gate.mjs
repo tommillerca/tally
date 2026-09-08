@@ -262,6 +262,7 @@ const PURE = ['pet-stress-guard.mjs', 'crew-pet-node-guard.mjs', 'transmog-recei
   'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs',
   'take-and-pay-audit.mjs'];   // L1/L5: transaction-boundary kills for inventory, Shop, Pit, meal XP retry (including midnight and overlapping opens), grants and Spire recovery; Node-only.
 PURE.push('fontscale-audit.mjs'); // R60-2: rem type seam, root doubling and px geometry controls; no browser or sockets.
+PURE.push('wheel-easing-audit.mjs'); // w1: no overshooting control points, with pre-fix CONTROL; no browser or sockets.
 PURE.unshift('store-copy-lint.mjs');
 PURE.push('storage-boot-audit.mjs'); // R54-4: throwing IndexedDB boot and normal control, no browser or sockets.
 PURE.push('crate-cadence-audit.mjs'); // c1: exact browsing cadence, outgoing overlap and a rejected 790ms control; no browser or sockets.
