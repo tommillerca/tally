@@ -1,0 +1,7 @@
+CONTROL lurkSp: known renders once; absent and unknown do not reach sink
+RED lurkSp: removed validation trips runtime boundary assertion
+BLIND lurkSp: identical findings; existing lint exit 0
+CONTROL petArtId: known renders once; absent and unknown do not reach sink
+RED petArtId: removed validation trips runtime boundary assertion
+BLIND petArtId: identical findings; existing lint exit 0
+DIAGNOSIS: both validation removals escape the existing ratchet. Shape D prevention is UNPROVEN.

@@ -1,5 +1,11 @@
 # Lookup guard review, 2026-09-07
 
+L7 follow-up, 2026-09-08: [measured counterexamples](L7-guardlint.md) show that
+removing either false positive's real validation leaves the findings identical
+and the lint green. The reviewed-site identity does not include validation
+provenance. Its PASS therefore cannot certify even that the reviewed boundaries
+remain healthy. No scanner change or seven-incident coverage is claimed.
+
 The current tree produces **2 true positives for missing boundary validation,
 2 false positives, and 0 proven crashes** across 4 candidates. Precision is 50%
 for the boundary-validation rule. This is not evidence of 50% crash detection
