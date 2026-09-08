@@ -58,7 +58,8 @@ let runId = 0;
 function run(mode, fault = '') {
   const dir = path.join(temp, String(++runId));
   const native = path.join(dir, 'native');
-  for (const rel of ['native/ios/App/App.xcodeproj', 'tests', 'bin']) mkdirSync(path.join(dir, rel), { recursive: true });
+  for (const rel of ['native/ios/App/App.xcodeproj', 'native/build', 'tests', 'bin']) mkdirSync(path.join(dir, rel), { recursive: true });
+  if (fault !== 'missing-export-options') writeFileSync(path.join(native, 'build/exportOptions.plist'), '<plist version="1.0"><dict/></plist>');
   symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'));
   for (const file of ['build-store.sh', 'submission-preflight.mjs']) copyFileSync(path.join(root, 'native', file), path.join(native, file));
   copyFileSync(path.join(root, 'tests/store-copy-scan.mjs'), path.join(dir, 'tests/store-copy-scan.mjs'));
@@ -89,6 +90,12 @@ try {
     const r = run(mode);
     check(r.status === 2 && r.output.includes('BUILD REFUSED:') && !r.calls && r.restored && !existsSync(path.join(r.native, 'www')),
       `unmarked/invalid mode ${JSON.stringify(mode) ?? 'unset'} refuses before side effects (exit ${r.status})`);
+  }
+  for (const mode of ['0', '1']) {
+    const r = run(mode, 'missing-export-options');
+    check(r.status === 1 && r.output.includes('BUILD REFUSED: missing native/build/exportOptions.plist')
+      && !r.calls && r.restored && !existsSync(path.join(r.native, 'www')),
+    `missing export options refuses ${mode === '1' ? 'submission' : 'internal'} before side effects`);
   }
   const internal = run('0');
   check(internal.status === 0 && internal.calls.includes('build/internal/App.xcarchive') && internal.calls.includes('build/internal/export/App.ipa') && !internal.calls.includes('build/submission/') && !existsSync(path.join(internal.native, 'www/submission.json')) && JSON.parse(readFileSync(path.join(internal.native, 'ios/App/App/capacitor.config.json'), 'utf8')).server?.url === 'https://example.invalid' && readFileSync(path.join(internal.native, 'ios/App/App/public/js/app.js'), 'utf8').includes('const STORE_BUILD = false;') && internal.restored,
