@@ -20422,6 +20422,7 @@ async function openStable(opts = {}) {
     const kennelMorphs = new Set([...kennelOwned].map(k => k.split('|')[1]));
     const kennelFound = ownedCellCount(kennelOwned, KENNEL_SPECIES.map(x => x.id));
     rememberKin(body);
+    const breedLockNote = st.ready ? '' : `<p class="note" data-breed-lock>Breeding is locked. Walk ${st.cooldownLeft.toLocaleString()} more ${st.cooldownLeft === 1 ? 'step' : 'steps'} to unlock it.</p>`;
     const bodyScroll = body.scrollTop;
     body.innerHTML = `
       <button class="pdk-door" id="stableToPaddock" type="button">
@@ -20500,6 +20501,7 @@ async function openStable(opts = {}) {
           <button class="btn ghost bw-cancel" id="breedCancel" type="button">Cancel</button>
         </div>` : ''}
       ${pair ? '' : `<p class="note" style="margin:2px 2px 10px"><b>Breed</b> feeds a spare pet into one you keep: the <b>keeper gains a lineage rank</b> (combat stats stop growing at the combined ${PET_STAT_MULT_CAP}x cap) and the spare is destroyed. <b>Destroy</b> trades a spare for Bone Dust instead.</p>`}
+      ${pair ? '' : breedLockNote}
       ${roster.length ? `
         <div class="cf${cfWasPanelled ? ' panelled' : ''}" data-want="${openIid || pair ? 'panelled' : 'open'}">
           <!-- The SVG motion-blur filter that used to live here is gone: measured
@@ -20548,7 +20550,7 @@ async function openStable(opts = {}) {
             Feed a plain spare in instead unless you are sure.</div>
           </div>` : ''}
           <div class="breed-pick"><span class="note">Which one are you keeping?</span><div class="breed-sp">${spChips}</div></div>
-          ${st.ready ? '' : `<p class="note">Walk ${st.cooldownLeft.toLocaleString()} more steps before breeding again.</p>`}
+          ${breedLockNote}
           <button class="btn" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Feed ${esc(petInstanceName(spare, bank[spare.iid] || 0))} in</button>
         </div>` : ''}`;
 
