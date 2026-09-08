@@ -2236,3 +2236,31 @@ note in a later build if he confirms it, and more work if he does not.
   and, on the second pass, still missing the route: the crew deck is a carousel
   and one tap only centres the card. Now written as two taps, with the empty state
   named.
+
+
+## 2026-09-07: R45 guard debts
+
+This section supersedes the crate performance numbers in the earlier v500
+crate-flick claim without changing that historical section. R45 measurements
+supplied with the work order show burst drawArrays calls during the move fell
+from 18 and 26 on v493 to zero on v509. That mechanism improvement stands.
+The reported dropped-frame counts were 2 to 10, and six of ten moves exceeded
+the audit's existing over20 <= 6 bound. The first flick still ran at half rate
+in four of five runs (12 to 20 frames); the second ran full rate in every run.
+A 520ms window contains about 31 frames at 60Hz, so 47 to 59 cannot describe
+that window at 60Hz. These are supplied R45 results, not new browser measurements.
+The first-flick app fix remains with the app lane.
+
+1. PROOF: mimic-audit.mjs | REACH: A zero-frame reveal now prints a named CONTROL failure, marks the three dependent pixel rows UNPROVEN, and continues through the remaining DOM, timing and arena checks to a verdict. Missing ground capture also continues. The Node regression exercises the actual grading block; the full browser audit was not executable in this lane.
+2. PROOF: boneyard-audit.mjs | REACH: ARRIVAL-SLOW requires the same ten-marker reveal-time sample as FAST. R45's one-marker sample is UNPROVEN, never a pass. Both laps explicitly force SwiftShader; their latency budget is now 400ms, stated in output as the 220ms fade plus 180ms software-compositor sampling slack, justified by R45's 260ms and 362ms readings. The 1200ms hold and missing visibility still fail. No phone timing claim is made.
+3. PROOF: guard-debts-audit.mjs | REACH: GODMODE_DPR=3 or boot(base, { deviceScaleFactor: 3 }) opts into DPR 3. The override applies to boot and later viewport changes on the returned page, even legacy explicit DPR 2 calls, and asserts window.devicePixelRatio after each change. Unset retains DPR 2 at boot; setWidth preserves the page's current DPR. Node checks use a stub browser, not rendered art proof.
+4. PROOF: crate-reveal-audit.mjs | REACH: FIRST FLICK 1->2 and SECOND FLICK 2->3 have independent cadence and burst-pause rows. Each 520ms window requires at least 25 rAF samples and retains over20 <= 6. A burst-draw control must see the actual canvas before the first tap; each move must record zero burst drawArrays calls. rAF samples are cadence evidence, not a count of compositor-rendered frames. Browser results remain unproven here.
+5. PROOF: submission-build-audit.mjs | REACH: Explicit artifact inspection requires SUBMISSION=1, a schema-1 submission marker matching both artifact SHA256 hashes, and the existing native store-content preflight. No-argument execution runs labeled synthetic self-tests in PURE and certifies no build. Creating the marker during sync and enforcing inspection before submission require native integration outside this lane; manual builds can still bypass an unintegrated test. Unmarked artifacts cannot pass this guard.
+6. PROOF: guard-debts-audit.mjs | REACH: Node-only regression checks execute the actual audit grading blocks with empty, undersampled and healthy fixtures. The pre-change grading code was restored on a throwaway copy and failed; restoring the changes passed. This does not substitute for the prohibited browser/server red-green runs.
+
+R45-7, R45-8 and R45-11 remain unspecified: neither this checkout's Markdown
+nor the frozen work order defines their defects. Proposed next step: recover
+the three finding bodies and their reproductions, assign any app/native fixes
+to their owners, then add guards against those observed states. No defect or
+fix has been invented from an issue number. Detailed evidence, pending browser
+commands and native integration proposal are in tests/wave-guards-report.md.
