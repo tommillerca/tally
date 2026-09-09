@@ -26,6 +26,33 @@
  *            ledger still holds the beaten key, a new instance is drawn, and its
  *            key is unclaimed.
  *
+ * THE 45-MINUTE INSTANCE IS PINNED, 2026-09-02. This suite was a coin flip at
+ * lap boundaries and reported the loss as a DEFECT. Tom, 2026-09-02 09:44 EDT on
+ * 2b9859b8, one commit behind main:
+ *   FAIL  DESPAWN ... | his instance rolled over mid-run, so this row measured NOTHING
+ *   FAIL  NEIGHBOURS ... | 2464_-6157_i12 still on the map
+ *   exit 1
+ * and the same suite on the same tree, minutes later, exit 0. 09:45 is a lap
+ * boundary (minute 585 = 13 x 45) and i12 is the instance that ended there.
+ * Both reds were the clock, and the second one printed the OPPOSITE of what had
+ * happened, because that detail string was shared by the pass and fail paths.
+ *
+ * The fix is a pin, not an UNPROVEN. The existing rollover guard between the fix
+ * and the first look (`!him`, below) declares itself and that is right, but a
+ * declared row that comes and goes with the wall clock is not a check, which is
+ * the lesson NEXT's empty sample already taught this file. So the page clock is
+ * moved forward to the START of a lap before anything is measured: a run takes
+ * ~105s (measured on clean main, 2026-09-02), a lap is 45 minutes, and a lap
+ * always lies inside one calendar day, so the alignment removes the instance
+ * rollover and the midnight dateKey() flip from the measurement window
+ * together. NEXT's own one-lap shift stacks on it and lands on the following
+ * lap's start, so that half gains the same headroom.
+ * Nothing DESPAWN or NEIGHBOURS asserts changed. A Wanderer still drawn after
+ * being beaten inside one instance is still red; a neighbour still derived and
+ * gone from the map is still red. Only the ungradable residual (the land oracle
+ * dropping a cell between the two looks, which the pin cannot reach) is now
+ * declared UNPROVEN by name instead of printing "measured NOTHING" as a red.
+ *
  * NEEDS A MAP. MapLibre needs WebGL and vector tiles; on a machine with neither,
  * every row here would be graded against a blank screen and pass on nothing, so
  * it measures the capability first and reports UNPROVEN with exit 97 rather than
@@ -88,6 +115,40 @@
  *   js/app.js `startWandererEncounter(w, rec.el)` deleted -> exit 1, CONTROL
  *     alone red, and it now names the right half: "cone entry never opened the
  *     encounter sheet in 20000ms".
+ *
+ * PROVE-RED, 2026-09-02, for the pin and for the two rows it touches. Throwaway
+ * `cp -R` trees with .git removed, ONE mutation at a time, the mutation asserted
+ * to have applied (source count 1 before the replace, 0 after), exits read from a
+ * FILE, and every run pinned to the SAME instance so the three are comparable.
+ *
+ * THE LOTTERY, REPRODUCED FIRST, because a fix for a failure nobody has seen
+ * again is a guess. On pristine 1681e58c, with a harness-only clock offset that
+ * starts the page 13 s short of a real lap boundary (the app still derives him
+ * from `new Date()`, so this is the same event as running at 09:44):
+ *   boundary at t+63.0s, BEFORE look at t+55.3s, AFTER look at t+79.5s
+ *   FAIL  DESPAWN ... | his instance rolled over mid-run, so this row measured NOTHING
+ *   exit 1
+ * The SAME offset against this file: `INSTANCE PINNED page clock +50s, now 0.22
+ * min into a 45-minute lap: 44.78 min of headroom`, every row graded, exit 0.
+ *
+ * THE ROWS STILL CATCH THEIR BUGS. All three at instance i27 (picked by probing
+ * all 32 of the day's instances from the point the suite actually stands the
+ * player on, 45 m in front of near[0], rather than from HOME: only 12 of 32 put
+ * a SECOND Wanderer inside WANDER_SHOW_M of that point, which is why NEIGHBOURS
+ * reads "no second Wanderer was near enough" on most runs):
+ *   control, unmutated   BEFORE/DESPAWN/LEDGER/NEIGHBOURS/NEXT all PASS, exit 0
+ *                        NEIGHBOURS graded for real: "1 of 1 neighbour(s)
+ *                        [2464_-6157_i27] still derived; off the map: [none]"
+ *   js/app.js:18361 `.filter(w => !wandererDone.has(...))` deleted (Tom's
+ *     original bug) -> exit 1, DESPAWN ALONE red: "2 marker(s) drawn
+ *     [2464_-6156_i27, 2464_-6157_i27], and he is still a live instance at 40m".
+ *     NEIGHBOURS stayed green through it.
+ *   js/app.js:18361 `wandererDone.size ? [] : wanderersNear(...)`, a filter that
+ *     clears the WHOLE map once any win is on the ledger -> exit 1, NEIGHBOURS
+ *     ALONE red: "1 of 1 neighbour(s) [2464_-6157_i27] still derived; off the
+ *     map: [2464_-6157_i27]". DESPAWN PASSED on this tree, which is the entire
+ *     reason the NEIGHBOURS row exists.
+ * One mutation, one red, each time, with the control green beside them.
  *
  *   node tests/wanderer-despawn-audit.mjs
  */
@@ -168,6 +229,52 @@ try {
     unproven('LEDGER the win is recorded on his instance key', 'this machine cannot draw the Boneyard');
     unproven('NEXT the next instance walks again', 'this machine cannot draw the Boneyard');
   } else {
+    /* PIN THE 45-MINUTE INSTANCE BEFORE ANYTHING IS MEASURED.
+       Every id here is `<cell>_i<floor(minutesSinceLocalMidnight / 45)>`, so a
+       lap boundary is a wall-clock event 32 times a day that renames every
+       Wanderer alive. A run that straddles one re-derives him under a new id
+       halfway through and DESPAWN and NEIGHBOURS then compare two different
+       populations. Measured by Tom, 2026-09-02 09:44 EDT on 2b9859b8: both rows
+       red at the 09:45 boundary (`2464_-6157_i12 still on the map`, and DESPAWN
+       printing its own "this row measured NOTHING"), and the same suite on the
+       same tree green minutes later. A gate that is a coin flip for 32 minutes a
+       day trains people to re-run reds, which is worse than no gate.
+       So the page clock is moved forward to the START of the next lap, which
+       buys the whole measurement a full WANDER_LAP_MIN of headroom against a run
+       that takes ~105s end to end. A lap always lies inside one calendar day
+       (1440 is a multiple of 45), so aligning also removes the midnight
+       dateKey() flip from the same window, for free.
+       NOT A WEAKENING, and deliberately not an UNPROVEN either: an UNPROVEN that
+       comes and goes on the clock is not a check, and this suite already learned
+       that lesson once with NEXT's empty sample. What DESPAWN and NEIGHBOURS
+       assert is untouched. The clock is a thing this suite already drives (NEXT
+       shifts it a whole lap below, and that shift stacks on this one to land
+       exactly on the following lap's start). The residual "he stopped being
+       derived for some OTHER reason" path is declared, not failed, below. */
+    const pin = await page.evaluate(async () => {
+      const { WANDER_LAP_MIN } = await import('./js/wanderer.js');
+      const d = new Date();
+      const mins = d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+      return { lap: WANDER_LAP_MIN, shiftMs: Math.ceil((WANDER_LAP_MIN - (mins % WANDER_LAP_MIN)) * 60000) + 1000 };
+    });
+    await page.evaluateOnNewDocument((SHIFT) => {
+      const ND = Date;
+      function D(...a) { return a.length ? new ND(...a) : new ND(ND.now() + SHIFT); }
+      D.now = () => ND.now() + SHIFT; D.parse = ND.parse; D.UTC = ND.UTC; D.prototype = ND.prototype;
+      window.Date = D;
+    }, pin.shiftMs);
+    await page.reload({ waitUntil: 'networkidle2' });
+    await sleep(2600);
+    await dismissOverlays(page);
+    /* PRINTED EVERY RUN, because the pin is the reason the two rows below can be
+       believed and a triager reading a red needs to see it held. */
+    const held = await page.evaluate((lap) => {
+      const d = new Date();
+      const mins = d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+      return { into: +(mins % lap).toFixed(2), headroom: +(lap - (mins % lap)).toFixed(2) };
+    }, pin.lap);
+    console.log(`INSTANCE PINNED  page clock +${(pin.shiftMs / 1000).toFixed(0)}s, now ${held.into} min into a ${pin.lap}-minute lap: ${held.headroom} min of headroom for a ~105s run`);
+
     await seed(page, { level: 18, coins: 500 });
     /* Stand 45 m into his light, computed off the position and heading the APP
        derives (land oracle and all), so the encounter fires from the player's
@@ -261,18 +368,43 @@ try {
          nothing to do with the win, so the row refuses to grade unless the
          module still says this exact instance is out there. */
       const stillDerived = after.near.some(w => w.id === him.id);
-      ok('DESPAWN the Wanderer you just beat is gone from the map',
-        stillDerived && !after.drawn.some(m => m.id === him.id),
-        stillDerived ? `${after.drawn.length} marker(s) drawn [${after.drawn.map(m => m.id).join(', ') || 'none'}], and he is still a live instance at ${him.dist}m`
-          : 'his instance rolled over mid-run, so this row measured NOTHING');
+      /* A ROW THAT MEASURED NOTHING IS UNPROVEN, NOT RED. The old shape passed
+         `stillDerived && ...` into ok() and printed "his instance rolled over
+         mid-run, so this row measured NOTHING" as a FAILURE, which is the exact
+         sentence that says it is not one. The pin above removes the rollover, so
+         reaching here now means the land oracle dropped his cell between the two
+         looks (js/water.js caps its tile cache at MAX_TILES and evicts; see
+         realWanderer in godmode.js, which retries for the same reason). Either
+         way nothing was measured, and this repo already has a channel for that. */
+      if (!stillDerived) unproven('DESPAWN the Wanderer you just beat is gone from the map',
+        `the module no longer derives ${him.id} as a live instance, and the pin rules out the 45-minute rollover, `
+        + `so the land oracle dropped his cell between the two looks: the live set is now `
+        + `[${after.near.map(w => w.id).join(', ') || 'empty'}]. This row measured NOTHING`);
+      else ok('DESPAWN the Wanderer you just beat is gone from the map',
+        !after.drawn.some(m => m.id === him.id),
+        `${after.drawn.length} marker(s) drawn [${after.drawn.map(m => m.id).join(', ') || 'none'}], and he is still a live instance at ${him.dist}m`);
       ok('LEDGER the win is recorded on his own instance key, which is what the map reads',
         after.ledger.includes(him.key), `ledger holds ${JSON.stringify(after.ledger)}, his key ${him.key}`);
       /* AND ONLY HIM. A filter that took every Wanderer off the map would pass
          DESPAWN and be a worse bug than the one being fixed. */
       const others = before.drawn.filter(m => m.id !== him.id).map(m => m.id);
-      ok('NEIGHBOURS the Wanderers nobody beat are still drawn',
-        others.length === 0 || others.every(id => after.drawn.some(m => m.id === id)),
-        others.length ? `${others.join(', ')} still on the map` : 'no second Wanderer was near enough to grade this');
+      /* GRADED AGAINST THE NEIGHBOURS THE MODULE STILL CALLS LIVE, the same
+         two-halves rule DESPAWN runs under and for the same reason: a neighbour
+         who is no longer derived is undrawn for a reason that has nothing to do
+         with the filter. Not a weakening: a neighbour that is still derived and
+         has left the map is still red, which is the whole claim.
+         AND THE DETAIL NO LONGER LIES. The old line printed "<id> still on the
+         map" whether the row passed or failed, so Tom's 2026-09-02 red read as
+         the opposite of what had happened. It now names what is missing. */
+      const gradable = others.filter(id => after.near.some(w => w.id === id));
+      const gone = gradable.filter(id => !after.drawn.some(m => m.id === id));
+      if (others.length && !gradable.length) unproven('NEIGHBOURS the Wanderers nobody beat are still drawn',
+        `none of the neighbours drawn before the fight [${others.join(', ')}] is still a live instance `
+        + `(live set [${after.near.map(w => w.id).join(', ') || 'empty'}]), so this row measured NOTHING`);
+      else ok('NEIGHBOURS the Wanderers nobody beat are still drawn',
+        gone.length === 0,
+        others.length ? `${gradable.length} of ${others.length} neighbour(s) [${others.join(', ')}] still derived; off the map: [${gone.join(', ') || 'none'}]`
+          : 'no second Wanderer was near enough to grade this');
 
       /* THE OTHER DIRECTION. A marker that never comes back is the same screen as
          a marker that never drew, so the clock is moved one lap and the page
