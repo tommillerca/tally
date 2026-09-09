@@ -9,6 +9,10 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 536, date: '2026-09-09', title: 'The toothbrush and the spade sit in your hand', items: [
+    'The off-hand toothbrushes and spades now sit in the raised fist instead of floating beside it.',
+  ] },
+
   { n: 535, date: '2026-09-09', title: 'Ten things that were quietly costing you', items: [
   'Shop cosmetics no longer charge Bone Dust a second time to wear. Football garments include all 32 team colourways.',
   'Foraging in the Kitchen saves the coin payment and ingredient together. A failed save keeps your coins.',

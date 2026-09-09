@@ -1,0 +1,13 @@
+PASS IL10-1 pixels-lost(alpha>0)=0 expected=0; every lost alpha<=30; max=0; alpha histogram={}
+PASS IL10-2 pixels-lost(alpha>0)=0 expected=0; every lost alpha<=30; max=0; alpha histogram={}
+PASS IL17-1 pixels-lost(alpha>0)=7 expected=7; every lost alpha<=30; max=11; alpha histogram={1: 1, 2: 1, 3: 2, 4: 1, 8: 1, 11: 1}
+PASS IL17-2 pixels-lost(alpha>0)=10 expected=10; every lost alpha<=30; max=30; alpha histogram={1: 4, 3: 2, 17: 2, 20: 1, 30: 1}
+PASS IL10-1 surviving RGBA multiset identical: before=18575 after=18575 distinct=4265; exact translated RGBA bytes identical
+PASS IL10-1 surviving bbox before=(344, 0, 604, 365) + (30,104) = expected=(374, 104, 634, 469) after=(374, 104, 634, 469)
+PASS IL10-2 surviving RGBA multiset identical: before=18542 after=18542 distinct=4058; exact translated RGBA bytes identical
+PASS IL10-2 surviving bbox before=(344, 0, 603, 364) + (30,104) = expected=(374, 104, 633, 468) after=(374, 104, 633, 468)
+PASS IL17-1 surviving RGBA multiset identical: before=15036 after=15036 distinct=2592; exact translated RGBA bytes identical
+PASS IL17-1 surviving bbox before=(362, 38, 582, 360) + (44,68) = expected=(406, 106, 626, 428) after=(406, 106, 626, 428)
+PASS IL17-2 surviving RGBA multiset identical: before=15024 after=15024 distinct=2060; exact translated RGBA bytes identical
+PASS IL17-2 surviving bbox before=(362, 38, 544, 359) + (44,68) = expected=(406, 106, 588, 427) after=(406, 106, 588, 427)
+PASS before-after.png: all four original/corrected layers over B0-1, at 1:1 scale
