@@ -20978,6 +20978,7 @@ async function openStable(opts = {}) {
     $$('[data-petwear]', body).forEach(btn => btn.addEventListener('click', async () => {
       const r = await togglePetWear(btn.dataset.petwear);
       if (!r.ok) { toast('That piece is not in your wardrobe.'); return; }
+      pushProfileSoon(); // Crew reads this wardrobe from the public snapshot.
       await refreshPetWear();
       popSound(S.sounds);
       render();
@@ -21012,6 +21013,7 @@ async function openStable(opts = {}) {
       for (const cur of worn.filter(i => i.football.team !== team && hasHere(i))) {
         const r = await togglePetWear(footballItemId(team, cur.football.garment));
         if (!r.ok) toast(`Could not put the ${t.name} ${label(cur)} on.`);
+        else pushProfileSoon(); // Coalesce successful pieces into one kit upload.
       }
       await refreshPetWear();
       popSound(S.sounds);

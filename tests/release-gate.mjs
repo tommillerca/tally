@@ -253,6 +253,7 @@ const coverageOnly = process.argv.includes('--coverage-only');
 // Frozen loss-prevention work order, 2026-09-08: real UI and service controls, Node only.
 const PURE = [
   'lab-density-audit.mjs', // Frozen density work order: production copy and destruction controls, no sockets.
+  'crew-outfit-audit.mjs', // Real wardrobe handlers, snapshot round trip and Crew figure contracts, no sockets.
   'wardrobe-playtest-audit.mjs', 'lab-room2-audit.mjs', 'stable-stale-disclosure-audit.mjs', 'breed-last-colour-audit.mjs', 'stable-loss-disclosure-audit.mjs', 'lab-health-recovery-audit.mjs',
   'lab-integration-audit.mjs', 'lab-ui-audit.mjs', 'laboratory-audit.mjs', 'lab-foundation-audit.mjs', 'pet-stress-guard.mjs', 'crew-pet-node-guard.mjs',
   'transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-atomic-audit.mjs', 'backup-encoder-audit.mjs', 'backup-key-audit.mjs', 'backup-version-audit.mjs',
