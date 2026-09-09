@@ -1,0 +1,13 @@
+PASS CONTROL: actual UI gate accepts laboratory.version 1 and all six callable methods
+PASS CONTROL: in-memory IndexedDB, two Base inputs destroyed, one coloured level-1 output, daily use spent
+PASS CONTROL: acknowledgement unions, UI flags persist, replay never recreates a removed result
+PASS CONTROL: sequential atomic purchases, fixed prices, stale snapshot refusal, idempotent debit
+PASS CONTROL: read-only Today reuses all supplied stores, safe pair predicate, refreshed warnings, acknowledgement
+PASS CONTROL: durable intent blocks submissions, recovery confirms pre-state, late dispatch cannot spend
+PASS CONTROL: production UI accepts real quotes and renders branch counts, warnings, bench and saved result
+PASS CONTROL: transaction abort rolls back both inputs, output and daily debit; unchanged readback confirms abort
+PASS CONTROL: lost post-commit response recovers the saved IID without a second spend
+PASS CONTROL: stale backup cannot undo deliberate Today restore or receipt acknowledgement
+PASS CONTROL: overnight intent readback recovers unchanged pets without accepting an old-day quote
+PASS CONTROL: shiny keeper is safe, shiny input is excluded, trained ordinary pets retain eligibility and exact salvage warning
+PASS CONTROL: persisted purchase blocks new submissions and transaction-side token checks reject a balance race

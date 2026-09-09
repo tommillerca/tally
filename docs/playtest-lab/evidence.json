@@ -1,0 +1,747 @@
+[
+  {
+    "id": "welcome",
+    "status": "Your pets do not match a recipe yet. Hatch eggs to discover species and build matching pairs.",
+    "stock": {
+      "base": 0,
+      "ember": 0,
+      "frost": 0,
+      "toxic": 0,
+      "rose": 0,
+      "midnight": 0
+    },
+    "html": "<section class=\"lab-identity\" aria-label=\"Selected species\"><span class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></span><span class=\"lab-identity-copy\"><b>Drizzle</b><small id=\"labSpeciesProgress\">You have 1 of 6 colours</small></span><button class=\"link\" data-lab-change-species>Change species</button></section><section class=\"lab-availability\"><details class=\"lab-clock\"><summary>1 experiment available today.</summary><p>0/1 experiments used</p><p>Experiments reset at 00:00, America/Vancouver.</p></details><p role=\"status\">Your pets do not match a recipe yet. Hatch eggs to discover species and build matching pairs.</p><nav class=\"lab-links\" aria-label=\"Find a pair\"><button class=\"btn ghost\" data-lab-nav=\"eggs\">Eggs</button><button class=\"btn ghost\" data-lab-change-species>Change species</button></nav></section><section class=\"lab-working\"><h3>Choose your pair</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class=\"lab-slots\" aria-label=\"Two pets to combine\"><section><button class=\"lab-pet lab-next\" data-lab-slot=\"0\">Choose first pet</button></section><span class=\"lab-plus\" aria-hidden=\"true\">+</span><section><button class=\"lab-pet\" data-lab-slot=\"1\">Choose second pet</button></section></div><div class=\"lab-stock\"><p>Spare pets: Base 0. Need 2.</p><small>Spare counts keep one of each colour and exclude invested pets.</small></div><p id=\"labPairHint\">Choose first pet to review a pair.</p><button class=\"btn ghost\" aria-describedby=\"labPairHint\" data-lab-review disabled>Review pair</button></section><p>Every experiment removes two pets to make one.</p><section class=\"lab-path\" aria-label=\"Recipe path\"><header><h3>Drizzle colour path</h3><small>Unmarked colours are still to collect.</small><p class=\"lab-repeat\"><span aria-hidden=\"true\">↶</span> Repeat to build a pair</p></header><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Base Drizzle: owned. Need two Base pets\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Base ×2</b><small>✓ Have</small></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"base-base\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use two Base pets. <b>Make Ember or Frost.</b></p><p class=\"lab-odds\">50% Ember · 50% Frost</p><p id=\"labCoinFlipOdds\">Always 50/50. Each coin flip can repeat a colour you already have.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Ember Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Ember</b></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Frost Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Frost</b></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"ember-frost\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use Ember and Frost. <b>Make Toxic or Rose.</b></p><p class=\"lab-odds\">50% Toxic · 50% Rose</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Toxic Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Toxic</b></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Rose Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Rose</b></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"toxic-rose\"><p><span aria-hidden=\"true\">↓</span> Use Toxic and Rose. <b>Make Midnight. Guaranteed.</b></p><p class=\"lab-odds\">100% Midnight</p><p>Midnight is the only output. Both pets are consumed.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Midnight Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Midnight</b></figcaption></figure></div></section>\n<details id=\"labHelp\" open><summary>How the recipes work</summary><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>\n<button class=\"link lab-collection\" data-lab-nav=\"collection\">Your collection: 1 of 36 colours</button><details class=\"lab-more\"><summary>More pet actions</summary><div class=\"lab-eggs\"><p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p></div><p class=\"lab-sinks\">Melting clears the pile. Breeding builds strength. The Laboratory builds the collection.</p><p class=\"note\">Clearing lots of spares? Melt them for Bone Dust. The Laboratory reduces your total by one pet per experiment.</p><nav class=\"lab-links\" aria-label=\"Pet actions\"><button class=\"btn ghost\" data-lab-nav=\"collection\">Collection</button><button class=\"btn ghost\" data-lab-nav=\"eggs\">Eggs</button><button class=\"btn ghost\" data-lab-nav=\"melt\">Melt spares</button><button class=\"btn ghost\" data-lab-nav=\"breed\">Breed</button></nav></details>",
+    "picker": "<section class=\"lab-pick-row\"><button class=\"lab-pet\" aria-describedby=\"lab-pick-info-p1\" data-lab-pick=\"p1\" ><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Base Drizzle</b><span>Level 1</span></button><div class=\"lab-pick-info\" id=\"lab-pick-info-p1\"><small>0 banked training steps · Bond 0/5</small><small>Last collection copy</small></div></section>"
+  },
+  {
+    "id": "one-spare",
+    "hasEligiblePair": true,
+    "hasSafePair": false,
+    "stock": {
+      "base": 1,
+      "ember": 0,
+      "frost": 0,
+      "toxic": 0,
+      "rose": 0,
+      "midnight": 0
+    },
+    "status": "Keep one of each colour. You need two spare pets of the same species that match a recipe.",
+    "html": "<section class=\"lab-identity\" aria-label=\"Selected species\"><span class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></span><span class=\"lab-identity-copy\"><b>Drizzle</b><small id=\"labSpeciesProgress\">You have 1 of 6 colours</small></span><button class=\"link\" data-lab-change-species>Change species</button></section><section class=\"lab-availability\"><details class=\"lab-clock\"><summary>1 experiment available today.</summary><p>0/1 experiments used</p><p>Experiments reset at 00:00, America/Vancouver.</p></details><p role=\"status\">Keep one of each colour. You need two spare pets of the same species that match a recipe.</p></section><section class=\"lab-working\"><h3>Base + Base: choose your pair</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class=\"lab-slots\" aria-label=\"Two pets to combine\"><section><button class=\"lab-pet\" data-lab-slot=\"0\"><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Base Drizzle</b><span>Level 1</span></button><button class=\"link\" data-lab-clear=\"0\">Clear first pet</button></section><span class=\"lab-plus\" aria-hidden=\"true\">+</span><section><button class=\"lab-pet\" data-lab-slot=\"1\"><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Base Drizzle</b><span>Level 1</span></button><button class=\"link\" data-lab-clear=\"1\">Clear second pet</button></section></div><section class=\"lab-outcomes\" aria-label=\"Possible outcomes: one new pet\"><h4><span aria-hidden=\"true\">↓</span> Could become</h4><div class=\"lab-alternatives\"><figure class=\"lab-outcome\"><img data-sprite><figcaption><b>Ember Drizzle</b><span>50%</span></figcaption></figure><span class=\"lab-or\">or</span><figure class=\"lab-outcome\"><img data-sprite><figcaption><b>Frost Drizzle</b><span>50%</span></figcaption></figure></div><p>One new pet</p></section><div class=\"lab-stock\"><p>Spare pets: Base 1. Need 2.</p><small>Spare counts keep one of each colour and exclude invested pets.</small></div><div class=\"lab-branches\"><h4>Collection changes by outcome</h4><section class=\"lab-branch\"><b>Ember Drizzle: 50%</b><p>If Ember appears (50%), these cells become empty: Base Drizzle. New cells: Ember Drizzle. Collection after: 1/36.</p><p>New collection colour. Needed for Ember + Frost.</p><small>Base Drizzle: 2 to 0 pets · Ember Drizzle: 0 to 1 pets</small></section><section class=\"lab-branch\"><b>Frost Drizzle: 50%</b><p>If Frost appears (50%), these cells become empty: Base Drizzle. New cells: Frost Drizzle. Collection after: 1/36.</p><p>New collection colour. Needed for Ember + Frost.</p><small>Base Drizzle: 2 to 0 pets · Frost Drizzle: 0 to 1 pets</small></section></div><p id=\"labPairHint\">Review shows the exact collection colours lost and gained before you confirm.</p><button class=\"btn lab-next\" aria-describedby=\"labPairHint\" data-lab-review >Review pair</button></section><p>Every experiment removes two pets to make one.</p><section class=\"lab-path\" aria-label=\"Recipe path\"><header><h3>Drizzle colour path</h3><small>Unmarked colours are still to collect.</small><p class=\"lab-repeat\"><span aria-hidden=\"true\">↶</span> Repeat to build a pair</p></header><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Base Drizzle: owned. Need two Base pets\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Base ×2</b><small>✓ Have</small></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"base-base\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use two Base pets. <b>Make Ember or Frost.</b></p><p class=\"lab-odds\">50% Ember · 50% Frost</p><p id=\"labCoinFlipOdds\">Always 50/50. Each coin flip can repeat a colour you already have.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Ember Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Ember</b></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Frost Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Frost</b></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"ember-frost\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use Ember and Frost. <b>Make Toxic or Rose.</b></p><p class=\"lab-odds\">50% Toxic · 50% Rose</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Toxic Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Toxic</b></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Rose Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Rose</b></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"toxic-rose\"><p><span aria-hidden=\"true\">↓</span> Use Toxic and Rose. <b>Make Midnight. Guaranteed.</b></p><p class=\"lab-odds\">100% Midnight</p><p>Midnight is the only output. Both pets are consumed.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Midnight Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Midnight</b></figcaption></figure></div></section>\n<details id=\"labHelp\" open><summary>How the recipes work</summary><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>\n<button class=\"link lab-collection\" data-lab-nav=\"collection\">Your collection: 1 of 36 colours</button><details class=\"lab-more\"><summary>More pet actions</summary><div class=\"lab-eggs\"><p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p></div><p class=\"lab-sinks\">Melting clears the pile. Breeding builds strength. The Laboratory builds the collection.</p><p class=\"note\">Clearing lots of spares? Melt them for Bone Dust. The Laboratory reduces your total by one pet per experiment.</p><nav class=\"lab-links\" aria-label=\"Pet actions\"><button class=\"btn ghost\" data-lab-nav=\"collection\">Collection</button><button class=\"btn ghost\" data-lab-nav=\"eggs\">Eggs</button><button class=\"btn ghost\" data-lab-nav=\"melt\">Melt spares</button><button class=\"btn ghost\" data-lab-nav=\"breed\">Breed</button></nav><button class=\"link\" data-lab-incubators>Incubators</button></details>",
+    "confirmation": "<section class=\"lab-equation\" aria-label=\"Experiment\"><div class=\"lab-inputs\" aria-label=\"Two pets to combine\"><figure class=\"lab-input\"><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Base Drizzle</b><span>Level 1</span></figure><span class=\"lab-plus\" aria-hidden=\"true\">+</span><figure class=\"lab-input\"><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Base Drizzle</b><span>Level 1</span></figure></div><section class=\"lab-outcomes\" aria-label=\"Possible outcomes: one new pet\"><h4><span aria-hidden=\"true\">↓</span> Could become</h4><div class=\"lab-alternatives\"><figure class=\"lab-outcome\"><img data-sprite><figcaption><b>Ember Drizzle</b><span>50%</span></figcaption></figure><span class=\"lab-or\">or</span><figure class=\"lab-outcome\"><img data-sprite><figcaption><b>Frost Drizzle</b><span>50%</span></figcaption></figure></div><p>One new pet</p></section></section><h3>What you will lose</h3><p>Both pets are permanently consumed. Their training, names, lineage, bonds and talent choices do not transfer. The new pet starts at level 1, with 0 banked steps and lineage 0.</p><section class=\"lab-loss\"><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Base Drizzle</b><span>Level 1 · 0 banked training steps</span><span>Nickname: none. Lineage 0. Bond 0/5. Non-shiny.</span><span>Talent choices: none. Not equipped.</span><p>Base Drizzle will be destroyed: level 1, 0 banked training steps. None of those steps transfer.</p><p>Base Drizzle loses lineage 0 and bond 0/5. The new pet starts with neither.</p></section><section class=\"lab-loss\"><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Base Drizzle</b><span>Level 1 · 0 banked training steps</span><span>Nickname: none. Lineage 0. Bond 0/5. Non-shiny.</span><span>Talent choices: none. Not equipped.</span><p>Base Drizzle will be destroyed: level 1, 0 banked training steps. None of those steps transfer.</p><p>Base Drizzle loses lineage 0 and bond 0/5. The new pet starts with neither.</p></section><div class=\"lab-branches\"><h4>Collection changes by outcome</h4><section class=\"lab-branch\"><b>Ember Drizzle: 50%</b><p>If Ember appears (50%), these cells become empty: Base Drizzle. New cells: Ember Drizzle. Collection after: 1/36.</p><p>New collection colour. Needed for Ember + Frost.</p><small>Base Drizzle: 2 to 0 pets · Ember Drizzle: 0 to 1 pets</small></section><section class=\"lab-branch\"><b>Frost Drizzle: 50%</b><p>If Frost appears (50%), these cells become empty: Base Drizzle. New cells: Frost Drizzle. Collection after: 1/36.</p><p>New collection colour. Needed for Ember + Frost.</p><small>Base Drizzle: 2 to 0 pets · Frost Drizzle: 0 to 1 pets</small></section></div><p>Melting these two pets separately would pay 120 Bone Dust. Animate pays no dust.</p><p>This cannot be undone. Type ANIMATE to destroy both pets and create one new pet.</p>"
+  },
+  {
+    "id": "terminal-input",
+    "first": "<section class=\"lab-pick-row\"><button class=\"lab-pet\" aria-describedby=\"lab-pick-info-p8\" data-lab-pick=\"p8\" ><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Base Drizzle</b><span>Level 1</span></button><div class=\"lab-pick-info\" id=\"lab-pick-info-p8\"><small>0 banked training steps · Bond 0/5</small><small>Untrained spare</small></div></section><section class=\"lab-pick-row\"><button class=\"lab-pet\" aria-describedby=\"lab-pick-info-p6\" data-lab-pick=\"p6\" ><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Midnight Drizzle</b><span>Level 1</span></button><div class=\"lab-pick-info\" id=\"lab-pick-info-p6\"><small>0 banked training steps · Bond 0/5</small><small>Last collection copy</small></div></section><section class=\"lab-pick-row\"><button class=\"lab-pet\" aria-describedby=\"lab-pick-info-p7\" data-lab-pick=\"p7\" ><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Base Drizzle</b><span>Level 1</span></button><div class=\"lab-pick-info\" id=\"lab-pick-info-p7\"><small>0 banked training steps · Bond 0/5</small><small></small></div></section><section class=\"lab-pick-row\"><button class=\"lab-pet\" aria-describedby=\"lab-pick-info-p9\" data-lab-pick=\"p9\" ><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Ember Drizzle</b><span>Level 1</span></button><div class=\"lab-pick-info\" id=\"lab-pick-info-p9\"><small>0 banked training steps · Bond 0/5</small><small>Last collection copy · Needed as an ingredient for Ember + Frost</small></div></section><section class=\"lab-pick-row\"><button class=\"lab-pet\" aria-describedby=\"lab-pick-info-p10\" data-lab-pick=\"p10\" ><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Frost Drizzle</b><span>Level 1</span></button><div class=\"lab-pick-info\" id=\"lab-pick-info-p10\"><small>0 banked training steps · Bond 0/5</small><small>Last collection copy · Needed as an ingredient for Ember + Frost</small></div></section>",
+    "second": "<section class=\"lab-pick-row\"><button class=\"lab-pet\" aria-describedby=\"lab-pick-info-p8\" data-lab-pick=\"p8\" disabled><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Base Drizzle</b><span>Level 1</span></button><div class=\"lab-pick-info\" id=\"lab-pick-info-p8\"><small>0 banked training steps · Bond 0/5</small><small>Untrained spare</small><small>Does not match this same-species recipe.</small></div></section><section class=\"lab-pick-row\"><button class=\"lab-pet\" aria-describedby=\"lab-pick-info-p7\" data-lab-pick=\"p7\" disabled><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Base Drizzle</b><span>Level 1</span></button><div class=\"lab-pick-info\" id=\"lab-pick-info-p7\"><small>0 banked training steps · Bond 0/5</small><small></small><small>Does not match this same-species recipe.</small></div></section><section class=\"lab-pick-row\"><button class=\"lab-pet\" aria-describedby=\"lab-pick-info-p9\" data-lab-pick=\"p9\" disabled><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Ember Drizzle</b><span>Level 1</span></button><div class=\"lab-pick-info\" id=\"lab-pick-info-p9\"><small>0 banked training steps · Bond 0/5</small><small>Last collection copy · Needed as an ingredient for Ember + Frost</small><small>Does not match this same-species recipe.</small></div></section><section class=\"lab-pick-row\"><button class=\"lab-pet\" aria-describedby=\"lab-pick-info-p10\" data-lab-pick=\"p10\" disabled><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Frost Drizzle</b><span>Level 1</span></button><div class=\"lab-pick-info\" id=\"lab-pick-info-p10\"><small>0 banked training steps · Bond 0/5</small><small>Last collection copy · Needed as an ingredient for Ember + Frost</small><small>Does not match this same-species recipe.</small></div></section>",
+    "html": "<section class=\"lab-identity\" aria-label=\"Selected species\"><span class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></span><span class=\"lab-identity-copy\"><b>Drizzle</b><small id=\"labSpeciesProgress\">You have 4 of 6 colours</small></span><button class=\"link\" data-lab-change-species>Change species</button></section><section class=\"lab-availability\"><details class=\"lab-clock\"><summary>1 experiment available today.</summary><p>0/1 experiments used</p><p>Experiments reset at 00:00, America/Vancouver.</p></details><p role=\"status\">Keep one of each colour. You need two spare pets of the same species that match a recipe.</p></section><section class=\"lab-working\"><h3>Base + Base: choose your pair</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class=\"lab-slots\" aria-label=\"Two pets to combine\"><section><button class=\"lab-pet\" data-lab-slot=\"0\"><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Midnight Drizzle</b><span>Level 1</span></button><button class=\"link\" data-lab-clear=\"0\">Clear first pet</button></section><span class=\"lab-plus\" aria-hidden=\"true\">+</span><section><button class=\"lab-pet lab-next\" data-lab-slot=\"1\">Choose second pet</button></section></div><div class=\"lab-stock\"><p>Spare pets: Base 1. Need 2.</p><small>Spare counts keep one of each colour and exclude invested pets.</small></div><p id=\"labPairHint\">Choose second pet to review a pair.</p><button class=\"btn ghost\" aria-describedby=\"labPairHint\" data-lab-review disabled>Review pair</button></section><p>Every experiment removes two pets to make one.</p><section class=\"lab-path\" aria-label=\"Recipe path\"><header><h3>Drizzle colour path</h3><small>Unmarked colours are still to collect.</small><p class=\"lab-repeat\"><span aria-hidden=\"true\">↶</span> Repeat to build a pair</p></header><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Base Drizzle: owned. Need two Base pets\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Base ×2</b><small>✓ Have</small></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"base-base\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use two Base pets. <b>Make Ember or Frost.</b></p><p class=\"lab-odds\">50% Ember · 50% Frost</p><p id=\"labCoinFlipOdds\">Always 50/50. Each coin flip can repeat a colour you already have.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Ember Drizzle: owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Ember</b><small>✓ Have</small></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Frost Drizzle: owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Frost</b><small>✓ Have</small></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"ember-frost\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use Ember and Frost. <b>Make Toxic or Rose.</b></p><p class=\"lab-odds\">50% Toxic · 50% Rose</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Toxic Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Toxic</b></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Rose Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Rose</b></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"toxic-rose\"><p><span aria-hidden=\"true\">↓</span> Use Toxic and Rose. <b>Make Midnight. Guaranteed.</b></p><p class=\"lab-odds\">100% Midnight</p><p>Midnight is the only output. Both pets are consumed.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Midnight Drizzle: owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Midnight</b><small>✓ Have</small></figcaption></figure></div></section>\n<details id=\"labHelp\" open><summary>How the recipes work</summary><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>\n<button class=\"link lab-collection\" data-lab-nav=\"collection\">Your collection: 4 of 36 colours</button><details class=\"lab-more\"><summary>More pet actions</summary><div class=\"lab-eggs\"><p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p></div><p class=\"lab-sinks\">Melting clears the pile. Breeding builds strength. The Laboratory builds the collection.</p><p class=\"note\">Clearing lots of spares? Melt them for Bone Dust. The Laboratory reduces your total by one pet per experiment.</p><nav class=\"lab-links\" aria-label=\"Pet actions\"><button class=\"btn ghost\" data-lab-nav=\"collection\">Collection</button><button class=\"btn ghost\" data-lab-nav=\"eggs\">Eggs</button><button class=\"btn ghost\" data-lab-nav=\"melt\">Melt spares</button><button class=\"btn ghost\" data-lab-nav=\"breed\">Breed</button></nav><button class=\"link\" data-lab-incubators>Incubators</button></details>"
+  },
+  {
+    "id": "mid-collection",
+    "stock": {
+      "base": 3,
+      "ember": 0,
+      "frost": 0,
+      "toxic": 0,
+      "rose": 0,
+      "midnight": 0
+    },
+    "collection": 4,
+    "html": "<section class=\"lab-identity\" aria-label=\"Selected species\"><span class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></span><span class=\"lab-identity-copy\"><b>Drizzle</b><small id=\"labSpeciesProgress\">You have 4 of 6 colours</small></span><button class=\"link\" data-lab-change-species>Change species</button></section><section class=\"lab-availability\"><details class=\"lab-clock\"><summary>1 experiment available today.</summary><p>0/1 experiments used</p><p>Experiments reset at 00:00, America/Vancouver.</p></details></section><section class=\"lab-working\"><h3>Choose your pair</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class=\"lab-slots\" aria-label=\"Two pets to combine\"><section><button class=\"lab-pet lab-next\" data-lab-slot=\"0\">Choose first pet</button></section><span class=\"lab-plus\" aria-hidden=\"true\">+</span><section><button class=\"lab-pet\" data-lab-slot=\"1\">Choose second pet</button></section></div><div class=\"lab-stock\"><p>Spare pets: Base 3. Need 2.</p><small>Spare counts keep one of each colour and exclude invested pets.</small></div><p id=\"labPairHint\">Choose first pet to review a pair.</p><button class=\"btn ghost\" aria-describedby=\"labPairHint\" data-lab-review disabled>Review pair</button></section><p>Every experiment removes two pets to make one.</p><section class=\"lab-path\" aria-label=\"Recipe path\"><header><h3>Drizzle colour path</h3><small>Unmarked colours are still to collect.</small><p class=\"lab-repeat\"><span aria-hidden=\"true\">↶</span> Repeat to build a pair</p></header><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Base Drizzle: owned. Need two Base pets\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Base ×2</b><small>✓ Have</small></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"base-base\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use two Base pets. <b>Make Ember or Frost.</b></p><p class=\"lab-odds\">50% Ember · 50% Frost</p><p id=\"labCoinFlipOdds\">Always 50/50. Each coin flip can repeat a colour you already have.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Ember Drizzle: owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Ember</b><small>✓ Have</small></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Frost Drizzle: owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Frost</b><small>✓ Have</small></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"ember-frost\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use Ember and Frost. <b>Make Toxic or Rose.</b></p><p class=\"lab-odds\">50% Toxic · 50% Rose</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Toxic Drizzle: owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Toxic</b><small>✓ Have</small></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Rose Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Rose</b></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"toxic-rose\"><p><span aria-hidden=\"true\">↓</span> Use Toxic and Rose. <b>Make Midnight. Guaranteed.</b></p><p class=\"lab-odds\">100% Midnight</p><p>Midnight is the only output. Both pets are consumed.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Midnight Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Midnight</b></figcaption></figure></div></section>\n<details id=\"labHelp\" open><summary>How the recipes work</summary><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>\n<button class=\"link lab-collection\" data-lab-nav=\"collection\">Your collection: 4 of 36 colours</button><details class=\"lab-more\"><summary>More pet actions</summary><div class=\"lab-eggs\"><p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p></div><p class=\"lab-sinks\">Melting clears the pile. Breeding builds strength. The Laboratory builds the collection.</p><p class=\"note\">Clearing lots of spares? Melt them for Bone Dust. The Laboratory reduces your total by one pet per experiment.</p><nav class=\"lab-links\" aria-label=\"Pet actions\"><button class=\"btn ghost\" data-lab-nav=\"collection\">Collection</button><button class=\"btn ghost\" data-lab-nav=\"eggs\">Eggs</button><button class=\"btn ghost\" data-lab-nav=\"melt\">Melt spares</button><button class=\"btn ghost\" data-lab-nav=\"breed\">Breed</button></nav><button class=\"link\" data-lab-incubators>Incubators</button></details>"
+  },
+  {
+    "id": "completionist",
+    "collection": 36,
+    "safePair": false,
+    "status": "All 36 colours owned. Animate copies, melt spares for Bone Dust, or breed to raise lineage.",
+    "html": "<section class=\"lab-identity\" aria-label=\"Selected species\"><span class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></span><span class=\"lab-identity-copy\"><b>Drizzle</b><small id=\"labSpeciesProgress\">You have 6 of 6 colours</small></span><button class=\"link\" data-lab-change-species>Change species</button></section><section class=\"lab-availability\"><details class=\"lab-clock\"><summary>1 experiment available today.</summary><p>0/1 experiments used</p><p>Experiments reset at 00:00, America/Vancouver.</p></details><p role=\"status\">All 36 colours owned. Animate copies, melt spares for Bone Dust, or breed to raise lineage.</p></section><section class=\"lab-working\"><h3>Choose your pair</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class=\"lab-slots\" aria-label=\"Two pets to combine\"><section><button class=\"lab-pet lab-next\" data-lab-slot=\"0\">Choose first pet</button></section><span class=\"lab-plus\" aria-hidden=\"true\">+</span><section><button class=\"lab-pet\" data-lab-slot=\"1\">Choose second pet</button></section></div><div class=\"lab-stock\"><p>Spare pets: Base 0. Need 2.</p><small>Spare counts keep one of each colour and exclude invested pets.</small></div><p id=\"labPairHint\">Choose first pet to review a pair.</p><button class=\"btn ghost\" aria-describedby=\"labPairHint\" data-lab-review disabled>Review pair</button></section><p>Every experiment removes two pets to make one.</p><section class=\"lab-path\" aria-label=\"Recipe path\"><header><h3>Drizzle colour path</h3><small>Unmarked colours are still to collect.</small><p class=\"lab-repeat\"><span aria-hidden=\"true\">↶</span> Repeat to build a pair</p></header><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Base Drizzle: owned. Need two Base pets\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Base ×2</b><small>✓ Have</small></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"base-base\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use two Base pets. <b>Make Ember or Frost.</b></p><p class=\"lab-odds\">50% Ember · 50% Frost</p><p id=\"labCoinFlipOdds\">Always 50/50. Each coin flip can repeat a colour you already have.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Ember Drizzle: owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Ember</b><small>✓ Have</small></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Frost Drizzle: owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Frost</b><small>✓ Have</small></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"ember-frost\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use Ember and Frost. <b>Make Toxic or Rose.</b></p><p class=\"lab-odds\">50% Toxic · 50% Rose</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Toxic Drizzle: owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Toxic</b><small>✓ Have</small></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Rose Drizzle: owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Rose</b><small>✓ Have</small></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"toxic-rose\"><p><span aria-hidden=\"true\">↓</span> Use Toxic and Rose. <b>Make Midnight. Guaranteed.</b></p><p class=\"lab-odds\">100% Midnight</p><p>Midnight is the only output. Both pets are consumed.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Midnight Drizzle: owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Midnight</b><small>✓ Have</small></figcaption></figure></div></section>\n<details id=\"labHelp\" open><summary>How the recipes work</summary><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>\n<button class=\"link lab-collection\" data-lab-nav=\"collection\">Your collection: 36 of 36 colours</button><details class=\"lab-more\"><summary>More pet actions</summary><div class=\"lab-eggs\"><p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p></div><p class=\"lab-sinks\">Melting clears the pile. Breeding builds strength. The Laboratory builds the collection.</p><p class=\"note\">Clearing lots of spares? Melt them for Bone Dust. The Laboratory reduces your total by one pet per experiment.</p><nav class=\"lab-links\" aria-label=\"Pet actions\"><button class=\"btn ghost\" data-lab-nav=\"collection\">Collection</button><button class=\"btn ghost\" data-lab-nav=\"eggs\">Eggs</button><button class=\"btn ghost\" data-lab-nav=\"melt\">Melt spares</button><button class=\"btn ghost\" data-lab-nav=\"breed\">Breed</button></nav><button class=\"link\" data-lab-incubators>Incubators</button></details>",
+    "branches": [
+      {
+        "morph": "toxic",
+        "lost": [
+          "C1|ember",
+          "C1|frost"
+        ],
+        "gained": [],
+        "afterCount": 34,
+        "duplicate": true,
+        "counts": [
+          {
+            "cell": "C1|ember",
+            "before": 1,
+            "after": 0
+          },
+          {
+            "cell": "C1|frost",
+            "before": 1,
+            "after": 0
+          },
+          {
+            "cell": "C1|toxic",
+            "before": 1,
+            "after": 2
+          }
+        ]
+      },
+      {
+        "morph": "rose",
+        "lost": [
+          "C1|ember",
+          "C1|frost"
+        ],
+        "gained": [],
+        "afterCount": 34,
+        "duplicate": true,
+        "counts": [
+          {
+            "cell": "C1|ember",
+            "before": 1,
+            "after": 0
+          },
+          {
+            "cell": "C1|frost",
+            "before": 1,
+            "after": 0
+          },
+          {
+            "cell": "C1|rose",
+            "before": 1,
+            "after": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "today-repeat",
+    "today": "<section class=\"lab-today\"><b>The Laboratory</b><p>Build your collection with a missing colour or needed ingredient. Two matching spare pets are consumed. 1 experiments available today.</p><button class=\"btn ghost\" data-lab-open>Open Laboratory</button><button class=\"link\" data-lab-hide>Hide this</button></section>",
+    "useful": true
+  },
+  {
+    "id": "optional-result-branch",
+    "branches": [
+      {
+        "morph": "ember",
+        "lost": [
+          "C1|base"
+        ],
+        "gained": [],
+        "afterCount": 4,
+        "duplicate": true,
+        "counts": [
+          {
+            "cell": "C1|base",
+            "before": 2,
+            "after": 0
+          },
+          {
+            "cell": "C1|ember",
+            "before": 3,
+            "after": 4
+          }
+        ]
+      },
+      {
+        "morph": "frost",
+        "lost": [
+          "C1|base"
+        ],
+        "gained": [],
+        "afterCount": 4,
+        "duplicate": true,
+        "counts": [
+          {
+            "cell": "C1|base",
+            "before": 2,
+            "after": 0
+          },
+          {
+            "cell": "C1|frost",
+            "before": 3,
+            "after": 4
+          }
+        ]
+      }
+    ],
+    "html": "<div class=\"lab-branches\"><h4>Collection changes by outcome</h4><section class=\"lab-branch\"><b>Ember Drizzle: 50%</b><p>If Ember appears (50%), these cells become empty: Base Drizzle. New cells: none. Collection after: 4/36.</p><p>You already own Ember. This makes another copy and uses one experiment today. Optional extra copy.</p><small>Base Drizzle: 2 to 0 pets · Ember Drizzle: 3 to 4 pets</small></section><section class=\"lab-branch\"><b>Frost Drizzle: 50%</b><p>If Frost appears (50%), these cells become empty: Base Drizzle. New cells: none. Collection after: 4/36.</p><p>You already own Frost. This makes another copy and uses one experiment today. Optional extra copy.</p><small>Base Drizzle: 2 to 0 pets · Frost Drizzle: 3 to 4 pets</small></section></div>"
+  },
+  {
+    "id": "intent-health-lock",
+    "statuses": [
+      "unknown",
+      "unknown",
+      "unknown"
+    ],
+    "pets": 3,
+    "used": 0,
+    "intents": [
+      "84654e0e-a4bc-4911-ae52-8f0a94e99720"
+    ],
+    "quote": {
+      "ok": false,
+      "reason": "unknown"
+    }
+  },
+  {
+    "id": "excluded-metadata",
+    "stored": {
+      "p72": 50000,
+      "p73": 50000,
+      "p74": 50000,
+      "p75": 50000
+    },
+    "rows": [
+      {
+        "iid": "p72",
+        "sp": "C1",
+        "morph": "base",
+        "shiny": true,
+        "lineage": 0,
+        "bankedSteps": 0,
+        "level": 1,
+        "nickname": "",
+        "bond": 0,
+        "talents": [],
+        "equipped": false,
+        "eligible": false,
+        "reason": "Shiny pets cannot be used here.",
+        "safeSurplus": false,
+        "lastCopy": false
+      },
+      {
+        "iid": "p73",
+        "sp": "CX",
+        "morph": "base",
+        "shiny": false,
+        "lineage": 0,
+        "bankedSteps": 0,
+        "level": 1,
+        "nickname": "",
+        "bond": 0,
+        "talents": [],
+        "equipped": false,
+        "eligible": false,
+        "reason": "The Day One Lizard cannot be used here.",
+        "safeSurplus": false,
+        "lastCopy": false
+      },
+      {
+        "iid": "p74",
+        "sp": "C1",
+        "morph": "UNKNOWN",
+        "shiny": false,
+        "lineage": 0,
+        "bankedSteps": 0,
+        "level": 1,
+        "nickname": "",
+        "bond": 0,
+        "talents": [],
+        "equipped": false,
+        "eligible": false,
+        "reason": "This saved colour is not supported.",
+        "safeSurplus": false,
+        "lastCopy": false
+      },
+      {
+        "iid": "p75",
+        "sp": "C1",
+        "morph": "base",
+        "shiny": false,
+        "lineage": 0,
+        "bankedSteps": 50000,
+        "level": 7,
+        "nickname": "BISCUIT",
+        "bond": 4,
+        "talents": [],
+        "equipped": false,
+        "eligible": true,
+        "reason": "",
+        "safeSurplus": false,
+        "lastCopy": false
+      }
+    ],
+    "picker": "<section class=\"lab-pick-row\"><button class=\"lab-pet\" aria-describedby=\"lab-pick-info-p72\" data-lab-pick=\"p72\" disabled><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Base Drizzle</b><span>Level 1</span></button><div class=\"lab-pick-info\" id=\"lab-pick-info-p72\"><small>0 banked training steps · Bond 0/5</small><small></small><small>Shiny pets cannot be used here.</small></div></section><section class=\"lab-pick-row\"><button class=\"lab-pet\" aria-describedby=\"lab-pick-info-p73\" data-lab-pick=\"p73\" disabled><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Base Day One Lizard</b><span>Level 1</span></button><div class=\"lab-pick-info\" id=\"lab-pick-info-p73\"><small>0 banked training steps · Bond 0/5</small><small></small><small>The Day One Lizard cannot be used here.</small></div></section><section class=\"lab-pick-row\"><button class=\"lab-pet\" aria-describedby=\"lab-pick-info-p74\" data-lab-pick=\"p74\" disabled><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>UNKNOWN Drizzle</b><span>Level 1</span></button><div class=\"lab-pick-info\" id=\"lab-pick-info-p74\"><small>0 banked training steps · Bond 0/5</small><small></small><small>This saved colour is not supported.</small></div></section><section class=\"lab-pick-row\"><button class=\"lab-pet\" aria-describedby=\"lab-pick-info-p75\" data-lab-pick=\"p75\" ><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>BISCUIT · Base Drizzle</b><span>Level 7</span></button><div class=\"lab-pick-info\" id=\"lab-pick-info-p75\"><small>50,000 banked training steps · Bond 4/5</small><small>Trained · Named · Bonded</small></div></section>",
+    "stableUnknownName": "Base"
+  },
+  {
+    "id": "shiny-keeper-control",
+    "stock": {
+      "base": 2,
+      "ember": 0,
+      "frost": 0,
+      "toxic": 0,
+      "rose": 0,
+      "midnight": 0
+    },
+    "risk": false,
+    "branches": [
+      {
+        "morph": "ember",
+        "lost": [],
+        "gained": [
+          "C1|ember"
+        ],
+        "afterCount": 2,
+        "duplicate": false,
+        "counts": [
+          {
+            "cell": "C1|base",
+            "before": 3,
+            "after": 1
+          },
+          {
+            "cell": "C1|ember",
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "neededFor": "Ember + Frost"
+      },
+      {
+        "morph": "frost",
+        "lost": [],
+        "gained": [
+          "C1|frost"
+        ],
+        "afterCount": 2,
+        "duplicate": false,
+        "counts": [
+          {
+            "cell": "C1|base",
+            "before": 3,
+            "after": 1
+          },
+          {
+            "cell": "C1|frost",
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "neededFor": "Ember + Frost"
+      }
+    ]
+  },
+  {
+    "id": "legacy-shiny-colour",
+    "labCells": [
+      "C1|base"
+    ],
+    "kennelCells": [
+      "C1|frost",
+      "C1|base"
+    ],
+    "branches": [
+      {
+        "morph": "ember",
+        "lost": [
+          "C1|base"
+        ],
+        "gained": [
+          "C1|ember"
+        ],
+        "afterCount": 2,
+        "duplicate": false,
+        "counts": [
+          {
+            "cell": "C1|base",
+            "before": 3,
+            "after": 1
+          },
+          {
+            "cell": "C1|ember",
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "neededFor": "Ember + Frost"
+      },
+      {
+        "morph": "frost",
+        "lost": [
+          "C1|base"
+        ],
+        "gained": [],
+        "afterCount": 1,
+        "duplicate": true,
+        "counts": [
+          {
+            "cell": "C1|base",
+            "before": 3,
+            "after": 1
+          },
+          {
+            "cell": "C1|frost",
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "neededFor": "Ember + Frost"
+      }
+    ],
+    "html": "<div class=\"lab-branches\"><h4>Collection changes by outcome</h4><section class=\"lab-branch\"><b>Ember Drizzle: 50%</b><p>If Ember appears (50%), these cells become empty: Base Drizzle. New cells: Ember Drizzle. Collection after: 2/36.</p><p>New collection colour. Needed for Ember + Frost.</p><small>Base Drizzle: 3 to 1 pets · Ember Drizzle: 0 to 1 pets</small></section><section class=\"lab-branch\"><b>Frost Drizzle: 50%</b><p>If Frost appears (50%), these cells become empty: Base Drizzle. New cells: none. Collection after: 1/36.</p><p>You already own Frost. This makes another copy and uses one experiment today. Needed for Ember + Frost.</p><small>Base Drizzle: 3 to 1 pets · Frost Drizzle: 0 to 1 pets</small></section></div>"
+  },
+  {
+    "id": "lab-disclosure-control",
+    "html": "<section class=\"lab-equation\" aria-label=\"Experiment\"><div class=\"lab-inputs\" aria-label=\"Two pets to combine\"><figure class=\"lab-input\"><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>BISCUIT · Toxic Drizzle</b><span>Level 7</span></figure><span class=\"lab-plus\" aria-hidden=\"true\">+</span><figure class=\"lab-input\"><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Rose Drizzle</b><span>Level 1</span></figure></div><section class=\"lab-outcomes\" aria-label=\"Possible outcomes: one new pet\"><h4><span aria-hidden=\"true\">↓</span> Will become</h4><div class=\"lab-alternatives\"><figure class=\"lab-outcome\"><img data-sprite><figcaption><b>Midnight Drizzle</b><span>100%</span></figcaption></figure></div><p>One new pet</p></section></section><h3>What you will lose</h3><p>Both pets are permanently consumed. Their training, names, lineage, bonds and talent choices do not transfer. The new pet starts at level 1, with 0 banked steps and lineage 0.</p><section class=\"lab-loss\"><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>BISCUIT · Toxic Drizzle</b><span>Level 7 · 50,000 banked training steps</span><span>Nickname: BISCUIT. Lineage 3. Bond 4/5. Non-shiny.</span><span>Talent choices: Jinx. Equipped.</span><p>BISCUIT · Toxic Drizzle will be destroyed: level 7, 50,000 banked training steps. None of those steps transfer.</p><p>The name BISCUIT is removed with this pet.</p><p>BISCUIT · Toxic Drizzle loses lineage 3 and bond 4/5. The new pet starts with neither.</p><p>BISCUIT · Toxic Drizzle's talent choices are removed: Jinx. The new pet inherits none.</p><p>BISCUIT · Toxic Drizzle is your equipped pet. The new level-1 pet will take its place.</p></section><section class=\"lab-loss\"><span class=\"lab-instance-art\" aria-hidden=\"true\"><img data-portrait></span><b>Rose Drizzle</b><span>Level 1 · 100 banked training steps</span><span>Nickname: none. Lineage 0. Bond 0/5. Non-shiny.</span><span>Talent choices: none. Not equipped.</span><p>Rose Drizzle will be destroyed: level 1, 100 banked training steps. None of those steps transfer.</p><p>Rose Drizzle loses lineage 0 and bond 0/5. The new pet starts with neither.</p></section><p>Midnight: 100%. Both selected pets are permanently consumed. The new Midnight starts at level 1.</p><div class=\"lab-branches\"><h4>Collection changes by outcome</h4><section class=\"lab-branch\"><b>Midnight Drizzle: 100%</b><p>These cells become empty: Rose Drizzle, Toxic Drizzle. New cells: Midnight Drizzle. Collection after: 2/36.</p><p>New collection colour. </p><small>Toxic Drizzle: 1 to 0 pets · Rose Drizzle: 1 to 0 pets · Midnight Drizzle: 0 to 1 pets</small></section></div><p>Melting these two pets separately would pay 144 Bone Dust. Animate pays no dust.</p><p>This cannot be undone. Type ANIMATE to destroy both pets and create one new pet.</p>",
+    "equipped": "pmttfq5e6-1-C1",
+    "result": {
+      "iid": "pmttfq5e6-1-C1",
+      "sp": "C1",
+      "lineage": 0,
+      "shiny": false,
+      "morph": "midnight",
+      "hatchedAtSteps": 0
+    },
+    "petWear": {
+      "PH": "test-owned-wardrobe"
+    }
+  },
+  {
+    "id": "old-receipt",
+    "live": {
+      "iid": "pmttfq5e6-1-C1",
+      "sp": "C1",
+      "morph": "midnight",
+      "shiny": false,
+      "lineage": 0,
+      "bankedSteps": 50000,
+      "level": 7,
+      "nickname": "NEWNAME",
+      "bond": 0,
+      "talents": [],
+      "equipped": true,
+      "eligible": true,
+      "reason": "",
+      "safeSurplus": false,
+      "lastCopy": true
+    },
+    "html": "<div class=\"lab-reveal lab-direct\" data-outcomes=\"1\"><div data-lab-result-art><img data-sprite></div><h3>Midnight Drizzle</h3><p role=\"status\">Added to your collection. 2/36.</p><p>Midnight was guaranteed by this recipe.</p><p>Level 1. 0 banked steps. Lineage 0. Non-shiny. No inherited name, bond or talents.</p><p>0 experiments available today.</p></div>"
+  },
+  {
+    "id": "stable-named-bonded",
+    "typed": false,
+    "disclosure": "Base Drizzle · Lv 1 will be destroyed for 60 Bone Dust. This cannot be undone. Tap again to confirm.",
+    "messages": [
+      "Base Drizzle · Lv 1 will be destroyed for 60 Bone Dust. This cannot be undone. Tap again to confirm.",
+      "Base Drizzle · Lv 1 salvaged into 60 Bone Dust."
+    ],
+    "remaining": [
+      {
+        "iid": "p90",
+        "sp": "C1",
+        "morph": "base",
+        "shiny": false,
+        "lineage": 0,
+        "hatchedAtSteps": 0
+      }
+    ],
+    "bank": {
+      "p90": 0
+    },
+    "nick": {},
+    "bond": {},
+    "talents": {
+      "__iidV": 2
+    },
+    "equipped": null
+  },
+  {
+    "id": "stable-talents",
+    "typed": true,
+    "disclosure": "<p>This is your last copy of this colour. <b>Ember Drizzle · Lv 7</b> has <b>50,000 banked steps</b> and lineage 2. Its steps and lineage are lost. Destroying it pays <b>76 Bone Dust</b> and it does not come back.</p>",
+    "messages": [
+      "Ember Drizzle · Lv 7 salvaged into 76 Bone Dust."
+    ],
+    "remaining": [
+      {
+        "iid": "p93",
+        "sp": "C1",
+        "morph": "base",
+        "shiny": false,
+        "lineage": 0,
+        "hatchedAtSteps": 0
+      }
+    ],
+    "bank": {},
+    "nick": {},
+    "bond": {},
+    "talents": {
+      "__iidV": 2
+    },
+    "equipped": null
+  },
+  {
+    "id": "stable-equipped",
+    "typed": false,
+    "disclosure": "Base Drizzle · Lv 1 will be destroyed for 60 Bone Dust. This cannot be undone. Tap again to confirm.",
+    "messages": [
+      "Base Drizzle · Lv 1 will be destroyed for 60 Bone Dust. This cannot be undone. Tap again to confirm.",
+      "Base Drizzle · Lv 1 salvaged into 60 Bone Dust."
+    ],
+    "remaining": [
+      {
+        "iid": "p96",
+        "sp": "C1",
+        "morph": "base",
+        "shiny": false,
+        "lineage": 0,
+        "hatchedAtSteps": 0
+      }
+    ],
+    "bank": {
+      "p96": 0
+    },
+    "nick": {},
+    "bond": {},
+    "talents": {
+      "__iidV": 2
+    },
+    "equipped": "p96"
+  },
+  {
+    "id": "stable-shiny-last-copy",
+    "typed": true,
+    "disclosure": "<p>This is your last copy of this colour. <b>Base Drizzle · Lv 1</b> has <b>0 banked steps</b>. Its steps and lineage are lost. Destroying it pays <b>60 Bone Dust</b> and it does not come back.</p>",
+    "messages": [
+      "Base Drizzle · Lv 1 salvaged into 60 Bone Dust."
+    ],
+    "remaining": [
+      {
+        "iid": "p99",
+        "sp": "C1",
+        "morph": "base",
+        "shiny": true,
+        "lineage": 0,
+        "hatchedAtSteps": 0
+      }
+    ],
+    "bank": {
+      "p99": 0
+    },
+    "nick": {},
+    "bond": {},
+    "talents": {
+      "__iidV": 2
+    },
+    "equipped": null
+  },
+  {
+    "id": "stable-training-before-commit",
+    "bank": {
+      "p101": 1100
+    }
+  },
+  {
+    "id": "stable-stale-training",
+    "typed": true,
+    "disclosure": "<p><b>Base Drizzle · Lv 1</b> has <b>100 banked steps</b>. Its steps and lineage are lost. Destroying it pays <b>60 Bone Dust</b> and it does not come back.</p>",
+    "messages": [
+      "Base Drizzle · Lv 1 salvaged into 60 Bone Dust."
+    ],
+    "remaining": [
+      {
+        "iid": "p102",
+        "sp": "C1",
+        "morph": "base",
+        "shiny": false,
+        "lineage": 0,
+        "hatchedAtSteps": 0
+      }
+    ],
+    "bank": {},
+    "nick": {},
+    "bond": {},
+    "talents": {
+      "__iidV": 2
+    },
+    "equipped": "p102"
+  },
+  {
+    "id": "breed-last-colour",
+    "html": "<div class=\"breed-bar sticky\">\n          <div class=\"breed-h\">What breeding does</div>\n          <div class=\"breed-trade\">\n            <span class=\"bt-out\">\n              <span class=\"bt-row\"><span class=\"bt-pet keep\"><img></span></span>\n              <small>Kept &middot; lineage 0 &rarr; 1</small>\n            </span>\n            <span class=\"bt-arrow\"></span>\n            <span class=\"bt-in\">\n              <span class=\"bt-row\"><span class=\"bt-pet\"><img></span></span>\n              <small>Fed in &middot; gone</small>\n            </span>\n          </div>\n          <ul class=\"breed-facts\">\n            <li>You keep <b>Base Drizzle · Lv 1</b>. Same pet, same name, <b>same level and look</b>.</li>\n            <li>It reaches <b>lineage 1</b>: (stat text omitted) (stat text omitted)</li>\n            <li><b>Midnight Drizzle · Lv 1 is destroyed</b> and does not come back.</li>\n          </ul>\n          \n          <div class=\"breed-pick\"><span class=\"note\">Which one are you keeping?</span><div class=\"breed-sp\"></div></div>\n          \n          <button class=\"btn\" id=\"doBreed\" >Feed Midnight Drizzle · Lv 1 in</button>\n        </div>",
+    "messages": [
+      "Midnight Drizzle · Lv 1 is destroyed for good and your keeper gains a lineage rank. Tap again to confirm."
+    ],
+    "collectionBefore": 2,
+    "collectionAfter": 1,
+    "pets": [
+      {
+        "iid": "p104",
+        "sp": "C1",
+        "morph": "base",
+        "shiny": false,
+        "lineage": 1,
+        "bankedSteps": 0,
+        "level": 1,
+        "nickname": "",
+        "bond": 0,
+        "talents": [],
+        "equipped": false,
+        "eligible": true,
+        "reason": "",
+        "safeSurplus": false,
+        "lastCopy": true
+      }
+    ],
+    "nick": {},
+    "bonds": {},
+    "talents": {
+      "__iidV": 2
+    }
+  },
+  {
+    "id": "breed-investment",
+    "html": "<div class=\"breed-bar sticky careful\">\n          <div class=\"breed-h\">What breeding does</div>\n          <div class=\"breed-trade\">\n            <span class=\"bt-out\">\n              <span class=\"bt-row\"><span class=\"bt-pet keep\"><img></span></span>\n              <small>Kept &middot; lineage 0 &rarr; 1</small>\n            </span>\n            <span class=\"bt-arrow\"></span>\n            <span class=\"bt-in\">\n              <span class=\"bt-row\"><span class=\"bt-pet\"><img></span></span>\n              <small>Fed in &middot; gone</small>\n            </span>\n          </div>\n          <ul class=\"breed-facts\">\n            <li>You keep <b>Base Drizzle · Lv 1</b>. Same pet, same name, <b>same level and look</b>.</li>\n            <li>It reaches <b>lineage 1</b>: (stat text omitted) (stat text omitted)</li>\n            <li><b>Ember Drizzle · Lv 7 is destroyed</b> and does not come back.</li>\n          </ul>\n          <div class=\"breed-warn\">\n            \n            <div><b>You are about to destroy a lineage 2 pet.</b>\n            Its bloodline is lost; lineage does not transfer.\n            Feed a plain spare in instead unless you are sure.</div>\n          </div>\n          <div class=\"breed-pick\"><span class=\"note\">Which one are you keeping?</span><div class=\"breed-sp\"></div></div>\n          \n          <button class=\"btn\" id=\"doBreed\" >Feed Ember Drizzle · Lv 7 in</button>\n        </div>",
+    "messages": [
+      "Ember Drizzle · Lv 7 is destroyed for good and your keeper gains a lineage rank. Tap again to confirm."
+    ],
+    "collectionBefore": 2,
+    "collectionAfter": 1,
+    "pets": [
+      {
+        "iid": "p107",
+        "sp": "C1",
+        "morph": "base",
+        "shiny": false,
+        "lineage": 1,
+        "bankedSteps": 0,
+        "level": 1,
+        "nickname": "",
+        "bond": 0,
+        "talents": [],
+        "equipped": false,
+        "eligible": true,
+        "reason": "",
+        "safeSurplus": false,
+        "lastCopy": true
+      }
+    ],
+    "nick": {},
+    "bonds": {},
+    "talents": {
+      "__iidV": 2
+    }
+  },
+  {
+    "id": "breed-low-training",
+    "html": "<div class=\"breed-bar sticky\">\n          <div class=\"breed-h\">What breeding does</div>\n          <div class=\"breed-trade\">\n            <span class=\"bt-out\">\n              <span class=\"bt-row\"><span class=\"bt-pet keep\"><img></span></span>\n              <small>Kept &middot; lineage 0 &rarr; 1</small>\n            </span>\n            <span class=\"bt-arrow\"></span>\n            <span class=\"bt-in\">\n              <span class=\"bt-row\"><span class=\"bt-pet\"><img></span></span>\n              <small>Fed in &middot; gone</small>\n            </span>\n          </div>\n          <ul class=\"breed-facts\">\n            <li>You keep <b>Base Drizzle · Lv 1</b>. Same pet, same name, <b>same level and look</b>.</li>\n            <li>It reaches <b>lineage 1</b>: (stat text omitted) (stat text omitted)</li>\n            <li><b>Base Drizzle · Lv 1 is destroyed</b> and does not come back.</li>\n          </ul>\n          \n          <div class=\"breed-pick\"><span class=\"note\">Which one are you keeping?</span><div class=\"breed-sp\"></div></div>\n          \n          <button class=\"btn\" id=\"doBreed\" >Feed Base Drizzle · Lv 1 in</button>\n        </div>",
+    "messages": [
+      "Base Drizzle · Lv 1 is destroyed for good and your keeper gains a lineage rank. Tap again to confirm."
+    ],
+    "collectionBefore": 1,
+    "collectionAfter": 1,
+    "pets": [
+      {
+        "iid": "p110",
+        "sp": "C1",
+        "morph": "base",
+        "shiny": false,
+        "lineage": 1,
+        "bankedSteps": 0,
+        "level": 1,
+        "nickname": "",
+        "bond": 0,
+        "talents": [],
+        "equipped": false,
+        "eligible": true,
+        "reason": "",
+        "safeSurplus": false,
+        "lastCopy": true
+      }
+    ],
+    "nick": {},
+    "bonds": {},
+    "talents": {
+      "__iidV": 2
+    }
+  },
+  {
+    "id": "breed-shiny-keeper-control",
+    "html": "<div class=\"breed-bar sticky\">\n          <div class=\"breed-h\">What breeding does</div>\n          <div class=\"breed-trade\">\n            <span class=\"bt-out\">\n              <span class=\"bt-row\"><span class=\"bt-pet keep\"><img></span></span>\n              <small>Kept &middot; lineage 0 &rarr; 1</small>\n            </span>\n            <span class=\"bt-arrow\"></span>\n            <span class=\"bt-in\">\n              <span class=\"bt-row\"><span class=\"bt-pet\"><img></span></span>\n              <small>Fed in &middot; gone</small>\n            </span>\n          </div>\n          <ul class=\"breed-facts\">\n            <li>You keep <b>Shiny Drizzle · Lv 1</b>. Same pet, same name, <b>same level and look</b>.</li>\n            <li>It reaches <b>lineage 1</b>: (stat text omitted) (stat text omitted)</li>\n            <li><b>Base Drizzle · Lv 1 is destroyed</b> and does not come back.</li>\n          </ul>\n          \n          <div class=\"breed-pick\"><span class=\"note\">Which one are you keeping?</span><div class=\"breed-sp\"></div></div>\n          \n          <button class=\"btn\" id=\"doBreed\" >Feed Base Drizzle · Lv 1 in</button>\n        </div>",
+    "messages": [
+      "Base Drizzle · Lv 1 is destroyed for good and your keeper gains a lineage rank. Tap again to confirm."
+    ],
+    "collectionBefore": 1,
+    "collectionAfter": 1,
+    "pets": [
+      {
+        "iid": "p113",
+        "sp": "C1",
+        "morph": "base",
+        "shiny": true,
+        "lineage": 0,
+        "bankedSteps": 0,
+        "level": 1,
+        "nickname": "",
+        "bond": 0,
+        "talents": [],
+        "equipped": false,
+        "eligible": false,
+        "reason": "Shiny pets cannot be used here.",
+        "safeSurplus": false,
+        "lastCopy": true
+      }
+    ],
+    "nick": {},
+    "bonds": {},
+    "talents": {
+      "__iidV": 2
+    }
+  },
+  {
+    "id": "incubator-hidden",
+    "hasExperiment": true,
+    "coins": 100000,
+    "hasEligiblePair": false,
+    "bench": "<section class=\"lab-recovery\"><p>Your last session ended before you saw your experiment. The result is saved. Open it to review.</p><button class=\"btn ghost\" data-lab-recover>Review saved experiment</button></section><section class=\"lab-identity\" aria-label=\"Selected species\"><span class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></span><span class=\"lab-identity-copy\"><b>Drizzle</b><small id=\"labSpeciesProgress\">You have 1 of 6 colours</small></span><button class=\"link\" data-lab-change-species>Change species</button></section><section class=\"lab-availability\"><details class=\"lab-clock\"><summary>Experiment use details</summary><p>1/1 experiments used</p><p>Experiments reset at 00:00, America/Vancouver.</p></details><p role=\"status\">Your pets do not match a recipe yet. Hatch eggs to discover species and build matching pairs.</p><p>You've used 1/1 experiments today. Experiments reset at 00:00, America/Vancouver.</p><nav class=\"lab-links\" aria-label=\"Find a pair\"><button class=\"btn ghost\" data-lab-nav=\"eggs\">Eggs</button><button class=\"btn ghost\" data-lab-change-species>Change species</button></nav></section><section class=\"lab-working\"><h3>Choose your pair</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class=\"lab-slots\" aria-label=\"Two pets to combine\"><section><button class=\"lab-pet\" data-lab-slot=\"0\">Choose first pet</button></section><span class=\"lab-plus\" aria-hidden=\"true\">+</span><section><button class=\"lab-pet\" data-lab-slot=\"1\">Choose second pet</button></section></div><div class=\"lab-stock\"><p>Spare pets: Base 0. Need 2.</p><small>Spare counts keep one of each colour and exclude invested pets.</small></div><p id=\"labPairHint\">Choose first pet to review a pair.</p><button class=\"btn ghost\" aria-describedby=\"labPairHint\" data-lab-review disabled>Review pair</button></section><p>Every experiment removes two pets to make one.</p><section class=\"lab-path\" aria-label=\"Recipe path\"><header><h3>Drizzle colour path</h3><small>Unmarked colours are still to collect.</small><p class=\"lab-repeat\"><span aria-hidden=\"true\">↶</span> Repeat to build a pair</p></header><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Base Drizzle: not owned. Need two Base pets\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Base ×2</b></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"base-base\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use two Base pets. <b>Make Ember or Frost.</b></p><p class=\"lab-odds\">50% Ember · 50% Frost</p><p id=\"labCoinFlipOdds\">Always 50/50. Each coin flip can repeat a colour you already have.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Ember Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Ember</b></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Frost Drizzle: owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Frost</b><small>✓ Have</small></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"ember-frost\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use Ember and Frost. <b>Make Toxic or Rose.</b></p><p class=\"lab-odds\">50% Toxic · 50% Rose</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Toxic Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Toxic</b></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Rose Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Rose</b></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"toxic-rose\"><p><span aria-hidden=\"true\">↓</span> Use Toxic and Rose. <b>Make Midnight. Guaranteed.</b></p><p class=\"lab-odds\">100% Midnight</p><p>Midnight is the only output. Both pets are consumed.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Midnight Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Midnight</b></figcaption></figure></div></section>\n<details id=\"labHelp\" ><summary>How the recipes work</summary><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>\n<button class=\"btn lab-next\" data-lab-nav=\"collection\">Your collection: 1 of 36 colours</button><details class=\"lab-more\"><summary>More pet actions</summary><div class=\"lab-eggs\"><p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p></div><p class=\"lab-sinks\">Melting clears the pile. Breeding builds strength. The Laboratory builds the collection.</p><p class=\"note\">Clearing lots of spares? Melt them for Bone Dust. The Laboratory reduces your total by one pet per experiment.</p><nav class=\"lab-links\" aria-label=\"Pet actions\"><button class=\"btn ghost\" data-lab-nav=\"collection\">Collection</button><button class=\"btn ghost\" data-lab-nav=\"eggs\">Eggs</button><button class=\"btn ghost\" data-lab-nav=\"melt\">Melt spares</button><button class=\"btn ghost\" data-lab-nav=\"breed\">Breed</button></nav></details>",
+    "incubator": "<p>Incubator 2: 20,000 coins. Adds one experiment each day. It supplies no pets and does not change the odds.</p><p>Capacity: 1 to 2. Today's remaining uses: 0 to 1.</p><p>Your free daily experiment has been used. It returns at the next experiment reset.</p><button class=\"btn\" data-lab-buy=\"2\" >Review incubator purchase</button>"
+  },
+  {
+    "id": "help-stale-snapshot",
+    "stored": true,
+    "oldSnapshot": false,
+    "paint": "<section class=\"lab-identity\" aria-label=\"Selected species\"><span class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></span><span class=\"lab-identity-copy\"><b>Drizzle</b><small id=\"labSpeciesProgress\">You have 1 of 6 colours</small></span><button class=\"link\" data-lab-change-species>Change species</button></section><section class=\"lab-availability\"><details class=\"lab-clock\"><summary>1 experiment available today.</summary><p>0/1 experiments used</p><p>Experiments reset at 00:00, America/Vancouver.</p></details></section><section class=\"lab-working\"><h3>Choose your pair</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class=\"lab-slots\" aria-label=\"Two pets to combine\"><section><button class=\"lab-pet lab-next\" data-lab-slot=\"0\">Choose first pet</button></section><span class=\"lab-plus\" aria-hidden=\"true\">+</span><section><button class=\"lab-pet\" data-lab-slot=\"1\">Choose second pet</button></section></div><div class=\"lab-stock\"><p>Spare pets: Base 2. Need 2.</p><small>Spare counts keep one of each colour and exclude invested pets.</small></div><p id=\"labPairHint\">Choose first pet to review a pair.</p><button class=\"btn ghost\" aria-describedby=\"labPairHint\" data-lab-review disabled>Review pair</button></section><p>Every experiment removes two pets to make one.</p><section class=\"lab-path\" aria-label=\"Recipe path\"><header><h3>Drizzle colour path</h3><small>Unmarked colours are still to collect.</small><p class=\"lab-repeat\"><span aria-hidden=\"true\">↶</span> Repeat to build a pair</p></header><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Base Drizzle: owned. Need two Base pets\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Base ×2</b><small>✓ Have</small></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"base-base\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use two Base pets. <b>Make Ember or Frost.</b></p><p class=\"lab-odds\">50% Ember · 50% Frost</p><p id=\"labCoinFlipOdds\">Always 50/50. Each coin flip can repeat a colour you already have.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Ember Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Ember</b></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Frost Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Frost</b></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"ember-frost\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use Ember and Frost. <b>Make Toxic or Rose.</b></p><p class=\"lab-odds\">50% Toxic · 50% Rose</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Toxic Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Toxic</b></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Rose Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Rose</b></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"toxic-rose\"><p><span aria-hidden=\"true\">↓</span> Use Toxic and Rose. <b>Make Midnight. Guaranteed.</b></p><p class=\"lab-odds\">100% Midnight</p><p>Midnight is the only output. Both pets are consumed.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Midnight Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Midnight</b></figcaption></figure></div></section>\n<details id=\"labHelp\" open><summary>How the recipes work</summary><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>\n<button class=\"link lab-collection\" data-lab-nav=\"collection\">Your collection: 1 of 36 colours</button><details class=\"lab-more\"><summary>More pet actions</summary><div class=\"lab-eggs\"><p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p></div><p class=\"lab-sinks\">Melting clears the pile. Breeding builds strength. The Laboratory builds the collection.</p><p class=\"note\">Clearing lots of spares? Melt them for Bone Dust. The Laboratory reduces your total by one pet per experiment.</p><nav class=\"lab-links\" aria-label=\"Pet actions\"><button class=\"btn ghost\" data-lab-nav=\"collection\">Collection</button><button class=\"btn ghost\" data-lab-nav=\"eggs\">Eggs</button><button class=\"btn ghost\" data-lab-nav=\"melt\">Melt spares</button><button class=\"btn ghost\" data-lab-nav=\"breed\">Breed</button></nav><button class=\"link\" data-lab-incubators>Incubators</button></details>"
+  },
+  {
+    "id": "recipe-matrix-control",
+    "checks": 378,
+    "legal": 18
+  },
+  {
+    "id": "insufficient-control",
+    "response": {
+      "ok": false,
+      "reason": "insufficient-coins"
+    },
+    "html": "<p>Incubator 2: 20,000 coins. Adds one experiment each day. It supplies no pets and does not change the odds.</p><p>Capacity: 1 to 2. Today's remaining uses: 0 to 1.</p><p>Incubator 2 costs 20,000 coins. You have 19,999; 1 more needed. Earn coins from your daily activities, or use the bench with your current capacity.</p><p>Your free daily experiment has been used. It returns at the next experiment reset.</p><button class=\"btn\" data-lab-buy=\"2\" disabled>Review incubator purchase</button>"
+  },
+  {
+    "id": "purchase-cap-control",
+    "third": {
+      "ok": false,
+      "reason": "prerequisite"
+    },
+    "balance": 80000,
+    "capacity": 3,
+    "used": 3,
+    "remaining": 0,
+    "beforePurchase": "<p>Incubator 2: 20,000 coins. Adds one experiment each day. It supplies no pets and does not change the odds.</p><p>Capacity: 1 to 2. Today's remaining uses: 0 to 1.</p><p>Your free daily experiment has been used. It returns at the next experiment reset.</p><button class=\"btn\" data-lab-buy=\"2\" >Review incubator purchase</button>",
+    "cappedHtml": "<section class=\"lab-recovery\"><p>Your last session ended before you saw your experiment. The result is saved. Open it to review.</p><button class=\"btn ghost\" data-lab-recover>Review saved experiment</button></section><section class=\"lab-identity\" aria-label=\"Selected species\"><span class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></span><span class=\"lab-identity-copy\"><b>Drizzle</b><small id=\"labSpeciesProgress\">You have 2 of 6 colours</small></span><button class=\"link\" data-lab-change-species>Change species</button></section><section class=\"lab-availability\"><details class=\"lab-clock\"><summary>Experiment use details</summary><p>1/1 experiments used</p><p>Experiments reset at 00:00, UTC.</p></details><p role=\"status\">You&#39;ve used 1/1 experiments today. Experiments reset at 00:00, UTC.</p></section><section class=\"lab-working\"><h3>Choose your pair</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class=\"lab-slots\" aria-label=\"Two pets to combine\"><section><button class=\"lab-pet\" data-lab-slot=\"0\">Choose first pet</button></section><span class=\"lab-plus\" aria-hidden=\"true\">+</span><section><button class=\"lab-pet\" data-lab-slot=\"1\">Choose second pet</button></section></div><div class=\"lab-stock\"><p>Spare pets: Base 9. Need 2.</p><small>Spare counts keep one of each colour and exclude invested pets.</small></div><p id=\"labPairHint\">Choose first pet to review a pair.</p><button class=\"btn ghost\" aria-describedby=\"labPairHint\" data-lab-review disabled>Review pair</button></section><p>Every experiment removes two pets to make one.</p><section class=\"lab-path\" aria-label=\"Recipe path\"><header><h3>Drizzle colour path</h3><small>Unmarked colours are still to collect.</small><p class=\"lab-repeat\"><span aria-hidden=\"true\">↶</span> Repeat to build a pair</p></header><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Base Drizzle: owned. Need two Base pets\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Base ×2</b><small>✓ Have</small></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"base-base\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use two Base pets. <b>Make Ember or Frost.</b></p><p class=\"lab-odds\">50% Ember · 50% Frost</p><p id=\"labCoinFlipOdds\">Always 50/50. Each coin flip can repeat a colour you already have.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Ember Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Ember</b></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Frost Drizzle: owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Frost</b><small>✓ Have</small></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"ember-frost\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use Ember and Frost. <b>Make Toxic or Rose.</b></p><p class=\"lab-odds\">50% Toxic · 50% Rose</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Toxic Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Toxic</b></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Rose Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Rose</b></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"toxic-rose\"><p><span aria-hidden=\"true\">↓</span> Use Toxic and Rose. <b>Make Midnight. Guaranteed.</b></p><p class=\"lab-odds\">100% Midnight</p><p>Midnight is the only output. Both pets are consumed.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Midnight Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Midnight</b></figcaption></figure></div></section>\n<details id=\"labHelp\" ><summary>How the recipes work</summary><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>\n<button class=\"btn lab-next\" data-lab-nav=\"collection\">Your collection: 2 of 36 colours</button><details class=\"lab-more\"><summary>More pet actions</summary><div class=\"lab-eggs\"><p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p></div><p class=\"lab-sinks\">Melting clears the pile. Breeding builds strength. The Laboratory builds the collection.</p><p class=\"note\">Clearing lots of spares? Melt them for Bone Dust. The Laboratory reduces your total by one pet per experiment.</p><nav class=\"lab-links\" aria-label=\"Pet actions\"><button class=\"btn ghost\" data-lab-nav=\"collection\">Collection</button><button class=\"btn ghost\" data-lab-nav=\"eggs\">Eggs</button><button class=\"btn ghost\" data-lab-nav=\"melt\">Melt spares</button><button class=\"btn ghost\" data-lab-nav=\"breed\">Breed</button></nav><button class=\"link\" data-lab-incubators>Incubators</button></details>"
+  },
+  {
+    "id": "midnight",
+    "oldRemaining": 0,
+    "newRemaining": 3,
+    "oldHtml": "<section class=\"lab-recovery\"><p>Your last session ended before you saw your experiment. The result is saved. Open it to review.</p><button class=\"btn ghost\" data-lab-recover>Review saved experiment</button></section><section class=\"lab-identity\" aria-label=\"Selected species\"><span class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></span><span class=\"lab-identity-copy\"><b>Drizzle</b><small id=\"labSpeciesProgress\">You have 2 of 6 colours</small></span><button class=\"link\" data-lab-change-species>Change species</button></section><section class=\"lab-availability\"><details class=\"lab-clock\"><summary>Experiment use details</summary><p>3/3 experiments used</p><p>Experiments reset at 00:00, UTC.</p></details><p role=\"status\">You&#39;ve used 3/3 experiments today. Experiments reset at 00:00, UTC.</p></section><section class=\"lab-working\"><h3>Choose your pair</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class=\"lab-slots\" aria-label=\"Two pets to combine\"><section><button class=\"lab-pet\" data-lab-slot=\"0\">Choose first pet</button></section><span class=\"lab-plus\" aria-hidden=\"true\">+</span><section><button class=\"lab-pet\" data-lab-slot=\"1\">Choose second pet</button></section></div><div class=\"lab-stock\"><p>Spare pets: Base 5. Need 2.</p><small>Spare counts keep one of each colour and exclude invested pets.</small></div><p id=\"labPairHint\">Choose first pet to review a pair.</p><button class=\"btn ghost\" aria-describedby=\"labPairHint\" data-lab-review disabled>Review pair</button></section><p>Every experiment removes two pets to make one.</p><section class=\"lab-path\" aria-label=\"Recipe path\"><header><h3>Drizzle colour path</h3><small>Unmarked colours are still to collect.</small><p class=\"lab-repeat\"><span aria-hidden=\"true\">↶</span> Repeat to build a pair</p></header><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Base Drizzle: owned. Need two Base pets\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Base ×2</b><small>✓ Have</small></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"base-base\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use two Base pets. <b>Make Ember or Frost.</b></p><p class=\"lab-odds\">50% Ember · 50% Frost</p><p id=\"labCoinFlipOdds\">Always 50/50. Each coin flip can repeat a colour you already have.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Ember Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Ember</b></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Frost Drizzle: owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Frost</b><small>✓ Have</small></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"ember-frost\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use Ember and Frost. <b>Make Toxic or Rose.</b></p><p class=\"lab-odds\">50% Toxic · 50% Rose</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Toxic Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Toxic</b></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Rose Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Rose</b></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"toxic-rose\"><p><span aria-hidden=\"true\">↓</span> Use Toxic and Rose. <b>Make Midnight. Guaranteed.</b></p><p class=\"lab-odds\">100% Midnight</p><p>Midnight is the only output. Both pets are consumed.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Midnight Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Midnight</b></figcaption></figure></div></section>\n<details id=\"labHelp\" ><summary>How the recipes work</summary><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>\n<button class=\"btn lab-next\" data-lab-nav=\"collection\">Your collection: 2 of 36 colours</button><details class=\"lab-more\"><summary>More pet actions</summary><div class=\"lab-eggs\"><p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p></div><p class=\"lab-sinks\">Melting clears the pile. Breeding builds strength. The Laboratory builds the collection.</p><p class=\"note\">Clearing lots of spares? Melt them for Bone Dust. The Laboratory reduces your total by one pet per experiment.</p><nav class=\"lab-links\" aria-label=\"Pet actions\"><button class=\"btn ghost\" data-lab-nav=\"collection\">Collection</button><button class=\"btn ghost\" data-lab-nav=\"eggs\">Eggs</button><button class=\"btn ghost\" data-lab-nav=\"melt\">Melt spares</button><button class=\"btn ghost\" data-lab-nav=\"breed\">Breed</button></nav><button class=\"link\" data-lab-incubators>Incubators</button></details>",
+    "newHtml": "<section class=\"lab-recovery\"><p>Your last session ended before you saw your experiment. The result is saved. Open it to review.</p><button class=\"btn ghost\" data-lab-recover>Review saved experiment</button></section><section class=\"lab-identity\" aria-label=\"Selected species\"><span class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></span><span class=\"lab-identity-copy\"><b>Drizzle</b><small id=\"labSpeciesProgress\">You have 2 of 6 colours</small></span><button class=\"link\" data-lab-change-species>Change species</button></section><section class=\"lab-availability\"><details class=\"lab-clock\"><summary>3 experiments available today.</summary><p>0/3 experiments used</p><p>Experiments reset at 00:00, UTC.</p></details></section><section class=\"lab-working\"><h3>Choose your pair</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class=\"lab-slots\" aria-label=\"Two pets to combine\"><section><button class=\"lab-pet lab-next\" data-lab-slot=\"0\">Choose first pet</button></section><span class=\"lab-plus\" aria-hidden=\"true\">+</span><section><button class=\"lab-pet\" data-lab-slot=\"1\">Choose second pet</button></section></div><div class=\"lab-stock\"><p>Spare pets: Base 5. Need 2.</p><small>Spare counts keep one of each colour and exclude invested pets.</small></div><p id=\"labPairHint\">Choose first pet to review a pair.</p><button class=\"btn ghost\" aria-describedby=\"labPairHint\" data-lab-review disabled>Review pair</button></section><p>Every experiment removes two pets to make one.</p><section class=\"lab-path\" aria-label=\"Recipe path\"><header><h3>Drizzle colour path</h3><small>Unmarked colours are still to collect.</small><p class=\"lab-repeat\"><span aria-hidden=\"true\">↶</span> Repeat to build a pair</p></header><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Base Drizzle: owned. Need two Base pets\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Base ×2</b><small>✓ Have</small></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"base-base\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use two Base pets. <b>Make Ember or Frost.</b></p><p class=\"lab-odds\">50% Ember · 50% Frost</p><p id=\"labCoinFlipOdds\">Always 50/50. Each coin flip can repeat a colour you already have.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Ember Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Ember</b></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Frost Drizzle: owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Frost</b><small>✓ Have</small></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"ember-frost\" aria-describedby=\"labCoinFlipOdds\"><p><span aria-hidden=\"true\">↓</span> Use Ember and Frost. <b>Make Toxic or Rose.</b></p><p class=\"lab-odds\">50% Toxic · 50% Rose</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Toxic Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Toxic</b></figcaption></figure><figure class=\"lab-specimen\" aria-label=\"Rose Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Rose</b></figcaption></figure></div><div class=\"lab-connection\" data-recipe=\"toxic-rose\"><p><span aria-hidden=\"true\">↓</span> Use Toxic and Rose. <b>Make Midnight. Guaranteed.</b></p><p class=\"lab-odds\">100% Midnight</p><p>Midnight is the only output. Both pets are consumed.</p></div><div class=\"lab-tier\"><figure class=\"lab-specimen\" aria-label=\"Midnight Drizzle: not owned\"><div class=\"lab-art\" aria-hidden=\"true\"><img data-portrait></div><figcaption><b>Midnight</b></figcaption></figure></div></section>\n<details id=\"labHelp\" ><summary>How the recipes work</summary><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>\n<button class=\"link lab-collection\" data-lab-nav=\"collection\">Your collection: 2 of 36 colours</button><details class=\"lab-more\"><summary>More pet actions</summary><div class=\"lab-eggs\"><p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p></div><p class=\"lab-sinks\">Melting clears the pile. Breeding builds strength. The Laboratory builds the collection.</p><p class=\"note\">Clearing lots of spares? Melt them for Bone Dust. The Laboratory reduces your total by one pet per experiment.</p><nav class=\"lab-links\" aria-label=\"Pet actions\"><button class=\"btn ghost\" data-lab-nav=\"collection\">Collection</button><button class=\"btn ghost\" data-lab-nav=\"eggs\">Eggs</button><button class=\"btn ghost\" data-lab-nav=\"melt\">Melt spares</button><button class=\"btn ghost\" data-lab-nav=\"breed\">Breed</button></nav><button class=\"link\" data-lab-incubators>Incubators</button></details>"
+  },
+  {
+    "id": "two-remaining-control",
+    "remaining": 2
+  },
+  {
+    "id": "timezone-return",
+    "status": "clock-backwards",
+    "copy": "Your device date is before your last experiment day. Check automatic date and time.",
+    "remaining": 0
+  }
+]
