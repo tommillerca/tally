@@ -63,7 +63,7 @@ async function runBoot(failedStorage) {
     trackEvent: setup, watchForWipe: setup, onWriteFailure: setup,
     setHaptics: setup, wornAura: async () => null,
     equipped: async () => ({}), showSplash: setup,
-    social: { initFromQuery: setup, recoveryStatus: async () => 'unknown' },
+    social: { onResponseFailure: setup, initFromQuery: setup, recoveryStatus: async () => 'unknown' },
   });
   await assert.doesNotReject(async () => vm.runInContext(
     `${markBooted}\n${bootSource}\nboot();`, context), 'boot must resolve without an escaping exception');

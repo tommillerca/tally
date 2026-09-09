@@ -16,21 +16,22 @@ const LIZ_W = 273, LIZ_H = 218;
 const CAT_W = 261, CAT_H = 206;
 const A = 'assets/bh/anim';
 
-function cloud(px) {
+function cloud(px, morph = 'base') {
+  const paint = morph === 'base' ? `${A}/cloud` : `${A}/morph/C1/${morph}`;
   const s = px / CLOUD_W;
   return `<div class="petanim" style="width:${px}px;height:${(px * CLOUD_H / CLOUD_W).toFixed(1)}px">
     <div class="pa-stage pa-cloud" style="transform:scale(${s.toFixed(4)})">
       <div class="pa-art">
         <img class="pa-shadow" src="${A}/cloud/shadow.png" alt="">
         <div class="pa-bob">
-          <img class="pa-body" src="${A}/cloud/body-noeyes.png" alt="">
-          <img class="pa-eyes" src="${A}/cloud/eyes.png" alt="">
+          <img class="pa-body" src="${paint}/body-noeyes.png" alt="">
+          <img class="pa-eyes" src="${paint}/eyes.png" alt="">
           <img class="pa-closed" src="${A}/cloud/closed.png" alt="">
         </div>
-        <img class="pa-drop pa-d1" src="${A}/cloud/drop.png" alt="">
-        <img class="pa-drop pa-d2" src="${A}/cloud/drop.png" alt="">
-        <img class="pa-drop pa-d3" src="${A}/cloud/drop.png" alt="">
-        <img class="pa-drop pa-d4" src="${A}/cloud/drop.png" alt="">
+        <img class="pa-drop pa-d1" src="${paint}/drop.png" alt="">
+        <img class="pa-drop pa-d2" src="${paint}/drop.png" alt="">
+        <img class="pa-drop pa-d3" src="${paint}/drop.png" alt="">
+        <img class="pa-drop pa-d4" src="${paint}/drop.png" alt="">
       </div>
     </div>
   </div>`;
@@ -83,18 +84,22 @@ function catfish(px) {
 // Returns animated HTML for an animated pet id, or null to fall back to a static image.
 // px = target display width in CSS pixels.
 //
-// KENNEL PALETTES, 2026-09-05: this used to take a `tint` (Kennel Phase A) CSS
-// filter string for a morph recolour, applied to the whole stack. Gone: a morph
-// is now a PNG variant of the flat master (js/pets.js morphAsset), and this
-// module draws the animated species from their OWN separate layer PNGs (body,
-// eyes, drops, shadow), which scripts/build-pet-morphs-v2.py does not recolor. A
-// morphed pet forces the static cropped image instead (js/app.js petSpriteHtml,
-// same trade wearsFootball already makes) rather than tinting these layers.
-export function animatedPetHtml(petId, px) {
+// Only certified layer sets are selectable. Unknown morphs retain base behavior;
+// known morphs without a faithful layer model return the matching static master.
+export const MORPH_ANIMATION_FALLBACKS = Object.freeze({
+  C3: 'Catfish: repaired bead/body seam has no certified recolour model.',
+  C4: 'Beardie: mouthline and textured tongue have no certified recolour model.',
+});
+const LAYER_MORPHS = new Set(['ember', 'frost', 'toxic', 'midnight', 'rose']);
+export function animatedPetHtml(petId, px, morph = 'base') {
+  if (petId !== 'CX' && LAYER_MORPHS.has(morph)) {
+    if (petId === 'C1') return cloud(px, morph);
+    return null;
+  }
   if (petId === 'C1') return cloud(px);
   if (petId === 'C3') return catfish(px);
   if (petId === 'C4') return lizard(px, 'lizard');
-  if (petId === 'CX') return lizard(px, 'lizard-amethyst'); // Founder's Lizard (survey reward)
+  if (petId === 'CX') return lizard(px, 'lizard-amethyst');
   return null;
 }
 

@@ -67,7 +67,7 @@ import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribut
 import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
-import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, petColourName, petInstanceName, salvageInstance, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear, bestInstance } from './loot.js';
+import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, petColourName, petInstanceName, salvageInstance, quotePetDestruction, petLastColourLoss, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear, bestInstance } from './loot.js';
 import { buildBattlePet, legalPicks, isKnownPet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, petStatBonusText, petBreedGainText, PET_STAT_MULT_CAP, PET_LINEAGE_STEP, SHINY_STAT_MULT, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs, ownedCellCount } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
@@ -553,15 +553,21 @@ function eggTint(morph) { return (morph && morph !== 'base' && MORPH_SHELL[morph
    DESIGN.md keeps the accent scarce and meaning "go", not "collected". */
 function morphSwatch(morph) { return MORPH_SHELL[morph] || 'var(--text)'; }
 
-function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = undefined, thumb = null) {
+function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = undefined, thumb = null, spriteRest = false) {
   const src = srcOverride || bhAsset(BH_BY_ID[petId]);
   const c = PET_CROP[petId];
   const worn = petWornLayers(petId, wearOf(wear));
   const tints = petWornTints(petId, wearOf(wear));   // Football kit, 2026-09-04: per worn layer, or null
   if (!c) return `<span class="petcrop" style="width:${px}px;height:${px}px"><img src="${src}" style="width:${px}px;height:${px}px;object-fit:contain" alt=""></span>`;
-  const FILL = 0.82;                                   // match the animated pets' ~63px fill in a 76px box
-  const cw = c.x1 - c.x0, ch = c.y1 - c.y0;            // content size (fraction of the square)
-  const imgSize = (px * FILL) / Math.max(cw, ch);      // displayed size of the whole square image
+  const cw = c.x1 - c.x0, ch = c.y1 - c.y0;
+  // Neutral rest, visible body width (largest alpha > 8 component), within 1%.
+  // These species' 640px masters and native layers have equal body widths.
+  // Use the animation stage's pixels-per-CSS-pixel for the whole registered
+  // static canvas, including garments. Portraits keep their existing crop.
+  // Stage widths are checked against petanim.js and app.css by the PURE guard.
+  const restStage = spriteRest && { C1: 222, C3: 261, C4: 273, CX: 273 }[petId];
+  const FILL = 0.82;
+  const imgSize = restStage ? px * 640 / restStage : (px * FILL) / Math.max(cw, ch);      // displayed size of the whole square image
   const tx = (px - cw * imgSize) / 2 - c.x0 * imgSize; // center content horizontally
   const ty = ground ? (px - c.y1 * imgSize)            // seat content bottom on the floor
                      : ((px - ch * imgSize) / 2 - c.y0 * imgSize); // else center (hover)
@@ -818,7 +824,7 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
     // the creature tiny inside its box because the source art sits small in a 640²
     // canvas: a shiny lizard came out a fraction of the normal one.
     // No morph tint: shiny always forces base (rule 0.1/1.2).
-    return `<div class="pet-shiny-wrap">${croppedPetImg(petId, S2, ground, `assets/bh/C/shiny/${petId}.png`, wear, thumb)}<span class="shiny-spark">${sparkIco(14)}</span></div>`;
+    return `<div class="pet-shiny-wrap">${croppedPetImg(petId, S2, ground, `assets/bh/C/shiny/${petId}.png`, wear, thumb, true)}<span class="shiny-spark">${sparkIco(14)}</span></div>`;
   }
   /* Kennel palettes: shiny forces base (rule 0.1/1.2, redundant defense against
      any caller that somehow got here with isShiny true -- see the branches
@@ -826,18 +832,9 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
      way `shiny` falls back to S.shinyPets two lines up. */
   const petMorph = isShiny ? 'base' : (morph !== undefined ? morph : ((S.petMorphs && S.petMorphs[petId]) || 'base'));
   const morphSrc = morphAsset(petId, petMorph);
-  /* A MORPHED PET FORCES THE STATIC CANVAS, same trade as wearsFootball just
-     above (2026-09-04) and for the identical reason: scripts/build-pet-morphs-v2.py
-     recolors the flat master (assets/bh/C/<id>.png), not the animated species'
-     separate layer PNGs (body, eyes, drops, shadow), so there is no morphed art
-     for the animated stack to draw. Kennel Phase A's own CSS filter used to
-     paint the animated branch too, which is exactly how the reported bug
-     ("ember reads blue on the Beardie") reached C4's lizard: that filter is
-     gone (see js/pets.js morphAsset), so falling back to the animated layers
-     for a morphed pet would silently un-fix it. While morphed, the animated
-     species (cloud/catfish/lizard) stop moving; base morph animates exactly
-     as it always did. */
-  return (wearsFootball || morphSrc ? null : animatedPetHtml(petId, S2)) || croppedPetImg(petId, S2, ground, morphSrc || null, wear, thumb);
+  // Pass the colour through to the selective layer resolver. Football retains
+  // its registered static canvas; unsupported layer sets use the morph master.
+  return (wearsFootball ? null : animatedPetHtml(petId, S2, petMorph)) || croppedPetImg(petId, S2, ground, morphSrc || null, wear, thumb, true);
 }
 // PORTRAIT: always content-cropped + vertically CENTERED in its box (no animation,
 // no floor-seating), so a pet reads the same in a roster tile regardless of whether
@@ -1481,6 +1478,7 @@ async function boot() {
   // Explain and stop before reads, migrations, cloud recovery, or lifecycle setup.
   if (!(await storageStatus()).ok) { renderStorageUnavailable(); return; }
   // Register before boot can write, including migrations and demo seeding.
+  social.onResponseFailure(message => toast(message, 8000, { error: true }));
   const interruptedSave = takeSaveInterruption();
   onWriteFailure(({ store, key, op, quiet, quota, error }) => {
     quota ||= storageIsFull(error);
@@ -18975,7 +18973,7 @@ function lazyHydrateWardArt(scope) {
 function hydratePackArt(scope, sel = '.pc-canvas[data-art]') {
   /* A MANNEQUIN CARD HAS NO CANVAS, AND SILENCE HERE WOULD MEAN AN UNDECODED
      ENTRANCE. Every caller uses this promise as "the art is ready": renderCard
-     races it before letting the card fly in, and wireLootChoice awaits it before
+     races it before the first browsing card, and wireLootChoice awaits it before
      the boss-loot grid is touchable. A wear card's layers are plain <img>s, so
      without this branch the promise resolved instantly and the card rose with an
      empty panel -- the same failure the canvas path was built to avoid, and the
@@ -19269,6 +19267,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         burst.restart(0);
       }
 
+      let sx = 0, dx = 0, pid = null, flung = false;
       // Two frames, so tearing .go off and putting it back really does restart
       // the entrance instead of being coalesced into no change at all.
       /* SAME SHAPE AS THE ROUTE REVEAL, FOUND BY SWEEPING FOR IT.
@@ -19306,20 +19305,30 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         at(beat('--b-card'), () => landed(tier));                             // the card is up
         if (CRATE_SEQ[crate]) playCrateSeq(reveal, wrap, crateSeqReady, at, crate, tOpen);
       } else {
-        // Art first, THEN the entrance. The card used to fly in with an empty art
-        // panel and fill itself a moment later, which robbed the payoff. Capped so
-        // a slow asset delays the reveal rather than blocking it forever.
-        Promise.race([hydratePackArt(deck), new Promise(r => setTimeout(r, 700))]).then(() => {
+        const artReady = hydratePackArt(deck);
+        const next = i > 0 && !reduced;
+        const enter = () => {
           if (flung || !reveal.isConnected) return;
-          go(); landed(tier);
+          if (next) {
+            // The deck contains a NEW rise node. Commit its hidden starting
+            // style now so browsing needs neither two frames nor the 300ms
+            // fallback before its authored 20ms + 380ms entrance can start.
+            void deck.offsetWidth;
+            deck.classList.add('go');
+          } else go();
+          landed(tier);
           // The move now overlaps: 20ms delay + 380ms rise. Keep the shader
           // paused through the audit's full 520ms flick window, and never let
           // an older card's timer resume it during a newer throw.
           at(560, () => { if (!flung && reveal.isConnected) burst?.resume(); });
-        });
+        };
+        // Warmed art continues hydrating while subsequent cards rise. Waiting
+        // here added up to 700ms between items despite immediate advance dispatch.
+        // Cold art can fill late; the first card retains its art-first gate.
+        if (next) enter();
+        else Promise.race([artReady, new Promise(r => setTimeout(r, 700))]).then(enter);
       }
 
-      let sx = 0, dx = 0, pid = null, flung = false;
       const settle = () => {
         if (flung) return;
         tilt.style.transition = 'transform .3s cubic-bezier(.22,1,.36,1)';
@@ -20093,7 +20102,7 @@ async function openStable(opts = {}) {
      still exactly one way in and it still carries #kennelBtn, the id every
      handler and audit clicks. */
   const wrap = openSheet(`
-    <div class="sheet-head"><h2>The Stable</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-head stable-head"><h2>The Stable</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body" id="stableBody"></div>`, { cls: 'full pet-a11y', onClose: () => { if (currentTab() === 'today') refresh(); } });
   async function render() {
     const body = $('#stableBody', wrap);
@@ -20104,7 +20113,7 @@ async function openStable(opts = {}) {
        records disagree (R39-1), and equipped() below has to read the repaired
        slot rather than race it inside the same Promise.all. */
     const eqIid0 = await equippedPetIid();
-    const [instsAll, bank, st, eqOwn, nicks, ownedCos] = await Promise.all([petInstances(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds()]);
+    const [instsAll, bank, st, eqOwn, nicks, ownedCos, bonds, talentPicks] = await Promise.all([petInstances(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds(), kvGet('petBonds', {}), kvGet('pettalents', {})]);
     /* R44-1: use the same known-species boundary as every state reader. */
     const insts = instsAll.filter(x => x && isKnownPet(x.sp));
     const labStock = laboratoryEngine() ? await laboratoryEngine().snapshot({ presentationOnly: true }).catch(() => null) : null;
@@ -20173,7 +20182,8 @@ async function openStable(opts = {}) {
     const spareLvl = spare ? petLevel(bank[spare.iid] || 0) : 0;
     // "maybe you shouldn't": a shiny, a bred bloodline or a levelled pet is a
     // real loss, and the player has to be told BEFORE they commit.
-    const spareIsPrecious = !!spare && (spare.shiny || (spare.lineage || 0) > 0 || spareLvl >= 5);
+    const spareLoss = spare ? breedInvestmentCopy(spare, bank, nicks, bonds, talentPicks) : '';
+    const spareIsPrecious = !!spare && (spare.shiny || !!spareLoss);
     /* No dust check: breeding is gated by the 6,000-step cooldown alone since
        2026-08-27, so the pair and the cooldown are the whole of it. */
     const canBreedNow = pair && st.ready;
@@ -20225,22 +20235,15 @@ async function openStable(opts = {}) {
         <span class="cf-chip r-${it.rarity || 'common'}">${x.shiny ? `${sparkIco(9)} SHINY` : esc((RARITIES[it.rarity] || {}).label || it.rarity || '')}</span>
         ${x.shiny ? '' : `<span class="cf-chip" style="top:38px">${esc(petColourName(x))}</span>`}
         <span class="cf-lv">LV ${lvl}</span>
-        <!-- Tom, 2026-08-08: "you should have the animated versions of the pets we
-             have animations for. That is the cloud, the orange liz and the purple
-             liz." That is ANIMATED_PETS = C1, C4, CX exactly.
-             petSpriteHtml rather than petPortraitHtml: it prefers the animated
-             build where one exists and falls back to the cropped still otherwise,
-             and it already resolves the one case that would break the figure
-             contract -- there are no animated SHINY variants, so a shiny pet
-             (except CX, whose amethyst art IS its special look) renders its
-             recoloured still instead of quietly losing the shiny. -->
-        <span class="cf-art">${petSpriteHtml(x.sp, 124, false, { mass: true, shiny: x.shiny, thumb: true, morph: x.morph })}</span>
+        <!-- Base pets keep their shipped animation. Shiny pets use the shipped
+             portrait asset: the shared animation path hue-rotates its layers. -->
+        <span class="cf-art">${x.shiny ? petPortraitHtml(x.sp, 196, x.shiny, { mass: true, thumb: true, morph: x.morph }) : petSpriteHtml(x.sp, 196, false, { mass: true, shiny: x.shiny, thumb: true, morph: x.morph })}</span>
         ${bySp[x.sp].length > 1 ? `<span class="cf-n" aria-label="${bySp[x.sp].length} of this species">×${bySp[x.sp].length}</span>` : ''}
         ${isEq ? '<span class="cf-eq">Out with you</span>' : ''}
         ${inSel && !isEq ? '<span class="cf-eq sel">Breeding</span>' : ''}
       </div>`;
     }).join('');
-    const cfDots = roster.map((x, i) => `<i class="${i === focusIdx ? 'on' : ''}" data-cfdot="${i}"></i>`).join('');
+    const cfDots = roster.map((x, i) => `<button type="button" class="${i === focusIdx ? 'on' : ''}" data-cfdot="${i}" aria-label="Show ${esc((BH_BY_ID[x.sp] || {}).name || 'pet')}" aria-current="${i === focusIdx ? 'true' : 'false'}"><i aria-hidden="true"></i></button>`).join('');
     const cfCaption = (() => {
       if (!focused) return '';
       const it = BH_BY_ID[focused.sp] || {};
@@ -20249,15 +20252,16 @@ async function openStable(opts = {}) {
       const bs = petBattleStats(focused.sp, lvl, focused.shiny, focused.lineage || 0);
       const fam = familyOf(focused.sp);
       const rows = [['Level', lvl], ['Power', bs.power], ['Health', bs.hp], ['Reflex', bs.reflex]];
-      if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next', toNext.toLocaleString()]);
+      if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next level', toNext.toLocaleString()]);
       if (focused.lineage) rows.push(['Lineage', `${focused.lineage}. ${petStatBonusText(focused.sp, focused.shiny, focused.lineage)}`]);
       return `<div class="cf-cap">
           <b>${esc(petInstanceName(focused))}${focused.shiny ? ' ✦' : ''}${nickTag(focused.iid)}</b>
           <span class="role"><span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}</span>
-          <dl class="cf-meta">${rows.map(([k, v]) => `<div class="row"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
+          <dl class="cf-meta">${rows.map(([k, v]) => `<div class="row${k === 'Level' ? ' cf-level' : k === 'Lineage' || k.startsWith('Steps') ? ' cf-progress' : ''}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
         </div>
-        <div class="cf-kin" role="listbox" aria-label="Your ${esc(it.name || focused.sp)}s">${kinChips(focused)}</div>
-        <div class="cf-dots">${cfDots}</div>`;
+        <div class="cf-colour-label"${bySp[focused.sp].length < 2 ? ' hidden' : ''}>Colour / copy</div>
+        <div class="cf-kin" role="listbox" aria-label="Colour and copy of ${esc(it.name || focused.sp)}">${kinChips(focused)}</div>
+        <div class="cf-dots" aria-label="Choose pet">${cfDots}</div>`;
     })();
     const cfActs = (() => {
       if (!focused) return '';
@@ -20266,17 +20270,18 @@ async function openStable(opts = {}) {
       const inSel = sel.includes(focused.iid);
       const isOpen = focused.iid === openIid;
       const dustVal = petDustValue(it) + (focused.shiny ? 15 : 0) + (focused.lineage || 0) * 8;
-      /* NICKNAME sits FIRST and spans the row. First because it is the only
-         control here that is about who this animal is rather than what you do
-         with it, and the row's last button melts a pet permanently, so nothing
-         new goes near it. Full width because .cf-acts is a two-column grid and
-         a fifth button would otherwise leave a lone orphan in the bottom row. */
+      // One next action: bring a companion along, or inspect its talents if out.
+      // A reviewed breeding pair gives the lime action to the existing feed button.
       return `<div class="cf-acts">
-          <button class="btn ghost cf-wide" data-petnick="${focused.iid}">${nicks[focused.iid] ? 'RENAME' : 'NICKNAME'}</button>
-          <button class="btn${isEq ? ' ghost' : ''}" data-eq="${focused.iid}"${isEq ? ' disabled' : ''}>${isEq ? 'OUT WITH YOU' : 'EQUIP'}</button>
-          <button class="btn ghost" data-pettree="${focused.iid}">${isOpen ? 'HIDE TALENTS' : 'TALENTS'}</button>
-          <button class="btn ghost${inSel ? ' on' : ''}" data-breedsel="${focused.iid}">${inSel ? 'BREEDING' : 'BREED'}</button>
-          <button class="btn ghost danger" data-destroy="${focused.iid}" data-dust="${dustVal}">DESTROY ${dustVal}</button>
+          <button class="btn${isEq || pair ? ' ghost' : ' stable-primary'}" data-eq="${focused.iid}"${isEq ? ' disabled' : ''}>${isEq ? 'Out with you' : 'Bring along'}</button>
+          <button class="btn${isEq && !pair ? ' stable-primary' : ' ghost'}" data-pettree="${focused.iid}">${isOpen ? 'Hide talents' : 'Talents'}</button>
+          <button class="btn ghost stable-rename" data-petnick="${focused.iid}">${nicks[focused.iid] ? 'Rename' : 'Nickname'}</button>
+          <div class="stable-danger">
+            <p>Permanent changes</p>
+            <button class="btn ghost${inSel ? ' on' : ''}" data-breedsel="${focused.iid}">${inSel ? 'Breeding' : 'Breed'}</button>
+            <button class="btn ghost danger" data-destroy="${focused.iid}" data-dust="${dustVal}">Destroy ${esc(petInstanceName(focused))} for ${dustVal} Bone Dust</button>
+            <small>Breeding destroys the spare. Destroy trades this pet for Bone Dust. That pet does not come back.</small>
+          </div>
         </div>`;
     })();
 
@@ -20441,7 +20446,6 @@ async function openStable(opts = {}) {
     const breedLockNote = st.ready ? '' : `<p class="note" data-breed-lock>Breeding is locked. Walk ${st.cooldownLeft.toLocaleString()} more ${st.cooldownLeft === 1 ? 'step' : 'steps'} to unlock it.</p>`;
     const bodyScroll = body.scrollTop;
     body.innerHTML = `
-      <div class="wallet-line stable-wallet"><span>Bone Dust</span><b><span class="dust-ico">${ICONS.dust(14)}</span> ${st.dust.toLocaleString()}</b></div>
       ${opts.labAction ? `<p role="status">${opts.labAction === 'melt' ? 'Choose a pet in the Stable, then use Destroy to melt that one pet for Bone Dust.' : 'Choose a keeper and a spare in the Stable, then review Breed to raise the keeper’s lineage.'}</p>` : ''}
       <!-- WAITING FOR THE SECOND PICK, AT THE TOP. Tom, 2026-08-10: "the breeding
            popup is good but it covers the breed button when you swipe to another
@@ -20455,7 +20459,6 @@ async function openStable(opts = {}) {
           <span class="bw-say"><b>Now pick the second pet</b><small>Swipe across and tap BREED on it</small></span>
           <button class="btn ghost bw-cancel" id="breedCancel" type="button">Cancel</button>
         </div>` : ''}
-      ${pair ? '' : breedLockNote}
       ${roster.length ? `
         <div class="cf${cfWasPanelled ? ' panelled' : ''}" data-want="${openIid || pair ? 'panelled' : 'open'}">
           <!-- The SVG motion-blur filter that used to live here is gone: measured
@@ -20464,7 +20467,8 @@ async function openStable(opts = {}) {
                removed: .cf-card is overflow:hidden, so the copies were clipped to
                the card and never trailed past it. The ring's motion reads through
                depth, rotation and fade. -->
-          <div class="cf-frame" id="cfFrame" tabindex="0" role="region" aria-roledescription="carousel" aria-label="Your pets">
+          <p class="cf-pet-hint" id="cfPetHint">Pets · Swipe to choose</p>
+          <div class="cf-frame" id="cfFrame" tabindex="0" role="region" aria-roledescription="carousel" aria-label="Choose pet. Swipe or use arrow keys." aria-describedby="cfPetHint">
             <div class="cf-track" id="cfTrack">${cfCards}</div>
           </div>
           ${cfWear}
@@ -20473,9 +20477,11 @@ async function openStable(opts = {}) {
         </div>
         ${openIid && openInst ? petTalentTree(openInst, petLevel(bank[openInst.iid] || 0), openPicks) : ''}
       ` : '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}
+      ${pair ? '' : breedLockNote}
+      <div class="wallet-line stable-wallet"><span>Bone Dust</span><b><span class="dust-ico">${ICONS.dust(14)}</span> ${st.dust.toLocaleString()}</b></div>
       <nav class="stable-rooms" aria-label="Pet rooms">
       <button class="pdk-door stable-door" id="stableToPaddock" type="button">
-        <span class="pdk-door-scene" aria-hidden="true">
+        <span class="stable-door-picture" aria-hidden="true"><span class="pdk-door-scene">
           <i class="pdk-door-moon"></i>
           <i class="pdk-door-rail r1"></i><i class="pdk-door-rail r2"></i>
           <i class="pdk-door-post" style="left:16px"></i><i class="pdk-door-post" style="left:70px"></i><i class="pdk-door-post" style="left:124px"></i>
@@ -20486,7 +20492,7 @@ async function openStable(opts = {}) {
           <span class="pdk-door-keeper">${avatarLayersHtml(eqOwn, { skip: ['BG', 'C'], noYard: true, thumb: 192 })}</span>
           <span class="pdk-door-pets">${doorSp.map(sp => `<span class="pdk-door-pet">${petAsideHtml(petFrom(null, sp), doorPx, { thumb: true })}</span>`).join('')}</span>
           <i class="pdk-door-vig"></i>
-        </span>
+        </span></span>
         <span class="pdk-door-tx">
           <b>The Paddock</b>
           <small>${insts.length} pet${insts.length === 1 ? '' : 's'} in your collection</small>
@@ -20543,11 +20549,12 @@ async function openStable(opts = {}) {
           <ul class="breed-facts">
             <li>You keep <b>${esc(petInstanceName(keeper, bank[keeper.iid] || 0))}</b>. Same pet, same name, <b>same level and look</b>.</li>
             <li>It reaches <b>lineage ${offLineage}</b>: ${esc(petBreedGainText(keeper.sp, petLevel(bank[keeper.iid] || 0), keeper.shiny, offLineage))} ${esc(petStatBonusText(keeper.sp, keeper.shiny, offLineage))}</li>
-            <li><b>${esc(petInstanceName(spare, bank[spare.iid] || 0))} is destroyed</b> and does not come back.</li>
+            <li><b>${esc(petInstanceName(spare, bank[spare.iid] || 0))} is destroyed</b> and does not come back.${petLastColourLoss(spare, insts) ? ` This is your last ${esc(petColourName(spare))} of this species. Its collection cell will become empty.` : ''}</li>
           </ul>
           ${spareIsPrecious ? `<div class="breed-warn">
             ${ICONS.warn(17)}
             <div><b>You are about to destroy ${spare.shiny ? 'a SHINY' : (spare.lineage || 0) > 0 ? `a lineage ${spare.lineage} pet` : `a level ${spareLvl} pet`}.</b>
+            ${esc(spareLoss)}
             ${spare.shiny ? 'Shinies are about a 1 in 30 hatch and its colour will NOT carry over.' : (spare.lineage || 0) > 0 ? 'Its bloodline is lost; lineage does not transfer.' : 'Its levels are lost.'}
             Feed a plain spare in instead unless you are sure.</div>
           </div>` : ''}
@@ -20623,12 +20630,6 @@ async function openStable(opts = {}) {
     if (cfFrame && cfTrack && roster.length) {
       const cards = [...cfTrack.children];
       const N = cards.length;
-      /* Tom, 2026-08-08: "the pets need to be bigger they're the heart of the
-         stable page and the current tiles seem too far apart we can stack them
-         closer." GAP is the gap BETWEEN cards as a fraction of card width, so 0.30
-         was most of a third of a card of dead air on each side. At 0.10 the
-         neighbours tuck in behind the featured pet and the ring reads as a deck
-         rather than three separate tiles. */
       const GAP = 0.10, ROTATE = 46, DEPTH = 0.34, FADE = 0.26, FALLOFF = 0.62;
       let pos = focusIdx, target = focusIdx, raf = null, shown = -1;
       /* Motion blur, driven by measured velocity rather than a fixed keyframe, so
@@ -20662,13 +20663,11 @@ async function openStable(opts = {}) {
         const cf = $('.cf', body);
         if (cf) cf.classList.toggle('moving', on);
       };
-      const cardPx = () => cards[0] ? cards[0].getBoundingClientRect().width || 150 : 150;
+      const cardPx = () => cards[0] ? cards[0].offsetWidth || 150 : 150;
       const indexAt = p => ((Math.round(p) % N) + N) % N;
       const paint = () => {
-        /* MEASURE ONCE. cardPx() is a getBoundingClientRect, and it was being
-           called again INSIDE this loop, immediately after writing a transform:
-           six forced synchronous layouts per frame, each invalidated by the write
-           before it. That is the drag lag. Read once, write many. */
+        /* Read the untransformed width once. Measuring a tilted card would
+           feed its projected width back into the next frame's pitch. */
         const CW = cardPx();
         const PITCH = CW * (1 + GAP);
         cards.forEach((card, i) => {
@@ -20680,47 +20679,12 @@ async function openStable(opts = {}) {
           const tilt = Math.min(ROTATE * ramp, 82) * Math.sign(off);
           const x = off * PITCH;
           card.style.transform = `translateX(calc(-50% + ${x}px)) translateZ(${-DEPTH * CW * ramp}px) rotateY(${-tilt}deg)`;
-          // a card teleports across the ring at half a turn out, so it must be
-          // invisible by then or the jump is visible
-          const edge = Math.min(1, Math.max(0, N / 2 - dist));
+          // Fade the far side of the ring. With only one or two pets there is
+          // no hidden back row, so keep the pet and its sole neighbour visible.
+          const edge = N <= 2 ? 1 : Math.min(1, Math.max(0, N / 2 - dist));
           card.style.opacity = String(Math.max(0, 1 - FADE * dist) * edge);
           card.style.zIndex = String(100 - Math.round(dist));
-          /* How far THIS card moved since the last frame, in screen pixels. That
-             distance IS the smear length a real shutter would record, so sigma is
-             about half of it. Nothing else feeds in: a card that did not move gets
-             no blur, however fast the rest of the ring is turning.
-             Cards that teleport across the ring (the half-turn wrap) are excluded,
-             or the jump would register as enormous velocity and flash. */
-          /* Tom, 2026-08-08: "the blur looks a bit too intense like the movement
-             is going faster than it actually is." Cut hard (0.5 -> 0.15 of the frame
-             displacement) and capped at 2.2px, and the floor raised so ordinary
-             settling carries none at all: blur should read as a hint of speed, not
-             announce it.
-             QUANTISED to 0.4px steps and only written when the step changes. An
-             SVG filter re-renders whenever stdDeviation is touched, so setting it
-             every frame on every card was re-rasterising six filters at 60Hz for
-             sub-pixel differences nobody can see. Offscreen cards skip it. */
-          /* THE SMEAR IS COMPOSITED, NOT FILTERED. Tom, 2026-08-10: "it's still
-             pretty laggy I'm assuming this is due to the blur effect. We cannot
-             have lag in the interface people will uninstall find a good
-             compromise here."
-             He was right, and it was already as tuned as an SVG filter gets:
-             quantised sigma, written only on change, offscreen cards skipped.
-             Measured over four real drags with seven pets:
-                 with the filter   median 16.7ms   p95 33.3ms   5% of frames >32ms
-                 without it        median 16.7ms   p95 25.0ms   0.4%
-             Sixty frames a second either way, so it was never uniformly slow: it
-             was STUTTER, which is exactly what reads as lag. An SVG filter forces
-             rasterisation off the compositor, and on a phone that is worse than
-             it is here.
-             So the filter goes and nothing replaces it. A composited two-copy
-             smear was built first and then removed: .cf-card is overflow:hidden,
-             so the copies were clipped to the card's own box and could never
-             trail past its silhouette, and the trailing copy painted over the pet
-             art rather than behind it. The ring reads as motion through depth,
-             rotation and fade, which cost nothing and were already there. */
-
-
+          card.setAttribute('aria-hidden', String(i !== indexAt(pos)));
         });
         const idx = indexAt(pos);
         if (idx !== shown) {
@@ -20735,7 +20699,10 @@ async function openStable(opts = {}) {
              sync when only one thing is moving, and it is one animated pet on
              screen instead of six. */
           cards.forEach((c, i) => c.classList.toggle('focus', i === idx));
-          $$('[data-cfdot]', body).forEach((d, i) => d.classList.toggle('on', i === idx));
+          $$('[data-cfdot]', body).forEach((d, i) => {
+            d.classList.toggle('on', i === idx);
+            d.setAttribute('aria-current', String(i === idx));
+          });
           /* THE TRAY BELONGS TO THE PET YOU ARE LOOKING AT. Tom, 2026-08-10:
              "switching to another pet while one pet's talents are open doesn't
              close the tray then swipe to the next pet like it should. The talents
@@ -20941,13 +20908,13 @@ async function openStable(opts = {}) {
       const cap = $('.cf-cap', body);
       if (cap) {
         const rows = [['Level', lvl], ['Power', bs.power], ['Health', bs.hp], ['Reflex', bs.reflex]];
-        if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next', toNext.toLocaleString()]);
+        if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next level', toNext.toLocaleString()]);
         if (inst.lineage) rows.push(['Lineage', `${inst.lineage}. ${petStatBonusText(inst.sp, inst.shiny, inst.lineage)}`]);
         $('b', cap).innerHTML = `${esc(petInstanceName(inst))}${inst.shiny ? ' ✦' : ''}${nickTag(inst.iid)}`;
         const role = $('.role', cap);
         if (role) role.innerHTML = `<span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}`;
         const meta = $('.cf-meta', cap);
-        if (meta) meta.innerHTML = rows.map(([k, v]) => `<div class="row"><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+        if (meta) meta.innerHTML = rows.map(([k, v]) => `<div class="row${k === 'Level' ? ' cf-level' : k === 'Lineage' || k.startsWith('Steps') ? ' cf-progress' : ''}"><dt>${k}</dt><dd>${v}</dd></div>`).join('');
       }
       const isEq = inst.iid === eqIid, inSel = sel.includes(inst.iid), isOpen = inst.iid === openIid;
       const dustVal = petDustValue(it) + (inst.shiny ? 15 : 0) + (inst.lineage || 0) * 8;
@@ -20956,11 +20923,12 @@ async function openStable(opts = {}) {
          four: spinning the ring never re-runs render(), so a button left
          pointing at the previous pet renames the wrong animal. */
       const nkB = $('[data-petnick]', body);
-      if (nkB) { nkB.dataset.petnick = inst.iid; nkB.textContent = nicks[inst.iid] ? 'RENAME' : 'NICKNAME'; }
-      if (eqB) { eqB.dataset.eq = inst.iid; eqB.textContent = isEq ? 'OUT WITH YOU' : 'EQUIP'; eqB.disabled = isEq; eqB.classList.toggle('ghost', isEq); }
-      if (trB) { trB.dataset.pettree = inst.iid; trB.textContent = isOpen ? 'HIDE TALENTS' : 'TALENTS'; }
-      if (brB) { brB.dataset.breedsel = inst.iid; brB.textContent = inSel ? 'BREEDING' : 'BREED'; brB.classList.toggle('on', inSel); }
-      if (dsB) { delete dsB.dataset.armed; dsB.dataset.destroy = inst.iid; dsB.dataset.dust = dustVal; dsB.textContent = `DESTROY ${dustVal}`; }
+      if (nkB) { nkB.dataset.petnick = inst.iid; nkB.textContent = nicks[inst.iid] ? 'Rename' : 'Nickname'; }
+      if (eqB) { eqB.dataset.eq = inst.iid; eqB.textContent = isEq ? 'Out with you' : 'Bring along'; eqB.disabled = isEq; eqB.classList.toggle('ghost', isEq || !!pair); eqB.classList.toggle('stable-primary', !isEq && !pair); }
+      if (trB) { trB.dataset.pettree = inst.iid; trB.textContent = isOpen ? 'Hide talents' : 'Talents'; trB.classList.toggle('ghost', !isEq || !!pair); trB.classList.toggle('stable-primary', isEq && !pair); }
+      if (brB) { brB.dataset.breedsel = inst.iid; brB.textContent = inSel ? 'Breeding' : 'Breed'; brB.classList.toggle('on', inSel); }
+      if (dsB) { delete dsB.dataset.armed; dsB.dataset.destroy = inst.iid; dsB.dataset.dust = dustVal; dsB.textContent = `Destroy ${petInstanceName(inst)} for ${dustVal} Bone Dust`; }
+      repaintLabIngredients(inst.iid);
       // her wardrobe follows the ring: shown only while she is the pet in front
       $$('.pet-wear', body).forEach(pwB => { pwB.hidden = pwB.dataset.pwsp !== inst.sp; });   // Football kit, 2026-09-04
       centreRail();
@@ -20968,7 +20936,9 @@ async function openStable(opts = {}) {
       if (kin) {
         rememberKin(body);
         kin.innerHTML = kinChips(inst);
-        kin.setAttribute('aria-label', `Your ${it.name || inst.sp}s`);
+        kin.setAttribute('aria-label', `Colour and copy of ${it.name || inst.sp}`);
+        const colourLabel = $('.cf-colour-label', body);
+        if (colourLabel) colourLabel.hidden = bySp[inst.sp].length < 2;
         restoreKin(body, inst.sp);
       }
     }
@@ -21100,14 +21070,16 @@ async function openStable(opts = {}) {
     $('#petsHelp', body)?.addEventListener('click', openPetsHelp);
     $('#stableToPaddock', body)?.addEventListener('click', () => openPaddock());
     wireLabLinks(body);
-    if (labStock) {
-      const needed = labStock.pets.filter(p => p.neededFor && (p.iid === focused?.iid || sel.includes(p.iid)));
+    function repaintLabIngredients(iid) {
+      $$('.lab-ingredient', body).forEach(note => note.remove());
+      const needed = (labStock?.pets || []).filter(p => p.neededFor && (p.iid === iid || sel.includes(p.iid)));
       for (const p of needed) {
         const note = document.createElement('p'); note.className = 'note lab-ingredient';
         note.textContent = `${labName(p)}: Needed for ${p.neededFor}. Melting or breeding this pet spends that ingredient.`;
         ($('.cf-acts', body) || body).appendChild(note);
       }
     }
+    repaintLabIngredients(focused?.iid);
     $('#kennelBtn', body)?.addEventListener('click', () => openKennel());
     /* THE BAR GETS A CONTAINING BLOCK, NOT SCROLL ROOM. See the long note above
        .breed-bar.sticky in app.css for the two fixes that came before this.
@@ -21133,79 +21105,90 @@ async function openStable(opts = {}) {
       while (dock.nextSibling) dock.appendChild(dock.nextSibling);
     }
     $$('[data-destroy]', body).forEach(btn => btn.addEventListener('click', async () => {
-      const inst = insts.find(x => x.iid === btn.dataset.destroy);
-      if (!inst) return;
-      const iid = inst.iid;
-      const steps = bank[iid] || 0;
-      const nm = petInstanceName(inst, steps);
-      const isShiny = !!(inst && inst.shiny);
-      const dustVal = btn.dataset.dust || '?';
-      const doSalvage = async () => {
-        const res = await salvageInstance(iid);
-        if (!res.ok) { toast('Could not destroy that pet.'); return false; }
+      const iid = btn.dataset.destroy;
+      const fresh = await quotePetDestruction(iid);
+      if (!fresh.ok) { toast('Could not review that pet.'); return; }
+      const reviewFor = q => ({
+        title: `Destroy ${petDestructionName(q)}?`, html: petDestructionHtml(q),
+        typed: true, prompt: `Type ${petDestructionName(q).toUpperCase()} or DESTROY to confirm`,
+        accepts: value => ['DESTROY', petDestructionName(q).toUpperCase()].includes(value.trim().toUpperCase()),
+        action: 'Destroy it', commit: () => doSalvage(q),
+      });
+      const doSalvage = async q => {
+        const res = await salvageInstance(iid, q);
+        if (res.reason === 'stale-quote') return {review:reviewFor(res.quote), message:'This pet changed. Review its losses again before destroying it.'};
+        if (!res.ok) return {close:false, message:'Could not destroy that pet. Cancel and review it again.'};
         popSound(S.sounds);
-        toast(`${nm} salvaged into ${res.dust} Bone Dust.`, 2600);
-        return true;
+        toast(`${petDestructionName(q)} salvaged into ${res.dust} Bone Dust.`, 2600);
+        await render();
+        return {close:true};
       };
-      // A colour's last copy or any investment needs a typed confirmation.
-      // Only an untrained, plain duplicate keeps the quick two-tap action.
-      const lastColour = insts.filter(x => x.sp === inst.sp && petColourName(x) === petColourName(inst)).length === 1;
-      if (lastColour || steps > 0 || isShiny || (inst.lineage || 0) > 0) {
-        openPetDestructionReview({
-          title: `Destroy ${nm}?`,
-          html: `<p>${lastColour ? 'This is your last copy of this colour. ' : ''}<b>${esc(nm)}</b> has <b>${steps.toLocaleString()} banked steps</b>${inst.lineage ? ` and lineage ${inst.lineage}` : ''}. Its steps and lineage are lost. Destroying it pays <b>${esc(dustVal)} Bone Dust</b> and it does not come back.</p>`,
-          typed: true, prompt: `Type ${nm.toUpperCase()} or DESTROY to confirm`,
-          accepts: value => ['DESTROY', nm.toUpperCase()].includes(value.trim().toUpperCase()),
-          action: 'Destroy it', commit: async () => {
-            const done = await doSalvage();
-            if (done) render();
-            return { close: done, message: done ? '' : 'Could not destroy that pet. Cancel and review it again.' };
-          },
-        });
+      // Keep the disclosed quote across the quick path's two taps as well.
+      if (btn.dataset.armed === iid && btn.destructionQuote) {
+        const result = await doSalvage(btn.destructionQuote);
+        delete btn.dataset.armed; delete btn.destructionQuote;
+        if (result.review) openPetDestructionReview({...result.review, message:result.message});
+        else if (result.message) toast(result.message);
         return;
       }
-      if (btn.dataset.armed !== iid) {
-        btn.dataset.armed = iid; const t = btn.innerHTML;
-        btn.innerHTML = `Melt ${esc(nm)} for <span class="dust-ico">${ICONS.dust(13)}</span>${dustVal}?`;
-        toast(`${nm} will be destroyed for ${dustVal} Bone Dust. This cannot be undone. Tap again to confirm.`, 4600);
-        setTimeout(() => {
-          if (btn.isConnected && btn.dataset.armed === iid) {
-            delete btn.dataset.armed;
-            if (btn.dataset.destroy === iid) btn.innerHTML = t;
-          }
-        }, 4600);
+      const q = fresh.quote, nm = petDestructionName(q);
+      // Preserve the stronger review for a last appearance or invested pet.
+      if (q.lastColour || q.lastCell || q.bankedSteps > 0 || q.inst.shiny || (q.inst.lineage || 0) > 0) {
+        openPetDestructionReview(reviewFor(q));
         return;
       }
-      if (await doSalvage()) render();
+      btn.dataset.armed = iid; btn.destructionQuote = q;
+      const t = btn.innerHTML;
+      btn.innerHTML = `Melt ${esc(nm)} for <span class="dust-ico">${ICONS.dust(13)}</span>${q.dust}?`;
+      toast(`${nm} will be destroyed for ${q.dust} Bone Dust. ${petDestructionLosses(q)} This cannot be undone. Tap again to confirm.`, 4600);
+      setTimeout(() => {
+        if (btn.isConnected && btn.dataset.armed === iid) {
+          delete btn.dataset.armed; delete btn.destructionQuote;
+          if (btn.dataset.destroy === iid) btn.innerHTML = t;
+        }
+      }, 4600);
     }));
     $$('[data-offsp]', body).forEach(c => c.addEventListener('click', () => { offSp = c.dataset.offsp; render(); }));
     $('#doBreed', body)?.addEventListener('click', async e => {
-      // breeding CONSUMES both parents. If one is shiny, warn once - the shiny
-      // colour carries to (and overtakes any common colour in) the offspring,
-      // but the parent itself is gone. Arm-then-confirm.
-      const spareInst = insts.find(x => x.iid === sel.find(y => y !== offSp)) || {};
-      const spareName = petInstanceName(spareInst, bank[spareInst.iid] || 0);
+      const keepIid = offSp, feedIid = sel.find(x => x !== offSp);
+      const fresh = await quotePetDestruction(feedIid, keepIid);
+      if (!fresh.ok) { toast('Could not review that pet.'); return; }
       const btn = e.currentTarget;
-      /* ARM ON EVERY BREED. It permanently destroys a pet, and since v270 every
-         irreversible spend takes two taps. A precious spare gets a louder line,
-         because "maybe you shouldn't" is the whole point of the pause. */
-      if (btn.dataset.armed !== '1') {
-        btn.dataset.armed = '1';
-        const t = btn.textContent;
-        btn.textContent = spareInst.shiny ? `Destroy the SHINY ${spareName}?` : `Destroy ${spareName}?`;
-        btn.classList.add('danger-ish');
-        toast(spareInst.shiny
-          ? `${spareName} is SHINY, roughly a 1 in 30 hatch, and its colour will not carry over. Destroying it is permanent. Tap again only if you are sure.`
-          : `${spareName} is destroyed for good and your keeper gains a lineage rank. Tap again to confirm.`, 5200);
-        setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = t; btn.classList.remove('danger-ish'); } }, 5200);
+      const reviewFor = q => ({
+        title: `Feed ${petDestructionName(q)} in?`,
+        html: `${petDestructionHtml(q)}<p>Your keeper gains a lineage rank. ${q.inst.shiny ? 'Shinies are about a 1 in 30 hatch and its colour will NOT carry over. ' : ''}${q.inst.lineage ? 'Its bloodline is lost; lineage does not transfer. ' : ''}Feed a plain spare in instead unless you are sure.</p>`,
+        typed:true, prompt:'Type DESTROY to confirm', accepts:value => value.trim().toUpperCase() === 'DESTROY',
+        action:'Feed it in', commit:() => doBreed(q),
+      });
+      const doBreed = async q => {
+        const res = await breedPets(keepIid, feedIid, q);
+        if (res.reason === 'stale-quote') return {review:reviewFor(res.quote), message:'This pet changed. Review its losses again before breeding.'};
+        if (!res.ok) return {close:false, message:BREED_ERR[res.reason] || 'Could not breed those.'};
+        sel = []; offSp = null; saveBreed();
+        await render();
+        // Close the review before opening the result, so history cannot close
+        // the result sheet in place of the confirmation underneath it.
+        return {close:true, afterClose:() => openPetBreedResult(res.offspring, petLevel(bank[res.offspring.iid] || 0))};
+      };
+      if (btn.dataset.armed === '1' && btn.destructionQuote) {
+        const result = await doBreed(btn.destructionQuote);
+        btn.dataset.armed = '0'; delete btn.destructionQuote;
+        if (result.review) openPetDestructionReview({...result.review, message:result.message});
+        else if (result.close) result.afterClose();
+        else toast(result.message);
         return;
       }
-      const keepIid = offSp, feedIid = sel.find(x => x !== offSp);
-      const res = await breedPets(keepIid, feedIid);
-      if (!res.ok) { toast(BREED_ERR[res.reason] || 'Could not breed those.'); render(); return; }
-      sel = []; offSp = null; saveBreed();
-      await render();                          // refresh the stable underneath
-      openPetBreedResult(res.offspring, petLevel(bank[res.offspring.iid] || 0));       // reveal on top (Stable stays open, no race)
+      const q = fresh.quote, spareInst = q.inst, spareName = petDestructionName(q);
+      if (q.lastCell) { openPetDestructionReview(reviewFor(q)); return; }
+      // Every other breed retains its two taps and its existing shiny warning.
+      btn.dataset.armed = '1'; btn.destructionQuote = q;
+      const t = btn.textContent;
+      btn.textContent = spareInst.shiny ? `Destroy the SHINY ${spareName}?` : `Destroy ${spareName}?`;
+      btn.classList.add('danger-ish');
+      toast(spareInst.shiny
+        ? `${spareName} is SHINY, roughly a 1 in 30 hatch, and its colour will not carry over. Destroying it is permanent. Tap again only if you are sure.`
+        : `${spareName} is destroyed for good and your keeper gains a lineage rank. Tap again to confirm.`, 5200);
+      setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; delete btn.destructionQuote; btn.textContent = t; btn.classList.remove('danger-ish'); } }, 5200);
     });
     $$('[data-petpick2]', body).forEach(btn => btn.addEventListener('click', async () => {
       const iid = btn.dataset.iid, tier = Number(btn.dataset.tier), node = btn.dataset.petpick2;
@@ -21257,6 +21240,16 @@ function labPair(a, b) {
   if (!a || !b || a.iid === b.iid || a.sp !== b.sp || a.eligible !== true || b.eligible !== true) return null;
   return labRecipes.find(r => [...r.inputs].sort().join('|') === [a.morph, b.morph].sort().join('|')) || null;
 }
+function breedInvestmentCopy(p, bank, nicks, bonds, talents) {
+  const losses = [];
+  if (bank[p.iid] > 0) losses.push(`${bank[p.iid].toLocaleString()} banked training steps`);
+  if (nicks[p.iid]) losses.push(`nickname ${nicks[p.iid]}`);
+  if (p.lineage > 0) losses.push(`lineage ${p.lineage}`);
+  if (bonds[p.iid] > 0) losses.push(`bond ${bonds[p.iid]}/5`);
+  const picks = talents[p.iid] || [];
+  if (picks.length) losses.push(`talent choices: ${picks.map(id => Object.values(PET_TREES).flatMap(t => t.flatMap(r => r.opts)).find(t => t.id === id)?.name || id).join(', ')}`);
+  return losses.length ? `Lost permanently: ${losses.join('; ')}. None transfers to your keeper.` : '';
+}
 function labInvested(p) {
   return p.bankedSteps > 0 || p.level > 1 || !!p.nickname || p.lineage > 0 || p.bond > 0 || p.talents.length > 0 || p.equipped;
 }
@@ -21276,10 +21269,10 @@ function labStateCopy(s, sp = '') {
   if (!s.pets.length) return 'Hatch eggs to discover species. The recipe path is here when you have a pair.';
   if (!s.hasEligiblePair) return 'Your pets do not match a recipe yet. Hatch eggs to discover species and build matching pairs.';
   if (s.remaining === 0) return `You've used ${s.used}/${s.capacity} experiments today. Experiments reset at ${s.resetTime}, ${s.zone}.`;
+  if (!s.hasSafePair) return `${s.collectionCount === labTotal() ? `All ${labTotal()} colours owned. ` : ''}No matching pair preserves both your collection and pet investment. You may review a risky pair and its exact losses, or hatch more copies first.`;
   if (s.collectionCount === labTotal()) return `All ${labTotal()} colours owned. Animate copies, melt spares for Bone Dust, or breed to raise lineage.`;
   if (sp && s.species[sp]?.complete) return `${labSpecies(sp)} has all ${MORPHS.length} colours. Choose another species to build the collection, or make an optional extra copy.`;
   if (sp && s.species[sp]?.hasEligiblePair === false) return `No matching pair for ${labSpecies(sp)} yet. Hatch eggs or choose another species. The recipes stay here.`;
-  if (!s.hasSafePair) return 'Keep one of each colour. You need two spare pets of the same species that match a recipe.';
   return `${s.remaining} experiment${s.remaining === 1 ? '' : 's'} available today.`;
 }
 function labSinksHtml(next = '') {
@@ -21359,7 +21352,7 @@ function labConfirmationHtml(q) {
 function labRevealHtml(r) {
   const b = r.branches.find(x => x.morph === r.result.morph);
   const certain = r.distribution.length === 1;
-  return `<div class="lab-reveal ${certain ? 'lab-direct' : 'lab-surprise'}" data-outcomes="${r.distribution.length}"><div data-lab-result-art>${petSpriteHtml(r.species, 144, false, { morph: r.result.morph, shiny: false, wear: null, thumb: true })}</div><h3>${esc(labColour(r.result.morph))} ${esc(labSpecies(r.species))}</h3><p role="status">${b.gained.length ? `Added to your collection. ${b.afterCount}/${labTotal()}.` : `Another copy. ${b.neededFor ? `Needed for ${esc(b.neededFor)}.` : 'Optional extra copy.'}`}</p><p>${certain ? r.recipe === 'toxic-rose' ? 'Midnight was guaranteed by this recipe.' : 'This saved experiment had a guaranteed result.' : 'Your experiment is saved.'}</p><p>Level 1. 0 banked steps. Lineage 0. Non-shiny. No inherited name, bond or talents.</p><p>${Number.isInteger(r.remaining) ? `${r.remaining} experiment${r.remaining === 1 ? '' : 's'} available today.` : 'Back to Laboratory to check remaining experiments.'}</p>${r.resultPresent === false ? '<p>This saved pet has since left your Stable. Reviewing this receipt does not recreate it.</p>' : ''}</div>`;
+  return `<div class="lab-reveal ${certain ? 'lab-direct' : 'lab-surprise'}" data-outcomes="${r.distribution.length}"><div data-lab-result-art>${petSpriteHtml(r.species, 144, false, { morph: r.result.morph, shiny: false, wear: null, thumb: true })}</div><h3>${esc(labColour(r.result.morph))} ${esc(labSpecies(r.species))}</h3><p role="status">${b.gained.length ? `Added to your collection. ${b.afterCount}/${labTotal()}.` : `Another copy. ${b.neededFor ? `Needed for ${esc(b.neededFor)}.` : 'Optional extra copy.'}`}</p><p>${certain ? r.recipe === 'toxic-rose' ? 'Midnight was guaranteed by this recipe.' : 'This saved experiment had a guaranteed result.' : 'Your experiment is saved.'}</p><p>At creation: Level 1. 0 banked steps. Lineage 0. Non-shiny. No inherited name, bond or talents. This receipt records the experiment, not later training or naming.</p><p>${Number.isInteger(r.remaining) ? `${r.remaining} experiment${r.remaining === 1 ? '' : 's'} available today.` : 'Back to Laboratory to check remaining experiments.'}</p>${r.resultPresent === false ? '<p>This saved pet has since left your Stable. Reviewing this receipt does not recreate it.</p>' : ''}</div>`;
 }
 function labTodayVisible(s, { current, priorDay, hidden }) {
   return current && priorDay && !hidden && s.status === 'ready' && s.remaining > 0 && s.hasSafeUsefulPair === true && s.collectionCount < labTotal();
@@ -21378,7 +21371,7 @@ function labPickerHtml(s, selected, slot, sp = '', colour = '') {
   const other = s.pets.find(p => p.iid === selected[1 - slot]);
   const rows = s.pets.filter(p => p.iid !== other?.iid && (!sp || p.sp === sp) && (!colour || p.morph === colour)).sort((a, b) => Number(!a.safeSurplus || labInvested(a)) - Number(!b.safeSurplus || labInvested(b)));
   return rows.length ? rows.map(p => {
-    const reason = p.reason || (other && !labPair(p, other) ? 'Does not match this same-species recipe.' : '');
+    const reason = p.reason || (p.morph === 'midnight' ? 'Midnight completes the recipe path. No recipe consumes it.' : '') || (other && !labPair(p, other) ? 'Does not match this same-species recipe.' : '');
     const tags = [p.safeSurplus && !labInvested(p) ? 'Untrained spare' : '', p.lastCopy ? 'Last collection copy' : '', p.bankedSteps > 0 || p.level > 1 ? 'Trained' : '', p.nickname ? 'Named' : '', p.bond > 0 ? 'Bonded' : '', p.lineage > 0 ? `Lineage ${p.lineage}` : '', p.equipped ? 'Equipped' : '', p.neededFor ? `Needed as an ingredient for ${p.neededFor}` : ''].filter(Boolean);
     return `<section class="lab-pick-row"><button class="lab-pet" aria-describedby="lab-pick-info-${esc(p.iid)}" data-lab-pick="${esc(p.iid)}" ${p.eligible !== true || reason ? 'disabled' : ''}>${labPetDetails(p, true)}</button><div class="lab-pick-info" id="lab-pick-info-${esc(p.iid)}"><small>${esc(p.bankedSteps.toLocaleString())} banked training steps · Bond ${esc(p.bond)}/5${p.talents.length ? ` · ${esc(p.talents.join(', '))}` : ''}</small><small>${esc(tags.join(' · '))}</small>${reason ? `<small>${esc(reason)}</small>` : ''}</div></section>`;
   }).join('') : '<p>No pets match these filters. Try another species or colour, or hatch eggs.</p>';
@@ -21392,15 +21385,15 @@ function labBenchHtml(s, selected, sp, q = null, choosingSpecies = false) {
   const nextSlot = empty < 0 ? 0 : empty;
   const activeId = pair?.id || labRecipes.find(r => pets.some(p => p && r.inputs.includes(p.morph)))?.id || 'base-base';
   const active = labRecipes.find(r => r.id === activeId);
-  const prompt = !sp ? 'Choose a species, then choose two pets.' : empty >= 0 ? `Choose ${empty === 0 ? 'first' : 'second'} pet to review a pair.` : !pair ? 'These pets do not match a recipe. Choose a different first or second pet.' : !canWork ? labStateCopy(s, sp) : 'Review shows the exact collection colours lost and gained before you confirm.';
-  const working = `<section class="lab-working"><h3>${pets.some(Boolean) ? `${active.inputs.map(labColour).join(' + ')}: choose your pair` : 'Choose your pair'}</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class="lab-slots" aria-label="Two pets to combine">${[0, 1].map(i => { const p = pets[i]; return `<section><button class="lab-pet${sp && canWork && !canReview && nextSlot === i ? ' lab-next' : ''}" data-lab-slot="${i}">${p ? labPetDetails(p, true) : `Choose ${i === 0 ? 'first' : 'second'} pet`}</button>${p ? `<button class="link" data-lab-clear="${i}">Clear ${i === 0 ? 'first' : 'second'} pet</button>` : ''}</section>`; }).join('<span class="lab-plus" aria-hidden="true">+</span>')}</div>${q ? labOutcomesHtml(q) : ''}${labIngredientCounts(s, sp, active)}${q ? labBranchesHtml(q) : ''}<p id="labPairHint">${esc(prompt)}</p><button class="btn ${canReview ? 'lab-next' : 'ghost'}" aria-describedby="labPairHint" data-lab-review ${canReview ? '' : 'disabled'}>Review pair</button></section>`;
+  const prompt = !canWork ? labStateCopy(s, sp) : !sp ? 'Choose a species, then choose two pets.' : empty >= 0 ? `Choose ${empty === 0 ? 'first' : 'second'} pet to review a pair.` : !pair ? 'These pets do not match a recipe. Choose a different first or second pet.' : 'Review shows the exact collection colours lost and gained before you confirm.';
+  const working = `<section class="lab-working"><h3>${pets.some(Boolean) ? `${active.inputs.map(labColour).join(' + ')}: choose your pair` : 'Choose your pair'}</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class="lab-slots" aria-label="Two pets to combine">${[0, 1].map(i => { const p = pets[i]; return `<section><button class="lab-pet${sp && canWork && !canReview && nextSlot === i ? ' lab-next' : ''}" data-lab-slot="${i}" ${canWork ? '' : 'disabled'}>${p ? labPetDetails(p, true) : `Choose ${i === 0 ? 'first' : 'second'} pet`}</button>${p ? `<button class="link" data-lab-clear="${i}">Clear ${i === 0 ? 'first' : 'second'} pet</button>` : ''}</section>`; }).join('<span class="lab-plus" aria-hidden="true">+</span>')}</div>${q ? labOutcomesHtml(q) : ''}${labIngredientCounts(s, sp, active)}${q ? labBranchesHtml(q) : ''}<p id="labPairHint">${esc(prompt)}</p><button class="btn ${canReview ? 'lab-next' : 'ghost'}" aria-describedby="labPairHint" data-lab-review ${canReview ? '' : 'disabled'}>Review pair</button></section>`;
   const status = labStateCopy(s, sp);
   const available = `${s.remaining} experiment${s.remaining === 1 ? '' : 's'} available today.`;
   const recovery = s.unseen?.length ? '<section class="lab-recovery"><p>Your last session ended before you saw your experiment. The result is saved. Open it to review.</p><button class="btn ghost" data-lab-recover>Review saved experiment</button></section>' : '';
   const noPair = !s.pets.length || !s.hasEligiblePair || (sp && s.species[sp]?.hasEligiblePair === false);
   return `${recovery}${sp ? '' : '<p>Make a new colour from two pets of the same species.</p>'}${labSpeciesHtml(s, sp, choosingSpecies)}<section class="lab-availability">${s.status === 'ready' ? `<details class="lab-clock"><summary>${s.remaining > 0 ? available : 'Experiment use details'}</summary><p>${s.used}/${s.capacity} experiments used</p><p>Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p></details>` : ''}${status !== available ? `<p role="status">${esc(status)}</p>` : ''}${s.status === 'ready' && s.remaining === 0 && !status.includes('Experiments reset at') ? `<p>You've used ${s.used}/${s.capacity} experiments today. Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p>` : ''}${noPair ? '<nav class="lab-links" aria-label="Find a pair"><button class="btn ghost" data-lab-nav="eggs">Eggs</button>' + (sp ? '<button class="btn ghost" data-lab-change-species>Change species</button>' : '') + '</nav>' : ''}</section>${working}<p>Every experiment removes two pets to make one.</p>${labRecipesHtml(s, sp)}
 <details id="labHelp" ${s.ui?.introRead ? '' : 'open'}><summary>How the recipes work</summary><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>
-<button class="${sp && !canWork ? 'btn lab-next' : 'link lab-collection'}" data-lab-nav="collection">Your collection: ${s.collectionCount} of ${labTotal()} colours</button><details class="lab-more"><summary>More pet actions</summary>${s.status !== 'ready' ? '<p>One experiment each day is free. Permanent incubators can add two more.</p>' : ''}<div class="lab-eggs">${s.eggs.length ? s.eggs.map(e => `<p>Egg: ${e.ready ? 'Ready to hatch' : `${e.steps.toLocaleString()}/${e.goal.toLocaleString()} steps`}. Open eggs to ${e.ready ? 'hatch it' : 'check progress'}.</p>`).join('') : '<p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p>'}</div>${labSinksHtml()}${s.hasEligiblePair && s.status === 'ready' ? '<button class="link" data-lab-incubators>Incubators</button>' : ''}</details>`;
+<button class="${sp && !canWork ? 'btn lab-next' : 'link lab-collection'}" data-lab-nav="collection">Your collection: ${s.collectionCount} of ${labTotal()} colours</button><details class="lab-more"><summary>More pet actions</summary>${s.status !== 'ready' ? '<p>One experiment each day is free. Permanent incubators can add two more.</p>' : ''}<div class="lab-eggs">${s.eggs.length ? s.eggs.map(e => `<p>Egg: ${e.ready ? 'Ready to hatch' : `${e.steps.toLocaleString()}/${e.goal.toLocaleString()} steps`}. Open eggs to ${e.ready ? 'hatch it' : 'check progress'}.</p>`).join('') : '<p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p>'}</div>${labSinksHtml()}${s.status === 'ready' ? '<button class="link" data-lab-incubators>Incubators</button>' : ''}</details>`;
 }
 // LAB UI PURE END
 
@@ -21420,21 +21413,57 @@ async function labReadSnapshot(pre = null) {
   return { status: 'unavailable', pets: rows, collectionCount: ownedCellCount(cells, KENNEL_SPECIES.map(s => s.id)), species: Object.fromEntries(KENNEL_SPECIES.map(s => [s.id, { count: MORPHS.filter(m => cells.has(`${s.id}|${m}`)).length }])), eggs: inv.filter(r => r.kind === 'egg').map(e => { const p = eggProgress(e, steps); return { ready: p.ready, steps: p.walked, goal: p.goal }; }), ui: {}, unseen: [] };
 }
 
-/* Both salvage and Animate use this same review/typed-confirmation sheet.
- * Text is never prefilled. Cancellation never invokes commit. */
-function openPetDestructionReview({ title, html, typed = false, accepts = t => t === 'ANIMATE', prompt = 'Type ANIMATE to confirm', action = 'Animate', commit, onClose = null }) {
-  let busy = false, finished = false;
-  const wrap = openSheet(`<div class="sheet-head"><h2>${esc(title)}</h2><button class="sheet-close">Cancel</button></div><div class="sheet-body lab-review">${html}${typed ? `<div class="t1-field"><label for="pdIn">${esc(prompt)}</label><input id="pdIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false"></div>` : ''}<p id="pdStatus" role="status"></p></div><div class="t1-foot"><button class="btn danger-ish" id="pdGo" ${typed ? 'disabled' : ''}>${esc(action)}</button></div>`, { cls: 't1 pet-a11y', name: 'PetDestruction', onClose });
-  const input = $('#pdIn', wrap), go = $('#pdGo', wrap), status = $('#pdStatus', wrap);
+/* Both salvage and Animate use this review, as does Breed. */
+// PET DESTRUCTION UI PURE BEGIN
+function petDestructionName(q) {
+  const kind = petInstanceName(q.inst, q.bankedSteps);
+  return q.nickname ? `${q.nickname} (${kind})` : kind;
+}
+function petDestructionLosses(q) {
+  const talents = q.talents.map(id => Object.values(PET_TREES).flatMap(tree => tree.flatMap(row => row.opts)).find(t => t.id === id)?.name || id);
+  return [
+    `${q.bankedSteps.toLocaleString()} banked steps and lineage ${q.inst.lineage || 0} are lost.`,
+    q.nickname ? `The nickname ${q.nickname} is lost.` : '',
+    q.bond ? `Bond ${q.bond}/5 is lost.` : '',
+    talents.length ? `Chosen talents are lost: ${talents.join(', ')}.` : '',
+    q.inst.shiny ? 'Its shiny appearance is lost.' : '',
+    q.equipped ? (q.replacement ? `It is equipped. ${q.replacement.name} will take its place.` : 'It is equipped. No pet will remain equipped.') : '',
+  ].filter(Boolean).join(' ');
+}
+function petDestructionHtml(q) {
+  const colour = MORPH_LABEL[q.inst.shiny ? 'base' : q.inst.morph || 'base'] || petColourName(q.inst);
+  return `<p>${q.lastColour ? 'This is your last copy of this colour. ' : ''}${q.lastCell ? `Your last ${esc(colour)} ${(esc(BH_BY_ID[q.inst.sp]?.name || q.inst.sp))} will be lost. Its collection cell will become empty. ` : ''}<b>${esc(petDestructionName(q))}</b> is destroyed and does not come back.</p><p>${esc(petDestructionLosses(q))}</p>${q.keepIid ? '' : `<p>Destroying it pays <b>${q.dust} Bone Dust</b>.</p>`}`;
+}
+// PET DESTRUCTION UI PURE END
+
+/* Salvage, Breed and Animate share this review. A stale quote replaces the
+ * disclosure in place and clears the typed acknowledgement before another try. */
+function openPetDestructionReview({ title, html, typed = false, accepts = t => t === 'ANIMATE', prompt = 'Type ANIMATE to confirm', action = 'Animate', commit, onClose = null, message = '' }) {
+  let busy = false, finished = false, afterClose = null;
+  const wrap = openSheet(`<div class="sheet-head"><h2>${esc(title)}</h2><button class="sheet-close">Cancel</button></div><div class="sheet-body lab-review">${html}${typed ? `<div class="t1-field"><label for="pdIn">${esc(prompt)}</label><input id="pdIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false"></div>` : ''}<p id="pdStatus" role="status"></p></div><div class="t1-foot"><button class="btn danger-ish" id="pdGo" ${typed ? 'disabled' : ''}>${esc(action)}</button></div>`, { cls: 't1 pet-a11y', name: 'PetDestruction', onClose: () => { onClose?.(); if (afterClose) queueMicrotask(afterClose); } });
+  let input = $('#pdIn', wrap), status = $('#pdStatus', wrap);
+  const go = $('#pdGo', wrap);
+  status.textContent = message;
   const typedOk = () => !typed || accepts(input.value);
-  input?.addEventListener('input', () => { go.disabled = busy || finished || !typedOk(); });
+  const wireInput = () => input?.addEventListener('input', () => { go.disabled = busy || finished || !typedOk(); });
+  wireInput();
   go.addEventListener('click', async () => {
     if (busy || finished || !typedOk()) return;
     busy = true; go.disabled = true;
     status.textContent = action === 'Animate' ? 'Saving your experiment...' : 'Saving...';
     try {
       const result = await commit();
+      if (result?.review) {
+        ({title, html, typed, accepts, prompt, action, commit} = result.review);
+        $('h2', wrap).textContent = title;
+        $('.lab-review', wrap).innerHTML = `${html}<div class="t1-field"><label for="pdIn">${esc(prompt)}</label><input id="pdIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false"></div><p id="pdStatus" role="status"></p>`;
+        input = $('#pdIn', wrap); status = $('#pdStatus', wrap);
+        input.value = ''; wireInput(); go.textContent = action; go.disabled = true;
+        status.textContent = result.message || ''; input.focus?.();
+        return;
+      }
       finished = true;
+      afterClose = result?.afterClose || null;
       if (result?.message) status.textContent = result.message;
       if (result?.close && wrap.isConnected) history.back();
     } catch {
@@ -21456,14 +21485,20 @@ function wireLabLinks(root) {
 let labUncertainOperation = null;
 async function openLaboratory() {
   const origin = document.activeElement;
-  let selected = [null, null], species = '', choosingSpecies = false, snapshot, quote = null, generation = 0, observer;
+  let selected = [null, null], species = '', choosingSpecies = false, snapshot, quote = null, generation = 0, observer, clockTimer;
   const resume = () => { if (!document.hidden && sheetStack.at(-1)?.wrap === wrap) draw(); };
-  const wrap = openSheet('<div class="sheet-head"><h2>The Laboratory</h2><button class="sheet-close">Back</button></div><div class="sheet-body lab-room" id="labBody"><p role="status">Opening The Laboratory...</p></div>', { cls: 'full pet-a11y lab-sheet', name: 'Laboratory', onClose: () => { generation++; observer?.disconnect(); document.removeEventListener('visibilitychange', resume); window.removeEventListener('focus', resume); origin?.isConnected && origin.focus(); if (currentTab() === 'today') refresh(); } });
+  const wrap = openSheet('<div class="sheet-head"><h2>The Laboratory</h2><button class="sheet-close">Back</button></div><div class="sheet-body lab-room" id="labBody"><p role="status">Opening The Laboratory...</p></div>', { cls: 'full pet-a11y lab-sheet', name: 'Laboratory', onClose: () => { generation++; clearInterval(clockTimer); observer?.disconnect(); document.removeEventListener('visibilitychange', resume); window.removeEventListener('focus', resume); origin?.isConnected && origin.focus(); if (currentTab() === 'today') refresh(); } });
   const body = $('#labBody', wrap);
   observer = new MutationObserver(resume);
   observer.observe($('#sheets'), { childList: true });
   document.addEventListener('visibilitychange', resume);
   window.addEventListener('focus', resume);
+  const clockKey = () => `${dateKey()}|${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
+  let lastClock = clockKey();
+  clockTimer = setInterval(() => {
+    const next = clockKey();
+    if (next !== lastClock) { lastClock = next; resume(); }
+  }, 1000);
   async function draw() {
     const gen = ++generation;
     quote = null;
@@ -21484,7 +21519,7 @@ async function openLaboratory() {
     const focusClear = focused?.getAttribute('data-lab-clear');
     body.innerHTML = labBenchHtml(snapshot, selected, species, quote, choosingSpecies);
     wireLabLinks(body);
-    $('#labHelp', body)?.addEventListener('toggle', e => { if (!e.target.open) laboratoryEngine()?.setUi({ introRead: true }).catch(() => {}); });
+    $('#labHelp', body)?.addEventListener('toggle', e => { if (!e.target.open) { snapshot.ui = { ...snapshot.ui, introRead: true }; laboratoryEngine()?.setUi({ introRead: true }).catch(() => {}); } });
     $$('input[name="labSpecies"]', body).forEach(radio => radio.addEventListener('change', e => { species = e.target.value; choosingSpecies = false; selected = [null, null]; quote = null; paint(); $('[data-lab-change-species]', body)?.focus(); }));
     $('[data-lab-keep-species]', body)?.addEventListener('click', () => { choosingSpecies = false; paint(); $('[data-lab-change-species]', body)?.focus(); });
     $$('[data-lab-change-species]', body).forEach(b => b.addEventListener('click', () => { choosingSpecies = true; paint(); $('input[name="labSpecies"]:checked', body)?.focus(); }));
@@ -21576,16 +21611,26 @@ async function openLaboratory() {
   }
   function incubators() {
     const sheet = openSheet(`<div class="sheet-head"><h2>Incubators</h2><button class="sheet-close">Back to bench</button></div><div class="sheet-body lab-room">${labIncubatorHtml(snapshot)}<p id="labPurchaseStatus" role="status"></p></div>`, { cls: 'full pet-a11y', name: 'LaboratoryIncubators', onClose: () => { if (wrap.isConnected) draw(); } });
-    const buy = $('[data-lab-buy]', sheet);
-    buy?.addEventListener('click', async () => {
-      if (!buy.dataset.armed) { buy.dataset.armed = '1'; buy.textContent = `Buy incubator ${buy.dataset.labBuy} for ${Number(buy.dataset.labBuy) === 2 ? '20,000' : '40,000'} coins`; return; }
-      buy.disabled = true;
-      try {
-        await rollDayIfNeeded();
-        const result = await laboratoryEngine().purchase({ slot: Number(buy.dataset.labBuy), opId: newId(), snapshotToken: snapshot.token });
-        $('#labPurchaseStatus', sheet).textContent = result.ok ? 'Incubator saved. Back to bench to use the added capacity.' : 'The purchase could not be completed. Back to bench to check your coins and capacity before reviewing again.';
-      } catch { $('#labPurchaseStatus', sheet).textContent = 'The purchase save could not be checked. Back to bench to review your capacity before trying again.'; }
-    });
+    const purchaseBody = $('.sheet-body', sheet);
+    function bindPurchase() {
+      const buy = $('[data-lab-buy]', sheet);
+      buy?.addEventListener('click', async () => {
+        if (!buy.dataset.armed) { buy.dataset.armed = '1'; buy.textContent = `Buy incubator ${buy.dataset.labBuy} for ${Number(buy.dataset.labBuy) === 2 ? '20,000' : '40,000'} coins`; return; }
+        buy.disabled = true;
+        try {
+          await rollDayIfNeeded();
+          const result = await laboratoryEngine().purchase({ slot: Number(buy.dataset.labBuy), opId: newId(), snapshotToken: snapshot.token });
+          if (result.ok) {
+            snapshot = await labReadSnapshot();
+            if (!sheet.isConnected) return;
+            purchaseBody.innerHTML = `${labIncubatorHtml(snapshot)}<p id="labPurchaseStatus" role="status"></p>`;
+            bindPurchase();
+          }
+          $('#labPurchaseStatus', sheet).textContent = result.ok ? 'Incubator saved. Back to bench to use the added capacity.' : 'The purchase could not be completed. Back to bench to check your coins and capacity before reviewing again.';
+        } catch { $('#labPurchaseStatus', sheet).textContent = 'The purchase save could not be checked. Back to bench to review your capacity before trying again.'; }
+      });
+    }
+    bindPurchase();
   }
   await draw();
 }
@@ -24310,7 +24355,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v524'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v525'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

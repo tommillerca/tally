@@ -1,0 +1,179 @@
+{
+  "5": {
+    "invested": "What breeding does Kept &middot; lineage 0 &rarr; 1 Fed in &middot; gone You keep Base Drizzle · Lv 1 . Same pet, same name, same level and look . It reaches lineage 1 : (stat text omitted) (stat text omitted) Ember Drizzle · Lv 7 is destroyed and does not come back. You are about to destroy a lineage 2 pet. Its bloodline is lost; lineage does not transfer. Feed a plain spare in instead unless you are sure. Which one are you keeping? Feed Ember Drizzle · Lv 7 in",
+    "low": "What breeding does Kept &middot; lineage 0 &rarr; 1 Fed in &middot; gone You keep Base Drizzle · Lv 1 . Same pet, same name, same level and look . It reaches lineage 1 : (stat text omitted) (stat text omitted) Base Drizzle · Lv 1 is destroyed and does not come back. Which one are you keeping? Feed Base Drizzle · Lv 1 in"
+  },
+  "7": {
+    "labCells": [
+      "C1|base"
+    ],
+    "kennelCells": [
+      "C1|frost",
+      "C1|base"
+    ],
+    "branches": [
+      {
+        "morph": "ember",
+        "lost": [
+          "C1|base"
+        ],
+        "gained": [
+          "C1|ember"
+        ],
+        "afterCount": 2,
+        "duplicate": false,
+        "counts": [
+          {
+            "cell": "C1|base",
+            "before": 3,
+            "after": 1
+          },
+          {
+            "cell": "C1|ember",
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "neededFor": "Ember + Frost"
+      },
+      {
+        "morph": "frost",
+        "lost": [
+          "C1|base"
+        ],
+        "gained": [],
+        "afterCount": 1,
+        "duplicate": true,
+        "counts": [
+          {
+            "cell": "C1|base",
+            "before": 3,
+            "after": 1
+          },
+          {
+            "cell": "C1|frost",
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "neededFor": "Ember + Frost"
+      }
+    ]
+  },
+  "8": {
+    "rows": [
+      {
+        "iid": "p72",
+        "sp": "C1",
+        "morph": "base",
+        "shiny": true,
+        "lineage": 0,
+        "bankedSteps": 0,
+        "level": 1,
+        "nickname": "",
+        "bond": 0,
+        "talents": [],
+        "equipped": false,
+        "eligible": false,
+        "reason": "Shiny pets cannot be used here.",
+        "safeSurplus": false,
+        "lastCopy": false
+      },
+      {
+        "iid": "p73",
+        "sp": "CX",
+        "morph": "base",
+        "shiny": false,
+        "lineage": 0,
+        "bankedSteps": 0,
+        "level": 1,
+        "nickname": "",
+        "bond": 0,
+        "talents": [],
+        "equipped": false,
+        "eligible": false,
+        "reason": "The Day One Lizard cannot be used here.",
+        "safeSurplus": false,
+        "lastCopy": false
+      }
+    ]
+  },
+  "9": {
+    "name": "Base",
+    "reason": "This saved colour is not supported."
+  },
+  "10": {
+    "status": "All 36 colours owned. Animate copies, melt spares for Bone Dust, or breed to raise lineage.",
+    "safePair": false
+  },
+  "11": {
+    "status": "Keep one of each colour. You need two spare pets of the same species that match a recipe.",
+    "hasEligiblePair": true
+  },
+  "12": {
+    "button": "<button class=\"lab-pet\" aria-describedby=\"lab-pick-info-p6\" data-lab-pick=\"p6\" >",
+    "text": "Base Drizzle Level 1 0 banked training steps · Bond 0/5 Untrained spare Midnight Drizzle Level 1 0 banked training steps · Bond 0/5 Last collection copy Base Drizzle Level 1 0 banked training steps · Bond 0/5 Ember Drizzle Level 1 0 banked training steps · Bond 0/5 Last collection copy · Needed as an ingredient for Ember + Frost Frost Drizzle Level 1 0 banked training steps · Bond 0/5 Last collection copy · Needed as an ingredient for Ember + Frost"
+  },
+  "13": {
+    "hasExperiment": true,
+    "html": "",
+    "purchase": "Incubator 2: 20,000 coins. Adds one experiment each day. It supplies no pets and does not change the odds. Capacity: 1 to 2. Today's remaining uses: 0 to 1. Your free daily experiment has been used. It returns at the next experiment reset. Review incubator purchase"
+  },
+  "14": {
+    "slots": [
+      "<button class=\"lab-pet\" data-lab-slot=\"0\">",
+      "<button class=\"lab-pet\" data-lab-slot=\"1\">"
+    ],
+    "hint": "Choose first pet to review a pair."
+  },
+  "16": {
+    "live": {
+      "iid": "pmttgeehr-1-C1",
+      "sp": "C1",
+      "morph": "midnight",
+      "shiny": false,
+      "lineage": 0,
+      "bankedSteps": 50000,
+      "level": 7,
+      "nickname": "NEWNAME",
+      "bond": 0,
+      "talents": [],
+      "equipped": true,
+      "eligible": true,
+      "reason": "",
+      "safeSurplus": false,
+      "lastCopy": true
+    },
+    "text": "Midnight Drizzle Added to your collection. 2/36. Midnight was guaranteed by this recipe. Level 1. 0 banked steps. Lineage 0. Non-shiny. No inherited name, bond or talents. 0 experiments available today."
+  },
+  "17": {
+    "introRead": false,
+    "details": "<details id=\"labHelp\" open>"
+  },
+  "18": {
+    "id": "clock-callback",
+    "initialClockReads": 1,
+    "midnightReads": 1,
+    "timezoneReads": 1,
+    "timersAfterClose": 0
+  },
+  "19": {
+    "id": "ingredient-callback",
+    "beforeSwipe": [
+      "Ember Drizzle: Needed for Ember + Frost. Melting or breeding this pet spends that ingredient."
+    ],
+    "afterSwipe": [
+      "Ember Drizzle: Needed for Ember + Frost. Melting or breeding this pet spends that ingredient."
+    ],
+    "backSwipe": [
+      "Ember Drizzle: Needed for Ember + Frost. Melting or breeding this pet spends that ingredient."
+    ]
+  },
+  "20": {
+    "capacity": 2,
+    "text": "Incubators Back to bench Incubator 2: 20,000 coins. Adds one experiment each day. It supplies no pets and does not change the odds. Capacity: 1 to 2. Today's remaining uses: 0 to 1. Your free daily experiment has been used. It returns at the next experiment reset. Review incubator purchase",
+    "buttons": [
+      "<button class=\"btn\" data-lab-buy=\"2\" >"
+    ]
+  }
+}

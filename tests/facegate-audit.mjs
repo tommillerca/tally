@@ -21,7 +21,8 @@
 import { readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
+import { missingDependency, requirePythonPackages } from './lib/audit-dependencies.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BH = join(ROOT, 'assets', 'bh');
@@ -40,30 +41,21 @@ const THRESHOLD = 2.0;   // percent of face ink a held item may cover
    So: try the explicit override, then that conda path so nobody's setup breaks,
    then the interpreter on PATH. And check the LIBRARIES, not just the binary,
    because a python without PIL or numpy fails later inside the script with a
-   traceback that reads like an art problem. Every setup failure exits 2, a code
-   no held-item bug can produce. Exit 1 still means findings. */
+   traceback that reads like an art problem. Missing prerequisites exit 97,
+   the release gate's UNPROVEN status. Exit 1 still means findings or crashes. */
 const pyCandidates = [process.env.PYTHON, `${process.env.HOME}/miniconda3/bin/python3`,
   '/usr/bin/python3', '/usr/local/bin/python3', '/usr/bin/python'];
 /* An explicit PYTHON that does not exist is a typo, not a hint. Falling through
    to some other interpreter would run the audit against a python the operator
    did not choose and never mention it. */
 if (process.env.PYTHON && !existsSync(process.env.PYTHON)) {
-  console.log(`SETUP  PYTHON is set to ${process.env.PYTHON}, which does not exist.`);
-  console.log('  This audit CHECKED NOTHING. Fix the path or unset PYTHON to autodetect.');
-  process.exit(2);
+  missingDependency(`Python at ${process.env.PYTHON}`, 'Fix the PYTHON path or unset PYTHON to autodetect; install packages with python3 -m pip install Pillow numpy.');
 }
 const PY = pyCandidates.find(p => p && existsSync(p));
 if (!PY) {
-  console.log(`SETUP  no python found; tried ${pyCandidates.filter(Boolean).join(', ')}`);
-  console.log('  This audit CHECKED NOTHING. Set PYTHON= to a python with PIL and numpy.');
-  process.exit(2);
+  missingDependency('Python 3', 'Install Python 3, set PYTHON to its executable, and run python3 -m pip install Pillow numpy.');
 }
-const depProbe = spawnSync(PY, ['-c', 'import PIL, numpy'], { encoding: 'utf8' });
-if (depProbe.status !== 0) {
-  console.log(`SETUP  ${PY} cannot import PIL and numpy, which this audit measures with.`);
-  console.log(`  This audit CHECKED NOTHING. ${(depProbe.stderr || '').trim().split('\n').pop()}`);
-  process.exit(2);
-}
+requirePythonPackages(PY, { PIL: 'Pillow', numpy: 'numpy' });
 
 const slots = HELD_SLOTS.filter(s => existsSync(join(BH, s)));
 const files = slots.flatMap(s =>

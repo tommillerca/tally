@@ -77,6 +77,11 @@ test('r56 B1 all species palettes separate and pre-fix frost fails CONTROL', asy
   checkPetPalette();
 });
 
+test('PURE dependency outages are UNPROVEN; installed package defects stay RED', async () => {
+  const { checkAuditDependencies } = await import('./lib/audit-dependencies.test.mjs');
+  checkAuditDependencies();
+});
+
 test('R52-9 locale formatter/parser round trips and ambiguity control', async () => {
   const { checkLocaleNumbers } = await import('./locale-numbers-audit.mjs');
   checkLocaleNumbers();
@@ -8234,6 +8239,15 @@ test('h1 health disclosure guard includes healthy and zero-step controls', () =>
   const output = execFile_.execFileSync(process.execPath, [join(here, 'health-disclosure-audit.mjs')], { encoding: 'utf8' });
   assert.match(output, /0 failed/);
   assert.match(output, /PASS CONTROL healthy step sync produces NONE/);
+});
+
+test('Stable redesign preserves named destruction, body controls and navigation order with CONTROLs', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'breed-lock-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /PASS CONTROL Stable loss:/);
+  assert.match(output, /PASS CONTROL Stable type:/);
+  assert.match(output, /PASS CONTROL Stable order:/);
+  assert.match(output, /PASS CONTROL Stable album:/);
+  assert.match(output, /STABLE REDESIGN: 4 guard groups passed, 0 failed/);
 });
 
 await runAll();

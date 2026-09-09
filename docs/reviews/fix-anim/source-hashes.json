@@ -1,0 +1,20 @@
+{
+  "assets/bh/anim/catfish/bead.png": "3efa3d32bdee810e498a60f6fa46c2cd4aab78815311d5d125e70805d93d30d3",
+  "assets/bh/anim/catfish/body.png": "679c36af59344791901651ac32da7f86a29aa98213ce621056d485d795601663",
+  "assets/bh/anim/catfish/drop.png": "f0a206df1235c7ee0aea7debd3f1ac4c0560fe7f78ff3e04f47b2124bcb6f3a1",
+  "assets/bh/anim/catfish/shadow.png": "b9305a4317caa5c7609182f32822c11adfcd3c59236f2b716c420f71fcb4ea91",
+  "assets/bh/anim/cloud/body-noeyes.png": "47b9a0ba72cb6b9325fb775aa3b9d7904be6e4394d7afcdd7064b0865c2588a7",
+  "assets/bh/anim/cloud/closed.png": "ea441ceca341a3f2f23e7f7f434e83d624bd1635b305b5bee0b00a9da6bfc710",
+  "assets/bh/anim/cloud/drop.png": "9067b6a65d5b98fc7535132931542dc05749a86208539569db1ee248fd71a66b",
+  "assets/bh/anim/cloud/eyes.png": "4802b7a450bbeb88aa00c16587fd5beecb4e079dafdfe4cd87743ce729081e6e",
+  "assets/bh/anim/cloud/shadow.png": "687d9eeba0ad150345c5bab25cc4c7d31e5fcaecc5a435a616ec4f05f73cb862",
+  "assets/bh/anim/lizard/base.png": "614f8212a9249fb08f0b2686e4ab3877dad593ed0143f7848aee3fe5704838b6",
+  "assets/bh/anim/lizard/drool.png": "0c9eec54e410c403bc6032a6df057bf059de727135d0b6fe435a7fde90355d3c",
+  "assets/bh/anim/lizard/fly.png": "574ad87baea7af71fbe49da7743b2be170ad0b3ac85ead3f340ef7ad44ad889f",
+  "assets/bh/anim/lizard/lid.png": "e5140d5db4963c255dbfe7e58e018e0d0c9c143583584d46819e64748f7336bf",
+  "assets/bh/anim/lizard/mouthline.png": "a6f985b4472cd3b0ba717699e916f30f21ef869ad7360d8edde0e96b5bf5552f",
+  "assets/bh/anim/lizard/out.png": "7a83e77f69dc9bf81d3c739f1455802643be03b9374abe07621669428b1973ab",
+  "assets/bh/anim/lizard/tongue.png": "bf5866b3d3c176fdef16bc2b672c83139295a63af3b61d0c396e6298d17a2fa5",
+  "assets/bh/anim/lizard-amethyst/base.png": "cef2f6ba6369968e7fffb1223b6266175da4deb2cbed03f44741d1bfd5bf5ae4",
+  "assets/bh/anim/lizard-amethyst/lid.png": "4622c3af176a42e4b82d43ed8646fd7ce7f3c606fd115c51656c1510ef7e4848"
+}

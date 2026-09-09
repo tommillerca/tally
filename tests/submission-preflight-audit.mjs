@@ -1,4 +1,5 @@
 import { auditOutputPath } from './lib/audit-output.mjs';
+import { importAuditPackage } from './lib/audit-dependencies.mjs';
 /* PROVES native/submission-preflight.mjs GOES RED.
  *
  * The preflight is the only thing standing between a store archive and Apple,
@@ -13,6 +14,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+await importAuditPackage('esprima'); // Refuse before child failures become rows.
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PREFLIGHT = path.join(HERE, '..', 'native', 'submission-preflight.mjs');
 const dir = mkdtempSync(auditOutputPath(path.join(tmpdir(), 'submission-preflight-')));

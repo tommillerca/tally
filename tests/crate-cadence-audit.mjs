@@ -1,5 +1,5 @@
 /* c1, 2026-09-08: authored cadence, not browser performance evidence.
- * Execute the real fling with a minimal DOM and clock. The old serial path
+ * Execute the real pointer/render path with a minimal DOM and clock. The old serial path
  * is a positive control: 330 + 40 + 420 = 790ms must fail the same grader.
  * TAIL in crate-reveal-audit watches OPENING, so its 60ms measured floor and
  * playCrateSeq's 100ms authored HOLD remain unchanged.
@@ -77,7 +77,133 @@ function grade(n) {
   assert.deepEqual(n, { advance: 0, delay: 20, rise: 380, settled: 400 });
 }
 
+// Drive the real renderCard, advance and pointer listeners, not a stub advance.
+// DOM/layout, art readiness and frame delivery are doubles, never pixel proof.
+async function driveRender(source, { artDelay = 0, frames = true, dx = -100, opening = true } = {}) {
+  let now = 0, artCalls = 0;
+  const tasks = [], entrances = [], captures = [], renders = [], reads = [];
+  const later = (fn, ms = 0) => tasks.push({ t: now + ms, fn });
+  const make = () => {
+    const el = node(), classes = new Set(), listeners = {};
+    el.isConnected = true;
+    el.style.removeProperty = key => delete el.style[key];
+    el.classList = {
+      add(name) {
+        if (el === deck && name === 'go' && !classes.has(name)) entrances.push({ i: ctx.i, t: now });
+        classes.add(name);
+      },
+      remove: name => classes.delete(name),
+    };
+    Object.defineProperty(el, 'offsetWidth', { get() { reads.push({ el, t: now }); return 240; } });
+    el.addEventListener = (type, fn) => (listeners[type] ||= []).push(fn);
+    el.dispatchEvent = event => { for (const fn of listeners[event.type] || []) fn(event); };
+    el.setPointerCapture = id => captures.push(id);
+    el.closest = () => null;
+    return el;
+  };
+  const scene = make(), deck = make(), reveal = make();
+  scene.appendChild(deck);
+  Object.defineProperty(deck, 'innerHTML', { set() {
+    deck.children.slice().forEach(child => child.remove());
+    const tilt = make(), rise = make(), sway = make();
+    tilt.kind = '.pack-tilt'; rise.kind = '.pc-rise'; sway.kind = '.pc-sway';
+    deck.appendChild(tilt); tilt.appendChild(rise); rise.appendChild(sway);
+    renders.push({ i: ctx.i, t: now });
+  } });
+  const query = (selector, scope = deck) => {
+    for (const child of scope.children || []) {
+      if (child.kind === selector) return child;
+      const nested = query(selector, child); if (nested) return nested;
+    }
+    return null;
+  };
+  const ctx = {
+    i: 0, cards: Array.from({ length: 3 }, () => ({ rarity: 'common' })),
+    opening, reduced: false, crate: null, CRATE_SEQ: {}, RAR_ORDER: ['common'], BURST: { common: {} },
+    deck, reveal, wrap: scene, countEl: null, hintEl: null, dotsEl: null,
+    burstTried: true, burst: null, burstEl: null,
+    innerWidth: 400, document: { createElement: make }, $: query,
+    packCardHtml: () => '', wirePackArtFallback() {},
+    hydratePackArt() {
+      artCalls++;
+      return new Promise(resolve => later(resolve, artCalls === 1 ? 0 : artDelay));
+    },
+    getComputedStyle: () => ({ transform: 'none', getPropertyValue: () => '' }),
+    at: (ms, fn) => later(fn, ms), setTimeout: later,
+    requestAnimationFrame: fn => { if (frames) later(fn, 16); },
+    beat: () => 300, landed: () => { reveal.dataset.landed = '1'; },
+    dropSound() {}, sparkleSound() {}, S: {}, haptic: { tap() {} },
+    done() { throw new Error('unexpected close'); },
+  };
+  const render = between(source, '    function renderCard() {', '\n    // a coins-only payout');
+  const advance = between(source, '    const advance = () => {', '\n    // No confetti');
+  vm.createContext(ctx);
+  vm.runInContext(`${advance}\n${render}\nrenderCard();`, ctx);
+  const tick = async t => {
+    // Flush native Promise.race/then jobs between authored timer callbacks.
+    for (;;) {
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+      tasks.sort((a, b) => a.t - b.t);
+      if (!tasks.length || tasks[0].t > t) break;
+      const task = tasks.shift(); now = task.t; task.fn();
+    }
+    now = t;
+  };
+  await tick(1000);
+  assert.equal(reveal.dataset.landed, '1', 'first card actually reaches its input gate');
+  now = 0; tasks.length = 0; entrances.length = 0; renders.length = 0; reads.length = 0;
+  const tilt = query('.pack-tilt');
+  for (const [type, clientX] of [['pointerdown', 200], ['pointermove', 200 + dx], ['pointerup', 200 + dx]]) {
+    tilt.dispatchEvent({ type, clientX, pointerId: 7, target: tilt });
+  }
+  assert.deepEqual(captures, [7], 'pointerdown must capture the real gesture');
+  await tick(0);
+  const outgoing = scene.children.find(el => el !== deck);
+  assert.ok(outgoing, 'pointerup must actually fling, not just record pointerdown');
+  assert.equal(outgoing.children[0], tilt);
+  assert.equal(ctx.i, 1, 'real advance increments exactly once');
+  tilt.dispatchEvent({ type: 'click', target: tilt });
+  await tick(339); assert.equal(outgoing.parentNode, scene);
+  await tick(340); assert.equal(outgoing.parentNode, null);
+  await tick(2000);
+  assert.deepEqual(renders, [{ i: 1, t: 0 }]);
+  assert.equal(artCalls, 2, 'both cards still hydrate their actual art');
+  assert.equal(entrances.length, 1, 'late callbacks cannot restart the next entrance');
+  return { start: entrances[0].t, layoutCommitted: reads.some(r => r.el === deck && r.t === 0) };
+}
+
+async function checkAsync(label, fn) {
+  try { await fn(); passed++; console.log(`PASS ${label}`); }
+  catch (error) { failed++; console.log(`FAIL ${label}: ${error.stack}`); }
+}
+
 check('CADENCE exact authored 0 + 20 + 380 = 400ms', () => grade(numbers(app, css)));
+check('ENTRY shipped page loads the audited JS and scoped browsing animation', () => {
+  const entry = read('../index.html');
+  assert.match(entry, /<script type="module" src="js\/app\.js"><\/script>/);
+  assert.match(entry, /<link rel="stylesheet" href="app\.css">/);
+  assert.match(css, /\.pack-reveal\.browsing \.pack-deck\.go \.pc-rise \{ animation: crNext \.38s cubic-bezier\(\.2,\.9,\.3,1\) var\(--b-card\) both; \}/);
+});
+await checkAsync('POINTER-RENDER real advance starts the next entrance at 0ms despite cold art or stalled frames', async () => {
+  for (const options of [
+    { artDelay: 0 }, { artDelay: 500, dx: 100 },
+    { artDelay: 5000, frames: false }, { opening: false, artDelay: 5000, dx: 0 },
+  ]) {
+    const run = await driveRender(app, options);
+    assert.equal(run.start, 0);
+    assert.equal(run.layoutCommitted, true);
+    const n = numbers(app, css);
+    grade({ ...n, settled: run.start + n.delay + n.rise });
+  }
+});
+await checkAsync('CONTROL hidden art/frame gates add 1000ms and fail the end-to-end grader', async () => {
+  const legacy = app.replace('const next = i > 0 && !reduced;', 'const next = false;');
+  assert.notEqual(legacy, app, 'control mutation must apply');
+  const run = await driveRender(legacy, { artDelay: 5000, frames: false });
+  assert.equal(run.start, 1000, '700ms art race plus 300ms frame fallback');
+  const n = numbers(legacy, css);
+  assert.throws(() => grade({ ...n, settled: run.start + n.delay + n.rise }), assert.AssertionError);
+});
 check('CONTROL old serial 330 + 40 + 420 = 790ms is rejected', () => {
   const legacyApp = app.replace('at(0, advance)', 'at(330, advance)');
   const legacyCss = css.replace('--b-card: .02s;', '--b-card: .04s;').replace('crNext .38s', 'crNext .42s');

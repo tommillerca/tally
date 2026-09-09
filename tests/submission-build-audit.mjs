@@ -1,4 +1,5 @@
 import { auditOutputPath } from './lib/audit-output.mjs';
+import { importAuditPackage } from './lib/audit-dependencies.mjs';
 /* Node-only shell integration guard. All platform/network commands are local
  * fixture executables. No Xcode, Capacitor CLI, ASC client or sockets are used.
  * CONTROL cases corrupt the copied resources and the archive independently:
@@ -9,6 +10,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+await importAuditPackage('esprima'); // The child preflight needs the parser too.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = readFileSync(path.join(root, 'native/build-ios.sh'), 'utf8');
 const failures = [];
@@ -59,11 +61,12 @@ let runId = 0;
 function run(mode, fault = '') {
   const dir = path.join(temp, String(++runId));
   const native = path.join(dir, 'native');
-  for (const rel of ['native/ios/App/App.xcodeproj', 'native/build', 'tests', 'bin']) mkdirSync(auditOutputPath(path.join(dir, rel)), { recursive: true });
+  for (const rel of ['native/ios/App/App.xcodeproj', 'native/build', 'tests/lib', 'bin']) mkdirSync(auditOutputPath(path.join(dir, rel)), { recursive: true });
   if (fault !== 'missing-export-options') writeFileSync(auditOutputPath(path.join(native, 'build/exportOptions.plist')), '<plist version="1.0"><dict/></plist>');
   symlinkSync(path.join(root, 'node_modules'), auditOutputPath(path.join(dir, 'node_modules')));
   for (const file of ['build-store.sh', 'submission-preflight.mjs']) copyFileSync(path.join(root, 'native', file), auditOutputPath(path.join(native, file)));
   copyFileSync(path.join(root, 'tests/store-copy-scan.mjs'), auditOutputPath(path.join(dir, 'tests/store-copy-scan.mjs')));
+  copyFileSync(path.join(root, 'tests/lib/audit-dependencies.mjs'), auditOutputPath(path.join(dir, 'tests/lib/audit-dependencies.mjs')));
   writeFileSync(auditOutputPath(path.join(native, 'build-ios.sh')), source);
   // Build-store is real. Only the large web copy is replaced with a tiny bundle.
   writeFileSync(auditOutputPath(path.join(native, 'build-www.sh')), `#!/bin/bash\nset -e\nnode - <<'JS'\nconst fs=require('fs');\nfs.rmSync('www',{recursive:true,force:true}); fs.mkdirSync('www/js',{recursive:true});\nfs.writeFileSync('www/js/app.js', 'const STORE_BUILD = ' + (process.env.STORE_BUILD === '1') + ';\\n' + ${JSON.stringify(island)});\nJS\n`, { mode: 0o755 });

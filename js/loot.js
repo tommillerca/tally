@@ -14,6 +14,7 @@ import { isMorph, MORPH_LABEL, morphAsset, isKnownPet, legalPicks, petLevel, MOR
 // Use the same colour identity as the art. Shinies and CX never wear morph art.
 export function petColourName(inst) {
   if (inst.shiny) return 'Shiny';
+  if (inst.sp !== 'CX' && !labMorph(inst.morph)) return `Unsupported colour (${String(inst.morph)})`;
   return morphAsset(inst.sp, inst.morph) ? MORPH_LABEL[inst.morph] : 'Base';
 }
 
@@ -1451,12 +1452,17 @@ export async function breedStatus() {
 }
 
 // Breed two instances by iid. offspringSp must be one of the two parents' species.
-export async function breedPets(keepIid, feedIid) {
+export async function breedPets(keepIid, feedIid, quote = null) {
   if(!keepIid||!feedIid||keepIid===feedIid)return {ok:false,reason:'pick-two'};
+  quote = quote && structuredClone(quote);
   await petInstances();await petLevelBank();await petTalentBank();
   return labTry(()=>payAtomic({snapshot:{keys:[...LAB_KEYS,'petBreedCredit'] ,stores:['health','inv']},decide:(s,rows)=>{
     const cur=s.petInst||[],keep0=cur.find(x=>selectablePetInstance(x)&&x.iid===keepIid),fed0=cur.find(x=>selectablePetInstance(x)&&x.iid===feedIid);
     if(!keep0||!fed0)labRefuse('gone');
+    if (quote) {
+      const live = petDestructionQuote(s, rows, feedIid, keepIid);
+      if (!labEqual(quote, live)) return {result:{ok:false, reason:'stale-quote', quote:live}};
+    }
     const lifetime=effectivePetSteps(rows.health),credit=s.petBreedCredit;
     if(credit!=null&&lifetime-credit<BREED_COOLDOWN_STEPS)return {result:{ok:false,reason:'cooldown',stepsLeft:BREED_COOLDOWN_STEPS-(lifetime-credit)}};
     const keep={...keep0,lineage:(keep0.lineage||0)+1};
@@ -1836,6 +1842,14 @@ function labNeededFor(sp, morph, roster, s) {
   if (['toxic','rose'].includes(morph) && v && count(morph)<2) return 'Toxic + Rose';
   return undefined;
 }
+function labDisplayMetadata(row, s) {
+  const id=row?.iid, steps=s.petLvlSteps?.[id]??0, lineage=row?.lineage??0, bond=s.petBonds?.[id]??0;
+  const number=n=>typeof n==='number'&&Number.isFinite(n)&&n>=0;
+  const nickname=s.petNick?.[id]??'', talents=s.pettalents?.[id]??[];
+  return {bankedSteps:number(steps)?steps:'unknown',level:number(steps)?petLevel(steps):'unknown',
+    lineage:number(lineage)&&Number.isInteger(lineage)?lineage:'unknown',bond:number(bond)&&bond<=5?bond:'unknown',
+    nickname:typeof nickname==='string'?nickname:'unknown',talents:Array.isArray(talents)&&talents.every(t=>typeof t==='string')?talents:['unknown']};
+}
 function labPetRows(roster, s) {
   const ids = roster.map(p=>p?.iid), unique = new Set(ids).size === ids.length;
   const counts = new Map();
@@ -1850,11 +1864,11 @@ function labPetRows(roster, s) {
     const input=labInput(row,s), key=labCellKey(row);
     const eligible=!!input && unique && !(s.petTaken||[]).includes(row?.iid);
     const reason=eligible ? '' : row?.shiny ? 'Shiny pets cannot be used here.' : row?.sp==='CX' ? 'The Day One Lizard cannot be used here.'
-      : !/^C[1-6]$/.test(row?.sp) ? 'This species is not supported.' : !labMorph(row?.morph) ? 'This saved colour is not supported.'
+      : !/^C[1-6]$/.test(row?.sp) ? 'This species is not supported.' : !labMorph(row?.morph) ? 'This saved colour is not supported. Keep this pet and your backup for recovery; it cannot supply a recipe.'
       : !unique ? 'Duplicate pet identities require repair and a fresh review.' : 'This saved pet has invalid or unavailable metadata.';
     // Invalid rows stay visible but never receive eligible status or permissive values.
     const p=input || {iid:row?.iid,sp:row?.sp,morph:labMorph(row?.morph)||String(row?.morph),shiny:!!row?.shiny,
-      lineage:0,bankedSteps:0,level:1,nickname:'',bond:0,talents:[],equipped:s.petEquipped===row?.iid};
+      ...labDisplayMetadata(row,s),equipped:s.petEquipped===row?.iid};
     return {...p, talents:labTalentNames(p), eligible, reason,
       safeSurplus:eligible && labPlain(p) && !keepers.has(row), lastCopy:counts.get(key)===1,
       neededFor:eligible ? labNeededFor(p.sp,p.morph,roster,s) : undefined};
@@ -1900,7 +1914,11 @@ function labRecover(s, rows) {
       else {
         try {
           validLabRequest(q);
-          unchanged=labEqual(q.context,labQuoteContext(s,rows,q.species)) && q.meter===effectivePetSteps(rows.health)
+          // Health sync can change the meter, bank and credit without dispatch.
+          // Receipts, roster and tombstones still prove whether inputs survived.
+          // Clearing under this lock fences a delayed requireIntent dispatch.
+          const withoutTraining = ({petLvlSteps, petStepCredit, ...context}) => context;
+          unchanged=labEqual(withoutTraining(q.context),withoutTraining(labQuoteContext(s,rows,q.species)))
             && q.capacity===labCapacity(s.labIncubators) && labEqual(q.occupancy,s.labDaily[q.day]||{slots:{},used:0});
         }
         catch(e) { if(!e?.refused) throw e; }
@@ -2158,11 +2176,41 @@ function petRemovalChanges(s, iids, next, lifetime, replacement = null) {
   }
   return changes;
 }
-async function salvageLivePet(iid, sp = null) {
+// Quote only what this removal will cost. Include health steps waiting to be
+// banked: removal settles that meter too, even before the next health credit.
+export function petLastColourLoss(inst, roster) {
+  const cell = labCellKey(inst);
+  return !!cell && roster.filter(p => labCellKey(p) === cell).length === 1;
+}
+function petDestructionQuote(s, rows, iid, keepIid = null) {
+  const roster = s.petInst || [], inst = roster.find(p => selectablePetInstance(p) && p.iid === iid);
+  if (!inst) labRefuse('gone');
+  const equipped = s.petEquipped === iid;
+  const meter = effectivePetSteps(rows.health);
+  const bankedSteps = (s.petLvlSteps?.[iid] || 0) + (equipped ? Math.max(0, meter - (s.petStepCredit ?? meter)) : 0);
+  const next = roster.filter(p => p.iid !== iid);
+  const replacement = equipped ? (next.find(p => p.iid === keepIid) || bestInstance(next, inst.sp) || next.find(selectablePetInstance)) : null;
+  return {iid, keepIid, inst, bankedSteps, nickname:s.petNick?.[iid] || '', bond:s.petBonds?.[iid] || 0,
+    talents:s.pettalents?.[iid] || [], equipped,
+    replacement:replacement ? {iid:replacement.iid, name:s.petNick?.[replacement.iid] || petInstanceName(replacement)} : null,
+    lastColour:roster.filter(p => p.sp === inst.sp && petColourName(p) === petColourName(inst)).length === 1,
+    lastCell:petLastColourLoss(inst, roster),
+    dust:petDustValue(BH_BY_ID[inst.sp] || {}) + (inst.shiny ? 15 : 0) + (inst.lineage || 0) * 8};
+}
+export async function quotePetDestruction(iid, keepIid = null) {
+  await petInstances(); await petLevelBank(); await petTalentBank();
+  return labTry(() => payAtomic({snapshot:labSnapshot, decide:(s, rows) => ({result:{ok:true, quote:petDestructionQuote(s, rows, iid, keepIid)}})}));
+}
+async function salvageLivePet(iid, sp = null, quote = null) {
+  quote = quote && structuredClone(quote);
   await petInstances();await petLevelBank();await petTalentBank();
   return labTry(()=>payAtomic({snapshot:{keys:[...LAB_KEYS,'bonedust','dustRev'],stores:['health','inv']},decide:(s,rows)=>{
     const cur=s.petInst||[],inst=sp?removeWorstInstance(cur,sp).removed:cur.find(x=>selectablePetInstance(x)&&x.iid===iid);
     if(!inst)labRefuse(sp?'not-owned':'gone');
+    if (quote) {
+      const live = petDestructionQuote(s, rows, inst.iid);
+      if (!labEqual(quote, live)) return {result:{ok:false, reason:'stale-quote', quote:live}};
+    }
     const item=BH_BY_ID[inst.sp]||{},dust=petDustValue(item)+(inst.shiny?15:0)+(inst.lineage||0)*8;
     const next=cur.filter(x=>x?.iid!==inst.iid),remaining=speciesCount(next,inst.sp);
     const changes=petRemovalChanges(s,[inst.iid],next,effectivePetSteps(rows.health));
@@ -2172,8 +2220,8 @@ async function salvageLivePet(iid, sp = null) {
       result:{ok:true,dust,name:item.name,remaining}};
   }}));
 }
-export async function salvageInstance(iid) {
-  return salvageLivePet(iid);
+export async function salvageInstance(iid, quote = null) {
+  return salvageLivePet(iid, null, quote);
 }
 
 // Is an owned pet the shiny variant? (any instance of the species is shiny)
