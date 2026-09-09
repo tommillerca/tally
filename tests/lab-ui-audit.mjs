@@ -107,7 +107,7 @@ await check('path art stays in normal flow and phone species choices keep two co
     assert.doesNotMatch(phone, /\.lab-species/);
   };
   rejectsMutation(css, css.replace('.lab-tier .lab-art { min-height: 96px', '.lab-tier .lab-art { min-height: 48px'), grade);
-  rejectsMutation(css, css.replace('.lab-slots { grid-template-columns: 1fr;', '.lab-slots, .lab-species { grid-template-columns: 1fr;'), grade);
+  rejectsMutation(css, css.replace('@media (max-width: 380px) {', '@media (max-width: 380px) { .lab-species { grid-template-columns: 1fr; }'), grade);
 });
 await check('reveal settles in 240ms at full opacity without rarity effects', () => {
   const grade = text => {
@@ -305,6 +305,82 @@ await check('picker never selects a pet and trained ordinary partners stay selec
   const s = state({ pets: [pet('last','toxic',{ lastCopy: true, safeSurplus: false, bankedSteps: 500, level: 1 }),pet('rose','rose'),pet('shiny','rose',{ shiny: true, eligible: false, reason: 'Shiny pets cannot be used here.' }),pet('founder','base',{ sp: 'CX', eligible: false, reason: 'The Day One Lizard cannot be used here.' }),pet('wrong','base'),pet('alien','oops',{ eligible: false, reason: 'This saved colour is not supported.' })] });
   const html = ui.labPickerHtml(s,[null,'rose'],0);
   rejectsMutation(html,html.replace('data-lab-pick="last" ', 'data-lab-pick="last" disabled '),h => { assert.match(h,/data-lab-pick="last" >/); assert.match(h,/Last collection copy/); assert.match(h,/Trained/); assert.match(h,/data-lab-pick="shiny" disabled/); assert.match(h,/data-lab-pick="wrong" disabled/); assert.match(h,/Day One Lizard cannot/); assert.match(h,/saved colour is not supported/); assert.doesNotMatch(h,/checked|aria-selected="true"/); });
+});
+await check('picker excludes the other slot by instance, retains identical partners and handles empty filters', () => {
+  const s = state({ pets: [pet('a'), pet('b'), pet('c'), pet('frost', 'frost')] });
+  for (const slot of [0, 1]) {
+    const selected = slot === 0 ? [null, 'a'] : ['a', null];
+    const grade = h => {
+      assert.doesNotMatch(h, /data-lab-pick="a"/);
+      for (const id of ['b', 'c']) assert.match(h, new RegExp(`data-lab-pick="${id}" >`));
+    };
+    const html = ui.labPickerHtml(s, selected, slot, 'C1', 'base');
+    rejectsMutation(html, ui.labPickerHtml(s, [null, null], slot, 'C1', 'base'), grade);
+    const empty = ui.labPickerHtml(state({ pets: [pet('a')] }), selected, slot);
+    rejectsMutation(empty, html, h => { assert.match(h, /No pets match these filters/); assert.doesNotMatch(h, /data-lab-pick=/); });
+  }
+  const picker = source.slice(source.indexOf('  function picker(slot)'), source.indexOf('  async function updatePreview()'));
+  rejectsMutation(picker, picker.replace('labPickerHtml(snapshot, selected, slot,', 'labPickerHtml(snapshot, [null, null], slot,'), h => assert.match(h, /labPickerHtml\(snapshot, selected, slot,/));
+});
+await check('pet-choice buttons use display type with compact identities and accessible investment details', () => {
+  const grade = text => {
+    assert.match(rule(text, '.lab-pet'), /font: 400 var\(--fs-5\)\/1\.15 var\(--display\)/);
+    assert.match(rule(text, '.lab-pet b'), /font: inherit/);
+  };
+  rejectsMutation(css, css.replace('var(--fs-5)/1.15 var(--display); }', 'var(--fs-5)/1.15 system-ui; }'), grade);
+  rejectsMutation(css, css.replace('.lab-pet b { font: inherit;', '.lab-pet b { font: bold 1rem system-ui;'), grade);
+  for (const selected of [[null, null], ['a', null], ['a', 'b']]) {
+    const html = ui.labBenchHtml(state(), selected, 'C1');
+    const buttons = html.match(/<button class="lab-pet[^>]*>[\s\S]*?<\/button>/g);
+    assert.equal(buttons.length, 2, 'CONTROL both real slots render');
+    const compact = h => { assert.doesNotMatch(h, /banked training steps|Nickname:|Talent choices:|Lineage/); };
+    for (const button of buttons) rejectsMutation(button, button.replace('</button>', 'Talent choices: none</button>'), compact);
+  }
+  const html = ui.labPickerHtml(state({ pets: [pet('a', 'base', { bankedSteps: 500, bond: 2, talents: ['Fang'], nickname: '<Name>' })] }), [null, null], 0);
+  const gradeInfo = h => {
+    assert.match(h, /aria-describedby="lab-pick-info-a"/);
+    assert.match(h, /id="lab-pick-info-a"/);
+    assert.match(h, /500 banked training steps · Bond 2\/5 · Fang/);
+    assert.match(h, /&lt;Name&gt;/);
+    assert.doesNotMatch(h.match(/<button[\s\S]*?<\/button>/)[0], /banked training steps|Bond|Fang/);
+  };
+  rejectsMutation(html, html.replace('id="lab-pick-info-a"', 'id="missing"'), gradeInfo);
+});
+await check('quote art separates two inputs from one possible output, including guaranteed Midnight', () => {
+  for (const [recipe, inputs, outputs] of [
+    ['base-base', ['base', 'base'], ['ember', 'frost']],
+    ['ember-frost', ['ember', 'frost'], ['toxic', 'rose']],
+    ['toxic-rose', ['toxic', 'rose'], ['midnight']],
+  ]) {
+    const q = quote({ recipe, inputs: inputs.map((m, i) => pet(String(i), m)), distribution: outputs.map(morph => ({ morph, weight: outputs.length === 1 ? 4 : 1 })), branches: outputs.map(morph => ({ morph, lost: [], gained: [], afterCount: 1 })) });
+    const html = ui.labConfirmationHtml(q);
+    const grade = h => {
+      const equation = h.match(/<section class="lab-equation"[\s\S]*?<h3>What you will lose/)[0];
+      const inputGroup = equation.slice(0, equation.indexOf('<section class="lab-outcomes"'));
+      const outcomeGroup = equation.slice(equation.indexOf('<section class="lab-outcomes"'));
+      assert.match(inputGroup, /aria-label="Two pets to combine"/);
+      assert.equal((inputGroup.match(/class="lab-input"/g) || []).length, 2);
+      assert.match(inputGroup, /class="lab-plus"/);
+      for (const m of inputs) assert.match(inputGroup, new RegExp(`C1-${m}.png`));
+      for (const m of outputs) { assert.doesNotMatch(inputGroup, new RegExp(`C1-${m}.png`)); assert.match(outcomeGroup, new RegExp(`C1-${m}.png`)); }
+      assert.match(outcomeGroup, /Possible outcomes: one new pet/);
+      assert.match(outcomeGroup, outputs.length === 1 ? /Will become/ : /Could become/);
+      assert.equal((outcomeGroup.match(/class="lab-or"/g) || []).length, outputs.length - 1);
+      assert.equal((outcomeGroup.match(/class="lab-outcome"/g) || []).length, outputs.length);
+      assert.equal((outcomeGroup.match(new RegExp(`>${outputs.length === 1 ? 100 : 50}%<`, 'g')) || []).length, outputs.length);
+      assert.doesNotMatch(equation, /<button|class="lab-loss"|banked training steps/);
+      assert.match(outcomeGroup, /<p>One new pet<\/p>/);
+    };
+    rejectsMutation(html, html.replace('class="lab-outcomes"', 'class="lab-inputs"'), grade);
+    rejectsMutation(html, html.replace(outputs.length === 1 ? 'Will become' : 'Could become', 'Add these pets'), grade);
+    if (outputs.length > 1) rejectsMutation(html, html.replace('class="lab-or"', 'class="lab-plus"'), grade);
+    const bench = ui.labBenchHtml(state({ pets: q.inputs }), ['0', '1'], 'C1', q);
+    rejectsMutation(bench, bench.replace(ui.labOutcomesHtml(q), ''), h => {
+      assert.ok(h.indexOf('data-lab-slot="1"') < h.indexOf(ui.labOutcomesHtml(q)));
+      assert.ok(h.includes(ui.labBranchesHtml(q)), 'all branch warnings remain visible');
+    });
+  }
+  rejectsMutation(css, css.replace('border-top: 2px solid var(--text-2)', 'border-top: 0'), h => assert.match(rule(h, '.lab-outcomes'), /border-top: 2px solid var\(--text-2\)/));
 });
 await check('confirmation names every investment and exact pair-wide cell loss', () => {
   const q = quote({ inputs: [pet('a','toxic',{ nickname: '<Bite>', bankedSteps: 82001, level: 10, lineage: 4, bond: 3, talents: ['Fang'], equipped: true }),pet('b','rose',{ bankedSteps: 731, level: 1 })] });
