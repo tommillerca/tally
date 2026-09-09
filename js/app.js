@@ -20928,6 +20928,7 @@ async function openStable(opts = {}) {
       if (trB) { trB.dataset.pettree = inst.iid; trB.textContent = isOpen ? 'Hide talents' : 'Talents'; trB.classList.toggle('ghost', !isEq || !!pair); trB.classList.toggle('stable-primary', isEq && !pair); }
       if (brB) { brB.dataset.breedsel = inst.iid; brB.textContent = inSel ? 'Breeding' : 'Breed'; brB.classList.toggle('on', inSel); }
       if (dsB) { delete dsB.dataset.armed; dsB.dataset.destroy = inst.iid; dsB.dataset.dust = dustVal; dsB.textContent = `Destroy ${petInstanceName(inst)} for ${dustVal} Bone Dust`; }
+      repaintLabIngredients(inst.iid);
       // her wardrobe follows the ring: shown only while she is the pet in front
       $$('.pet-wear', body).forEach(pwB => { pwB.hidden = pwB.dataset.pwsp !== inst.sp; });   // Football kit, 2026-09-04
       centreRail();
@@ -24354,7 +24355,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v524'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v525'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

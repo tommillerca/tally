@@ -128,8 +128,8 @@ for (const equipped of [false, true]) {
 // Switching pets must update the named loss and clear the previous armed IID.
 const repaintActions = slice('      const isEq = inst.iid === eqIid, inSel =', '      // her wardrobe follows the ring:');
 const destroy = { dataset: { armed: 'previous' }, textContent: '' };
-new Function('inst', 'eqIid', 'sel', 'openIid', 'pair', 'it', 'petDustValue', 'petInstanceName', '$', 'body', repaintActions)(
-  pet, null, [], null, false, {}, () => 60, () => 'Frost Drizzle', selector => selector === '[data-destroy]' ? destroy : null, {});
+new Function('inst', 'eqIid', 'sel', 'openIid', 'pair', 'it', 'petDustValue', 'petInstanceName', '$', 'body', 'repaintLabIngredients', repaintActions)(
+  pet, null, [], null, false, {}, () => 60, () => 'Frost Drizzle', selector => selector === '[data-destroy]' ? destroy : null, {}, () => {});
 assert.equal(destroy.textContent, 'Destroy Frost Drizzle for 60 Bone Dust');
 assert.equal(destroy.dataset.destroy, pet.iid);
 assert.equal(destroy.dataset.armed, undefined);

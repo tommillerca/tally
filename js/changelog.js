@@ -4,6 +4,15 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 525, date: '2026-09-08', title: 'The Stable, rebuilt around your pet', items: [
+    'The Stable has been redesigned. The album you swipe through is still there, with the neighbouring pets peeking at the edges, but the pet itself is bigger, the writing has a proper hierarchy instead of five things shouting at once, and there is one clear action instead of a wall of buttons.',
+    'Ember, Frost, Toxic, Rose and Midnight pets now breathe and blink like the ordinary ones. Before this, choosing a colour quietly cost you the animation.',
+    'Destroying or breeding a pet now names it and lists exactly what you lose: banked steps, nickname, bond, lineage and the talents you chose, by name.',
+    'The Laboratory got fourteen fixes from a full play-through. Warnings no longer stick to the previous pet when you swipe, exhausted slots are actually disabled and say why, Midnight explains that it finishes the path, the incubator stays reachable after your first experiment, and buying a second incubator refreshes the room instead of showing you the old numbers.',
+    'Card flings in the crate settle straight away rather than waiting on art that was already loaded.',
+    'Backup and friends now check that the server actually sent back what it claimed before saving anything locally.',
+  ] },
+
   { n: 524, date: '2026-09-08', title: 'Colours you can actually tell apart', items: [
     'A Frost pet used to look almost the same as its ordinary version, and Rose and Ember were close enough to confuse. Every colour on every creature has been pulled further apart. Cam\'s linework, eyes and blush are untouched.',
     'The Stable puts your pet first. The doors to the Paddock, Kennel and Laboratory sit quietly at the bottom instead of crowding the top, Bone Dust has its own row, and the explanations are in one place.',

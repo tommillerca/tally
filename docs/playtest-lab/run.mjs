@@ -81,12 +81,13 @@ await D.kvSet('petLvlSteps',{[investedReceipt.result.iid]:50000});await L.setPet
 s=await L.laboratory.snapshot();record('old-receipt',{live:s.pets.find(p=>p.iid===investedReceipt.result.iid),html:ui.labRevealHtml(s.unseen[0])});
 // Capture and drive the production Stable Destroy click handler.
 const destroySource=app.slice(app.indexOf("    $$('[data-destroy]', body).forEach",app.indexOf('async function openStable')),app.indexOf("    $$('[data-offsp]', body).forEach",app.indexOf('async function openStable')));
+const destroyHelpers=app.split('// PET DESTRUCTION UI PURE BEGIN')[1].split('// PET DESTRUCTION UI PURE END')[0];
 async function destroyCase(name,roster,extra={},between=null) {
   await seed(roster,extra);const bank=await D.kvGet('petLvlSteps');
   const messages=[];let review=null,click;
   const button={dataset:{destroy:roster[0].iid,dust:String(L.petDustValue(BH_BY_ID[roster[0].sp])+(roster[0].shiny?15:0)+(roster[0].lineage||0)*8)},innerHTML:'Destroy',addEventListener:(type,fn)=>{click=fn;}};
-  const ctx=vm.createContext({...P,...L,esc,insts:roster,bank,body:{},S:{},ICONS:{dust:()=>''},setTimeout:()=>0,popSound:()=>{},render:()=>{},toast:x=>messages.push(x),openPetDestructionReview:config=>{review=config;},$$:()=>[button]});
-  vm.runInContext(destroySource,ctx);await click();
+  const ctx=vm.createContext({...P,...L,esc,insts:roster,bank,body:{},S:{},ICONS:{dust:()=>''},BH_BY_ID,setTimeout:()=>0,popSound:()=>{},render:()=>{},toast:x=>messages.push(x),openPetDestructionReview:config=>{review=config;},$$:()=>[button]});
+  vm.runInContext(destroyHelpers,ctx);vm.runInContext(destroySource,ctx);await click();
   const disclosure=review?.html||messages.join(' '),typed=!!review;
   if(between)await between();
   if(review)await review.commit();else await click();
@@ -114,7 +115,8 @@ async function breedCase(name,roster,extra={}) {
     petPortraitHtml:()=>'<img>',petBreedGainText:()=>'(stat text omitted)',petStatBonusText:()=>'(stat text omitted)',
     ICONS:{chev:()=>'',warn:()=>''},spChips:'',breedLockNote:'',canBreedNow:true,
     body:{},insts:roster,sel:roster.map(p=>p.iid),offSp:keeper.iid,$:()=>button,toast:x=>messages.push(x),setTimeout:()=>0,
-    BREED_ERR:{},saveBreed:()=>{},render:async()=>{},openPetBreedResult:()=>{}});
+    BREED_ERR:{},saveBreed:()=>{},render:async()=>{},openPetBreedResult:()=>{},BH_BY_ID,openPetDestructionReview:()=>{}});
+  vm.runInContext(destroyHelpers,ctx);
   const html=vm.runInContext(breedExpression,ctx);vm.runInContext(breedHandler,ctx);
   await click({currentTarget:button});await click({currentTarget:button});
   const after=await L.laboratory.snapshot();

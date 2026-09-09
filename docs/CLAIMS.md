@@ -1,5 +1,26 @@
 # What each patch note claims, and what backs it
 
+## v525 (2026-09-08)
+
+1. PROOF: breed-lock-audit.mjs | REACH: The Stable's album survives the redesign. Executed paint geometry proves the neighbouring cards still peek at the frame edges; swipe, velocity snap, vertical axis lock, keyboard navigation, dot taps and neighbour taps are driven through the production handlers with reduced motion on and off. Body order, typography scale and the single primary action are asserted against the shipped tokens. Removing the peek, the depth transform or the primary-action class each goes red. This is source and executed-handler evidence in Node, not a browser screenshot.
+2. PROOF: pet-morph-animation-audit.mjs | REACH: Every generated morph now ships the three animation layers its base species ships, and the renderer no longer skips animatedPetHtml when a morphSrc exists. Catfish (C3) and Beardie (C4) remain deliberately static and are asserted as static, not as passing. Deleting a morph layer or restoring the renderer's morphSrc gate goes red.
+3. PROOF: stable-loss-disclosure-audit.mjs, stable-stale-disclosure-audit.mjs, breed-last-colour-audit.mjs | REACH: Destroy and Breed reviews name the pet and enumerate banked steps, nickname, bond, lineage and each chosen talent by its real name. A quote that goes stale between review and commit replaces the disclosure in place and clears the typed acknowledgement. Reverting to the unnamed copy or to the un-enumerated loss line goes red on each audit.
+4. PROOF: lab-room2-audit.mjs | REACH: Fourteen playtest findings each carry a frozen pre-fix observation that the grade rejects and a current production scenario that it passes. The carousel repaint, day-rollover clock, incubator purchase refresh and slot disabling are driven through the real callbacks with DOM endpoints doubled. Findings 6 and 15 are NOT fixed: they were blocked by the reserved Destroy scope and are recorded as open. No browser gestures or native event timing are claimed.
+5. PROOF: crate-cadence-audit.mjs | REACH: The authored path from fling to the next card's rise is measured from source and clock, not from browser wall time. Subsequent normal-motion cards hydrate concurrently and commit layout before adding .go synchronously, removing the two-frame wait that ready art still paid. Restoring the frame wait goes red. Pixel-level cadence on a device remains UNPROVEN.
+6. PROOF: response-bodies-audit.mjs | REACH: Ten structured-data seams in js/social.js now validate the success body before anything is written locally; each has a malformed-body case that goes red without the check. The report does NOT certify the other seventeen calls: they are enumerated with their disposition, and several remain HTTP-status-only.
+Two changes in this release are not player-facing and so carry no patch note.
+Six store and submission audits previously exited green when a required package
+was missing; they now exit 97 UNPROVEN, `checkAuditDependencies` in
+`tests/unit.test.js` proves each distinguishes a missing dependency from a real
+defect, and esprima is pinned in package.json. Two integration breaks found while
+stitching the lanes were fixed here rather than carried: `repaintFocus` had lost
+its call to `repaintLabIngredients`, and the playtest harness lacked the
+destruction helpers its production slice now calls. The assembled release runs
+373 unit assertions with 0 failures and all 108 PURE entries exit 0. Browser and
+socket proofs were not run. Laboratory findings 6 and 15 remain open, blocked by
+the reserved Destroy scope.
+
+
 ## T1: pet re-tune rulings (2026-09-07)
 
 1. PROOF: pit.test.js | REACH: Eternal Guard retains its per-species, automatic level-10 unlock, with the contract and existing player text both promising exactly 20% HP. A real lethal hit saves once at that amount; reverting to 40% fails both effect and resolved-HP checks.
