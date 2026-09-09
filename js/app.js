@@ -29,7 +29,7 @@ import {
   setWornAura, ownsAura,
   rack, rerollRack, rackRerollCost, buyRackItem, wornAura,
   buyPetItem,
-  DUST_EGG, buyDustEgg, dustEggBought,
+  DUST_EGG, buyDustEgg, dustEggBought, dustEggPending,
 } from './loot.js';
 import * as labLoot from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
@@ -100,7 +100,7 @@ import { HERO_EDGE } from '../data/hero-edge.js';
 import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers, petWornTints, petWornItems, petCanWear,
   BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK, bhFamilyKey, bhFamilies } from '../data/boneheadz.js';
 // Football kit, 2026-09-04
-import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SHELF, FOOTBALL_PETS, footballItemId, footballTints, footballBundleMath, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
+import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SHELF, FOOTBALL_PETS, footballItemId, footballGrantIds, footballBundleIds, footballTints, footballBundleMath, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays, dayOrdinal, armMidnightTimer,
@@ -10281,7 +10281,7 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
      Impeccable's football-kit critique). */
   const kit = footballBundleMath();
   const quote = footballBundleQuote(ownedHere);
-  const bundleOwned = ownedHere === sold.length;
+  const bundleOwned = ownedHere === sold.length && footballBundleIds().every(id => ownedCos.has(id));
   /* skip: ['C'] sits on the call line on purpose: figure-audit STACK reads each
      avatarLayersHtml call in a two-line window (2026-09-05).
      A comment placed HERE, above `return`, not between the markup lines below:
@@ -10362,7 +10362,9 @@ function footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundl
       <div class="drop-grid">
         ${sold.map(g => {
           const id = footballItemId(team.id, g.key);   // the PREVIEW id: the tile sells the garment, in every team
-          const owned = ownedCos.has(id);
+          const ids = footballGrantIds(id);
+          const owned = ids.every(piece => ownedCos.has(piece));
+          const pending = !owned && ids.some(piece => ownedCos.has(piece));
           /* THE PET TILE (g.pets) IS 384 NOW, matching fb-hero-pet above (same
              lizard, same crop). It used to be pinned to 192: Tom, 2026-09-05,
              "in the shop itself, the lizards are all blurry". Her PET_CROP puts
@@ -10387,6 +10389,7 @@ function footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundl
             ${teamStripHtml()}
             ${owned
               ? `<button class="drop-buy" disabled>In your Wardrobe</button>`
+              : pending ? `<button class="drop-buy" data-buyfb="${id}" data-amt="0">Collect paid colours</button>`
               : `<button class="drop-buy${sellable && !canBuy ? ' cant' : ''}" data-buyfb="${id}" data-amt="${price}" ${sellable ? '' : 'disabled'} aria-label="Buy the ${esc(g.label)}${sellable ? `, ${price.toLocaleString()} coins` : ''}, all ${FOOTBALL_TEAMS.length} teams">${sellable ? `${ICONS.coin(12)} ${price.toLocaleString()}` : 'Soon'}</button>`}
           </div>`;
         }).join('')}
@@ -10423,8 +10426,8 @@ function footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundl
 }
 
 async function renderShop(el) {
-  const [fighter, coinBal, dustBal, ownedCos, rk, playerEq, auraWorn, eggBought] =
-    await Promise.all([buildFighter(), coins(), boneDust(), ownedCosmeticIds(), rack(), equipped(), wornAura(), dustEggBought()]);
+  const [fighter, coinBal, dustBal, ownedCos, rk, playerEq, auraWorn, eggBought, eggPending] =
+    await Promise.all([buildFighter(), coins(), boneDust(), ownedCosmeticIds(), rack(), equipped(), wornAura(), dustEggBought(), dustEggPending()]);
   const rerender = () => renderShop(el);
 
   // No page heading or back button: the Shop is a tab inside Your Bonehead now,
@@ -10849,10 +10852,10 @@ async function renderShop(el) {
        and the charm stay gone. -->
   <div class="t3-sect"><b>Bone Dust</b><i></i></div>
   <div class="t3-cells">
-    <button class="t3-cell" data-dustegg="1" ${eggBought || dustBal < DUST_EGG.cost ? 'disabled' : ''}>
+    <button class="t3-cell" data-dustegg="1" ${eggBought || (!eggPending && dustBal < DUST_EGG.cost) ? 'disabled' : ''}>
       <span class="art">${crateIcon('egg', 54)}</span>
       <b>${esc(DUST_EGG.label).toUpperCase()}</b>
-      <span class="t3-price${eggBought ? '' : ' dust'}">${eggBought ? `${ICONS.check(13)} Yours this week` : `${ICONS.dust(13)} ${DUST_EGG.cost}`}</span>
+      <span class="t3-price${eggBought ? '' : ' dust'}">${eggBought ? `${ICONS.check(13)} Yours this week` : `${ICONS.dust(13)} ${eggPending ? 'Collect paid egg' : DUST_EGG.cost}`}</span>
       <small>${eggBought ? 'A new one lands Monday' : `${DUST_EGG.desc} · 1 a week`}</small>
     </button>
   </div>
@@ -10872,10 +10875,9 @@ async function renderShop(el) {
     toast(`${r.label} bought. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left. You now have ${r.owned}.`, 3000);
     rerender();
   }));
-  /* THE DUST EGG. armToConfirm like every spend. buyDustEgg claims the weekly
-     receipt before the dust moves and recovers a paid-but-ungranted week on the
-     next tap, the same shape as buyRackItem, so nothing here needs to know. */
-  el.querySelectorAll('[data-dustegg]').forEach(b => armToConfirm(b, `Spend ${DUST_EGG.cost}?`, async () => {
+  /* THE DUST EGG. Receipt, debit and delivery commit together. Legacy paid
+     deliveries stay clickable without requiring another 60 dust. */
+  el.querySelectorAll('[data-dustegg]').forEach(b => armToConfirm(b, eggPending ? 'Collect paid egg?' : `Spend ${DUST_EGG.cost}?`, async () => {
     const r = await buyDustEgg();
     if (!r.ok) {
       toast(r.reason === 'limit' ? (r.recovered ? 'The egg you already paid for is in the nest now. Walk it warm.' : 'One a week. A fresh egg lands Monday.')
@@ -10939,7 +10941,8 @@ async function renderShop(el) {
         : b.dataset.buyfb ? buyFootballItem(b.dataset.buyfb)
         : buyDropItem(b.dataset.buydrop)).finally(() => { busy = false; reset(); });
       if (!r.ok) {
-        toast(r.reason === 'owned' ? 'Already in your Wardrobe.' : r.reason === 'not-stocked' ? 'Not for sale yet.' : `Not enough coins. That costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`, 2600);
+        toast(r.reason === 'owned' ? (r.recovered ? 'Your paid colours are in your Wardrobe now.' : 'Already in your Wardrobe.') : r.reason === 'not-stocked' ? 'Not for sale yet.' : `Not enough coins. That costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`, 2600);
+        if (r.recovered) rerender();
         return;
       }
       levelSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
@@ -10980,7 +10983,7 @@ async function renderShop(el) {
     const sold = FOOTBALL_SHELF;
     const ownedHere = footballOwnedGarmentCount(ownedCos);
     const quote = footballBundleQuote(ownedHere);
-    const bundleOwned = ownedHere === sold.length;
+    const bundleOwned = ownedHere === sold.length && footballBundleIds().every(id => ownedCos.has(id));
     // the LIVE balance, for the reason in wireDropBuyButtons above: this body is
     // built when the player opens the room, not when the shop was rendered.
     body.innerHTML = footballDropBodyHtml(ownedCos, await coins(), team, sold, price, quote, bundleOwned);
@@ -11053,8 +11056,8 @@ async function renderShop(el) {
   }
   wireRackBuys(el);
   /* THE PET BUYS. armToConfirm on every one, the app-wide rule that one tap can
-     never spend. buyPetItem does the atomic claim before the money moves and
-     recovers a receipt whose grant never landed, the same shape as the rack, so
+     never spend. buyPetItem commits the payment with the goods and
+     recovers a legacy receipt whose grant never landed, so
      nothing here needs to know about that. */
   el.querySelectorAll('[data-petbuy]').forEach(b => armToConfirm(b, 'Buy?', async () => {
     const id = b.dataset.petbuy, amt = +b.dataset.amt;

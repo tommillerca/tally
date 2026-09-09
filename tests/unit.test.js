@@ -2695,10 +2695,10 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
        below moved 3 -> 2 with it. */
     buyDustEgg: 'NOT COSMETIC, BY RULING (Tom, 2026-08-31): the dust shop egg was removed unintentionally, and dust is the deterministic hatch route for a non-walker. One Mystery Egg per ISO week for 60 dust, bounded by the dustegg:<week> receipt. If dust is ever sold for real money, this is the first thing to look at.',
   };
-  /* The one dust spend allowed to reach a grant, and ONLY grantEgg. Not a skip:
+  /* The one dust spend allowed to deliver an egg, using eggRow in its transaction. Not a skip:
      row 3 still forbids it every other grant, so the crate and the charm cannot
      ride back in on the egg's ruling. */
-  const POWER_EXCEPTIONS = { buyDustEgg: /grantEgg/ };
+  const POWER_EXCEPTIONS = { buyDustEgg: /eggRow/ };
   const owners = [...src.matchAll(/^(?:export\s+)?(?:async\s+)?function\s+(\w+)/gm)].map(m => [m.index, m[1]]);
   const ownerAt = i => { let n = '(top level)'; for (const [ix, name] of owners) { if (ix <= i) n = name; else break; } return n; };
   /* WIDENED AGAIN 2026-09-05 (offline crash seam OFF-2a): buyRackItem folded
@@ -2716,7 +2716,7 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
 
   // 3. and none of them hands out an item, except the one declared exception,
   //    which may reach EXACTLY its declared grant and nothing else
-  const GRANTS = /grantEgg|grantCrate|grantConsumable|grantGear|grantPet\b|addPetInstance/;
+  const GRANTS = /eggRow|grantEgg|grantCrate|grantConsumable|grantGear|grantPet\b|addPetInstance/;
   for (const fn of Object.keys(DECLARED)) {
     const from = src.slice(src.indexOf(`function ${fn}(`));
     const body = from.slice(0, from.indexOf('\n}\n'));
@@ -6713,11 +6713,19 @@ test('football BUNDLE-CONCURRENCY: an overlapping single-garment buy no longer o
     loot.buyFootballItem(cleatsId, true),
   ]);
   assert.equal(bundleR.ok, true, `bundle must sell, got ${JSON.stringify(bundleR)}`);
-  assert.equal(itemR.ok, true, `single buy must sell, got ${JSON.stringify(itemR)}`);
-  assert.equal(bundleR.cost, 13400, `4 missing at quote time prorates to 13,400, got ${JSON.stringify(bundleR)}`);
-  assert.equal(itemR.cost, 4200, `one garment must cost one garment's price, got ${JSON.stringify(itemR)}`);
+  // Both serial orders are legal: the bundle can win first and refuse the
+  // now-owned single, or the single can land first and lower the bundle quote.
   const spent = WALLET - await loot.coins();
-  assert.equal(spent, 14300, `single (4,200) + what the bundle actually delivered (3 new garments, re-quoted and refunded to 10,100) must total 14,300 and never more, got ${spent}`);
+  if (itemR.ok) {
+    assert.equal(itemR.cost, 4200);
+    assert.equal(bundleR.cost, 10100, 'bundle reports only the three garments it charges for');
+    assert.equal(spent, 14300);
+  } else {
+    assert.equal(itemR.reason, 'owned');
+    assert.equal(bundleR.cost, 13400);
+    assert.equal(spent, 13400);
+  }
+  assert.equal(spent, bundleR.cost + (itemR.ok ? itemR.cost : 0), 'receipts must equal the actual debit');
   const owned = await loot.ownedCosmeticIds();
   const garmentsOwned = FB.FOOTBALL_SOLD.filter(g => FB.FOOTBALL_TEAMS.some(t => owned.has(FB.footballItemId(t.id, g.key))));
   assert.equal(garmentsOwned.length, FB.FOOTBALL_SOLD.length, `all ${FB.FOOTBALL_SOLD.length} garments must be owned after both purchases land, got ${garmentsOwned.map(g => g.key)}`);

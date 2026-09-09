@@ -207,20 +207,19 @@ ok('STABLE the same week and salt give the same shelf, so it cannot change under
    moved. Source order is the contract here because this audit is pure node and
    cannot drive IndexedDB. */
 {
-  const src = readFileSync(new URL('../js/loot.js', import.meta.url), 'utf8');
-  const at = src.indexOf('async function rerollRack');
-  /* Comments are STRIPPED before matching. Proving this row red caught the
-     first draft matching the words `ids: cur.ids` inside rerollRack's own
-     comment while the code beside it redrew the nine: a guard that reads prose
-     grades the documentation, not the behaviour. */
-  const body = (at === -1 ? '' : src.slice(at, src.indexOf('\nexport', at + 1)))
-    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-  const keeps = body.includes('ids: cur.ids');
-  const debitAfterClaim = body.includes('kvUpdate') && body.includes('coinsAdd')
-    && body.indexOf('kvUpdate') < body.indexOf('coinsAdd');
-  ok('WEEK-IDENTITY rerollRack keeps the themed nine and debits only after the claim',
-    keeps && debitAfterClaim,
-    body ? `ids: cur.ids ${keeps ? 'present' : 'MISSING'}, debit-after-claim ${debitAfterClaim}` : 'rerollRack body NOT FOUND, so this row read nothing');
+  await import('./mem-idb.mjs');
+  const { kvSet, useDbName } = await import('../js/db.js');
+  const loot = await import('../js/loot.js');
+  useDbName('rack-rotate-week-identity');
+  await kvSet('coins', 100000);
+  await loot.rerollRack(); // CONTROL consumes the free rung first.
+  const before = await loot.rack(), balance = await loot.coins();
+  const result = await loot.rerollRack(), after = await loot.rack();
+  ok('WEEK-IDENTITY reroll keeps the themed nine and charges the paid rung once',
+    result.ok && result.cost > 0 && JSON.stringify(before.ids) === JSON.stringify(after.ids)
+      && after.rr === before.rr + 1 && balance - await loot.coins() === result.cost,
+    `rung ${before.rr} -> ${after.rr}, charged ${balance - await loot.coins()}`);
+
 }
 
 /* THE TWO RUNG ARRAYS ARE PARALLEL, AND NOTHING ELSE HOLDS THEM TOGETHER.

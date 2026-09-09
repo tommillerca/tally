@@ -80,108 +80,56 @@ export const DROP = {
   ],
 };
 
-/* Football kit, 2026-09-04: one tile per GARMENT, one flat price, and what it
-   hands over is that garment in every team's colours (footballGrantIds; the
-   helmet still drags its three visors, so 128 ids). Tom: "buy the garment get
-   all 32 colours." Same receipt-decides shape as buyDropItem: money first,
-   atomically; the grant race's loser is refunded. Refuses while the kit is not
-   live or has no price, so a flipped flag without a number sells nothing.
-
-   ALREADY OWNED MEANS ANY COLOURWAY. A second helmet in a different team is not
-   a second purchase, it is the same purchase, so the ownership check has to
-   refuse it before the coins move. It does, and not by accident: the 32 rows
-   granted above are all in ownedCosmeticIds(), so `owned.has(itemId)` is already
-   true for every team's copy. Graded by tests/football-kit-audit.mjs row REPEAT,
-   which asserts the coin delta is zero.
-
-   `stocked` is a parameter for the same reason footballBundleSellable's are: the
-   shop is shut until Tom flips FOOTBALL_KIT_LIVE, and a buy path nobody can call
-   is a buy path nobody has tested. Production callers pass nothing.
-
-   `petsPending` (Tom, 2026-09-06, "warn before buying"): a pet garment
-   (pet-helmet, pet-jersey) worn is drawn on a lizard, and a player with no
-   lizard yet (see FOOTBALL_PETS) has nothing to put it on. Nothing is
-   withheld or refunded -- the garment is granted exactly as normal and simply
-   waits, owned, in the Wardrobe until a lizard hatches -- but the confirm
-   toast says so rather than the player finding out silently. */
-// Does this save own a lizard at all (C4 Beardie or CX Founder's Lizard,
-// FOOTBALL_PETS)? Called by both buy paths below to decide whether the pet
-// garments they hand over have anything to be worn on yet. Defined here
-// (petInstances is a hoisted function declaration further down this module)
-// rather than duplicated in each buy path.
+/* Football garments include every team's colours and helmet visors.
+   Live ownership determines the quote inside the transaction that debits coins
+   and grants all rows. A partial legacy garment is already paid and its missing
+   colours are delivered for free. One owned colour represents the whole garment. */
 const ownsFootballPet = async () => (await petInstances()).some(x => FOOTBALL_PETS.includes(x.sp));
 export async function buyFootballItem(itemId, stocked = footballPieceSellable()) {
   const ids = footballGrantIds(itemId);
   const cost = FOOTBALL_KIT_PRICE_PLACEHOLDER;
   const garment = FOOTBALL_GARMENT_BY_KEY[(BH_BY_ID[itemId] || {}).football?.garment];
-  // `sold` and not merely "a football item": the three visors are granted, never
-  // sold, so a stray tile id for one must not take 4,200 for a piece of a hat.
   if (!stocked || !ids.length || !garment?.sold || !Number.isFinite(cost) || cost <= 0) return { ok: false, reason: 'not-stocked' };
-  if ((await ownedCosmeticIds()).has(itemId)) return { ok: false, reason: 'owned' };
-  const left = await spendCoins(cost);
-  if (left === null) return { ok: false, reason: 'coins', need: cost, have: await coins() };
-  if (!await grantCosmetic(itemId, 'football')) {
-    await coinsAdd(cost);
-    return { ok: false, reason: 'owned' };
-  }
-  for (const id of ids) if (id !== itemId) await grantCosmetic(id, 'football');
   const petsPending = !!garment.pets && !await ownsFootballPet();
-  return { ok: true, label: `${garment.label} · ${FOOTBALL_TEAMS.length} colourways`, granted: ids.length, cost, coins: left, petsPending };
+  return payAtomic({ snapshot: { keys: ['coins'], stores: ['inv'] }, decide: (state, rows) => {
+    const owned = new Set(rows.inv.filter(r => r.kind === 'cos').map(r => r.itemId));
+    const missing = ids.filter(id => !owned.has(id));
+    if (!missing.length) return { result: { ok: false, reason: 'owned' } };
+    const paid = ids.some(id => owned.has(id)), balance = Number(state.coins) || 0;
+    if (!paid && balance < cost) return { result: { ok: false, reason: 'coins', need: cost, have: balance } };
+    return {
+      kv: { looks: cur => looksWith(cur, ids),
+        ...(!paid ? { coins: () => balance - cost, coinsRev: cur => (Number(cur) || 0) + cost } : {}) },
+      puts: missing.map(id => ({ store: 'inv', val: cosRow(id, 'football') })),
+      result: paid ? { ok: false, reason: 'owned', recovered: true }
+        : { ok: true, label: `${garment.label} · ${FOOTBALL_TEAMS.length} colourways`, granted: ids.length, cost, coins: balance - cost, petsPending },
+    };
+  } });
 }
 
-/* THE BUNDLE. Tom, 2026-09-04: "per garment only with a bundle of everything for
-   a slightly cheaper but expensive price." One purchase, all five sold garments,
-   each in all 32 colourways (256 ids: the helmet still drags its three visors).
-   There is one bundle now, not one per team; the first argument is the team tile
-   the player tapped and is IGNORED, kept only so js/app.js keeps working until
-   its shelf patch lands (docs/FOOTBALL-KIT.md).
-   Same receipt-decides shape as above. PRICED FOR WHAT IS MISSING (Tom,
-   2026-09-05, Impeccable's football-kit critique, PRORATED 2026-09-06): a
-   player who owns 3 of 5 garments pays 20% off the two remaining garments'
-   sum, never the flat 16,800. footballBundleQuote does the arithmetic;
-   footballOwnedGarmentCount counts a garment as owned the moment any one of
-   its 32 team ids is, matching how footballGrantIds hands them over. Owning
-   ALL of it is refused outright.
-   `petsPending`: the bundle always includes both pet garments, so the same
-   "nothing to wear it on yet" warning buyFootballItem carries applies here
-   unconditionally on a save with no lizard, regardless of which garments
-   this particular purchase actually delivered. */
+/* The bundle costs 20% less than the missing garments, rounded by the shared
+   quote function. Its returned price is what this transaction actually charges,
+   including when another purchase lands first. */
 export async function buyFootballBundle(_teamId, stocked = footballBundleSellable()) {
   const ids = footballBundleIds();
   if (!ids.length || !stocked) return { ok: false, reason: 'not-stocked' };
-  const owned = await ownedCosmeticIds();
-  const want = ids.filter(id => !owned.has(id));
-  if (!want.length) return { ok: false, reason: 'owned' };
-  const { cost, missing, save } = footballBundleQuote(footballOwnedGarmentCount(owned));
-  if (!Number.isFinite(cost) || cost <= 0) return { ok: false, reason: 'not-stocked' };
-  const left = await spendCoins(cost);
-  if (left === null) return { ok: false, reason: 'coins', need: cost, have: await coins() };
-  /* The FIRST missing piece is the receipt, exactly as the single tile uses its
-     own item: two overlapping taps both spend, and the one that loses the grant
-     is refunded, so a bundle is never charged twice. */
-  if (!await grantCosmetic(want[0], 'football')) {
-    await coinsAdd(cost);
-    return { ok: false, reason: 'owned' };
-  }
-  const landed = new Set([want[0]]);
-  for (const id of want.slice(1)) if (await grantCosmetic(id, 'football')) landed.add(id);
-  /* OVERCHARGE GUARD (P1, Codex 2026-09-05). `want` and `cost` are a SNAPSHOT
-     taken before either coin moved. A single-garment buy for a DIFFERENT
-     garment that lands in the gap between that snapshot and this loop grants
-     the garment for free here (grantCosmetic just no-ops on an id already
-     owned) while `cost` was quoted as if the bundle still had to pay for it:
-     both purchases succeed, and the player is out one garment's price.
-     Re-quote against what THIS call actually delivered (a garment counts once
-     it lands one of its 32 ids, same rule footballOwnedGarmentCount uses, not
-     once per team id) and refund the gap. A clean run delivers exactly
-     `missing` garments and the requote matches `cost`, so refund is 0. */
-  const landedGarments = FOOTBALL_SOLD.filter(g =>
-    footballGrantIds(footballItemId(FOOTBALL_TEAMS[0].id, g.key)).some(id => landed.has(id))).length;
-  const fair = footballBundleQuote(FOOTBALL_SOLD.length - landedGarments).cost;
-  const refund = cost - fair;
-  const finalCoins = refund > 0 ? await coinsAdd(refund) : left;
   const petsPending = !await ownsFootballPet();
-  return { ok: true, label: `The full kit · ${FOOTBALL_TEAMS.length} colourways`, granted: missing, cost, coins: finalCoins, save, petsPending };
+  return payAtomic({ snapshot: { keys: ['coins'], stores: ['inv'] }, decide: (state, rows) => {
+    const owned = new Set(rows.inv.filter(r => r.kind === 'cos').map(r => r.itemId));
+    const want = ids.filter(id => !owned.has(id));
+    if (!want.length) return { result: { ok: false, reason: 'owned' } };
+    const { cost, missing, save } = footballBundleQuote(footballOwnedGarmentCount(owned));
+    if (!Number.isFinite(cost) || cost < 0) return { result: { ok: false, reason: 'not-stocked' } };
+    const balance = Number(state.coins) || 0;
+    if (balance < cost) return { result: { ok: false, reason: 'coins', need: cost, have: balance } };
+    return {
+      kv: { looks: cur => looksWith(cur, ids),
+        ...(cost > 0 ? { coins: () => balance - cost, coinsRev: cur => (Number(cur) || 0) + cost } : {}) },
+      puts: want.map(id => ({ store: 'inv', val: cosRow(id, 'football') })),
+      result: cost === 0 ? { ok: false, reason: 'owned', recovered: true }
+        : { ok: true, label: `The full kit · ${FOOTBALL_TEAMS.length} colourways`, granted: missing, cost, coins: balance - cost, save, petsPending },
+    };
+  } });
 }
 
 export async function buyDropItem(itemId) {
@@ -189,24 +137,18 @@ export async function buyDropItem(itemId) {
   if (!d) throw new Error('not a drop item');
   const item = BH_BY_ID[itemId];
   if ((await ownedCosmeticIds()).has(itemId)) return { ok: false, reason: 'owned' };
-  /* CHARGED ONCE, GRANTED ONCE, and this used to be neither. Reading the balance
-     and then calling coinsAdd let overlapping taps all pass one stale check:
-     measured on origin/main 13583e42, four taps on a 3,000-coin jacket with
-     7,000 coins took the WHOLE 7,000 (the clamp ate the overdraft) and
-     delivered one jacket.
-     grantCosmetic is already the receipt here, so no second ledger row is
-     needed: it addIfAbsent's `cos:<id>` and returns null to whoever loses. The
-     money moves first, atomically, and the loser of the grant race gets it
-     straight back, so exactly one caller is out of pocket. Same receipt-decides
-     principle as buyRackItem, without a `dropbuy:` key that would then need its
-     own recovery branch. */
-  const left = await spendCoins(d.cost);
-  if (left === null) return { ok: false, reason: 'coins', need: d.cost, have: await coins() };
-  if (!await grantCosmetic(itemId, 'drop')) {
-    await coinsAdd(d.cost);   // somebody else's tap landed the piece: give it back
-    return { ok: false, reason: 'owned' };
-  }
-  return { ok: true, label: item.name, cost: d.cost, coins: left };
+  // Ownership, debit and delivery share one live transaction. No refund seam.
+  return payAtomic({ snapshot: { keys: ['coins'], stores: ['inv'] }, decide: (state, rows) => {
+    if (rows.inv.some(r => r.kind === 'cos' && r.itemId === itemId)) return { result: { ok: false, reason: 'owned' } };
+    const balance = Number(state.coins) || 0;
+    if (balance < d.cost) return { result: { ok: false, reason: 'coins', need: d.cost, have: balance } };
+    return {
+      kv: { coins: () => balance - d.cost, coinsRev: cur => (Number(cur) || 0) + d.cost,
+        looks: cur => looksWith(cur, [itemId]) },
+      puts: [{ store: 'inv', val: cosRow(itemId, 'drop') }],
+      result: { ok: true, label: item.name, cost: d.cost, coins: balance - d.cost },
+    };
+  } });
 }
 
 /* ---------- the rack: the weekly cosmetic shop (v409) ----------
@@ -480,35 +422,20 @@ export async function rerollRack() {
      undefined must be a dead button, never `bal < undefined` (false) followed
      by a NaN wallet write. */
   if (!Number.isFinite(cost)) return { ok: false, reason: 'price' };
-  /* SPEND FIRST, and spendCoins IS the right primitive here even though a
-     reroll is a price rung rather than an item. The rack kvUpdate below is
-     already an atomic claim on the counter, so two rerolls could never
-     double-charge each other; what the old read-then-coinsAdd still allowed was
-     a reroll and a BUY landing together, each passing its own stale read.
-     Measured on origin/main 2faa73b6: a 3,000-coin wallet paid for a 500-coin
-     reroll and a 3,000-coin piece at once and got both, 500 coins free.
-     The stale-PRICE case is covered by the same refund: `cost` is read off the
-     rr this caller saw, so if another reroll advances the counter first the
-     kvUpdate refuses on `used !== st.rr` and the money goes straight back,
-     rather than this caller buying a dear rung at a cheap rung's price. */
-  const left = await spendCoins(cost);
-  if (left === null) return { ok: false, reason: 'coins', need: cost, have: await coins() };
-  const next = await kvUpdate('rack', cur => {
-    /* Weekly, per above. The `cur.week !== st.week` guard on the next line is
-       what makes reading cur.rr straight off the record safe: a record from
-       another week never gets this far. */
-    const used = (cur && cur.rr) || 0;
-    if (!cur || cur.week !== st.week || used !== st.rr) return undefined;   // somebody else moved it
+  // The paid rung and its new shelf commit with the debit. A stale quote
+  // refuses without charging, and an aborted shelf write rolls back the coins.
+  return payAtomic({ snapshot: { keys: ['rack', 'coins'] }, decide: state => {
+    const cur = state.rack, used = (cur && cur.rr) || 0;
+    if (!cur || cur.week !== st.week || used !== st.rr) return { result: { ok: false, reason: 'race' } };
+    const balance = Number(state.coins) || 0;
+    if (balance < cost) return { result: { ok: false, reason: 'coins', need: cost, have: balance } };
     const salt = (cur.salt || 0) + 1;
-    /* ONLY THE ROTATING SHELF MOVES. `ids: cur.ids` is the 2026-08-31 ruling's
-       boundary: the themed nine keep their week identity, so a reroll can
-       never fish a specific themed piece out of its rung. The new salt seeds
-       the rotating draw alone, against the SAME themed ids, so the two shelves
-       stay disjoint and buyRackItem's indexOf pricing cannot cross. */
-    return { week: cur.week, salt, ids: cur.ids, rot: rackRotatePick(cur.week, salt, cur.ids), rotDay: day, rr: used + 1 };
-  });
-  if (!next) { await coinsAdd(cost); return { ok: false, reason: 'race' }; }
-  return { ok: true, cost, rr: next.rr, coins: left };
+    const next = { week: cur.week, salt, ids: cur.ids, rot: rackRotatePick(cur.week, salt, cur.ids), rotDay: day, rr: used + 1 };
+    return { kv: {
+      coins: () => balance - cost, coinsRev: rev => (Number(rev) || 0) + Math.max(1, cost),
+      rack: () => next,
+    }, result: { ok: true, cost, rr: next.rr, coins: balance - cost } };
+  } });
 }
 
 /* THE AURA YOU BOUGHT IS THE AURA YOU WEAR. There is exactly one aura in the
@@ -689,51 +616,9 @@ export async function buyRackItem(artId, currency = 'coins') {
     isAura: aura, coins: await coins(), dust: await boneDust() };
 }
 
-/* BUYING FROM GWART'S MENAGERIE.
- *
- * Deliberately the SAME SHAPE buyRackItem used to be, because the failure modes
- * are the same and one of them already cost a real player their coins and
- * their piece:
- *   - the claim is won BEFORE the money moves, so a double-spend is impossible
- *   - the gap that ordering leaves is closed by the recovery branch below
- *   - the grant is wrapped, so a rejected write is reported instead of vanishing
- * NO LONGER IDENTICAL, since 2026-09-05 (offline crash seam OFF-2a):
- * buyRackItem folded its spend and its claim into ONE db.claimAndPay
- * transaction, because a crash between the two separate writes below (this
- * function's shape) leaves a debited wallet and no receipt, and the retry that
- * follows spends again. That same gap is still open here, unfixed, out of
- * scope for OFF-2a: this function needs the identical treatment. Written down
- * rather than left implied by a comment that no longer matches the code it
- * used to describe.
- *
- * AN ACCESSORY IS UNBUYABLE UNTIL YOU OWN HER, and that is geometry, not
- * merchandising. Measured 2026-08-21: the glasses overlap Bumbleseal's ink by
- * 94.8% and overlap every other pet by 0.0%, because Cam draws each piece
- * positioned for HER body inside the shared 2048 canvas. Sold to someone who
- * does not own her, a purse would hang in empty air.
- *
- * BUYING THE PET EQUIPS HER. Fifty thousand coins should not end with the
- * player hunting through a menu to find what they just bought.
- *
- * AND BUYING THE PET PUTS A COPY IN THE STABLE, which is a separate write and
- * was the v421 defect: `grantCosmetic` + `equip('C', id)` is ownership plus a
- * paper-doll slot, and every screen that lists what you OWN reads `petInst`
- * instead. See reclaimOwnedPets above for the full trace. Go through
- * addPetInstance/setEquippedPet, the same pair hatching and grantPet use, so the
- * level bank, the legacy anchor and the battle pet all land too: `equip('C')`
- * alone left the fight running the old pet.
- *
- * Mint-if-absent in deliverPet, because reclaimOwnedPets may already have minted
- * this species during that very petInstances() read: grantCosmetic runs first in
- * both branches below, so by then the reclaim sees an owned pet with no copy and
- * does its job. Minting unconditionally would hand out TWO Bumbleseals for one
- * purchase.
- */
-async function deliverPet(sp) {
-  const inst = (await petInstances()).find(x => x.sp === sp) || await addPetInstance(sp);
-  await setEquippedPet(inst.iid);
-}
-
+/* Menagerie payment, receipt, cosmetic and Stable copy commit together.
+   A legacy paid receipt can finish delivery even with an empty wallet.
+   Accessories remain gated on owning the pet they were drawn for. */
 export async function buyPetItem(id) {
   const isPet = id === PET_SHOP.pet.id;
   const entry = isPet ? PET_SHOP.pet : PET_SHOP.items.find(i => i.id === id);
@@ -744,62 +629,40 @@ export async function buyPetItem(id) {
   if (owned.has(id)) return { ok: false, reason: 'owned' };
   if (!isPet && !owned.has(PET_SHOP.pet.id)) return { ok: false, reason: 'needs-pet', pet: PET_SHOP.pet.id };
 
-  const price = entry.coin;
-  /* Spend first, atomically, then claim: same ordering as buyRackItem and for
-     the same measured reason. Her accessories are the worst case in the game
-     for the old shape, because they are the only shelf where several things are
-     affordable at once and every one of them is thousands of coins. Measured on
-     origin/main 2faa73b6: an 8,000-coin wallet bought an 8,000 and a 6,000
-     accessory together and kept both, 6,000 coins of goods free. */
-  const left = await spendCoins(price);
-  if (left === null) return { ok: false, reason: 'coins', need: price, have: await coins() };
-
-  if (!(await db.addIfAbsent('kv', { k: `petbuy:${id}`, v: { ts: Date.now(), price } }))) {
-    /* Refund first: this caller paid a moment ago and is not getting the piece,
-       so the give-back bounded by the debit above keeps the total charged for it
-       at exactly one price. Then: paid but never granted, finish it rather than
-       answering 'owned' about something the player does not have. Reported as
-       'owned' and not as a fresh purchase, because this branch cannot tell a
-       stuck receipt from a losing caller in a race, and answering ok:true there
-       makes one purchase report several successes. Same as buyRackItem. */
-    await coinsAdd(price);
-    if ((await ownedCosmeticIds()).has(id)) return { ok: false, reason: 'owned' };
-    await grantCosmetic(id, 'petshop');
-    if (isPet) await deliverPet(id);
-    return { ok: false, reason: 'owned', recovered: true };
-  }
+  const price = entry.coin, key = `petbuy:${id}`;
+  if (!Number.isFinite(price) || price <= 0) return { ok: false, reason: 'not-stocked' };
+  const prepared = isPet ? await petInstancePay(id) : null;
+  let result;
   try {
-    await grantCosmetic(id, 'petshop');
-    if (isPet) await deliverPet(id);
+    result = await payAtomic({ snapshot: { keys: [key, 'coins'], stores: ['inv'] }, decide: (state, rows) => {
+      const has = itemId => rows.inv.some(r => r.kind === 'cos' && r.itemId === itemId);
+      if (has(id)) return { result: { ok: false, reason: 'owned' } };
+      if (!isPet && !has(PET_SHOP.pet.id)) return { result: { ok: false, reason: 'needs-pet', pet: PET_SHOP.pet.id } };
+      const paid = !!state[key], balance = Number(state.coins) || 0;
+      if (!paid && balance < price) return { result: { ok: false, reason: 'coins', need: price, have: balance } };
+      return {
+        kv: {
+          ...(prepared?.pay.kv || {}),
+          looks: cur => looksWith(cur, [id]),
+          [key]: () => state[key] || { ts: Date.now(), price },
+          ...(!paid ? { coins: () => balance - price, coinsRev: cur => (Number(cur) || 0) + price } : {}),
+        },
+        puts: [{ store: 'inv', val: cosRow(id, 'petshop') }],
+        result: paid ? { ok: false, reason: 'owned', recovered: true }
+          : { ok: true, label: art.name, cost: price, isPet, coins: balance - price },
+      };
+    } });
+    if (isPet && (result.ok || result.recovered)) await setEquippedPet(prepared.inst.iid);
   } catch {
     return { ok: false, reason: 'write', label: art.name };
   }
-  return { ok: true, label: art.name, cost: price, isPet, coins: await coins() };
+  return result;
 }
 
-/* THE MYSTERY EGG, BACK ON DUST, ONCE A WEEK.
- *
- * The Bone Dust shop sold this egg for 60 dust, unbounded, until S0 closed the
- * whole shop on 2026-08-25 (commit 23de102b). Tom ruled on 2026-08-31 that the
- * egg's removal was unintentional: dust needs a deterministic egg source so a
- * player who cannot walk enough for step milestones can still hatch. The
- * historical price (60) is kept; the historical bound (none) is NOT, it is one
- * per ISO week, because the old shop predates the exploit sweeps and an
- * unbounded dust-to-pet pump is exactly the class they closed.
- *
- *   TRANSITION  this week's Mystery Egg goes from unbought to bought. Once per
- *               ISO week, and the week key is the whole mechanism.
- *   AUTHORITY   db.addIfAbsent on the kv row `dustegg:<isoWeek>`, claimed
- *               BEFORE the dust moves, same ordering as buyRackItem/buyPetItem.
- *   NO-OP       a second attempt in the same week loses the claim and returns
- *               reason 'limit', having deducted nothing.
- *
- * THE GRANTED FLAG replaces what ownedCosmeticIds() is to the rack's recovery
- * branch. A cosmetic is owned forever, so "receipt exists but not owned" proves
- * a stuck write; an egg HATCHES and its inv row is deleted, so inventory absence
- * proves nothing. The receipt itself carries `granted`, flipped by a CONDITIONAL
- * kvUpdate (one transaction, one winner) so a retry after a failed write grants
- * exactly one egg and a double-tap racing the recovery cannot grant two. */
+/* One Mystery Egg for 60 Bone Dust per ISO week, by the 2026-08-31 ruling.
+   Receipt, dust and egg commit together. Legacy receipts without `granted`
+   represent paid delivery still owed and recover without another debit.
+   A granted legacy receipt must stay closed even after its egg hatches. */
 export const DUST_EGG = { label: 'Mystery Egg', cost: 60, desc: 'Incubate, then hatch a pet' };
 
 const dustEggKey = async () => {
@@ -816,56 +679,34 @@ export async function dustEggBought() {
   return !!(r && r.granted);
 }
 
+export async function dustEggPending() {
+  const receipt = await kvGet(await dustEggKey(), null);
+  return !!receipt && !receipt.granted;
+}
+
 export async function buyDustEgg() {
   const key = await dustEggKey();
   const price = DUST_EGG.cost;
   if (!Number.isFinite(price)) return { ok: false, reason: 'not-stocked' };
-  /* Spend first, atomically, same ordering as buyRackItem. The weekly receipt
-     already made a second EGG impossible, so what this closes is the egg landing
-     alongside another dust spend: two stale reads, two clamped debits, dust that
-     was never there. */
-  const left = await spendDust(price);
-  if (left === null) return { ok: false, reason: 'dust', need: price, have: await boneDust() };
-  if (!(await db.addIfAbsent('kv', { k: key, v: { ts: Date.now(), price } }))) {
-    /* Refund first: this caller paid and is not getting THIS week's egg from
-       this branch unless it wins the flip below, and if it does win it is paying
-       for the stuck receipt's egg, which was already charged for. Either way the
-       dust it just spent buys it nothing.
-       The receipt is down: this week's egg was already bought, OR a write failed
-       after payment and the egg never landed. The conditional kvUpdate is both
-       the test and the claim in one transaction: exactly one caller ever flips
-       granted, so a losing caller cannot re-grant. */
-    await boneDustAdd(price);
-    let won;
-    try { won = !!(await kvUpdate(key, v => v && !v.granted ? { ...v, granted: true } : undefined)); }
-    catch { won = false; }
-    if (!won) return { ok: false, reason: 'limit' };
-    try { await grantEgg('dust'); }
-    catch {
-      /* Reopen the recovery for the next tap; best-effort, because the world
-         where this write also fails is the world the receipt exists for. */
-      try { await kvUpdate(key, v => v ? { ...v, granted: false } : undefined); } catch { /* say so below */ }
-      return { ok: false, reason: 'write', label: DUST_EGG.label };
-    }
-    /* 'limit', not ok:true: this branch cannot tell a stuck receipt from a
-       losing caller in a race (same reasoning as buyRackItem), and by the time
-       it returns the egg really has been granted for this week. */
-    return { ok: false, reason: 'limit', recovered: true };
+  const egg = await eggRow('dust');
+  try {
+    return await payAtomic({ snapshot: { keys: [key, 'bonedust'], stores: ['inv'] }, decide: state => {
+      const receipt = state[key], balance = Number(state.bonedust) || 0;
+      if (receipt?.granted) return { result: { ok: false, reason: 'limit' } };
+      if (!receipt && balance < price) return { result: { ok: false, reason: 'dust', need: price, have: balance } };
+      return {
+        kv: {
+          [key]: () => ({ ...(receipt || { ts: Date.now(), price }), granted: true }),
+          ...(!receipt ? { bonedust: cur => balance - price, dustRev: cur => (Number(cur) || 0) + price } : {}),
+        },
+        puts: [{ store: 'inv', val: egg }],
+        result: receipt ? { ok: false, reason: 'limit', recovered: true }
+          : { ok: true, label: DUST_EGG.label, cost: price, dust: balance - price },
+      };
+    } });
+  } catch {
+    return { ok: false, reason: 'write', label: DUST_EGG.label };
   }
-  /* Flip granted BEFORE the grant, conditionally. If a concurrent recovery call
-     already flipped it (receipt from a prior failed run), it also granted, so
-     this caller must not grant a second egg for one week's payment. */
-  let mine;
-  try { mine = !!(await kvUpdate(key, v => v && !v.granted ? { ...v, granted: true } : undefined)); }
-  catch { return { ok: false, reason: 'write', label: DUST_EGG.label }; }
-  if (mine) {
-    try { await grantEgg('dust'); }
-    catch {
-      try { await kvUpdate(key, v => v ? { ...v, granted: false } : undefined); } catch { /* recovery stays open best-effort */ }
-      return { ok: false, reason: 'write', label: DUST_EGG.label };
-    }
-  }
-  return { ok: true, label: DUST_EGG.label, cost: price, dust: await boneDust() };
 }
 
 /* WHAT THE PET IS WEARING. One kv row, `petWear`, shaped { slotCode: itemId }:

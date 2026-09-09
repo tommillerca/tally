@@ -251,17 +251,18 @@ const coverageOnly = process.argv.includes('--coverage-only');
    merge, so a well-meaning rewrite of the rule into name matching goes red with
    the evidence in the failure line. */
 // Frozen loss-prevention work order, 2026-09-08: real UI and service controls, Node only.
-const PURE = ['wardrobe-playtest-audit.mjs', 'lab-room2-audit.mjs', 'stable-stale-disclosure-audit.mjs', 'breed-last-colour-audit.mjs', 'stable-loss-disclosure-audit.mjs', 'lab-health-recovery-audit.mjs', 'lab-integration-audit.mjs', 'lab-ui-audit.mjs', 'laboratory-audit.mjs', 'lab-foundation-audit.mjs', 'pet-stress-guard.mjs', 'crew-pet-node-guard.mjs', 'transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-atomic-audit.mjs', 'backup-encoder-audit.mjs', 'backup-key-audit.mjs', 'backup-version-audit.mjs', 'backup-conflict-audit.mjs', 'unit.test.js', 'log-xp-farm-audit.mjs', 'drip-badge-audit.mjs', 'xp-key-provenance-lint.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'stat-source-audit.mjs', 'bastions-rep-sim.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'rack-rotate-audit.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs', 'render-sink-lint.mjs', 'lapse-witness-audit.mjs', 'spawn-claim-atomic-audit.mjs', 'wardrobe-family-audit.mjs', 'football-kit-audit.mjs', 'restore-latch-audit.mjs', 'first-pet-audit.mjs',
-  'recovery-status-audit.mjs', // R57-F3: mocked lookup failures and exact 404 controls, no sockets
-  /* currency-revision-lint and inv-tombstone-audit (2026-09-06, Codex audit of
-     v485) are PURE for the same reason spawn-claim-atomic-audit is: a static
-     read of js/*.js and an in-memory IndexedDB drive of js/db.js and js/loot.js,
-     no browser, a few seconds. The lint is what stops the NEXT balance write
-     from forgetting its revision; the tombstone audit is the only row that
-     consumes 501 items and merges the pre-consumption blob, which is the one
-     shape the merge audit never drove. */
-  'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs',
-  'take-and-pay-audit.mjs'];   // L1/L5: transaction-boundary kills for inventory, Shop, Pit, meal XP retry (including midnight and overlapping opens), grants and Spire recovery; Node-only.
+const PURE = [
+  'wardrobe-playtest-audit.mjs', 'lab-room2-audit.mjs', 'stable-stale-disclosure-audit.mjs', 'breed-last-colour-audit.mjs', 'stable-loss-disclosure-audit.mjs', 'lab-health-recovery-audit.mjs',
+  'lab-integration-audit.mjs', 'lab-ui-audit.mjs', 'laboratory-audit.mjs', 'lab-foundation-audit.mjs', 'pet-stress-guard.mjs', 'crew-pet-node-guard.mjs',
+  'transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-atomic-audit.mjs', 'backup-encoder-audit.mjs', 'backup-key-audit.mjs', 'backup-version-audit.mjs',
+  'backup-conflict-audit.mjs', 'unit.test.js', 'log-xp-farm-audit.mjs', 'drip-badge-audit.mjs', 'xp-key-provenance-lint.mjs', 'facegate-audit.mjs',
+  'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'stat-source-audit.mjs',
+  'bastions-rep-sim.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs',
+  'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'rack-rotate-audit.mjs', 'pet-accessory-lint.mjs',
+  'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs',
+  'render-sink-lint.mjs', 'lapse-witness-audit.mjs', 'spawn-claim-atomic-audit.mjs', 'wardrobe-family-audit.mjs', 'football-kit-audit.mjs', 'restore-latch-audit.mjs',
+  'first-pet-audit.mjs', 'shop-economy-audit.mjs', 'recovery-status-audit.mjs', 'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs', 'take-and-pay-audit.mjs',
+];
 PURE.push('pet-morph-animation-audit.mjs'); // 2026-09-08: selective layers, named fallback and neutral-rest width controls; no browser.
 PURE.push('pet-palette-audit.mjs'); // r56 B1: actual PNG pairs and shipped-art CONTROL; offline Python image reads.
 PURE.push('fontscale-audit.mjs'); // R60-2: rem type seam, root doubling and px geometry controls; no browser or sockets.
