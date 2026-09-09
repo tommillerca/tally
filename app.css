@@ -3427,9 +3427,10 @@ body::before {
 }
 .race-champ b { color: var(--gold); font-weight: 800; }
 
-/* a racer who has not opened the app wears their age (Tom, 2026-08-30) */
+/* Snapshot freshness describes the data, never player presence. */
 .race-fresh { font-family: var(--mono, monospace); font-size: 10.5px; color: var(--text-3);
-  margin-left: 7px; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+  margin-left: 0; letter-spacing: .04em; text-transform: uppercase; white-space: normal;
+  flex-basis: 100%; order: 3; }
 
 .race-lanes { display: grid; gap: 7px; }
 .race-lane { display: grid; grid-template-columns: 26px 1fr; gap: 9px; align-items: center; }
@@ -3462,7 +3463,7 @@ body::before {
    row. 13px clears it with 2px of air, and only the leading lanes ever showed it
    because a marker near 100% is the one that lands under the step number. Fixed
    on the component, so the Crew board gets it too: it is the same lane. */
-.race-lane .nm { display: flex; align-items: baseline; gap: 6px; margin-bottom: 12px; }
+.race-lane .nm { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin-bottom: 12px; }
 .race-lane .nm b {
   font-size: var(--fs-2); font-weight: 700; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -3792,6 +3793,7 @@ body::before {
   font-size: 10px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase;
   color: var(--text-3); display: flex; align-items: center; gap: 5px;
 }
+.cfan-plate small.cfan-snapshot { text-transform: none; letter-spacing: 0; }
 .cfan-plate .lv {
   margin-left: auto; background: var(--gold); color: var(--ink); border: 2px solid var(--ink);
   border-radius: 7px; padding: 0 6px; font-family: var(--display); font-size: 12px; letter-spacing: 0.03em;

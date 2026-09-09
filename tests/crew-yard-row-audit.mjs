@@ -31,6 +31,7 @@ const context = vm.createContext({
     : null,
   openFriendPaddock: f => { visited = f; },
 });
+vm.runInContext(['onlineLabel', 'snapshotDetail'].map(name => app.match(new RegExp(`^function ${name}\\([^]*?^}`, 'm'))[0]).join('\n'), context);
 vm.runInContext(source, context);
 const wear = { CH: 'CH1' };
 const pet = { id: 'C4', level: 8, shiny: true, morph: 'ember' };

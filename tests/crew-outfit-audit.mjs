@@ -82,6 +82,7 @@ vm.runInContext([
   cut(app, 'function crewCardArtHtml(', '/* CREW-4:'),
 ].join('\n'), ctx);
 // Execute the real profile template, stopping before its DOM wiring.
+vm.runInContext(['onlineLabel', 'snapshotDetail'].map(name => app.match(new RegExp(`^function ${name}\\([^]*?^}`, 'm'))[0]).join('\n'), ctx);
 vm.runInContext(cut(app, 'function openFriendProfile(', '\nfunction '), ctx);
 ctx.social = { isOnline: ctx.isOnline, syncProfile: ctx.syncProfile, pushProfileUpdate: ctx.pushProfileUpdate };
 vm.runInContext('let petRailTeam = null; let ownedCos = new Set();', ctx);

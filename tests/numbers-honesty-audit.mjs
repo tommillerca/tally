@@ -47,7 +47,7 @@ async function test(name, body) {
   catch (e) { failed++; console.error(`FAIL ${name}: ${e.message}`); }
 }
 const numericSource = span('const NUM_SHAPE', '/* READ A FIELD') + fn('readNum') +
-  span('const MIN_AGE', '// Online/last-seen') + fn('quickAddEntry') + fn('openQuickAdd');
+  span('const MIN_AGE', 'function onlineLabel(') + fn('quickAddEntry') + fn('openQuickAdd');
 async function quickAdd(raw, locale) {
   const saved = [], toasts = [];
   const E = env({ Intl: { NumberFormat: class extends Intl.NumberFormat {

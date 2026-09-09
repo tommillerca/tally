@@ -241,17 +241,25 @@ const LIMITS = {
   age: { min: MIN_AGE, max: 120 },
   heightCm: { min: 90, max: 250 },
 };
-// Online/last-seen label for Crew + leaderboard. last_seen updates on the ~5-min
-// social sync, so "online now" = within ~6 min (accurate at session boundaries).
+// last_seen is a server contact timestamp, never evidence of presence or absence.
+// Keep minute/hour precision only below one day. Missing/future clocks are unknown.
 function onlineLabel(lastSeen) {
-  if (!lastSeen) return { on: false, text: '' };
-  const mins = (Date.now() - lastSeen) / 60000;
-  if (mins < 6) return { on: true, text: 'online now' };
-  if (mins < 60) return { on: false, text: `${Math.max(1, Math.round(mins))}m ago` };
-  const hrs = mins / 60;
-  if (hrs < 24) return { on: false, text: `${Math.round(hrs)}h ago` };
-  const days = Math.round(hrs / 24);
-  return { on: false, text: days <= 1 ? 'yesterday' : `${days}d ago` };
+  const age = Date.now() - lastSeen;
+  if (!Number.isFinite(lastSeen) || lastSeen <= 0 || age < 0) return { on: false, fresh: false, text: 'Sync time unavailable' };
+  if (age >= 86400000) return { on: false, fresh: false, text: 'Awaiting a recent sync' };
+  const mins = Math.floor(age / 60000);
+  if (mins < 6) return { on: true, fresh: true, text: 'Synced recently' };
+  return { on: false, fresh: true, text: mins < 60 ? `Synced ${mins}m ago` : `Synced ${Math.floor(mins / 60)}h ago` };
+}
+function snapshotNotice(rows, key = 'lastSeen') {
+  if (!rows.length) return '';
+  // Lists can be capped. Describe this view, never claim a measured fleet outage.
+  return rows.some(p => onlineLabel(p[key]).fresh)
+    ? 'Showing last shared snapshots. Details may have changed.'
+    : 'Showing last shared snapshots. No recent updates have reached this view. Syncing may be delayed.';
+}
+function snapshotDetail(lastSeen) {
+  return `Last shared profile · ${onlineLabel(lastSeen).text}. Details may have changed.`;
 }
 
 const S = {
@@ -3106,13 +3114,7 @@ async function crewDeliveries(limit = 40) {
  * thinner than news here, which is honest, and it is much better than an inbox
  * that greets a long-time player as if nobody had ever cheered them. */
 const cheerAt = i => CHEERS[i] || null;
-/* WHEN IT ARRIVED, NOT WHETHER THEY ARE AWAKE. Both inboxes stamped their rows
-   with onlineLabel, which is the PRESENCE label the Crew fan uses, so anything
-   less than six minutes old read "online now": "DUSTY LULU / cheered you /
-   online now". That is a fact about a person, printed where the time of a
-   message goes. onlineLabel itself is right for what it is for, so the fix is
-   here at the two call sites that are not asking about presence: keep its
-   buckets, swap the one that is not a time. */
+// Message ages describe recorded events, independently of profile sync freshness.
 /* AND IT IS THE TIME IT WAS SENT, NOT THE TIME WE FETCHED IT. Round 29 (S12):
    three cheers sent minutes apart, one app open, and all three read "just now",
    because a ledger row is stamped by awardOnce at ingest and this read that
@@ -3123,8 +3125,14 @@ const cheerAt = i => CHEERS[i] || null;
    as what it is (an arrival) rather than reprinted as if it were the other. */
 const deliveredWhen = row => {
   const sent = +(row && row.sentAt) || 0;
-  const l = onlineLabel(sent || (row && row.ts));
-  const text = l.on || !l.text ? 'just now' : l.text;
+  const stamp = sent || (row && row.ts);
+  const mins = Math.max(0, (Date.now() - stamp) / 60000);
+  const hours = mins / 60;
+  const days = Math.round(hours / 24);
+  const text = !stamp || mins < 6 ? 'just now'
+    : mins < 60 ? `${Math.max(1, Math.round(mins))}m ago`
+    : hours < 24 ? `${Math.round(hours)}h ago`
+    : days <= 1 ? 'yesterday' : `${days}d ago`;
   return sent ? text : `arrived ${text}`;
 };
 const sentOrIngestTs = r => +(r && r.sentAt) || (r && r.ts) || 0;
@@ -12409,7 +12417,7 @@ async function friendSinceYesterdayMap(friends) {
     next[f.playerId] = now;
     const was = cache[f.playerId];
     if (!was) continue;
-    if (now.spires > was.spires) labels[f.playerId] = now.spires === 1 ? 'Just took a spire' : `Holds ${now.spires} spires now`;
+    if (now.spires > was.spires) labels[f.playerId] = now.spires === 1 ? 'Shared a spire update' : `Shared an update: ${now.spires} spires`;
     else if (now.level > was.level) labels[f.playerId] = `Leveled up to ${now.level}`;
     else if (now.gear > was.gear) labels[f.playerId] = 'New gear since last time';
     else if (now.badges > was.badges) labels[f.playerId] = 'Earned a new badge';
@@ -12421,6 +12429,7 @@ async function friendSinceYesterdayMap(friends) {
 function crewCardHtml(f, since) {
   const p = f.profile || {};
   const ol = onlineLabel(f.lastSeen);
+  if (!ol.fresh) since = null;
   /* THE STAGE SHIPS EMPTY. paintFan built every friend's full layered stack
      through innerHTML, so a crew of 30 mounted 270 images and 428 MB before
      anybody touched anything, and 120 friends reached 1537.5 MB. applyFan fills
@@ -12428,9 +12437,9 @@ function crewCardHtml(f, since) {
   return `<button class="cfan-card" data-fan="${esc(f.playerId)}">
     <span class="cfan-hit"></span>
     <div class="cfan-stage"></div>
-    ${ol.on ? '<span class="cfan-live" title="Online now"></span>' : ''}
+    ${ol.on ? '<span class="cfan-live" title="Synced recently"></span>' : ''}
     <span class="cfan-fstar" hidden>${ICONS.star(15)}</span>
-    <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small><span class="cfan-title">${p.title ? esc(p.title) : p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}</span><span class="lv">LV ${p.level || 1}</span></small>${since ? `<small class="cfan-since">${esc(since)}</small>` : ''}${
+    <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small><span class="cfan-title">${p.title ? esc(p.title) : p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}</span><span class="lv">LV ${p.level || 1}</span></small><small class="cfan-snapshot">${esc(ol.text)}</small>${since ? `<small class="cfan-since">${esc(since)}</small>` : ''}${
       /* CREW-13: spires had zero surface anywhere on the Crew tab. Skipped
          when `since` already said so (e.g. "Just took a spire") -- one card
          does not need to say the same true thing twice. */
@@ -12455,7 +12464,7 @@ function requestRowsHtml(data) {
   if (incoming.length) h += `<div class="fl-sect"><div class="fl-h">Wants to be friends · ${crewCount(incoming, truncated.incoming)}</div>${incoming.map(f => `
     <div class="fl-row">
       ${friendRowAvatar(f)}
-      <div class="fl-main"><b>${nameWithAlias(f)}</b><span>${f.profile ? 'Lv ' + f.profile.level : 'New Bonehead'}</span></div>
+      <div class="fl-main"><b>${nameWithAlias(f)}</b><span>${f.profile ? 'Last shared Lv ' + f.profile.level : 'Profile not shared yet'}</span></div>
       <div class="fl-actions"><button class="btn small" data-accept="${esc(f.playerId)}">Accept</button><button class="btn small ghost" data-remove="${esc(f.playerId)}">Ignore</button></div>
     </div>`).join('')}${truncated.incoming ? `<p class="note">${crewTruncText(incoming, 'requests')}</p>` : ''}</div>`;
   if (outgoing.length) h += `<div class="fl-sect"><div class="fl-h">Pending · ${crewCount(outgoing, truncated.outgoing)}</div>${outgoing.map(f => `
@@ -12549,7 +12558,7 @@ async function renderFriends(el) {
              remembers itself would eventually hide most of someone's crew with no
              obvious reason why. -->
         <button class="cfan-online" id="cfanOnline" aria-pressed="false"
-                aria-label="Show only friends who are online"><i class="live-dot"></i>Online</button>
+                aria-label="Show only friends with a recent sync"><i class="live-dot"></i>Recent syncs</button>
       </div>
       <p class="cfan-nohit note" id="cfanNoHit" hidden></p>
       <div class="cfan-wrap" id="cfanWrap" hidden><div class="cfan-deck" id="cfanDeck"></div></div>
@@ -12560,6 +12569,7 @@ async function renderFriends(el) {
       </div>
       <div class="cfan-sel" id="cfanSel" hidden></div>
       <p class="cfan-nohit note" id="cfanTrunc" hidden></p>
+      <p class="note" id="cfanSnapshot" hidden></p>
       <div class="friends-empty" id="cfanEmpty" hidden>
         <p class="fe-title">No Crew yet</p>
         <p class="note">Send a friend your code, or type theirs in below. Once you've added each other their Bonehead joins your fan right here, and you can send gifts and cheers.</p>
@@ -12952,7 +12962,7 @@ async function renderFriends(el) {
     box.innerHTML = `
       <button class="cfan-star${favs.has(f.playerId) ? ' on' : ''}" id="cfanStar" aria-label="Star this friend">${ICONS.star(!!favs.has(f.playerId))}</button>
       <div class="cfan-sel-tx">
-        <button class="cfan-sel-nm" id="cfanView">${nameWithAlias(f)}${ol.text ? ` <em>${ol.on ? '<i class="live-dot"></i> online' : esc(ol.text)}</em>` : ''}</button>
+        <button class="cfan-sel-nm" id="cfanView">${nameWithAlias(f)}${ol.text ? ` <em>${esc(ol.text)}</em>` : ''}</button>
         <div class="cfan-chips">
           <span class="cfan-chip lvl">LV ${p.level || 1}</span>
           ${p.badges ? `<span class="cfan-chip">${p.badges} badges</span>` : ''}
@@ -13008,6 +13018,11 @@ async function renderFriends(el) {
        make-a-friend copy. The count reads a dash rather than 0 for the same
        reason: 0 is a claim about their crew, and we do not have one. */
     const unreached = data.reached === false;
+    const snapshot = $('#cfanSnapshot', el);
+    if (snapshot) {
+      snapshot.textContent = unreached ? '' : snapshotNotice(data.friends);
+      snapshot.hidden = !snapshot.textContent;
+    }
     const unrBox = $('#cfanUnreached', el);
     if (unrBox) unrBox.hidden = !unreached;
     const truncated = !!data.truncated?.friends; // see crewCount
@@ -13091,7 +13106,7 @@ async function renderFriends(el) {
          case (people are asleep), so that message also says how to undo it. */
       noHit.textContent = !empty ? ''
         : fanQuery.trim() ? `Nobody in your Crew matches "${fanQuery}".`
-        : fanOnlineOnly ? 'Nobody in your Crew is online right now. Tap Online again to see everyone.'
+        : fanOnlineOnly ? 'No recent syncs in this selection. Tap Recent syncs again to see everyone.'
         : 'Nobody in your Crew yet.';
     }
     wrap.hidden = empty;
@@ -13275,7 +13290,7 @@ async function renderFriends(el) {
         : 'Could not reach the Crew server. Tap to try again.';
       return;
     }
-    if (wait) wait.hidden = true;
+    if (wait) { wait.textContent = snapshotNotice(players); wait.hidden = false; }
     /* THE PODIUM IS THE TILE, NOT THE LIST. Two notes from Tom that read as
        opposites but are not:
          2026-08-08 "I just want it to include all players in the main list" . 
@@ -13295,7 +13310,7 @@ async function renderFriends(el) {
         <div class="lb-pod p${place}">
           <div class="pod-fig">${lbAvatar(p, 'pod-av')}</div>
           <div class="pod-name">${esc(p.name)}</div>
-          <div class="pod-lvl">Lv ${p.level}</div>
+          <div class="pod-lvl">Last shared Lv ${p.level}</div>
           <div class="pod-plinth"><span>${place}</span></div>
         </div>`;
       // 2nd, 1st, 3rd: the winner stands in the middle and higher
@@ -13309,7 +13324,7 @@ async function renderFriends(el) {
     const you = $('#lbYouAre', el);
     if (you && meIdx >= 0) {
       const ahead = meIdx > 0 ? players[meIdx - 1] : null;
-      you.innerHTML = `<b>#${meIdx + 1}</b><span>of ${players.length}${ahead ? ` · ${esc(ahead.name)} is one rung up at Lv ${ahead.level}` : ' · nobody above you'}</span>`;
+      you.innerHTML = `<b>Recorded #${meIdx + 1}</b><span>of ${players.length}${ahead ? ` · ${esc(ahead.name)} is one rung up at Lv ${ahead.level}` : ' · nobody above you'}</span>`;
       you.hidden = false;
     }
   };
@@ -13333,7 +13348,7 @@ async function renderFriends(el) {
     const outIds = new Set((data.outgoing || []).map(f => f.playerId));
     const inIds = new Set((data.incoming || []).map(f => f.playerId));
     body.innerHTML = `
-      <p class="note" style="margin:0 0 10px">Every Bonehead in the game, ranked by level. Add anyone: they accept by adding you back.</p>
+      <p class="note" style="margin:0 0 10px">${esc(snapshotNotice(players))} Ranked by last shared level. Add anyone: they accept by adding you back.</p>
       ${players.map((p, i) => {
         const btn = p.you ? '<span class="lb-tag you">You</span>'
           : friendIds.has(p.playerId) ? `<span class="lb-tag crew">${ICONS.check(11)} Crew</span>`
@@ -13356,7 +13371,7 @@ async function renderFriends(el) {
         return `<div class="lb-row${top3} ${p.you ? 'me' : ''}" ${p.you ? '' : `data-lbview="${esc(p.playerId)}"`}>
           <span class="lb-num r${rank}">${rank}</span>
           <span class="lb-head" data-lbhead="${i}" style="width:52px;height:52px"></span>
-          <div class="lb-who"><b>${esc(p.name)}${medal}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${p.spires ? ` · <span class="lb-spires">${badgePixHtml('tombstone', 11)} ${p.spires} spire${p.spires === 1 ? '' : 's'}</span>` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${ol.on ? '<i class="live-dot"></i> online' : ol.text}</span>` : ''}</small></div>
+          <div class="lb-who"><b>${esc(p.name)}${medal}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${p.spires ? ` · <span class="lb-spires">${badgePixHtml('tombstone', 11)} ${p.spires} spire${p.spires === 1 ? '' : 's'}</span>` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${esc(ol.text)}</span>` : ''}</small></div>
           ${btn}
         </div>`;
       }).join('')}`;
@@ -13449,21 +13464,10 @@ async function renderFriends(el) {
      The board is a TRACK, not a table: the fill is each racer's distance
      relative to the leader and their own Bonehead is the marker, so the GAP is
      what you read and you can see whose head is in front of yours. */
-  /* THE FROZEN ROWS EXPLAIN THEMSELVES. Tom, 2026-08-30, after playtesters
-     reported "peoples steps arent updating in the step race": production said
-     the pipeline was healthy and the stuck racers were simply players who had
-     not opened the app since the week rolled (9 of 22, none seen in 36 hours).
-     Steps are summed on the phone and pushed when the app runs, so a friend
-     who walks but does not open Boneheadz shows a frozen number. That is the
-     design; what was missing was the row SAYING so. The server now sends each
-     racer's last_seen, and a row older than three hours wears its age, so a
-     frozen number reads as "has not checked in", never as a broken race. */
-  const raceFreshHtml = p => {
-    if (p.you || !p.seenAt) return '';
-    const h = (Date.now() - p.seenAt) / 3600000;
-    if (h < 3) return '';
-    const label = h < 24 ? `synced ${Math.round(h)}h ago` : `last seen ${Math.round(h / 24)}d ago`;
-    return `<span class="race-fresh">${label}</span>`;
+  // A race snapshot says what reached the server, not when somebody played.
+  const raceFreshHtml = (p, local = false) => {
+    if (local) return '<span class="race-fresh">On this phone</span>';
+    return `<span class="race-fresh">${esc(onlineLabel(p.seenAt).text)} · recorded steps</span>`;
   };
   const hydrateRace = async () => {
     if (!RACE_LIVE) return;
@@ -13536,6 +13540,8 @@ async function renderFriends(el) {
        "unranked", never a made-up position. */
     const own = await weekStepsNow();
     const { rows, mine, behind, standing, aboveName } = social.raceStanding(race.players || [], race, wk, own, await social.displayName(), myFit, ordinal, esc);
+    const comparisonsFresh = (race.players || []).every(p => onlineLabel(p.seenAt).fresh);
+    const raceNotice = snapshotNotice(race.players || [], 'seenAt');
     const lead = rows.length ? rows[0].steps : 0;
     /* CREW-3: on a device's first-ever race week, a gap (to first OR to the
        lane above) is a number about a stranger's whole week against a few
@@ -13554,11 +13560,12 @@ async function renderFriends(el) {
         <span class="gbn-ico race-ico">${badgePixHtml('badge-footprint', 24)}</span>
         <span class="gbn-txt">
           <span class="race-h"><b>THE STEP RACE</b><span class="race-clock">${clock.toUpperCase()}</span></span>
-          <small>${standing}</small>
+          <small>${!rows.length ? 'No steps have reached this board yet.' : comparisonsFresh ? 'Last shared standings: ' + standing : 'Standings await recent updates.'}</small>
         </span>
         <span class="gbn-chev">›</span>
       </summary>
       <div class="gbn-body">
+        <p class="note">${esc(raceNotice)}</p>
         ${race.champion ? `<div class="race-champ">${badgePixHtml('badge-trophy', 22)}
           <span>Last race <b>${esc(race.champion.name)}</b> took it with ${race.champion.steps.toLocaleString()} steps.</span></div>` : ''}
         ${rows.length ? `<div class="race-lanes">
@@ -13583,16 +13590,16 @@ async function renderFriends(el) {
             const open = p.playerId && !p.you;
             const tag = open ? 'button' : 'div';
             return `<${tag} class="race-lane r${p.rank}${p.you ? ' you' : ''}${open ? ' tap' : ''}"${open ? ` type="button" data-raceview="${esc(p.playerId)}"` : ''}>
-              <span class="rk">${p.rank}</span>
+              <span class="rk" aria-label="Recorded rank ${p.rank}">${p.rank}</span>
               <div class="bd">
-                <div class="nm"><b>${esc(p.name)}</b>${raceFreshHtml(p)}<span class="st">${p.steps.toLocaleString()}</span></div>
-                <div class="track"><i style="width:${pct}%"></i>
+                <div class="nm"><b>${esc(p.name)}</b>${raceFreshHtml(p, !(race.players || []).includes(p))}<span class="st">${p.steps.toLocaleString()}</span></div>
+                ${comparisonsFresh ? `<div class="track"><i style="width:${pct}%"></i>
                   <span class="run" style="left:${pct}%">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG', 'C'], foreign: true })}</span>
-                </div>
+                </div>` : ''}
               </div>
             </${tag}>`;
           }).join('')}
-        </div>` : '<p class="note" style="margin:0">Nobody has walked a step yet this race. The top of this board is going spare.</p>'}
+        </div>` : '<p class="note" style="margin:0">No steps have reached this board yet.</p>'}
         ${/* CREW-3: a brand-new player got "196,000 behind Howling Fibula. About
              2084 minutes of walking" -- a whale's whole week measured against a
              few hours of theirs. First week: say what is true and encouraging
@@ -13602,7 +13609,7 @@ async function renderFriends(el) {
              anyone would act on. */ ''}
         ${firstRace
           ? `<div class="race-gap">Your first race${friendCount ? `. ${friendCount} friend${friendCount === 1 ? '' : 's'} ${friendCount === 1 ? 'is' : 'are'} in it` : ''}.</div>`
-          : behind ? `<div class="race-gap">You are <b>${behind.toLocaleString()} steps</b> behind ${esc(aboveName || 'the racer above you')}${behind / 5500 * 60 <= 60 ? ` · about <b>${Math.max(1, Math.round(behind / 5500 * 60))} minutes</b> of walking` : ''}.</div>` : ''}
+          : comparisonsFresh && behind ? `<div class="race-gap">At last sync, you were <b>${behind.toLocaleString()} steps</b> behind ${esc(aboveName || 'the racer above you')}${behind / 5500 * 60 <= 60 ? ` · about <b>${Math.max(1, Math.round(behind / 5500 * 60))} minutes</b> of walking` : ''}.</div>` : ''}
         ${podium.length ? `<div class="race-purse">
           <span class="lab">When it settles, the top ${podium.length} take</span>
           <div class="rows">
@@ -13614,7 +13621,7 @@ async function renderFriends(el) {
             </div>`).join('')}
           </div>
         </div>` : ''}
-        <p class="note" style="margin:10px 2px 0">Everyone playing is in it. Steps count from the day the race starts.</p>
+        <p class="note" style="margin:10px 2px 0">This board uses shared step totals. Steps count from the day the race starts.</p>
       </div>`;
     card.hidden = false;
     composeAvatars(card);
@@ -13634,7 +13641,7 @@ async function renderFriends(el) {
       const p = rows.find(x => x.playerId === lane.dataset.raceview);
       if (!p) return;
       openFriendProfile(
-        { name: p.name, playerId: p.playerId, addToken: p.addToken,
+        { name: p.name, playerId: p.playerId, addToken: p.addToken, lastSeen: p.seenAt,
           profile: { outfit: p.outfit, pet: p.pet, level: p.level, levelName: p.levelName,
             badges: p.badges, stats: p.stats, gearCount: p.gearCount } },
         null,
@@ -13655,37 +13662,19 @@ async function renderFriends(el) {
     const card = $('#newcomersCard', el), list = $('#newcomersList', el);
     if (!card || !list || !card.isConnected || !players) return;
     const known = new Set([...(data.friends || []), ...(data.outgoing || [])].map(f => f.playerId));
-    /* WORTH ADDING, not merely NEW.
-       v281 showed "joined this week", which on a pre-launch community meant the
-       card was hidden almost every week. v285 dropped the window entirely, and
-       that surfaced the opposite problem: Tom, 2026-08-08, "the new player
-       feature needs work and im pretty sure youre still adding ghost accounts
-       because it's just showing bot lvl 1s in there."
-       Registration has been gated to onboarding-completion since v279, so these
-       are not phantom rows: they are real accounts that finished onboarding and
-       never came back. Adding one gets you a Crew member who will never play.
-       So the bar is EVIDENCE OF PLAY: past level 1, or seen in the last fortnight.
-       Newest first among those who qualify. */
-    /* EVIDENCE OF PLAY, not evidence of arrival. v286 accepted "seen in the last
-       fortnight", which every brand-new signup passes by definition, so the
-       section filled with real-but-untouched level-1 accounts and read as bots
-       (Tom, 2026-08-08: "youre clearly still making random lvl 1 bots... and
-       flooding the new who's new section". Checked: 41 players before two full
-       test runs and 41 after, so the accounts are real installs, not my tests.
-       The complaint stands either way.)
-       The bar is now something you can only get by PLAYING: past level 1, or you
-       came back on a later day than you joined. */
+    // Discovery eligibility uses recorded progress or a later server contact.
+    // Neither condition establishes whether somebody is playing now.
     const DAY = 86400000;
-    const playing = p => (p.level || 1) > 1 || (p.lastSeen && p.joinedAt && p.lastSeen - p.joinedAt > DAY);
+    const hasSharedProgress = p => (p.level || 1) > 1 || (p.lastSeen && p.joinedAt && p.lastSeen - p.joinedAt > DAY);
     const fresh = players
-      .filter(p => !p.you && !known.has(p.playerId) && playing(p))
+      .filter(p => !p.you && !known.has(p.playerId) && hasSharedProgress(p))
       .sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0))
       .slice(0, 5);
     if (!fresh.length) { card.hidden = true; return; }
     const rowHtml = p => `
       <div class="t3-row">
         ${lbAvatar(p, 'lb-av')}
-        <div class="t3-tx"><b>${esc(p.name)}</b><small>Level ${p.level}${p.badges ? ` · ${p.badges} badges` : ''} · ${esc(onlineLabel(p.lastSeen).text || 'online now')}</small></div>
+        <div class="t3-tx"><b>${esc(p.name)}</b><small>Last shared level ${p.level}${p.badges ? ` · ${p.badges} badges` : ''} · ${esc(onlineLabel(p.lastSeen).text)}</small></div>
         <button class="btn ghost" data-lbadd="${esc(p.addToken)}">+ ADD</button>
       </div>`;
     /* CREW-8, 2026-09-05: five rows of strangers cost 470px and were the single
@@ -13836,6 +13825,7 @@ function openFriendProfile(f, onChange, opts = {}) {
         <div class="fp-lvlbadge">Lv ${p.level ?? '?'}</div>
       </div>
       <div class="fp-title"><div class="fp-class">${p.title ? `${esc(p.title)} · ` : ''}${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal" hidden></div></div>
+      <p class="note" style="text-align:center">${esc(snapshotDetail(f.lastSeen))}</p>
       ${spireHtml}
 
       ${hasFightableStats(p.stats) && p.outfit ? `<button class="btn fp-battle" id="fpBattle">${ICONS.pit(18)} Battle their bonehead</button>` : ''}
@@ -13865,7 +13855,7 @@ function openFriendProfile(f, onChange, opts = {}) {
 
       ${yardHtml}
 
-      ${statBars ? `<div class="fp-stats-h">Stats</div><div class="fp-statbars">${statBars}</div>` : '<p class="note" style="text-align:center">Their stats will show once they next open the app.</p>'}
+      ${statBars ? `<div class="fp-stats-h">Stats</div><div class="fp-statbars">${statBars}</div>` : '<p class="note" style="text-align:center">No stats have reached this profile yet.</p>'}
 
       ${stranger ? '' : `<div class="fp-alias">
         <div class="nb-lab">Your nickname for them <span class="fp-alias-hint">only you see this</span></div>
@@ -20116,7 +20106,8 @@ async function openFriendPaddock(f) {
       ${paddockSceneHtml({ roster, places, eggCount: 0, eq: p.outfit || { B: 'B0-1', SK: 'SK0-1' }, keeper: PDK_SCENE.KEEPER, visitor: eqVisitor })}
       <div class="pdk-panel fpdk-note">
         <b>${yard.n} PET${yard.n === 1 ? '' : 'S'}</b>
-        ${out < yard.n ? `<p class="note">${out} out in the field right now</p>` : ''}
+        <p class="note">${esc(snapshotDetail(f.lastSeen))}</p>
+        ${out < yard.n ? `<p class="note">${out} shown from their shared paddock</p>` : ''}
       </div>
     </div>`, { cls: 'sheet-paddock pet-a11y' });
 }
@@ -22891,11 +22882,14 @@ async function renderBoneyard(el) {
           const race = await social.fetchStepRace(wk);
           const rows = (race && race.players) || [];
           const mine = rows.find(p => p.you);
+          const comparisonsFresh = rows.length && rows.every(p => onlineLabel(p.seenAt).fresh);
           const lead = rows.length ? rows[0].steps : 0;
-          mapRace = !mine ? null
+          mapRace = !rows.length ? null
+            : !comparisonsFresh ? 'Step race updates may be delayed.'
+            : !mine ? null
             : lead > mine.steps
-              ? `<b>${ordinal(race.yourRank)}</b> · ${(lead - mine.steps).toLocaleString()} behind ${esc(rows[0].name)}`
-              : `<b>1st</b> in the step race · hold it`;
+              ? `Last shared: <b>${ordinal(race.yourRank)}</b> · ${(lead - mine.steps).toLocaleString()} behind ${esc(rows[0].name)}`
+              : `Last shared: <b>1st</b> in the step race`;
         }
       } catch { mapRace = null; }
       try {
@@ -24476,7 +24470,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v529'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v530'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
