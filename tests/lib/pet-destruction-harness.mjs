@@ -54,7 +54,13 @@ export async function stable(roster, mode='destroy') {
   const end=app.indexOf(mode==='destroy'?"    $$('[data-offsp]', body).forEach":"    $$('[data-petpick2]', body).forEach", start);
   vm.runInContext(app.slice(start,end),context);
   return {messages,sheets,results,button,
-    click:()=>button.events.click({currentTarget:button}),
+    click:()=>{
+      const event={currentTarget:button,target:button};
+      // DOM dispatch does not await listeners. currentTarget is cleared before
+      // their promise resumes; target remains the original dispatch target.
+      try { return button.events.click(event); }
+      finally { event.currentTarget=null; }
+    },
     get review(){return current;},
     get disclosure(){return current?.nodes['.lab-review'].innerHTML || messages.join(' ');},
     type(value){current.nodes['#pdIn'].value=value;current.nodes['#pdIn'].events.input();},

@@ -21188,9 +21188,9 @@ async function openStable(opts = {}) {
     $$('[data-offsp]', body).forEach(c => c.addEventListener('click', () => { offSp = c.dataset.offsp; render(); }));
     $('#doBreed', body)?.addEventListener('click', async e => {
       const keepIid = offSp, feedIid = sel.find(x => x !== offSp);
+      const btn = e.currentTarget;
       const fresh = await quotePetDestruction(feedIid, keepIid);
       if (!fresh.ok) { toast('Could not review that pet.'); return; }
-      const btn = e.currentTarget;
       const reviewFor = q => ({
         title: `Feed ${petDestructionName(q)} in?`,
         html: `${petDestructionHtml(q)}<p>Your keeper gains a lineage rank. ${q.inst.shiny ? 'Shinies are about a 1 in 30 hatch and its colour will NOT carry over. ' : ''}${q.inst.lineage ? 'Its bloodline is lost; lineage does not transfer. ' : ''}Feed a plain spare in instead unless you are sure.</p>`,
