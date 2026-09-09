@@ -1,5 +1,20 @@
 # What each patch note claims, and what backs it
 
+## v533 (2026-09-09)
+
+1. PROOF: fontscale-audit.mjs | REACH: A full census measured 0 of 415 elements scaling on v516 and 5 of 427 on v529, with 680 of 899 `font-size` declarations hardcoded px. The type ramp is converted so text follows the system text-size setting. Fixed art dimensions, borders and pixel-art sizes are deliberately NOT swept up. The census is now a guard with a floor rather than a one-off measurement. **Visual review across every screen is owed and NOT done: no lane could render, and scaling text inside hand-tuned fixed-size surfaces is exactly where this breaks.**
+2. PROOF: boneyard-zoom-audit.mjs | REACH: Pinch-zoom is permitted on the Boneyard and refused elsewhere, per Tom's ruling. `tests/fontscale-audit.mjs` previously ASSERTED `user-scalable=no` must be present, so anyone fixing zoom broke the suite; it now records the policy instead of requiring it. Real pinch gestures are unverified: device proof is owed.
+3. PROOF: lab-lock-recovery-audit.mjs | REACH: `animate()` is two transactions and a crash left the `labIntents` fence behind, with recovery clearing it only on an exact pinned-context match. Measured 8 of 28 kills locked, including 6 of 6 taken mid-transaction, and boot-time auto-equip could trigger it with zero player action. Recovery no longer depends on an exact match, and the control, nickname-first and auto-equip arms all recover.
+4. PROOF: lab-conflict-audit.mjs | REACH: Two offline devices could each take slot 1 of the same day, the account got two free experiments, and in the same-pair arm the same two pets were destroyed twice. On reconnect the losing device was permanently refused with `backupAt` 0 while Settings read "your progress is safe and it keeps retrying", which could never succeed. The refusal is kept, because it protects data; the dead end and the false copy are gone.
+5. PROOF: r3-rest-audit.mjs | REACH: `hasCloudBackup()` returned true on `r.ok` without reading the body, so a bare `{"ok":true}` rendered "a cloud backup does exist" on the screen before irreversible destruction; it now treats an unreadable shape as "cannot confirm". The refused restore explains itself rather than printing `laboratory-restore-conflict`. The destroy escalation gate now includes nickname and bond, matching its own disclosure.
+
+6. PROOF: r3-rest-audit.mjs | REACH: The Stable's `isKnownPet` filter and its warning were unreachable because `petInstances()` already filters, v528's crew change left the wire payload shipping data the UI no longer shows, and `js/pets.js` claimed "5 morphs = 30 pairs" while the code correctly uses 6. Each corrected; the dead guard's disposition is recorded rather than silently deleted.
+
+378 unit assertions, 0 failures, all 142 PURE entries exit 0. Two audits were
+found belonging to no running tier after a conflict resolution dropped their
+registrations, and one new audit lacked the positive CONTROL row the project
+requires; both were corrected before this gate, not waived.
+
 ## v532 (2026-09-09)
 
 1. PROOF: breed-two-tap-audit.mjs, after-await-event-lint.mjs | REACH: `#doBreed` read `e.currentTarget` AFTER an `await`, by which point dispatch had completed and it was null, so the next `.dataset` read threw on every tap, before arming, before the review, and before `breedPets` was ever called. Nothing changed on screen; the only signal was a console error. Verified independently against live `origin/main` before the fix. The capture now happens before the first await, as v516 had it. The guard drives the REAL handler through a full two-tap breed and asserts the roster actually changes, which is what a registration-only or no-exception test would have missed. A second lint fails on any async listener reading `currentTarget` after an await, so the class cannot return.

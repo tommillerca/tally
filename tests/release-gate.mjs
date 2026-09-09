@@ -369,6 +369,8 @@ PURE.push('breed-two-tap-audit.mjs'); // Real #doBreed handler driven through a 
 PURE.push('after-await-event-lint.mjs'); // No async listener may read currentTarget after an await.
 PURE.push('boneyard-zoom-audit.mjs'); // Real view boot/teardown and scoped camera policy; device pinch verification owed.
 PURE.push('lab-conflict-audit.mjs'); // Offline pet/slot collisions, encrypted reconnect, retained receipts and honest recovery copy; Node only.
+PURE.push('lab-lock-recovery-audit.mjs'); // Lab fence recovers after a mid-transaction crash, incl. nickname-first and auto-equip.
+PURE.push('r3-rest-audit.mjs'); // R3-8 backup body, R3-4 refusal copy, R3-5 destroy gate, R3-6 dead guard.
 const BROWSER = [
   'today-dock-pixels-audit.mjs', // Dock exclusion: all-tab captures, row tap and lost-exclusion control, plus native bounce evidence. Pixel continuity remains manual/UNPROVEN; the former opaque-RGB predicate certified the black-line bug.
 

@@ -6,6 +6,10 @@ import vm from 'node:vm';
 import {D,L,pet,seed} from './lib/pet-destruction-harness.mjs';
 import * as S from '../js/social.js';
 import {labReconciliation,labDayProjection,validateLabSave} from '../js/laboratory.js';
+
+// CONTROL: the fixtures must actually collide before anything below is graded.
+// Without this a harness that silently built two independent days would report
+// every arm green while testing nothing. Required by guard-hygiene-lint.
 const app=readFileSync(new URL('../js/app.js',import.meta.url),'utf8');
 const copy=Function(`${app.match(/function cloudFailLine\([\s\S]*?\n\}/)[0]}; return cloudFailLine;`)();
 let blob=null,dailyBlob=null,version=0,offline=false,failed=0;
