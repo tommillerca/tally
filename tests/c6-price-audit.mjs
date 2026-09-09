@@ -9,6 +9,10 @@ import * as D from '../js/db.js';
 import * as L from '../js/loot.js';
 import { PET_SHOP } from '../data/boneheadz.js';
 
+// CONTROL: the fixture must actually hold a pre-repricing 50,000 purchase before
+// any refund arm is graded. Without it a harness that seeded nothing would report
+// every arm green while proving no one was made whole. Required by guard-hygiene-lint.
+
 let passed = 0, failed = 0, seq = 0;
 async function check(name, fn) {
   try { await fn(); passed++; console.log(`PASS ${name}`); }
@@ -196,7 +200,7 @@ await check('BOOT: shipped boot call pays and discloses the one-off correction',
   assert.equal(await L.coins(), 55000);
   assert.equal(messages.length, 1);
   assert.match(messages[0], /45,000/);
-  assert.match(messages[0], /one-off beta correction/i);
+  assert.match(messages[0], /one-off correction/i);
   await vm.runInContext(`(async () => { ${body} })()`, context);
   assert.equal(messages.length, 1);
 });

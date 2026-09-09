@@ -1,5 +1,22 @@
 # What each patch note claims, and what backs it
 
+## v534 (2026-09-09)
+
+1. PROOF: c6-price-audit.mjs | REACH: C6 Bumbleseal cost 50,000 coins while being obtainable free from the ordinary egg pool. Repriced to 5,000, and anyone who paid the old price is credited the 45,000 difference exactly once, keeping their pet and all progress. Measured from production analytics before the change: `buy_pet` with `{"id":"C6","cost":50000}` fired 5 times across 5 distinct devices, so the refund population is small and the entitlement, not a server count, decides who is owed. A replayed refund grants nothing, an aborted credit burns no entitlement and can retry, and a player who hatched C6 free is owed nothing.
+
+**The cosmetic-only conflict is NOT resolved by this release and is not claimed
+to be.** C6's `PET_STATS.mult` is 1.15, so selling it at any price still sells
+power. This release corrects an indefensible price; it does not make the product
+compliant with the never-sell-power rule. That decision is still open.
+
+Two documents also land: `docs/reviews/boneyard-critique.md`, which recommends
+NOT building the proposed Boneyard coin sink, and `docs/BACKLOG.md`, a triage of
+the previously unreadable open-feedback list.
+
+379 unit assertions, 0 failures, all 143 PURE entries exit 0. This was the first
+clean multi-lane assembly of the day: the lanes were grouped by changed-file
+overlap rather than by clock, and zero cherry-picks conflicted.
+
 ## v533 (2026-09-09)
 
 1. PROOF: fontscale-audit.mjs | REACH: A full census measured 0 of 415 elements scaling on v516 and 5 of 427 on v529, with 680 of 899 `font-size` declarations hardcoded px. The type ramp is converted so text follows the system text-size setting. Fixed art dimensions, borders and pixel-art sizes are deliberately NOT swept up. The census is now a guard with a floor rather than a one-off measurement. **Visual review across every screen is owed and NOT done: no lane could render, and scaling text inside hand-tuned fixed-size surfaces is exactly where this breaks.**

@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 534, date: '2026-09-09', title: 'Bumbleseal costs what it is worth', items: [
+    'Bumbleseal was 50,000 coins from the shop, back when that was the only way to get one. It hatches from ordinary eggs now, so it costs 5,000. If you paid the old price, the 45,000 difference is back in your wallet and you keep the pet and everything you did with it.',
+  ] },
+
   { n: 533, date: '2026-09-09', title: 'Text that grows, a room that unlocks itself', items: [
     'Text now follows your phone\'s text-size setting. Almost none of it did before: five elements out of 427. If you use larger text, the whole app should finally read properly.',
     'You can pinch to zoom on the Boneyard.',

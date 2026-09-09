@@ -1813,7 +1813,7 @@ async function boot() {
   if (merch) setTimeout(() => toast(`The Bone Merchant has closed. Your ${merch.weapons.length} weapon${merch.weapons.length === 1 ? ' has' : 's have'} been refunded in full: +${merch.coins.toLocaleString()} coins${merch.dust ? ` and +${merch.dust} Bone Dust` : ''}. Strength comes from your stats, talents and the gear you can see now.`, 6400), init && init.xp > 0 ? 5600 : 3000);
   // C6 BETA CORRECTION BEGIN
   const c6Refund = await refundC6BetaPrice();
-  if (c6Refund) setTimeout(() => toast(`Bumbleseal now costs 5,000 coins. Your 45,000-coin difference is back. Your pet and progress stay yours. This is a one-off beta correction; future price drops will not be refunded.`, 7500), 6500);
+  if (c6Refund) setTimeout(() => toast(`Bumbleseal now costs 5,000 coins. Your 45,000-coin difference is back. Your pet and progress stay yours. This is a one-off correction; future price drops will not be refunded.`, 7500), 6500);
   // C6 BETA CORRECTION END
   /* Give back the Gauntlet ceiling the cell-scoped gate marker swallowed. See
      backfillDenCeilingIfNeeded: a player who beat the same cell's boss week
@@ -24502,7 +24502,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v533'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v534'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
