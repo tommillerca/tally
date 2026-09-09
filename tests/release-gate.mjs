@@ -275,6 +275,7 @@ const PURE = [
   'render-sink-lint.mjs', 'lapse-witness-audit.mjs', 'spawn-claim-atomic-audit.mjs', 'wardrobe-family-audit.mjs', 'football-kit-audit.mjs', 'restore-latch-audit.mjs',
   'first-pet-audit.mjs', 'shop-economy-audit.mjs', 'recovery-status-audit.mjs', 'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs', 'take-and-pay-audit.mjs',
 ];
+PURE.push('c6-price-audit.mjs'); // One-off beta correction: real purchase, hatch, refund, retries, abort, merge and boot disclosure.
 PURE.push('pet-morph-animation-audit.mjs'); // 2026-09-08: selective layers, named fallback and neutral-rest width controls; no browser.
 PURE.push('pet-palette-audit.mjs'); // r56 B1: actual PNG pairs and shipped-art CONTROL; offline Python image reads.
 PURE.push('fontscale-audit.mjs'); // Full source census, 100% scaling ratchet, Dynamic Type root and fixed-art controls; no rendering.

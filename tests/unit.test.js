@@ -72,6 +72,12 @@ let passed = 0, failed = 0;
 const QUEUE = [];
 function test(name, fn) { QUEUE.push([name, fn]); }
 
+test('C6 beta price correction drives real purchases, free hatches and exactly-once refunds', () => {
+  const output = execFile_.execFileSync(process.execPath,
+    [join(here, 'c6-price-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /C6 price audit: 11 passed, 0 failed/);
+});
+
 test('missing social identity recovers on resume with the existing signing key', () => {
   const output = execFile_.execFileSync(process.execPath,
     [join(here, 'sync-identity-audit.mjs')], { encoding: 'utf8' });
