@@ -9165,9 +9165,9 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 #stableBody .stable-room b { font: 400 .96875rem/1.2 var(--display); letter-spacing: .02em; }
 #stableBody .stable-room small { color: var(--dim); font: 600 .6875rem/1.4 system-ui, sans-serif; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 #stableBody .stable-room .new-dot { top: 7px; right: 7px; width: 13px; height: 13px; background: var(--coral); box-shadow: 0 0 0 2px var(--surface-2); }
-#stableBody .stable-help { margin-top: 8px; border-block: 1px solid var(--line); font-size: .8125rem; line-height: 1.5; }
-#stableBody .stable-help summary, #stableBody .stable-help .link { min-height: 44px; padding: 12px 0; }
-#stableBody .stable-help p { margin: 0 0 10px; }
+#stableBody .stable-help, #chContent .stable-help { margin-top: 8px; border-block: 1px solid var(--line); font-size: .8125rem; line-height: 1.5; }
+#stableBody .stable-help summary, #stableBody .stable-help .link, #chContent .stable-help summary { min-height: 44px; padding: 12px 0; }
+#stableBody .stable-help p, #chContent .stable-help p { margin: 0 0 10px; }
 #stableBody button:focus-visible, #stableBody [tabindex]:focus-visible, #stableBody summary:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
   #stableBody *, #stableBody *::before, #stableBody *::after { animation: none !important; transition: none !important; }

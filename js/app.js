@@ -16928,6 +16928,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     const mogBarHtml = () => {
       if (!mogOn) return '';
       const { sel, cost, afford, changed } = mogState();
+      if (!changed) return '';
       return `<div class="look-bar mog-bar${changed ? ' armed' : ''}">
             <div class="mog-lines">
               <span><i>You keep</i><b>${wornGear ? gearLabel(wornGear) : 'every piece you own'}</b></span>
@@ -17083,11 +17084,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
           ? `<button class="fit-chip reset" data-fit-reset="1" title="Unequip everything, gear included. Nothing is lost: it all stays in your Backpack.">Take it all off</button>`
           : ''}
       </div>
-      ${fitList.length ? `<p class="note fit-note">Tap a fit to wear it. A fit brings its gear back to empty slots and never bumps gear you are already wearing. Long-press a fit to rename or bin it.</p>` : ''}
-      ${/* v425: fits record gear now. An older fit has no gear map, so after
+      ${fitList.length ? `<details class="stable-help">
+        <summary>How fits work</summary>
+        <p class="note fit-note">Tap a fit to wear it. A fit brings its gear back to empty slots and never bumps gear you are already wearing. Long-press a fit to rename or bin it.</p>
+        ${/* v425: fits record gear now. An older fit has no gear map, so after
             Take it all off it can only bring back part of the look; one quiet
             line tells the player the re-save fixes it. No migration, no modal. */''}
-      ${fitList.some(f => !f.gear) ? `<p class="note fit-note">Fits saved a while ago remember only the look. Put one on, gear up, and save it again to keep the gear with it.</p>` : ''}`;
+        ${fitList.some(f => !f.gear) ? `<p class="note fit-note">Fits saved a while ago remember only the look. Put one on, gear up, and save it again to keep the gear with it.</p>` : ''}
+      </details>` : ''}`;
 
     content.innerHTML = `
       ${fitRail}
@@ -17294,6 +17298,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
                 way as the v2 panel's tiles (QA round 22 W13b) */''}
           ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${costTag(i.id)}`, i.name)).join('')}
         </div>
+        ${changed ? `
         <div class="look-bar${changed ? ' armed' : ''}">
           <span class="lb-txt">${changed ? 'Trying' : 'Wearing'}: <b>${esc(nameOf(sel))}</b></span>
           ${changed
@@ -17301,7 +17306,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
                 ? `<button class="btn" data-look-apply="${esc(sel)}" data-look-price="${cost || 0}">${cost ? `Wear it · ${cost} dust` : 'Wear it · free'}</button>`
                 : `<button class="btn ghost" disabled>Need ${cost} dust · you have ${dustBal}</button>`)
             : ''}
-        </div>
+        </div>` : ''}
         <p class="note" style="text-align:center;margin-top:8px">${wornGear
           ? `Your ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} keeps <b>${gearLabel(wornGear)}</b> whatever it looks like. Trying one on is free, you only spend Bone Dust when you wear it. You have <b><span class="dust-ico">${ICONS.dust(12)}</span> ${dustBal}</b>.`
           : `Nothing with stats in this ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} slot, so a look here is only a look: <b>switching is free</b>.`}${arts.length ? '' : ' No other looks collected for this slot yet, keep hunting.'}</p>`;
@@ -17645,8 +17650,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
          a look tap replaced the team bar with a copy of this one and left the real
          one stale (dressing-room-audit PICK, 2026-09-06, "You get Boneyard Bruisers
          Cleats, as equipped" after tapping Thornback Toads). */
-      const panel = $('.mog-panel', content), figs = $('.mog-figs', content), bar = $('.mog-dock > .mog-bar', content);
-      if (!done || !panel || !figs || !bar) { renderCharacter(wrap, 'wardrobe', { instant: true }); return; }
+      const panel = $('.mog-panel', content), figs = $('.mog-figs', content), dock = $('.mog-dock', content);
+      if (!done || !panel || !figs || !dock) { renderCharacter(wrap, 'wardrobe', { instant: true }); return; }
       const { cur, sel } = mogState();
       figs.innerHTML = mogFigsHtml();
       for (const c of $$('[data-look]', panel)) {
@@ -17661,7 +17666,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
         const tag = $('.look-cost', c);
         if (tag && lookPriceMap[c.dataset.look] !== undefined) tag.outerHTML = costTag(c.dataset.look);
       }
-      bar.outerHTML = mogBarHtml();
+      // No bar on arrival or after reverting/committing. Insert it directly in
+      // the dock on the first choice, preserving the sticky travel and the doll.
+      const bar = $('.mog-dock > .mog-bar', content);
+      if (bar) bar.outerHTML = mogBarHtml();
+      else dock.insertAdjacentHTML('beforeend', mogBarHtml());
       wireMogBar();
       if (committed) {
         const pill = $('.ward-dust', wrap);
