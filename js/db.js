@@ -1274,30 +1274,52 @@ export async function readFileSave() {
   });
 }
 
-// Separate from the imported stores, scoped to this database, and append-only.
-// No retention eviction: a full/disabled localStorage refuses the import.
+// Separate from the imported stores and scoped to this database. Keep the two
+// newest readable points. Unreadable entries are reported and left recoverable.
 const filePointPrefix = () => `tally-file-restore:${encodeURIComponent(dbName)}:`;
 export function fileRestorePoints() {
   const points = [];
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
     if (key?.startsWith(filePointPrefix())) {
-      const point = JSON.parse(localStorage.getItem(key));
-      if (!point?.data || STORES.some(s => !Array.isArray(point.data[s]))) throw new Error('A restore point could not be read.');
-      points.push({ ...point, key });
+      try {
+        const point = JSON.parse(localStorage.getItem(key));
+        if (typeof point?.createdAt !== 'string' || !Number.isFinite(Date.parse(point.createdAt)) ||
+            !point?.data || STORES.some(s => !Array.isArray(point.data[s]))) {
+          throw new Error('A restore point could not be read.');
+        }
+        points.push({ ...point, key });
+      } catch {
+        console.warn(`Skipping unreadable restore point ${key}. Its stored data has been kept for recovery.`);
+      }
     }
   }
-  return points.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return points.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 export function saveFileRestorePoint(data) {
   if (frozen) throw frozenError();
-  const point = { createdAt: new Date().toISOString(), data };
-  const key = filePointPrefix() + newId();
+  let point, key, previous, wrote = false;
   try {
+    const points = fileRestorePoints();
+    // Strict ordering also covers rapid clicks and a clock moved backwards.
+    point = { createdAt: new Date(Math.max(Date.now(), points.length ? Date.parse(points[0].createdAt) + 1 : 0)).toISOString(), data };
     const bytes = JSON.stringify(point);
+    // Upgrade append-only histories before writing, including quota-full ones.
+    for (const old of points.slice(2)) localStorage.removeItem(old.key);
+    // Reuse the older slot: setItem replaces atomically on quota failure and
+    // never needs space for a third full snapshot. The newest point stays safe.
+    key = points[1]?.key || filePointPrefix() + newId();
+    previous = localStorage.getItem(key);
     localStorage.setItem(key, bytes);
+    wrote = true;
     if (localStorage.getItem(key) !== bytes) throw new Error('Restore point verification failed');
   } catch {
+    if (wrote) {
+      try {
+        if (previous == null) localStorage.removeItem(key);
+        else localStorage.setItem(key, previous);
+      } catch { console.warn(`Could not recover restore point slot ${key} after a storage failure.`); }
+    }
     throw new Error('Could not save a restore point (storage is full or unavailable). Nothing was replaced. Free device storage and try again.');
   }
   return { ...point, key };

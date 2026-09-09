@@ -376,6 +376,9 @@ PURE.push('boneyard-zoom-audit.mjs'); // Real view boot/teardown and scoped came
 PURE.push('lab-conflict-audit.mjs'); // Offline pet/slot collisions, encrypted reconnect, retained receipts and honest recovery copy; Node only.
 PURE.push('lab-lock-recovery-audit.mjs'); // Lab fence recovers after a mid-transaction crash, incl. nickname-first and auto-equip.
 PURE.push('r3-rest-audit.mjs'); // R3-8 backup body, R3-4 refusal copy, R3-5 destroy gate, R3-6 dead guard.
+PURE.push('r4-restore-audit.mjs'); // R4-7/R4-9: quota-bounded history, exact undo and isolated malformed entries. R4-10 separately remains blocked by the frozen app.js boundary.
+PURE.push('reachable-density-audit.mjs'); // R4-21: guards the shared reachability METER with dense/sparse controls; shipped spacing is a deferred MODEL finding.
+PURE.push('native-shell-comment-audit.mjs'); // R4-21: remote iOS shell cannot claim a wrapped web build; mutation controls.
 PURE.push('hand-registration-audit.mjs'); // R4: off-hand and right-hand registration census against the raised fist.
 const BROWSER = [
   'today-dock-pixels-audit.mjs', // Dock exclusion: all-tab captures, row tap and lost-exclusion control, plus native bounce evidence. Pixel continuity remains manual/UNPROVEN; the former opaque-RGB predicate certified the black-line bug.
@@ -661,6 +664,7 @@ function failLines(out) {
    HELPERS, which is a list of modules that assert nothing and are imported by
    the checks themselves. A new guard is covered whatever it is called. */
 const HELPERS = new Set([
+  'reachable-density-model.mjs', // density instrument; reports the deferred spacing finding without assertions
   'release-gate.mjs',  // this file
   'store-copy-scan.mjs', // shared reachability scanner for store-copy-lint and native submission preflight; no assertions of its own
   'audit-lifecycle.mjs', // shared process receipt, preloaded for every tier
@@ -710,6 +714,7 @@ const onDisk = (await readdir(here))
  * 1, in the gate itself. The complement cannot be computed AND have teeth. One line
  * per file is the price, and it puts each omission on the record as a decision. */
 const DECLARED = {
+  'reachable-density-model.mjs': ['skip', 'a balance MODEL, not a guard: the shipped route scores 0.568 spawns/fix against a floor of 1 (N=400). This is the finding rather than a failure; the spacing decision is deferred by the product owner, Tom. Reports the gap and synthetic controls, asserting nothing about the app. reachable-density-audit.mjs guards the shared meter in PURE.'],
   'hand-registration-audit.mjs': ['fast', 'every off-hand (IL) and right-hand (IR) sprite is scored against the raised fist on B0-1: item ink inside the fist core and in a 14px ring around it. Catches a garment drawn out of registration with the hand. Red before: IL10-1/2 scored ring=0 (the toothbrush touched the hand nowhere) and IL17-1/2 ring=267 (the spade grazed a knuckle). Node-only pixel census with dilation controls.'],
   'serve-tree-identity-audit.mjs': ['full', 'R3: binds real Python/Node loopback sockets to prove wrong-tree refusal, read-only serving and child exit. Includes the server exit proof moved out of unit.test.js; cannot run in socket-denied PURE environments.'],
   'pet-talent-ui-audit.mjs': ['full', 'Lane A: operates Stable talent controls, rejects stale levels, reopens saved choices and checks the duplicate in a real fight.'],
