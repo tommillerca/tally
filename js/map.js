@@ -82,6 +82,8 @@ export function createBoneyardMap(maplibregl, container, { lat, lng }) {
     pitchWithRotate: false,
     dragRotate: false,
     touchPitch: false,
+    // Boneyard-only camera zoom; never enable document/viewport zoom for a tab.
+    touchZoomRotate: true,
   });
   map.touchZoomRotate.disableRotation();
   return map;

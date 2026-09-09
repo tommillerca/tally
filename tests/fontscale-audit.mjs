@@ -103,5 +103,15 @@ const badMimic = external.map(file => file.path === 'js/mimic.js'
   ? { ...file, source: file.source.replace('--tb-size: .875rem', '--tb-size: 14px') } : file);
 assert.notDeepEqual(badMimic, external, 'injected token mutation must apply');
 assert.throws(() => verify(source, badMimic), /px-valued TYPE/);
-assert.match(read('index.html'), /user-scalable=no/, 'viewport zoom policy is outside this lane');
-console.log('PASS 9 regression mutations rejected; viewport zoom policy preserved');
+// Record the viewport policy without making typography depend on its value.
+// The scoped zoom contract belongs to boneyard-zoom-audit.mjs.
+const viewportPolicy = html => html.match(/<meta\b[^>]*name=["']viewport["'][^>]*>/i)?.[0] || '(no viewport meta)';
+console.log(`INFO viewport policy: ${viewportPolicy(read('index.html'))}`);
+for (const policy of ['yes', 'no']) {
+  const changed = external.map(file => file.path === 'index.html'
+    ? { ...file, source: file.source.replace(/,?\s*user-scalable=[^,"'\s>]+/g, '').replace(/initial-scale=1/, `initial-scale=1, user-scalable=${policy}`) }
+    : file);
+  assert.ok(changed.find(file => file.path === 'index.html').source.includes(`user-scalable=${policy}`));
+  assert.equal(verify(source, changed), count, 'font audit must accept either viewport policy');
+}
+console.log('PASS 9 regression mutations rejected; viewport yes/no policy changes accepted');

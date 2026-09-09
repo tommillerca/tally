@@ -111,6 +111,10 @@ input, textarea, select, [contenteditable] {
 }
 .code-line { -webkit-touch-callout: default; }
 
+/* Page pinch is off. The Boneyard zooms its MapLibre camera, whose canvas
+   owns its gestures. Keep native scrolling on both axes everywhere else. */
+html, body { touch-action: pan-x pan-y; }
+
 body {
   /* Midnight backdrop: on-brand near-black with a faint purple/blue depth + glow.
      A TOKEN because Today's scroller has to paint the identical thing over its
@@ -123,7 +127,6 @@ body {
   line-height: 1.35;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
-  touch-action: manipulation;
 }
 button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
 input, select, textarea { font: inherit; color: inherit; }

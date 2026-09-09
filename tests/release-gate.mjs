@@ -278,6 +278,7 @@ const PURE = [
 PURE.push('pet-morph-animation-audit.mjs'); // 2026-09-08: selective layers, named fallback and neutral-rest width controls; no browser.
 PURE.push('pet-palette-audit.mjs'); // r56 B1: actual PNG pairs and shipped-art CONTROL; offline Python image reads.
 PURE.push('fontscale-audit.mjs'); // R60-2: rem type seam, root doubling and px geometry controls; no browser or sockets.
+PURE.push('boneyard-zoom-audit.mjs'); // Real view boot/teardown and scoped camera policy; device pinch verification owed.
 PURE.push('wheel-look-audit.mjs'); // Frozen wheel presentation: production labels, ring, type colours and print styling; Node only, pixel review owed.
 PURE.push('wheel-easing-audit.mjs'); // w1: no overshooting control points, with pre-fix CONTROL; no browser or sockets.
 PURE.unshift('store-copy-lint.mjs');
