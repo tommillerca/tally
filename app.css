@@ -9202,25 +9202,78 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .cf-dots i.on { opacity: 1; transform: scale(1.25); background: var(--accent); }
 .cf-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; padding: 16px 0 0; }
 .cf-acts .btn { width: 100%; }
-/* r56: the creature leads the Stable; currency, navigation and help are quiet. */
-#stableBody .stable-wallet { margin: 0 0 8px; color: var(--text-2); font-size: .78125rem; }
-#stableBody .cf-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; max-width: none; }
+/* Stable redesign: one printed portrait, quiet controls, separate permanent changes.
+   Scoped to this sheet so the shared pet wardrobe and other rooms keep their skin. */
+.stable-head h2 { font-family: inherit; font-weight: 700; letter-spacing: 0; }
+#stableBody button { font-family: inherit; }
+#stableBody { padding-bottom: calc(var(--pad) + var(--sab)); }
+#stableBody .cf { --card: min(280px, calc(100vw - 64px)); display: flex; flex-direction: column; }
+#stableBody .cf-frame {
+  order: 2; width: calc(var(--card) * var(--cf-scale) + 12px); max-width: 100%;
+  margin: 12px auto 0; padding: 4px 0 8px; --cf-pad: 12px;
+  perspective: none; transition: none;
+}
+#stableBody .cf-track { transform-style: flat; transition: none; }
+#stableBody .cf-card { border: 2px solid var(--ink); border-radius: 18px 20px 17px 19px; box-shadow: var(--sh); }
+@media (max-width: 343px) {
+  #stableBody .cf-art { transform: scale(.88); }
+}
+#stableBody .cf-card.active { border-color: var(--ink); }
+#stableBody .cf-card.picked { border-color: var(--violet); }
+#stableBody .cf-eq { background: var(--surface-3); color: var(--text); border-color: var(--ink); }
+#stableBody .cf-eq.sel { background: var(--violet); color: var(--bg); }
+#stableBody .cf-lv, #stableBody .cf-n { font-family: inherit; font-weight: 700; letter-spacing: 0; background: var(--surface); color: var(--text); border-color: var(--ink); }
+#stableBody .cf-cap { display: contents; }
+#stableBody .cf-cap > b { order: 0; font: 400 2.5rem/1.05 var(--display); text-align: center; overflow-wrap: anywhere; transition: none; }
+#stableBody .cf-cap .alias-tag { font: 500 .875rem/1.4 system-ui, sans-serif; }
+#stableBody .cf-cap .role { order: 1; justify-content: center; font-size: .75rem; }
+#stableBody .pet-wear { order: 3; }
+#stableBody .cf-kin { order: 4; margin: 10px 0 0; padding: 0 2px; }
+#stableBody .cf-kin .chip { font: 600 .8125rem/1.3 system-ui, sans-serif; letter-spacing: 0; background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0; box-shadow: none; }
+#stableBody .cf-kin .chip.on { color: var(--text); border-bottom-color: var(--text); background: var(--surface-2); }
+#stableBody .cf-switch { order: 5; display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-top: 8px; }
+#stableBody .cf-switch button { min-width: 44px; min-height: 44px; padding: 8px; border: 0; background: none; color: var(--text); font: 600 .8125rem/1.3 system-ui, sans-serif; }
+#stableBody .cf-switch button:disabled { color: var(--text-3); }
+#stableBody .cf-position { font-size: .75rem; color: var(--text-2); text-align: center; font-variant-numeric: tabular-nums; }
+#stableBody .cf-dots { order: 6; gap: 0; margin: 0; padding: 0; max-height: none; opacity: 1; overflow: visible; }
+#stableBody .cf-dots button { display: grid; place-items: center; width: 44px; min-height: 44px; padding: 0; border: 0; background: none; }
+#stableBody .cf-dots i { pointer-events: none; background: var(--text-2); opacity: .5; transform: none; }
+#stableBody .cf-dots .on i { background: var(--text); opacity: 1; outline: 1px solid var(--text); outline-offset: 3px; }
+#stableBody .cf-meta { order: 7; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; max-width: none; max-height: none; overflow: visible; margin: 4px 0 0; padding: 12px 0; border-block: 2px solid var(--ink); text-align: left; }
 #stableBody .cf-meta .row { display: flex; flex-direction: column; gap: 3px; border: 0; padding: 0; }
 #stableBody .cf-meta dt { font-size: .75rem; }
-#stableBody .cf-meta dd { font-size: 1.125rem; }
-#stableBody .cf-acts .btn { min-height: 44px; padding: 10px; box-shadow: none; }
-#stableBody .stable-rooms { display: grid; gap: 8px; margin-top: 20px; }
-#stableBody .stable-door, #stableBody .stable-collection { margin: 0; border: 1px solid var(--line-strong); box-shadow: none; }
-#stableBody .stable-door { min-height: 94px; }
-#stableBody .pdk-door-tx b { font: 600 .875rem/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif; letter-spacing: 0; color: var(--text); }
+#stableBody .cf-meta dd { font-size: 1.25rem; }
+#stableBody .cf-meta .cf-level, #stableBody .cf-meta .cf-progress { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; align-items: baseline; gap: 16px; }
+#stableBody .cf-meta .cf-level dd, #stableBody .cf-meta .cf-progress dd { font-size: .875rem; text-align: right; overflow-wrap: anywhere; }
+#stableBody .cf.panelled .cf-meta { display: none; }
+#stableBody .cf-acts { order: 8; display: flex; flex-wrap: wrap; gap: 8px 16px; padding-top: 14px; }
+#stableBody .cf-acts .btn { width: auto; min-height: 44px; padding: 10px 0; font: 600 .875rem/1.35 system-ui, sans-serif; letter-spacing: 0; text-transform: none; border: 0; border-radius: 0; box-shadow: none; background: transparent; color: var(--text-2); }
+#stableBody .cf-acts .stable-primary { order: -1; flex-basis: 100%; padding: 14px; background: var(--accent); color: var(--accent-ink); border: 2px solid var(--ink); border-radius: 17px 19px 16px 18px; box-shadow: var(--sh-sm); font-weight: 800; }
+#stableBody .cf-acts .btn:disabled { opacity: 1; color: var(--text-3); }
+#stableBody .stable-rename { margin-left: auto; }
+#stableBody .stable-danger { flex-basis: 100%; margin-top: 12px; padding-top: 14px; border-top: 2px dashed var(--line-strong); display: flex; flex-wrap: wrap; gap: 4px 16px; }
+#stableBody .stable-danger p { flex-basis: 100%; font-size: .75rem; color: var(--text-3); }
+#stableBody .stable-danger .danger { color: var(--danger); text-align: left; }
+#stableBody .stable-danger .on { color: var(--violet); text-decoration: underline; text-underline-offset: 4px; }
+#stableBody .stable-danger small { flex-basis: 100%; font-size: .75rem; line-height: 1.5; color: var(--text-2); }
+#stableBody .stable-wallet { display: flex; justify-content: space-between; gap: 12px; margin: 20px 0 8px; padding: 10px 0; background: none; border: 0; border-radius: 0; color: var(--text-2); font-size: .78125rem; }
+#stableBody .stable-wallet b { font: 700 .875rem/1.4 system-ui, sans-serif; }
+#stableBody .stable-rooms { display: grid; gap: 0; margin: 0; }
+#stableBody .stable-door, #stableBody .stable-collection { margin: 0; min-height: 60px; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; }
+#stableBody .stable-door-picture { position: relative; flex: 0 0 82px; height: 47px; align-self: center; overflow: hidden; border-radius: 16px; }
+#stableBody .stable-door-picture .pdk-door-scene { position: absolute; inset: 0 auto auto 0; width: 164px; height: 94px; transform: scale(.5); transform-origin: top left; }
+#stableBody .pdk-door-tx { padding: 10px 8px; }
+#stableBody .pdk-door-tx b { font: 600 .875rem/1.3 system-ui, sans-serif; letter-spacing: 0; color: var(--text); }
 #stableBody .pdk-door-tx small { font-size: .75rem; font-weight: 400; color: var(--text-2); }
-#stableBody .stable-collection { margin-top: 8px; min-height: 44px; background: transparent; }
-#stableBody .stable-collection .kdoor-sw { flex-basis: 64px; background: transparent; }
-#stableBody .stable-collection .pdk-door-tx { padding: 8px; }
-#stableBody .stable-help { margin-top: 12px; border-block: 1px solid var(--line-strong); font-size: .8125rem; line-height: 1.5; }
+#stableBody .pdk-door-go { color: var(--text-3); font-size: 1.25rem; }
+#stableBody .stable-collection .kdoor-sw { flex-basis: 40px; background: transparent; }
+#stableBody .stable-help { margin-top: 8px; border-block: 1px solid var(--line); font-size: .8125rem; line-height: 1.5; }
 #stableBody .stable-help summary, #stableBody .stable-help .link { min-height: 44px; padding: 12px 0; }
 #stableBody .stable-help p { margin: 0 0 10px; }
-#stableBody :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+#stableBody button:focus-visible, #stableBody [tabindex]:focus-visible, #stableBody summary:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  #stableBody *, #stableBody *::before, #stableBody *::after { animation: none !important; transition: none !important; }
+}
 /* The nickname button spans the two-column grid: a fifth button would otherwise
    sit alone in the bottom row beside a gap. */
 .cf-acts .btn.cf-wide { grid-column: 1 / -1; }

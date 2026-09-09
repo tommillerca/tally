@@ -16,7 +16,7 @@ const keeper = { iid: 'keeper', sp: 'C1', lineage: 0 };
 const spare = { iid: 'spare', sp: 'C2', lineage: 0 };
 const emptyArt = () => '';
 
-function render(cooldownLeft, picks) {
+function render(cooldownLeft, picks, cfActs = '') {
   const pair = picks === 2;
   const body = { innerHTML: '', scrollTop: 0 };
   const scope = {
@@ -30,7 +30,7 @@ function render(cooldownLeft, picks) {
     MORPHS: [], kennelMorphs: new Set(), kennelFound: 0, KENNEL_SPECIES: [],
     ICONS: { dust: emptyArt, chev: emptyArt },
     PET_STAT_MULT_CAP: 2, cfWasPanelled: false, openIid: null,
-    cfCards: '', cfWear: '', cfCaption: '', cfActs: '',
+    cfCards: '', cfWear: '', cfCaption: '', cfActs,
     petPortraitHtml: emptyArt, esc: String,
     petInstanceName: pet => pet.iid, petLevel: () => 1,
     petBreedGainText: emptyArt, petStatBonusText: emptyArt,
@@ -92,3 +92,114 @@ for (const remaining of [0, 2345]) {
 }
 console.log('PASS CONTROL Stable: one collapsed explainer, labelled currency, retained doors after the pet');
 console.log('BREED LOCK + STABLE UI: 7 passed, 0 failed (Node only; browser and sockets unrun)');
+
+// Frozen redesign: execute the actual initial action template and focus repaint.
+// Healthy CONTROL covers equipped, inactive and breeding-pair presentations.
+const css = readFileSync(new URL('../app.css', import.meta.url), 'utf8');
+const slice = (from, to) => {
+  const a = app.indexOf(from), b = app.indexOf(to, a + from.length);
+  assert(a >= 0 && b > a, `CONTROL production block exists: ${from}`);
+  return app.slice(a, b);
+};
+const actions = slice('    const cfActs =', '\n    /* HER WARDROBE');
+const pet = { iid: 'frost', sp: 'C1', shiny: false, lineage: 0 };
+function renderActions(equipped, pair = false) {
+  const scope = { focused: pet, BH_BY_ID: { C1: {} }, eqIid: equipped ? pet.iid : null,
+    sel: [], openIid: null, pair, nicks: {}, petDustValue: () => 60,
+    petInstanceName: () => 'Frost Drizzle', esc: String };
+  return new Function(...Object.keys(scope), actions + '\nreturn cfActs;')(...Object.values(scope));
+}
+const gradeLoss = html => {
+  assert.match(html, /class="stable-danger">[\s\S]*data-breedsel=[\s\S]*data-destroy=/, 'permanent actions have their own section');
+  assert.match(html, /data-destroy="frost"[^>]*>Destroy Frost Drizzle for 60 Bone Dust<\/button>/, 'destroy names the actual pet lost and the currency received');
+  assert.match(html, /Breeding destroys the spare\.[\s\S]*That pet does not come back\./, 'permanent loss is disclosed before acting');
+};
+for (const equipped of [false, true]) {
+  for (const pair of [false, true]) {
+    const html = renderActions(equipped, pair);
+    gradeLoss(html);
+    assert.equal(count(html, /stable-primary/g), pair ? 0 : 1, 'one primary, delegated to the existing feed action with a pair');
+    for (const name of ['data-eq', 'data-pettree', 'data-petnick', 'data-breedsel', 'data-destroy']) assert.equal(count(html, new RegExp(name + '=', 'g')), 1, `CONTROL capability ${name}`);
+    for (const faulty of [html.replace('Destroy Frost Drizzle for 60 Bone Dust', 'Destroy 60'), html.replace('class="stable-danger"', 'class="ordinary"'), html.replace('That pet does not come back.', '')]) {
+      assert.throws(() => gradeLoss(faulty), 'CONTROL anonymous loss or missing separation must fail');
+    }
+  }
+}
+// Switching pets must update the named loss and clear the previous armed IID.
+const repaintActions = slice('      const isEq = inst.iid === eqIid, inSel =', '      // her wardrobe follows the ring:');
+const destroy = { dataset: { armed: 'previous' }, textContent: '' };
+new Function('inst', 'eqIid', 'sel', 'openIid', 'pair', 'it', 'petDustValue', 'petInstanceName', '$', 'body', repaintActions)(
+  pet, null, [], null, false, {}, () => 60, () => 'Frost Drizzle', selector => selector === '[data-destroy]' ? destroy : null, {});
+assert.equal(destroy.textContent, 'Destroy Frost Drizzle for 60 Bone Dust');
+assert.equal(destroy.dataset.destroy, pet.iid);
+assert.equal(destroy.dataset.armed, undefined);
+console.log('PASS CONTROL Stable loss: named pet, permanent section, initial and switched focus, one next action');
+
+const gradeType = source => {
+  for (const selector of ['#stableBody .cf-acts .btn', '#stableBody .cf-kin .chip', '.stable-head h2']) {
+    const rule = source.slice(source.indexOf(selector + ' {')).split('}')[0];
+    assert(rule.startsWith(selector + ' {'), `CONTROL scoped rule exists: ${selector}`);
+    assert.match(rule, /font(?:-family)?:\s*[^;]*(?:system-ui|inherit)/, 'controls use body type');
+    assert.doesNotMatch(rule, /var\(--display\)|Bangers/i, 'display face is reserved for the creature name');
+  }
+  assert.match(source, /#stableBody \.cf-cap > b\s*\{[^}]*var\(--display\)/, 'CONTROL pet identity still earns display type');
+};
+gradeType(css);
+for (const selector of ['#stableBody .cf-acts .btn', '#stableBody .cf-kin .chip', '.stable-head h2']) {
+  const faulty = css.replace(selector + ' {', selector + ' { font-family: var(--display);');
+  assert.notEqual(faulty, css, 'CONTROL mutation applied');
+  assert.throws(() => gradeType(faulty), 'CONTROL display type restored to controls must fail');
+}
+console.log('PASS CONTROL Stable type: body controls and copy chips, display pet identity; three regressions rejected');
+
+const gradeOrder = html => {
+  for (const marker of ['data-destroy="frost"', 'class="stable-wallet"']) {
+    // The wallet carries a shared class too, so match its stable class explicitly.
+    assert(html.includes(marker === 'class="stable-wallet"' ? 'wallet-line stable-wallet' : marker), 'CONTROL pet actions and wallet are present');
+  }
+  const endOfActions = html.indexOf('That pet does not come back.');
+  assert(endOfActions > html.indexOf('id="cfFrame"'), 'CONTROL actions follow the portrait');
+  assert(html.indexOf('wallet-line stable-wallet') > endOfActions, 'wallet follows the pet content');
+  for (const door of ['id="stableToPaddock"', 'data-lab-open', 'id="kennelBtn"']) {
+    assert.equal(html.split(door).length - 1, 1, `CONTROL one ${door}`);
+    assert(html.indexOf(door) > endOfActions, 'every door is below all pet actions');
+  }
+};
+// Execute both production templates together, so order follows the shipped DOM.
+const bodyWithActions = render(0, 0, renderActions(true));
+gradeOrder(bodyWithActions);
+for (const door of ['id="stableToPaddock"', 'data-lab-open', 'id="kennelBtn"']) {
+  const faulty = `<button ${door}></button>` + bodyWithActions.replace(door, 'data-moved-door');
+  assert.throws(() => gradeOrder(faulty), 'CONTROL a door above pet content must fail');
+}
+const movedWallet = bodyWithActions.match(/<div class="wallet-line stable-wallet">[\s\S]*?<\/div>/)[0];
+assert.throws(() => gradeOrder(movedWallet + bodyWithActions.replace(movedWallet, '')), 'CONTROL currency leading the pet must fail');
+console.log('PASS CONTROL Stable order: all three doors and currency follow pet content; four regressions rejected');
+
+// Execute the production paint arithmetic, including the one-pet opacity case.
+// This checks resting geometry only. Browser clipping and gestures remain unrun.
+const paintCards = slice('        const CW = cards[0].offsetWidth;', '        const idx = indexAt(pos);');
+const gradeCarousel = source => {
+  for (const N of [1, 2, 6]) for (const pos of [0, N - 1]) for (const scale of [1, .62]) {
+    const cards = Array.from({ length: N }, () => ({ offsetWidth: 280, style: {}, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } }));
+    new Function('cards', 'N', 'pos', 'GAP', 'indexAt', source)(cards, N, pos, .1, p => ((Math.round(p) % N) + N) % N);
+    const viewport = 280 * scale + 12;
+    let visible = 0;
+    cards.forEach((card, i) => {
+      const match = card.style.transform.match(/^translateX\(calc\(-50% \+ (-?[\d.]+)px\)\)$/);
+      assert(match, 'flat translation, no tilted neighbour');
+      const centre = viewport / 2 + Number(match[1]) * scale;
+      if (centre + 140 * scale > 0 && centre - 140 * scale < viewport) visible++;
+      if (i === pos) assert.equal(card.style.opacity, '1', 'CONTROL focused portrait is fully opaque even with one pet');
+      assert.equal(card.attrs['aria-hidden'], String(i !== pos));
+    });
+    assert.equal(visible, 1, 'exactly one portrait intersects the resting viewport');
+  }
+};
+gradeCarousel(paintCards);
+for (const faulty of [paintCards.replace('CW * (1 + GAP)', 'CW * .5'), paintCards.replace("card.style.opacity = '1'", "card.style.opacity = '.5'")]) {
+  assert.notEqual(faulty, paintCards);
+  assert.throws(() => gradeCarousel(faulty), 'CONTROL slivers or dimmed single pet must fail');
+}
+console.log('PASS CONTROL Stable carousel: one full portrait at rest for 1/2/6 species in both panel sizes; two regressions rejected');
+console.log('STABLE REDESIGN: 4 guard groups passed, 0 failed (Node only; scroll height and pixels unmeasured)');

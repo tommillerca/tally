@@ -20093,7 +20093,7 @@ async function openStable(opts = {}) {
      still exactly one way in and it still carries #kennelBtn, the id every
      handler and audit clicks. */
   const wrap = openSheet(`
-    <div class="sheet-head"><h2>The Stable</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-head stable-head"><h2>The Stable</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body" id="stableBody"></div>`, { cls: 'full pet-a11y', onClose: () => { if (currentTab() === 'today') refresh(); } });
   async function render() {
     const body = $('#stableBody', wrap);
@@ -20225,22 +20225,15 @@ async function openStable(opts = {}) {
         <span class="cf-chip r-${it.rarity || 'common'}">${x.shiny ? `${sparkIco(9)} SHINY` : esc((RARITIES[it.rarity] || {}).label || it.rarity || '')}</span>
         ${x.shiny ? '' : `<span class="cf-chip" style="top:38px">${esc(petColourName(x))}</span>`}
         <span class="cf-lv">LV ${lvl}</span>
-        <!-- Tom, 2026-08-08: "you should have the animated versions of the pets we
-             have animations for. That is the cloud, the orange liz and the purple
-             liz." That is ANIMATED_PETS = C1, C4, CX exactly.
-             petSpriteHtml rather than petPortraitHtml: it prefers the animated
-             build where one exists and falls back to the cropped still otherwise,
-             and it already resolves the one case that would break the figure
-             contract -- there are no animated SHINY variants, so a shiny pet
-             (except CX, whose amethyst art IS its special look) renders its
-             recoloured still instead of quietly losing the shiny. -->
-        <span class="cf-art">${petSpriteHtml(x.sp, 124, false, { mass: true, shiny: x.shiny, thumb: true, morph: x.morph })}</span>
+        <!-- Base pets keep their shipped animation. Shiny pets use the shipped
+             portrait asset: the shared animation path hue-rotates its layers. -->
+        <span class="cf-art">${x.shiny ? petPortraitHtml(x.sp, 196, x.shiny, { mass: true, thumb: true, morph: x.morph }) : petSpriteHtml(x.sp, 196, false, { mass: true, shiny: x.shiny, thumb: true, morph: x.morph })}</span>
         ${bySp[x.sp].length > 1 ? `<span class="cf-n" aria-label="${bySp[x.sp].length} of this species">×${bySp[x.sp].length}</span>` : ''}
         ${isEq ? '<span class="cf-eq">Out with you</span>' : ''}
         ${inSel && !isEq ? '<span class="cf-eq sel">Breeding</span>' : ''}
       </div>`;
     }).join('');
-    const cfDots = roster.map((x, i) => `<i class="${i === focusIdx ? 'on' : ''}" data-cfdot="${i}"></i>`).join('');
+    const cfDots = roster.map((x, i) => `<button type="button" class="${i === focusIdx ? 'on' : ''}" data-cfdot="${i}" aria-label="Show ${esc((BH_BY_ID[x.sp] || {}).name || 'pet')}" aria-current="${i === focusIdx ? 'true' : 'false'}"><i aria-hidden="true"></i></button>`).join('');
     const cfCaption = (() => {
       if (!focused) return '';
       const it = BH_BY_ID[focused.sp] || {};
@@ -20249,14 +20242,19 @@ async function openStable(opts = {}) {
       const bs = petBattleStats(focused.sp, lvl, focused.shiny, focused.lineage || 0);
       const fam = familyOf(focused.sp);
       const rows = [['Level', lvl], ['Power', bs.power], ['Health', bs.hp], ['Reflex', bs.reflex]];
-      if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next', toNext.toLocaleString()]);
+      if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next level', toNext.toLocaleString()]);
       if (focused.lineage) rows.push(['Lineage', `${focused.lineage}. ${petStatBonusText(focused.sp, focused.shiny, focused.lineage)}`]);
       return `<div class="cf-cap">
           <b>${esc(petInstanceName(focused))}${focused.shiny ? ' ✦' : ''}${nickTag(focused.iid)}</b>
           <span class="role"><span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}</span>
-          <dl class="cf-meta">${rows.map(([k, v]) => `<div class="row"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
+          <dl class="cf-meta">${rows.map(([k, v]) => `<div class="row${k === 'Level' ? ' cf-level' : k === 'Lineage' || k.startsWith('Steps') ? ' cf-progress' : ''}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
         </div>
         <div class="cf-kin" role="listbox" aria-label="Your ${esc(it.name || focused.sp)}s">${kinChips(focused)}</div>
+        <div class="cf-switch" aria-label="Switch pets">
+          <button type="button" data-cfstep="-1" aria-label="Previous pet"${roster.length < 2 ? ' disabled' : ''}>‹ Previous</button>
+          <span class="cf-position" aria-live="polite">Pet ${focusIdx + 1} of ${roster.length}</span>
+          <button type="button" data-cfstep="1" aria-label="Next pet"${roster.length < 2 ? ' disabled' : ''}>Next ›</button>
+        </div>
         <div class="cf-dots">${cfDots}</div>`;
     })();
     const cfActs = (() => {
@@ -20266,17 +20264,18 @@ async function openStable(opts = {}) {
       const inSel = sel.includes(focused.iid);
       const isOpen = focused.iid === openIid;
       const dustVal = petDustValue(it) + (focused.shiny ? 15 : 0) + (focused.lineage || 0) * 8;
-      /* NICKNAME sits FIRST and spans the row. First because it is the only
-         control here that is about who this animal is rather than what you do
-         with it, and the row's last button melts a pet permanently, so nothing
-         new goes near it. Full width because .cf-acts is a two-column grid and
-         a fifth button would otherwise leave a lone orphan in the bottom row. */
+      // One next action: bring a companion along, or inspect its talents if out.
+      // A reviewed breeding pair gives the lime action to the existing feed button.
       return `<div class="cf-acts">
-          <button class="btn ghost cf-wide" data-petnick="${focused.iid}">${nicks[focused.iid] ? 'RENAME' : 'NICKNAME'}</button>
-          <button class="btn${isEq ? ' ghost' : ''}" data-eq="${focused.iid}"${isEq ? ' disabled' : ''}>${isEq ? 'OUT WITH YOU' : 'EQUIP'}</button>
-          <button class="btn ghost" data-pettree="${focused.iid}">${isOpen ? 'HIDE TALENTS' : 'TALENTS'}</button>
-          <button class="btn ghost${inSel ? ' on' : ''}" data-breedsel="${focused.iid}">${inSel ? 'BREEDING' : 'BREED'}</button>
-          <button class="btn ghost danger" data-destroy="${focused.iid}" data-dust="${dustVal}">DESTROY ${dustVal}</button>
+          <button class="btn${isEq || pair ? ' ghost' : ' stable-primary'}" data-eq="${focused.iid}"${isEq ? ' disabled' : ''}>${isEq ? 'Out with you' : 'Bring along'}</button>
+          <button class="btn${isEq && !pair ? ' stable-primary' : ' ghost'}" data-pettree="${focused.iid}">${isOpen ? 'Hide talents' : 'Talents'}</button>
+          <button class="btn ghost stable-rename" data-petnick="${focused.iid}">${nicks[focused.iid] ? 'Rename' : 'Nickname'}</button>
+          <div class="stable-danger">
+            <p>Permanent changes</p>
+            <button class="btn ghost${inSel ? ' on' : ''}" data-breedsel="${focused.iid}">${inSel ? 'Breeding' : 'Breed'}</button>
+            <button class="btn ghost danger" data-destroy="${focused.iid}" data-dust="${dustVal}">Destroy ${esc(petInstanceName(focused))} for ${dustVal} Bone Dust</button>
+            <small>Breeding destroys the spare. Destroy trades this pet for Bone Dust. That pet does not come back.</small>
+          </div>
         </div>`;
     })();
 
@@ -20441,7 +20440,6 @@ async function openStable(opts = {}) {
     const breedLockNote = st.ready ? '' : `<p class="note" data-breed-lock>Breeding is locked. Walk ${st.cooldownLeft.toLocaleString()} more ${st.cooldownLeft === 1 ? 'step' : 'steps'} to unlock it.</p>`;
     const bodyScroll = body.scrollTop;
     body.innerHTML = `
-      <div class="wallet-line stable-wallet"><span>Bone Dust</span><b><span class="dust-ico">${ICONS.dust(14)}</span> ${st.dust.toLocaleString()}</b></div>
       ${opts.labAction ? `<p role="status">${opts.labAction === 'melt' ? 'Choose a pet in the Stable, then use Destroy to melt that one pet for Bone Dust.' : 'Choose a keeper and a spare in the Stable, then review Breed to raise the keeper’s lineage.'}</p>` : ''}
       <!-- WAITING FOR THE SECOND PICK, AT THE TOP. Tom, 2026-08-10: "the breeding
            popup is good but it covers the breed button when you swipe to another
@@ -20455,7 +20453,6 @@ async function openStable(opts = {}) {
           <span class="bw-say"><b>Now pick the second pet</b><small>Swipe across and tap BREED on it</small></span>
           <button class="btn ghost bw-cancel" id="breedCancel" type="button">Cancel</button>
         </div>` : ''}
-      ${pair ? '' : breedLockNote}
       ${roster.length ? `
         <div class="cf${cfWasPanelled ? ' panelled' : ''}" data-want="${openIid || pair ? 'panelled' : 'open'}">
           <!-- The SVG motion-blur filter that used to live here is gone: measured
@@ -20473,9 +20470,11 @@ async function openStable(opts = {}) {
         </div>
         ${openIid && openInst ? petTalentTree(openInst, petLevel(bank[openInst.iid] || 0), openPicks) : ''}
       ` : '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}
+      ${pair ? '' : breedLockNote}
+      <div class="wallet-line stable-wallet"><span>Bone Dust</span><b><span class="dust-ico">${ICONS.dust(14)}</span> ${st.dust.toLocaleString()}</b></div>
       <nav class="stable-rooms" aria-label="Pet rooms">
       <button class="pdk-door stable-door" id="stableToPaddock" type="button">
-        <span class="pdk-door-scene" aria-hidden="true">
+        <span class="stable-door-picture" aria-hidden="true"><span class="pdk-door-scene">
           <i class="pdk-door-moon"></i>
           <i class="pdk-door-rail r1"></i><i class="pdk-door-rail r2"></i>
           <i class="pdk-door-post" style="left:16px"></i><i class="pdk-door-post" style="left:70px"></i><i class="pdk-door-post" style="left:124px"></i>
@@ -20486,7 +20485,7 @@ async function openStable(opts = {}) {
           <span class="pdk-door-keeper">${avatarLayersHtml(eqOwn, { skip: ['BG', 'C'], noYard: true, thumb: 192 })}</span>
           <span class="pdk-door-pets">${doorSp.map(sp => `<span class="pdk-door-pet">${petAsideHtml(petFrom(null, sp), doorPx, { thumb: true })}</span>`).join('')}</span>
           <i class="pdk-door-vig"></i>
-        </span>
+        </span></span>
         <span class="pdk-door-tx">
           <b>The Paddock</b>
           <small>${insts.length} pet${insts.length === 1 ? '' : 's'} in your collection</small>
@@ -20623,13 +20622,7 @@ async function openStable(opts = {}) {
     if (cfFrame && cfTrack && roster.length) {
       const cards = [...cfTrack.children];
       const N = cards.length;
-      /* Tom, 2026-08-08: "the pets need to be bigger they're the heart of the
-         stable page and the current tiles seem too far apart we can stack them
-         closer." GAP is the gap BETWEEN cards as a fraction of card width, so 0.30
-         was most of a third of a card of dead air on each side. At 0.10 the
-         neighbours tuck in behind the featured pet and the ring reads as a deck
-         rather than three separate tiles. */
-      const GAP = 0.10, ROTATE = 46, DEPTH = 0.34, FADE = 0.26, FALLOFF = 0.62;
+      const GAP = 0.10;
       let pos = focusIdx, target = focusIdx, raf = null, shown = -1;
       /* Motion blur, driven by measured velocity rather than a fixed keyframe, so
          a slow drag blurs barely at all and a flick smears. `reduced` disables it
@@ -20669,58 +20662,14 @@ async function openStable(opts = {}) {
            called again INSIDE this loop, immediately after writing a transform:
            six forced synchronous layouts per frame, each invalidated by the write
            before it. That is the drag lag. Read once, write many. */
-        const CW = cardPx();
+        const CW = cards[0].offsetWidth;
         const PITCH = CW * (1 + GAP);
         cards.forEach((card, i) => {
-          let off = i - pos;
-          off = ((off % N) + N) % N;
+          let off = ((i - pos) % N + N) % N;
           if (off > N / 2) off -= N;
-          const dist = Math.abs(off);
-          const ramp = Math.pow(dist, FALLOFF);
-          const tilt = Math.min(ROTATE * ramp, 82) * Math.sign(off);
-          const x = off * PITCH;
-          card.style.transform = `translateX(calc(-50% + ${x}px)) translateZ(${-DEPTH * CW * ramp}px) rotateY(${-tilt}deg)`;
-          // a card teleports across the ring at half a turn out, so it must be
-          // invisible by then or the jump is visible
-          const edge = Math.min(1, Math.max(0, N / 2 - dist));
-          card.style.opacity = String(Math.max(0, 1 - FADE * dist) * edge);
-          card.style.zIndex = String(100 - Math.round(dist));
-          /* How far THIS card moved since the last frame, in screen pixels. That
-             distance IS the smear length a real shutter would record, so sigma is
-             about half of it. Nothing else feeds in: a card that did not move gets
-             no blur, however fast the rest of the ring is turning.
-             Cards that teleport across the ring (the half-turn wrap) are excluded,
-             or the jump would register as enormous velocity and flash. */
-          /* Tom, 2026-08-08: "the blur looks a bit too intense like the movement
-             is going faster than it actually is." Cut hard (0.5 -> 0.15 of the frame
-             displacement) and capped at 2.2px, and the floor raised so ordinary
-             settling carries none at all: blur should read as a hint of speed, not
-             announce it.
-             QUANTISED to 0.4px steps and only written when the step changes. An
-             SVG filter re-renders whenever stdDeviation is touched, so setting it
-             every frame on every card was re-rasterising six filters at 60Hz for
-             sub-pixel differences nobody can see. Offscreen cards skip it. */
-          /* THE SMEAR IS COMPOSITED, NOT FILTERED. Tom, 2026-08-10: "it's still
-             pretty laggy I'm assuming this is due to the blur effect. We cannot
-             have lag in the interface people will uninstall find a good
-             compromise here."
-             He was right, and it was already as tuned as an SVG filter gets:
-             quantised sigma, written only on change, offscreen cards skipped.
-             Measured over four real drags with seven pets:
-                 with the filter   median 16.7ms   p95 33.3ms   5% of frames >32ms
-                 without it        median 16.7ms   p95 25.0ms   0.4%
-             Sixty frames a second either way, so it was never uniformly slow: it
-             was STUTTER, which is exactly what reads as lag. An SVG filter forces
-             rasterisation off the compositor, and on a phone that is worse than
-             it is here.
-             So the filter goes and nothing replaces it. A composited two-copy
-             smear was built first and then removed: .cf-card is overflow:hidden,
-             so the copies were clipped to the card's own box and could never
-             trail past its silhouette, and the trailing copy painted over the pet
-             art rather than behind it. The ring reads as motion through depth,
-             rotation and fade, which cost nothing and were already there. */
-
-
+          card.style.transform = `translateX(calc(-50% + ${off * PITCH}px))`;
+          card.style.opacity = '1';
+          card.setAttribute('aria-hidden', String(i !== indexAt(pos)));
         });
         const idx = indexAt(pos);
         if (idx !== shown) {
@@ -20735,7 +20684,12 @@ async function openStable(opts = {}) {
              sync when only one thing is moving, and it is one animated pet on
              screen instead of six. */
           cards.forEach((c, i) => c.classList.toggle('focus', i === idx));
-          $$('[data-cfdot]', body).forEach((d, i) => d.classList.toggle('on', i === idx));
+          $$('[data-cfdot]', body).forEach((d, i) => {
+            d.classList.toggle('on', i === idx);
+            d.setAttribute('aria-current', String(i === idx));
+          });
+          const position = $('.cf-position', body);
+          if (position) position.textContent = `Pet ${idx + 1} of ${N}`;
           /* THE TRAY BELONGS TO THE PET YOU ARE LOOKING AT. Tom, 2026-08-10:
              "switching to another pet while one pet's talents are open doesn't
              close the tray then swipe to the next pet like it should. The talents
@@ -20879,6 +20833,9 @@ async function openStable(opts = {}) {
         if (e.key === 'ArrowLeft') { e.preventDefault(); settle(Math.round(pos) - 1); }
         if (e.key === 'ArrowRight') { e.preventDefault(); settle(Math.round(pos) + 1); }
       });
+      $$('[data-cfstep]', body).forEach(button => button.addEventListener('click', () => {
+        settle(Math.round(pos) + Number(button.dataset.cfstep));
+      }));
       $$('[data-cfdot]', body).forEach(d => d.addEventListener('click', () => {
         // travel the SHORT way round, or the ring unwinds the long way to index 0
         const to = +d.dataset.cfdot;
@@ -20941,13 +20898,13 @@ async function openStable(opts = {}) {
       const cap = $('.cf-cap', body);
       if (cap) {
         const rows = [['Level', lvl], ['Power', bs.power], ['Health', bs.hp], ['Reflex', bs.reflex]];
-        if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next', toNext.toLocaleString()]);
+        if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next level', toNext.toLocaleString()]);
         if (inst.lineage) rows.push(['Lineage', `${inst.lineage}. ${petStatBonusText(inst.sp, inst.shiny, inst.lineage)}`]);
         $('b', cap).innerHTML = `${esc(petInstanceName(inst))}${inst.shiny ? ' ✦' : ''}${nickTag(inst.iid)}`;
         const role = $('.role', cap);
         if (role) role.innerHTML = `<span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}`;
         const meta = $('.cf-meta', cap);
-        if (meta) meta.innerHTML = rows.map(([k, v]) => `<div class="row"><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+        if (meta) meta.innerHTML = rows.map(([k, v]) => `<div class="row${k === 'Level' ? ' cf-level' : k === 'Lineage' || k.startsWith('Steps') ? ' cf-progress' : ''}"><dt>${k}</dt><dd>${v}</dd></div>`).join('');
       }
       const isEq = inst.iid === eqIid, inSel = sel.includes(inst.iid), isOpen = inst.iid === openIid;
       const dustVal = petDustValue(it) + (inst.shiny ? 15 : 0) + (inst.lineage || 0) * 8;
@@ -20956,11 +20913,11 @@ async function openStable(opts = {}) {
          four: spinning the ring never re-runs render(), so a button left
          pointing at the previous pet renames the wrong animal. */
       const nkB = $('[data-petnick]', body);
-      if (nkB) { nkB.dataset.petnick = inst.iid; nkB.textContent = nicks[inst.iid] ? 'RENAME' : 'NICKNAME'; }
-      if (eqB) { eqB.dataset.eq = inst.iid; eqB.textContent = isEq ? 'OUT WITH YOU' : 'EQUIP'; eqB.disabled = isEq; eqB.classList.toggle('ghost', isEq); }
-      if (trB) { trB.dataset.pettree = inst.iid; trB.textContent = isOpen ? 'HIDE TALENTS' : 'TALENTS'; }
-      if (brB) { brB.dataset.breedsel = inst.iid; brB.textContent = inSel ? 'BREEDING' : 'BREED'; brB.classList.toggle('on', inSel); }
-      if (dsB) { delete dsB.dataset.armed; dsB.dataset.destroy = inst.iid; dsB.dataset.dust = dustVal; dsB.textContent = `DESTROY ${dustVal}`; }
+      if (nkB) { nkB.dataset.petnick = inst.iid; nkB.textContent = nicks[inst.iid] ? 'Rename' : 'Nickname'; }
+      if (eqB) { eqB.dataset.eq = inst.iid; eqB.textContent = isEq ? 'Out with you' : 'Bring along'; eqB.disabled = isEq; eqB.classList.toggle('ghost', isEq || !!pair); eqB.classList.toggle('stable-primary', !isEq && !pair); }
+      if (trB) { trB.dataset.pettree = inst.iid; trB.textContent = isOpen ? 'Hide talents' : 'Talents'; trB.classList.toggle('ghost', !isEq || !!pair); trB.classList.toggle('stable-primary', isEq && !pair); }
+      if (brB) { brB.dataset.breedsel = inst.iid; brB.textContent = inSel ? 'Breeding' : 'Breed'; brB.classList.toggle('on', inSel); }
+      if (dsB) { delete dsB.dataset.armed; dsB.dataset.destroy = inst.iid; dsB.dataset.dust = dustVal; dsB.textContent = `Destroy ${petInstanceName(inst)} for ${dustVal} Bone Dust`; }
       // her wardrobe follows the ring: shown only while she is the pet in front
       $$('.pet-wear', body).forEach(pwB => { pwB.hidden = pwB.dataset.pwsp !== inst.sp; });   // Football kit, 2026-09-04
       centreRail();

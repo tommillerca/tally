@@ -8236,6 +8236,14 @@ test('h1 health disclosure guard includes healthy and zero-step controls', () =>
   assert.match(output, /PASS CONTROL healthy step sync produces NONE/);
 });
 
+test('Stable redesign preserves named destruction, body controls and navigation order with CONTROLs', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'breed-lock-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /PASS CONTROL Stable loss:/);
+  assert.match(output, /PASS CONTROL Stable type:/);
+  assert.match(output, /PASS CONTROL Stable order:/);
+  assert.match(output, /STABLE REDESIGN: 4 guard groups passed, 0 failed/);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
