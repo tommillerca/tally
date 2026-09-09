@@ -22,20 +22,6 @@ import { petLevel } from './pets.js';
 export const PET_SPECIES = BH_ITEMS.filter(i => i.slot === 'C');
 const SPECIES_BY_ID = Object.fromEntries(PET_SPECIES.map(p => [p.id, p]));
 
-/* The Paddock's rarity colours are the app.css GLOW family (epic rgb 155,146,232,
-   legendary 255,201,97), not `RARITIES[r].color` from js/loot.js, which is a second
-   and different rarity palette used for text chips elsewhere (#c084fc epic,
-   #4ade80 uncommon). The handoff specifies this family and it is what the pet cards
-   already glow with, so the screen agrees with itself. If the two palettes are ever
-   unified, this map is one of the places to change. */
-export const PDK_RARITY = {
-  common:    '#8f8578',
-  uncommon:  '#a5e847',
-  rare:      '#6fd0ff',
-  epic:      '#9b92e8',
-  legendary: '#ffc961',
-};
-
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = n => Number(n || 0).toLocaleString();
 
@@ -45,14 +31,12 @@ const num = n => Number(n || 0).toLocaleString();
    against the instance, so an index would move the affection to a different animal
    the first time the roster sorts differently. */
 export function cardModel(row) {
-  const sp = SPECIES_BY_ID[row.sp] || { name: row.sp, rarity: 'common' };
+  const sp = SPECIES_BY_ID[row.sp] || { name: row.sp };
   return {
     iid: row.iid,
     sp: row.sp,                     // the SPECIES id, kept so the thumb can ink-fit its art
     name: row.name || sp.name,
     species: sp.name,
-    rarity: sp.rarity,
-    rarityColor: PDK_RARITY[sp.rarity] || PDK_RARITY.common,
     shiny: !!row.shiny,
     level: petLevel(row.levelSteps),
     bond: Math.max(0, Math.min(5, row.bond | 0)),
@@ -133,12 +117,11 @@ export function gridModel(roster) {
   return PET_SPECIES.map(s => {
     const t = owned.get(s.id);
     return {
-      sp: s.id, name: s.name, rarity: s.rarity, rarityColor: PDK_RARITY[s.rarity] || PDK_RARITY.common,
+      sp: s.id, name: s.name,
       art: bhAsset(s), owned: !!t, count: t ? t.count : 0,
       worn: t ? petWornLayers(s.id, wear) : [],
       tints: t ? petWornTints(s.id, wear) : [],
       showCount: !!t && t.count > 1, anyShiny: !!(t && t.anyShiny),
-      glow: s.rarity === 'legendary' || s.rarity === 'epic',
     };
   });
 }
@@ -250,7 +233,6 @@ export function cardHtml(m) {
       <div class="pdk-id">
         <b class="pdk-name">${esc(m.name)}</b>
         <span class="pdk-chips">
-          <span class="pdk-chip pdk-rar" style="background:${m.rarityColor}">${esc(m.rarity)}</span>
           ${m.shiny ? '<span class="pdk-chip pdk-shiny">SHINY</span>' : ''}
           <span class="pdk-chip pdk-lv">LV ${m.level}</span>
         </span>
@@ -347,7 +329,7 @@ export function panelHtml(roster, eggs, { tileBox = 0, showTeaser = true, inFiel
         <span class="pdk-eggico${egg.count ? '' : ' pdk-empty'}" aria-hidden="true"></span>
         <span class="pdk-eggbar"><i style="width:${Math.round(egg.pct * 100)}%"></i></span>
       </button>
-      ${tiles.map(t => `<button class="pdk-tile${t.owned ? '' : ' pdk-lockt'}${t.glow ? ' r-' + t.rarity : ''}" data-sp="${esc(t.sp)}">
+      ${tiles.map(t => `<button class="pdk-tile${t.owned ? '' : ' pdk-lockt'}" data-sp="${esc(t.sp)}">
         ${layeredArt(t.sp, t.art, t.worn, { alt: t.name, box: tileBox, tints: t.tints })}
         ${t.showCount ? `<span class="pdk-x">×${t.count}</span>` : ''}
         ${t.anyShiny ? '<span class="pdk-star" aria-hidden="true"></span>' : ''}

@@ -62,12 +62,15 @@ try {
       const fits = await page.$eval('.cf-card[data-sp="C1"]', card => {
         const chips = [...card.querySelectorAll('.cf-chip')];
         const colour = chips.find(c => c.textContent.trim() === 'Frost');
-        if (!colour) return false;
+        if (!colour || chips.length !== 1 || /\b(common|uncommon|rare|epic|legendary)\b/i.test(card.textContent)
+          || /\br-(common|uncommon|rare|epic|legendary)\b/.test(card.className)) return false;
         const r = colour.getBoundingClientRect(), box = card.getBoundingClientRect();
-        const other = chips.find(c => c !== colour).getBoundingClientRect();
-        return r.width > 0 && r.left >= box.left && r.right <= box.right && r.bottom <= box.bottom && r.top >= other.bottom;
+        const level = card.querySelector('.cf-lv')?.getBoundingClientRect();
+        if (!level) return false;
+        const overlaps = r.left < level.right && r.right > level.left && r.top < level.bottom && r.bottom > level.top;
+        return r.width > 0 && r.left >= box.left && r.right <= box.right && r.bottom <= box.bottom && r.top >= box.top && !overlaps;
       });
-      assert(fits, `Frost chip absent, clipped or overlaps rarity at ${width}`);
+      assert(fits, `Frost chip absent, clipped, tiered or overlaps level at ${width}`);
     }
   });
   await row('R44-14 breed picker and feed facts name the spare', async () => {

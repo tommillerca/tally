@@ -341,6 +341,7 @@ PURE.push('multidevice-earnings-audit.mjs'); // L2: both offline currency histor
 PURE.push('response-bodies-audit.mjs'); // Parsed wrong-body refusal, unchanged state and production disclosure with valid controls; no sockets.
 PURE.push('quest-wheel-budget-audit.mjs'); // P1: real quest claims and wheel commit over mem-idb, abort/retry and concurrency; no sockets.
 PURE.push('kitchen-delivery-audit.mjs'); // p1-kitchen: transaction aborts, retries, overlapping Eats and actual cauldron callback; Node only.
+PURE.push('pet-rarity-audit.mjs'); // Frozen rarity-out: real pet markup, neutral tiles and retained gear rarity; Node only.
 const BROWSER = [
   'today-dock-pixels-audit.mjs', // v522: the Today dock band must not paint --hero-edge. Browser tier: it screenshots and samples real pixels, which is the only instrument that catches this class (the geometry measures correct either way). Its CONTROL-PIXELS row is deliberately UNPROVEN, see docs/CLAIMS.md v522.
 

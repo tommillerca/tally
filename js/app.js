@@ -10187,7 +10187,6 @@ function petShelfHtml(ownedCos, coinBal) {
     <span class="pet-new">NEW ARRIVAL</span>
     <div class="pet-hero-art">${petSpriteHtml(PET_SHOP.pet.id, 176, true, { thumb: true })}</div>
     <div class="pet-hero-copy">
-      <div class="pet-kind">${esc((pet.rarity || '').toUpperCase())} PET</div>
       <div class="pet-name">${esc(pet.name)}</div>
       <p>${esc(PET_SHOP.pet.blurb)}</p>
       <button class="t3-price pet-buy" data-petbuy="${PET_SHOP.pet.id}" data-amt="${PET_SHOP.pet.coin}"
@@ -10202,9 +10201,8 @@ function petShelfHtml(ownedCos, coinBal) {
     const a = BH_BY_ID[it.id]; if (!a) return '';
     const owned = ownedCos.has(it.id);
     const locked = !hasPet;
-    return `<div class="rk r-${a.rarity}${owned ? ' owned' : ''}${locked ? ' pet-locked' : ''}">
+    return `<div class="rk${owned ? ' owned' : ''}${locked ? ' pet-locked' : ''}">
       <div class="rk-stage">${petShotHtml(it.id, 112)}</div>
-      <div class="rk-rar">${esc((a.rarity || '').toUpperCase())}</div>
       <div class="rk-name">${esc(a.name)}</div>
       ${owned ? `<div class="rk-owned">In your Wardrobe</div>`
         : locked ? `<div class="pet-lock">Needs ${esc(pet.name)}</div>`
@@ -16048,7 +16046,7 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
         <div class="reveal-eyebrow">New arrival</div>
         <div class="reveal-sub">${esc(it.name || newPet.sp)} is yours</div>
         <div class="reveal-body">
-          <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar newpet-avatar r-${it.rarity || 'common'}">${petPortraitHtml(newPet.sp, 104, false, { thumb: true })}</div></div>
+          <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar newpet-avatar">${petPortraitHtml(newPet.sp, 104, false, { thumb: true })}</div></div>
           <div class="cele-bubble">Out with you now, and home in your Stable whenever you visit.</div>
         </div>
         <div class="reveal-foot">
@@ -16323,11 +16321,11 @@ function openHatchReveal(res, charWrap) {
   const hatchName = `A ${MORPH_LABEL[res.morph] || ''} ${item ? item.name : ''}`.replace(/\s+/g, ' ').trim() + '!';
   const revealHtml = item
     ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? `${sparkIco(24)} SHINY! ${sparkIco(24)}` : res.dupe ? 'ANOTHER ONE!' : esc(hatchName)}</div>
-       <div class="hatch-prize r-${item.rarity}${res.shiny ? ' is-shiny' : ''}">
+       <div class="hatch-prize${res.shiny ? ' is-shiny' : ''}">
          <canvas class="hatch-art" width="512" height="512"></canvas>
          <b>${esc(petInstanceName({ sp: item.id, morph: res.morph, shiny: res.shiny }))}${res.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</b>
          <small>${res.shiny ? 'Ultra-rare variant · follows your bonehead' : res.dupe ? 'A spare pet · keep it for recipes, melt it or breed' : 'Pet · follows your bonehead'}</small>
-         <span class="rar-chip" style="color:${res.shiny ? 'var(--gold)' : RARITIES[item.rarity].color}">${res.shiny ? 'SHINY' : RARITIES[item.rarity].label}</span>
+         ${res.shiny ? '<span class="rar-chip" style="color:var(--gold)">SHINY</span>' : ''}
        </div>`
     : `<div class="lvl-stamp" style="font-size:26px">A FAMILIAR FRIEND</div>
        <p class="note">This egg hatched a pet you already know. It scampered back into your crew and left you +${res.coins} coins. Keep hatching for shinies.</p>`;
@@ -18304,15 +18302,14 @@ function petPanelHtml(petId, fighter) {
   const passives = { yourDamage: 'your attacks hit harder', damageTaken: 'you take less damage', hypeGain: 'you build Hype faster' };
   const shiny = S.shinyPets.has(petId);
   const lineage = meta.lineage || 0;
-  const rarity = (BH_BY_ID[petId] || {}).rarity || 'common';
-  const bs = petBattleStats(petId, lvl, shiny, lineage); // intrinsic battle stats (rarity + tilt + shiny + lineage)
+  const bs = petBattleStats(petId, lvl, shiny, lineage); // intrinsic battle stats (species + tilt + shiny + lineage)
   const statLine = `<span class="pet-stats"><b>${bs.power}</b> PWR · <b>${bs.hp}</b> HP · <b>${bs.reflex}</b> REF</span>`;
   return `
-    <div class="pet-card r-${rarity} lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">
+    <div class="pet-card lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">
       ${petSpriteHtml(petId, 60, false, { thumb: true })}
       <div class="pet-card-meta">
         <b>${esc(fam.name)}${lineage ? ` <span class="lin-tag">${ICONS.star(11)}${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(10)} SHINY</span>` : ''} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
-        <small><span class="rar-lbl r-${rarity}">${(RARITIES[rarity] || {}).label || rarity}</span> · Pet level ${lvl}${lvl < PET_MAX_LEVEL ? ` · ${toNext.toLocaleString()} steps to Lv ${lvl + 1}` : ' · maxed'}</small>
+        <small>Pet level ${lvl}${lvl < PET_MAX_LEVEL ? ` · ${toNext.toLocaleString()} steps to Lv ${lvl + 1}` : ' · maxed'}</small>
         ${statLine}
         <span class="note" style="font-size:11.5px">${esc(fam.blurb)} Passive: ${passives[fam.passive]}. ${esc(petStatBonusText(petId, shiny, lineage))}</span>
       </div>
@@ -18551,11 +18548,11 @@ function drawTrimmedArt(canvas, src, pad = 0.08, tints = null) {
 }
 
 // Shared pack-card markup.
-// card: {imgSrc?|iconHtml?, name, rarity, kind, lvl?, statList?, talent?, plain?, stats?, statsHtml?, id?}
+// card: {imgSrc?|iconHtml?, name, rarity?, pet?, kind, lvl?, statList?, talent?, plain?, stats?, statsHtml?, id?}
 // Image art uses a canvas that hydratePackArt() fills (trimmed + centered).
 function packCardHtml(c, { selectable = false } = {}) {
-  const rar = RARITIES[c.rarity] || RARITIES.common;
-  const holo = RAR_ORDER.indexOf(c.rarity) >= 2 ? ' holo' : '';
+  const rar = c.pet ? null : RARITIES[c.rarity] || RARITIES.common;
+  const holo = !c.pet && RAR_ORDER.indexOf(c.rarity) >= 2 ? ' holo' : '';
   /* `wear` (a Boneheadz art id) DRAWS THE PIECE ON A MANNEQUIN and beats the
      loose PNG. It is set at the card-building sites rather than derived here
      because only they know whether the thing being revealed is worn at all: a
@@ -18565,7 +18562,7 @@ function packCardHtml(c, { selectable = false } = {}) {
   const art = c.wear && canWear(c.wear) ? wornArtHtml(c.wear, PC_WEAR_CSS)
     : c.imgSrc ? `<canvas class="pc-canvas" width="600" height="600" data-art="${esc(c.imgSrc)}"></canvas>`
     : `<div class="pc-icon">${c.iconHtml || ''}</div>`;
-  const sparks = RAR_ORDER.indexOf(c.rarity) >= 3
+  const sparks = !c.pet && RAR_ORDER.indexOf(c.rarity) >= 3
     ? `<span class="pc-spark k1">${sparkIco(16)}</span><span class="pc-spark k2">${sparkIco(11)}</span><span class="pc-spark k3">${sparkIco(12)}</span><span class="pc-spark k4">${sparkIco(15)}</span>`
     : '';
   /* The BAND under the plate is where a drop says what it does: real stat chips
@@ -18597,11 +18594,11 @@ function packCardHtml(c, { selectable = false } = {}) {
     + `<div class="pc-head"><span class="pc-kind">${esc(c.kind || '')}</span>${c.lvl ? `<span class="pc-lvl">${esc(c.lvl)}</span>` : ''}</div>`
     + `<div class="pc-art">${art}</div>`
     + `<div class="pc-plate"><div class="pc-name">${esc(c.name)}</div>`
-    + `<div class="pc-rar">${rar.label}</div></div>`
+    + (rar ? `<div class="pc-rar">${rar.label}</div>` : '') + '</div>'
     + (bandBits ? `<div class="pc-band">${bandBits}</div>` : '');
   return selectable
-    ? `<button class="pack-card selectable r-${c.rarity}${holo}" data-gear="${esc(c.id || '')}" aria-pressed="false">${inner}</button>`
-    : `<div class="pack-card r-${c.rarity}${holo}">${inner}</div>`;
+    ? `<button class="pack-card selectable${c.pet ? '' : ` r-${c.rarity}${holo}`}" data-gear="${esc(c.id || '')}" aria-pressed="false">${inner}</button>`
+    : `<div class="pack-card${c.pet ? '' : ` r-${c.rarity}${holo}`}">${inner}</div>`;
 }
 
 /* How much of the crate icon is LID, per crate kind, as a percentage of its own
@@ -19009,7 +19006,7 @@ function wirePackArtFallback(scope) {
 
    A crate deals a HAND, not a card: the rest of the pack stacks behind the one
    you are looking at, and you tap or drag the top one away to get to the next.
-   cards: [{imgSrc?|iconHtml?, name, rarity, kind, lvl?, statList?, talent?, stats?}]. */
+   cards: [{imgSrc?|iconHtml?, name, rarity?, pet?, kind, lvl?, statList?, talent?, stats?}]. */
 /* Test seam, webdriver-gated like __spireSheet / __friendProfile. The reveal is
    the one screen an audit cannot reach by clicking: a legendary card depends on
    RNG that never produced one for the original author, and the boss-loot grid
@@ -19238,7 +19235,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
          painted and the retimed beats never applied: measured, --b-card still
          resolved to 1.38s with the class reading "pack-reveal opening r-common".
          It is a property of the CRATE, not of the card being shown. */
-      reveal.className = `pack-reveal ${first ? 'opening' : 'browsing'} r-${c.rarity}${CRATE_SEQ[crate] ? ' pix-crate' : ''}`;
+      reveal.className = `pack-reveal ${first ? 'opening' : 'browsing'} ${c.pet ? '' : `r-${c.rarity}`}${CRATE_SEQ[crate] ? ' pix-crate' : ''}`;
       if (countEl) countEl.textContent = cards.length > 1 ? `${i + 1} of ${cards.length}` : '';
       if (hintEl) hintEl.textContent = i >= cards.length - 1
         ? (crate ? 'Tap to close the crate' : 'Tap to close')
@@ -19493,8 +19490,8 @@ function crateResultToCard(r) {
     return gearToCard(g);
   }
   const isPet = r.item && r.item.slot === 'C';
-  if (r.type === 'dupe') return { wear: r.item.id, imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET · DUPE' : 'DUPE', statsHtml: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
-  return { wear: r.item.id, imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET' : (esc((BH_SLOTS.find(s => s.code === r.item.slot) || {}).label || 'COSMETIC').toUpperCase()), stats: `New · ${(RARITIES[r.item.rarity] || RARITIES.common).label}` };
+  if (r.type === 'dupe') return { wear: r.item.id, imgSrc: bhAsset(r.item), name: r.item.name, ...(isPet ? { pet: true } : { rarity: r.item.rarity }), kind: isPet ? 'PET · DUPE' : 'DUPE', statsHtml: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
+  return { wear: r.item.id, imgSrc: bhAsset(r.item), name: r.item.name, ...(isPet ? { pet: true } : { rarity: r.item.rarity }), kind: isPet ? 'PET' : (esc((BH_SLOTS.find(s => s.code === r.item.slot) || {}).label || 'COSMETIC').toUpperCase()), stats: isPet ? 'New' : `New · ${(RARITIES[r.item.rarity] || RARITIES.common).label}` };
 }
 
 async function openCrateReveal(result) {
@@ -19651,7 +19648,7 @@ function openPetLevelUp(petId, level, prevLevel, newTalent, inst = null) {
   confettiRain(70); levelSound(S.sounds);
   const wrap = openSheet(`
     <div class="sheet-body" style="text-align:center;padding-top:12px">
-      <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${(BH_BY_ID[petId] || {}).rarity || 'common'} lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">${petPortraitHtml(petId, 104, shiny, { thumb: true, morph })}</div></div>
+      <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">${petPortraitHtml(petId, 104, shiny, { thumb: true, morph })}</div></div>
       <div class="lvl-stamp" style="font-size:30px">PET LEVEL ${level}!</div>
       <div class="cele-sub" style="font-size:15px;margin-top:2px">${esc(petName)}${lineage ? ` <span class="lin-tag">${ICONS.star(11)}${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
       <div class="pet-gains">${gains}</div>
@@ -19712,7 +19709,7 @@ function openPetsHelp() {
       </section>
       <section>
         <h3>When to stop</h3>
-        <p>Rarity, shiny and lineage share a <b>${PET_STAT_MULT_CAP}x base-stat cap</b>. At the cap, more lineage adds <b>no combat stats</b>. Check the stat gains before destroying a spare. Each rank still records another ${BREED_COOLDOWN_STEPS.toLocaleString()} steps walked.</p>
+        <p>Species, shiny and lineage share a <b>${PET_STAT_MULT_CAP}x base-stat cap</b>. At the cap, more lineage adds <b>no combat stats</b>. Check the stat gains before destroying a spare. Each rank still records another ${BREED_COOLDOWN_STEPS.toLocaleString()} steps walked.</p>
         <p>Two things never transfer: a fed-in pet's <b>levels</b> and its <b>bloodline</b>. Feed in plain spares, not the pet you have been walking.</p>
       </section>
       <section>
@@ -19799,8 +19796,6 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
     const p = places[r.iid];
     if (!p) return '';
     const art = petSpriteHtml(r.sp, p.w, p.kind === 'walk' || p.kind === 'flop', { shiny: r.shiny, wear: r.wear || null, thumb: true, morph: r.morph });   // 2026-09-06: the paddock scene carries the Kennel morph like it carries shiny (own instance record, or the friend's wire)
-    const rarity = (BH_BY_ID[r.sp] || {}).rarity;
-    const glow = p.kind === 'fly' && rarity === 'legendary' ? ' pdk-gold' : p.kind === 'hover' && rarity === 'epic' ? ' pdk-epic' : '';
     const pos = p.kind === 'walk'
       ? `left:${p.x0}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px;--pdk-range:${Math.max(0, (p.x1 - p.x0) - p.w)}px;--pdk-dur:${9 + ([...r.iid].reduce((a, c) => a + c.charCodeAt(0), 0) % 5)}s`
       : p.kind === 'fly'
@@ -19821,7 +19816,7 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
        iid is what the bond is banked against, so it is what the tap has to carry. A
        friend's field passes positional ids (`y0`, `y1`) and opens nothing, which is
        unchanged: it has no card to open. */
-    return `<div class="pdk-pet pdk-${p.kind}${glow}" data-pdk="${r.sp}" data-iid="${r.iid}" style="${pos}">
+    return `<div class="pdk-pet pdk-${p.kind}" data-pdk="${r.sp}" data-iid="${r.iid}" style="${pos}">
       <span class="pdk-flip"><span class="pdk-bob">${art}</span></span>
       ${r.equipped || r.breeding ? `<span class="pdk-state">${r.equipped ? '<span>OUT WITH YOU</span>' : ''}${r.breeding ? '<span class="pdk-breeding">BREEDING</span>' : ''}</span>` : ''}
       ${p.kind === 'walk' || p.kind === 'flop' ? '<span class="pdk-shadow"></span>' : ''}
@@ -20121,7 +20116,7 @@ async function openStable(opts = {}) {
     sel = sel.filter(iid => insts.some(x => x.iid === iid));
     /* THE PRIVATE NICKNAME, beside the species name and never instead of it.
        Same shape as nameWithAlias() for friends: the real identity stays the
-       headline, because breed, rarity and family are what this screen is FOR
+       headline, because breeding and family are what this screen is FOR
        and a pet called BISCUIT with no species is unreadable. dir="auto" so an
        Arabic or Hebrew nickname renders in its own direction without dragging
        the punctuation around it; bidi control characters are refused upstream
@@ -20222,14 +20217,12 @@ async function openStable(opts = {}) {
     const focusIdx = Math.max(0, roster.findIndex(x => x.iid === (cfIid || eqIid)));
     const focused = roster[focusIdx] || roster[0] || null;
     const cfCards = roster.map((x, i) => {
-      const it = BH_BY_ID[x.sp] || {};
       const lvl = petLevel(bank[x.iid] || 0);
       const isEq = x.iid === eqIid;
       const inSel = sel.includes(x.iid);
-      return `<div class="cf-card r-${it.rarity || 'common'}${x.shiny ? ' is-shiny' : ''}${isEq ? ' active' : ''}${inSel ? ' picked' : ''}"
+      return `<div class="cf-card${x.shiny ? ' is-shiny' : ''}${isEq ? ' active' : ''}${inSel ? ' picked' : ''}"
           data-cfi="${i}" data-petsel="${x.iid}" data-sp="${x.sp}">
-        <span class="cf-chip r-${it.rarity || 'common'}">${x.shiny ? `${sparkIco(9)} SHINY` : esc((RARITIES[it.rarity] || {}).label || it.rarity || '')}</span>
-        ${x.shiny ? '' : `<span class="cf-chip" style="top:38px">${esc(petColourName(x))}</span>`}
+        <span class="cf-chip">${x.shiny ? `${sparkIco(9)} SHINY` : esc(petColourName(x))}</span>
         <span class="cf-lv">LV ${lvl}</span>
         <!-- Base pets keep their shipped animation. Shiny pets use the shipped
              portrait asset: the shared animation path hue-rotates its layers. -->
@@ -20252,7 +20245,7 @@ async function openStable(opts = {}) {
       if (focused.lineage) rows.push(['Lineage', `${focused.lineage}. ${petStatBonusText(focused.sp, focused.shiny, focused.lineage)}`]);
       return `<div class="cf-cap">
           <b>${esc(petInstanceName(focused))}${focused.shiny ? ' ✦' : ''}${nickTag(focused.iid)}</b>
-          <span class="role"><span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}</span>
+          <span class="role"><span class="dot"></span>${esc(fam.name || fam.key || '')}</span>
           <dl class="cf-meta">${rows.map(([k, v]) => `<div class="row${k === 'Level' ? ' cf-level' : k === 'Lineage' || k.startsWith('Steps') ? ' cf-progress' : ''}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
         </div>
         <div class="cf-colour-label"${bySp[focused.sp].length < 2 ? ' hidden' : ''}>Colour / copy</div>
@@ -20334,7 +20327,7 @@ async function openStable(opts = {}) {
         // 192 from the Locker Room's much bigger tiles (measured there to
         // legitimately clear no tier) was reading a 384-eligible box as 192.
         const tile = a.football ? croppedPetImg(sp, 62, false, morphAsset(sp, (S.petMorphs && S.petMorphs[sp]) || 'base') || null, { [a.slot]: i.id }, true) : petShotHtml(i.id, 62);
-        return `<button class="pw-item r-${a.rarity}${fam ? ' fam' : ''}${on ? ' on' : ''}" type="button" data-petwear="${i.id}" aria-pressed="${on}"${fam ? ` aria-label="${esc(a.name)}, ${fam.length} colourways"` : ''}>
+        return `<button class="pw-item${fam ? ' fam' : ''}${on ? ' on' : ''}" type="button" data-petwear="${i.id}" aria-pressed="${on}"${fam ? ` aria-label="${esc(a.name)}, ${fam.length} colourways"` : ''}>
           <span class="pw-art">${tile}${fam ? `<span class="ward-fam-n" aria-hidden="true">${fam.length}</span>` : ''}</span>
           <b>${esc(a.name)}</b>
           <small>${on ? 'WORN' : esc(slotLbl)}</small>
@@ -20428,7 +20421,7 @@ async function openStable(opts = {}) {
        rarity-sorted, so which species land here changes per player. A flex row anchored
        to the safe box holds whatever two species turn up, at any normalised size, and
        two animals beside you reads as a field with company rather than a contact sheet.
-       Your two RAREST, because that is the collection worth walking out to see. */
+       Two companions preview the field. */
     const doorSp = order.slice(0, 2);
     const doorPx = 28;
     /* The Kennel door's own numbers, from the same instances this render already
@@ -20908,7 +20901,7 @@ async function openStable(opts = {}) {
         if (inst.lineage) rows.push(['Lineage', `${inst.lineage}. ${petStatBonusText(inst.sp, inst.shiny, inst.lineage)}`]);
         $('b', cap).innerHTML = `${esc(petInstanceName(inst))}${inst.shiny ? ' ✦' : ''}${nickTag(inst.iid)}`;
         const role = $('.role', cap);
-        if (role) role.innerHTML = `<span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}`;
+        if (role) role.innerHTML = `<span class="dot"></span>${esc(fam.name || fam.key || '')}`;
         const meta = $('.cf-meta', cap);
         if (meta) meta.innerHTML = rows.map(([k, v]) => `<div class="row${k === 'Level' ? ' cf-level' : k === 'Lineage' || k.startsWith('Steps') ? ' cf-progress' : ''}"><dt>${k}</dt><dd>${v}</dd></div>`).join('');
       }
@@ -21742,7 +21735,7 @@ function openPetBreedResult(off, level) {
       <div class="reveal-stamp">Lineage ${off.lineage}</div>
       <div class="reveal-sub">${esc(it.name || off.sp)} gained a lineage rank</div>
       <div class="reveal-body">
-        <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${it.rarity || 'common'} lin-${Math.min(off.lineage, 6)}${off.shiny ? ' is-shiny' : ''}">${petPortraitHtml(off.sp, 104, off.shiny, { thumb: true, morph: off.morph })}</div></div>
+        <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar lin-${Math.min(off.lineage, 6)}${off.shiny ? ' is-shiny' : ''}">${petPortraitHtml(off.sp, 104, off.shiny, { thumb: true, morph: off.morph })}</div></div>
         <div class="reveal-sub" style="font-size:var(--fs-3)">${esc(it.name || off.sp)}${off.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
         <div class="cele-bubble">${esc(petBreedGainText(off.sp, level, off.shiny, off.lineage))} ${esc(petStatBonusText(off.sp, off.shiny, off.lineage))}</div>
         ${parents.length ? `<div class="fused">
@@ -24406,7 +24399,7 @@ function drawGrantDelivery(r) {
        got a Day One Lizard back with no reveal, no toast and nothing to look at.
        That is the end of the chain and it is the only part she experiences.
        Same shape as the crate line above; a pet is drawn from its own art. */
-    if (p.pet && BH_BY_ID[p.pet]) { const it = BH_BY_ID[p.pet]; cards.push({ imgSrc: bhAsset(it), name: it.name, rarity: it.rarity, kind, stats: note }); hadCard = true; }
+    if (p.pet && BH_BY_ID[p.pet]) { const it = BH_BY_ID[p.pet]; cards.push({ imgSrc: bhAsset(it), name: it.name, pet: true, kind, stats: note }); hadCard = true; }
     if (p.egg) { cards.push({ iconHtml: crateIcon('egg', 120), name: CRATES.egg.label, rarity: 'rare', kind, stats: note }); hadCard = true; }
     if (p.gearId && GEAR_BY_ID[p.gearId]) { cards.push({ ...gearToCard(GEAR_BY_ID[p.gearId]), kind }); hadCard = true; }
     if (p.consumable && CONSUMABLES[p.consumable]) { cards.push({ iconHtml: consumableIcon(p.consumable, 120), name: CONSUMABLES[p.consumable].label, rarity: 'uncommon', kind, stats: note }); hadCard = true; }
@@ -25473,7 +25466,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <div class="bh-stage fstage" id="youStage">${avatarLayersHtml(player.outfit, { noYard: true, skip: ['BG', 'C'] })}</div>
         ${petBody ? `
         <div class="pet-fighter" id="petG">
-          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''}${petArtId && petFacesLeft(petArtId) ? ' faces-away' : ''} r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'} lin-${Math.min((petBody.kit && petBody.kit.lineage) || 0, 6)}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, petFightPx(petArtId, 76), !petHovers(petArtId), { thumb: true, morph: petArtMorph }) : ''}</div>
+          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''}${petArtId && petFacesLeft(petArtId) ? ' faces-away' : ''} lin-${Math.min((petBody.kit && petBody.kit.lineage) || 0, 6)}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, petFightPx(petArtId, 76), !petHovers(petArtId), { thumb: true, morph: petArtMorph }) : ''}</div>
         </div>` : ''}
       </div>
       <div id="floats"></div>

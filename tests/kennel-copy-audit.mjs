@@ -58,6 +58,8 @@ await test('R44-14 copy chips name both colours even with a nickname', async () 
 await test('R44-14 card chip and initial caption name the displayed colour', async () => {
   const html = await run(cut('    const cfCards =', '    const cfDots =') + '\nreturn cfCards;', selection);
   assert.match(html, /class="cf-chip"[^>]*>Frost<\/span>/, 'card has no Frost chip');
+  assert.equal((html.match(/class="cf-chip"/g) || []).length, 1, 'one colour chip replaces the old rarity/colour pair');
+  assert.doesNotMatch(html, /\b(?:common|uncommon|rare|epic|legendary)\b/i, 'pet card must not claim a rarity');
   const caption = await run(cut('    const cfCaption =', '    const cfActs =') + '\nreturn cfCaption;', { ...selection, kinChips: () => '' });
   assert(caption.includes('Frost Drizzle'), 'initial caption loses colour');
 });
