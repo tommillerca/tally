@@ -163,37 +163,24 @@ export const PET_TREES = {
   ],
 };
 
-// ---- per-pet identity: base stats scale with RARITY, tilted by personality ----
-// Every pet used to be a clone of its family; now each has its own stat line so a
-// legendary is meaningfully stronger than a common and two same-family pets still
-// feel different. `mult` is the rarity power budget; `tilt` redistributes it to
-// give each pet a role flavour (glass-cannon, tank, evasive...). Commons sit at
-// mult 1.0 with a light tilt so the early-game baseline is unchanged.
+// All species share the old top multiplier. The shared tilt is the componentwise
+// maximum of the pre-parity tilts: copying C2 would nerf capped C1/C5 stats.
+// Rarity remains catalogue metadata; family trees and species Signatures stay intact.
+// Legacy exported rarity scale retained for compatibility; PET_STATS no longer
+// uses rarity to set combat power.
 export const PET_RARITY_MULT = { common: 1.0, uncommon: 1.09, rare: 1.18, epic: 1.27, legendary: 1.36 };
+const PARITY_TILT = Object.freeze({ power: 1.12, marrow: 1.15, wind: 1.06, reflex: 1.12 });
 export const PET_STATS = {
-  C3: { rarity: 'common',    mult: 1.00, tilt: { power: 1.05, reflex: 0.97 } },            // Corner-store hound (catfish): scrappy biter
-  C4: { rarity: 'common',    mult: 1.00, tilt: { power: 1.12, marrow: 0.85, reflex: 1.05 } }, // Basic hound (lizard): glass cannon
-  C5: { rarity: 'uncommon',  mult: 1.09, tilt: { marrow: 1.15, power: 0.92 } },            // Tidy warden (dog): sturdy guardian
-  C1: { rarity: 'epic',      mult: 1.27, tilt: { reflex: 1.12, wind: 1.06, power: 0.96 } }, // Cosmic imp (cloud): evasive utility
-  C2: { rarity: 'legendary', mult: 1.36, tilt: { marrow: 1.08, reflex: 1.02 } },           // Eternal warden (duck): best all-round
-  // Day One Lizard: an amethyst C4 for early players. Legendary GLOW for prestige,
-  // but deliberately NOT a power pet: a well-rounded rare-tier line (mult 1.15,
-  // balanced tilt) that sits clearly below the epic C1 (1.27) and legendary C2
-  // (1.36), so it's a nice pet to have without breaking the game or the balance
-  // audit. A thank-you, not best-in-slot.
-  CX: { rarity: 'legendary', mult: 1.15, tilt: { power: 1.04, marrow: 1.06, reflex: 1.0 } }, // Day One hound (lizard): sturdy all-rounder
-  /* Bumbleseal: THE DAY ONE LIZARD'S LINE, TO THE DIGIT, on purpose. She was
-     missing from this table too, which silently made a 50,000-coin legendary a
-     COMMON stat line (the `|| { rarity: 'common', mult: 1 }` fallback below).
-     Rather than invent a number, she reuses the one line in here that already
-     answers "a legendary GLOW that must not be best-in-slot": CX's, which is
-     documented above as deliberately below the epic C1 (1.27) and the legendary
-     C2 (1.36). Nothing new to balance, because nothing new was introduced. She is
-     sold for coins and the house rule is that money never buys power. */
-  C6: { rarity: 'legendary', mult: 1.15, tilt: { power: 1.04, marrow: 1.06, reflex: 1.0 } }, // Combat power: the C6 sale remains a cosmetic-only rule violation.
+  C3: { rarity: 'common', mult: 1.36, tilt: PARITY_TILT },
+  C4: { rarity: 'common', mult: 1.36, tilt: PARITY_TILT },
+  C5: { rarity: 'uncommon', mult: 1.36, tilt: PARITY_TILT },
+  C1: { rarity: 'epic', mult: 1.36, tilt: PARITY_TILT },
+  C2: { rarity: 'legendary', mult: 1.36, tilt: PARITY_TILT },
+  CX: { rarity: 'legendary', mult: 1.36, tilt: PARITY_TILT },
+  C6: { rarity: 'legendary', mult: 1.36, tilt: PARITY_TILT },
 };
-// Shiny (the ultra-rare recolour) is no longer purely cosmetic: it grants a small
-// flat bump to every stat so a shiny pull is a genuine power upgrade, not a skin.
+
+// Earned shiny and lineage factors are unchanged.
 export const SHINY_STAT_MULT = 1.08;
 // v128 breeding: each LINEAGE tier (bred by fusing two pets) adds a flat % to every
 // stat. Lineage remains earned and recorded forever; combat has a finite budget.
@@ -222,8 +209,7 @@ export function petBreedGainText(petId, level, shiny, lineage) {
 
 // The single source of truth for a battle-pet's intrinsic stat line (engine AND
 // UI read this). `hp` is the pet's own HP floor; makePetBody adds a slice of the
-// owner's Marrow on top. Commons at level 1 (lineage 0, no shiny) retain the
-// original hatch HP; subsequent HP growth is now +1 per level before multipliers.
+// owner's Marrow on top. HP grows +1 per level before the shared multipliers.
 export function petBattleStats(petId, level = 1, shiny = false, lineage = 0) {
   const L = Math.max(1, level);
   const lin = Math.max(0, Math.floor(lineage || 0));

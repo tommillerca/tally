@@ -8324,6 +8324,41 @@ test('R4 app P1 shop credits, atomic forage, stale GPS and future-day rewards', 
   assert.match(output, /R4 APP P1: 14 passed, 0 failed/);
 });
 
+test('PET PARITY: seven species retain earned factors and never lose a combat stat', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'pet-parity-guard.mjs')], { encoding: 'utf8' });
+  assert.match(output, /equal stats and no loss PASS/);
+});
+
+test('PET STRESS: equipped legal level-16 profile and separate ordinary/extreme boards', async () => {
+  const sim = await import('./fight-sim.mjs');
+  const profile = sim.realisticPlayerProfile();
+  assert.equal(profile.level, 16);
+  assert.deepEqual(profile.stats, { power: 63, marrow: 65, wind: 56, reflex: 57, hype: 65 });
+  assert.deepEqual(profile.gearArmor, { armor: 26, spellArmor: 20 });
+  assert.equal(profile.gear.length, 8);
+  assert.equal(profile.gear.filter(g => g.rarity === 'rare').length, 4);
+  assert.ok(profile.gear.every(g => g.minLevel <= profile.level && g.rarity !== 'legendary'));
+  assert.equal(profile.talents.length, 15);
+  const ordinary = sim.petStressBuilds(), extreme = sim.petStressBuilds({ extreme: true });
+  assert.equal(ordinary.length, 14);
+  assert.equal(extreme.length, 14);
+  assert.equal(sim.historicalPetStressBuilds().length, 21);
+  for (const b of ordinary) {
+    assert.equal(b.pet.level, 6);
+    assert.equal(b.pet.stats.lineage, 0);
+    assert.deepEqual(b.pet.stats, (await import('../js/pets.js')).petBattleStats(b.id, 6, false, 0));
+  }
+  for (const b of extreme) {
+    assert.equal(b.pet.level, 10);
+    assert.deepEqual(b.pet.stats, (await import('../js/pets.js')).petBattleStats(b.id, 10, true, 20));
+  }
+  const args = { ...ordinary[0], foeCfg: sim.FOES[0], seed: 7919 };
+  const geared = sim.createSimFight(args), naked = sim.createSimFight({ ...args, gearArmor: null });
+  assert.ok(geared.p.d.armor > naked.p.d.armor, 'sim must consume equipped physical armor');
+  assert.ok(geared.p.d.spellArmor > naked.p.d.spellArmor, 'sim must consume equipped spell armor');
+  assert.deepEqual(geared.f, naked.f, 'player armor never inflates the foe');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

@@ -15265,7 +15265,7 @@ async function renderSettings(el) {
   });
   $('#cbOff', el)?.addEventListener('click', async () => {
     await social.setCloudBackup(false);
-    toast('Cloud backup off. Your progress will only live on this phone. Your Crew row and leaderboard entry stop updating.', 6500);
+    toast('Cloud backup off. Your progress stays on this phone. Your Crew row and leaderboard entry stop updating for others. We still check for gifts your crew sends you.', 6500);
     renderSettings(el);
   });
   $('#copyCode', el)?.addEventListener('click', async () => {
@@ -24526,7 +24526,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v538'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v539'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

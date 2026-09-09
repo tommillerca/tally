@@ -84,7 +84,7 @@ const REASONS = {
 export async function syncHealthLine() {
   const state = await syncHealthState();
   const off = await kvGet('cloudOff', false).catch(() => false);
-  if (off) return 'Cloud backup is off. Profile sync is off. Your Crew row and leaderboard entry stop updating.';
+  if (off) return 'Cloud backup is off. Profile sync is off. Your Crew row and leaderboard entry stop updating for others. We still check for gifts your crew sends you.';
   if (storageFailed) return 'Sync diagnostics could not be saved on this device.';
   const last = state?.entries?.at(-1);
   const date = at => new Date(at).toLocaleString();

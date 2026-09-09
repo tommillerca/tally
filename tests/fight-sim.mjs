@@ -22,9 +22,11 @@ import { realpathSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import {
   makeFighter, createFight, endTurn, aiTakeTurn,
+  deriveStats, allocatedStats, talentPoints, canTakeTalent, TALENT_TREES,
   scaleStats, TURN_CAP, smartPlayerTurn, LADDER, CHAMPION, RUNG_TALENTS, endlessFoe,
 } from '../js/pit.js';
 
+import { GEAR_ITEMS, GEAR_SLOTS, gearStats, gearTalents, gearSetInfo, gearArmor } from '../js/gear.js';
 import { buildBattlePet, PET_ASSIGN, PET_TREES, PET_ACTIONS, petBattleStats } from '../js/pets.js';
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? Number(process.argv[i + 1]) : d; };
@@ -63,9 +65,9 @@ function damagePerTurn({ stats, talents, pet, food = null }, { turns = 10, seed 
    PLAYER only, which is what the Kitchen actually does. Added 2026-09-07 so the
    Pit's "what is this dish worth" line is measured here rather than asserted:
    makeFighter has always taken it, this harness simply never passed it. */
-export function createSimFight({ stats, talents = [], pet, food = null, foeCfg, foeMult = 0.8, seed }) {
+export function createSimFight({ stats, talents = [], pet, food = null, gearArmor = null, foeCfg, foeMult = 0.8, seed }) {
   const cfg = foeCfg || { mult: foeMult, aiLevel: 4 };
-  const player = makeFighter({ name: 'P', stats, talents, pet, food });
+  const player = makeFighter({ name: 'P', stats, talents, pet, food, gearArmor });
   const foe = makeFighter({ name: cfg.name || 'F', stats: cfg.foeStats || scaleStats(stats, cfg.bossMult || cfg.mult),
     style: cfg.style || 'plain', talents: cfg.mode === 'champ' ? CHAMPION.talents
       : cfg.mode === 'rung' ? RUNG_TALENTS[cfg.rung] || [] : cfg.talents || [] });
@@ -279,7 +281,7 @@ function printEnvelope() {
 }
 
 function printPetBoard() {
-  console.log(`\nPET BOARD: ${SEEDS} paired seeds, stats=55, no player talents. Cells: win% [95% Wilson interval].`);
+  console.log(`\nHISTORICAL SYNTHETIC PET BOARD (current pet code): ${SEEDS} paired seeds, stats=55, no player talents. Cells: win% [95% Wilson interval].`);
   console.log('build'.padEnd(38) + FOES.map(f => f.key.padEnd(23)).join(''));
   const cell = r => `${(100 * r.winRate).toFixed(1)} [${r.ci.map(x => (100 * x).toFixed(1)).join(',')}]`.padEnd(23);
   for (const b of [BUILDS[0], ...PET_BUILDS]) {
@@ -294,7 +296,7 @@ function printPetBoard() {
 
 // Shared stress cells for the advisory board and the PURE regression guard.
 export const PET_STRESS_KINDS = ['Skewer', 'Crow Lord', 'Crow Lord + Skewer'];
-export function petStressBuilds() {
+export function historicalPetStressBuilds() {
   return Object.keys(PET_ASSIGN).flatMap(id => PET_STRESS_KINDS.map(kind => {
     const picks = id === 'C1' ? ['i-jinx', 'i-doublehex', 'i-mark', 'i-deephex', 'i-havoc'] : petPicks(id, 10);
     return { ...(kind.includes('Crow Lord') ? BUILDS.find(b => b.name.includes('Crow Lord')) : BUILDS[0]),
@@ -303,16 +305,78 @@ export function petStressBuilds() {
       food: kind.includes('Skewer') ? { petFree: true } : null };
   }));
 }
-export function petStressCells({ seeds = SEEDS, seedStart = 1 } = {}) {
-  return petStressBuilds().flatMap(build => FOES.map(foeCfg => ({
+export function historicalPetStressCells({ seeds = SEEDS, seedStart = 1 } = {}) {
+  return historicalPetStressBuilds().flatMap(build => FOES.map(foeCfg => ({
     key: `${build.name}/${foeCfg.key}`, id: build.id, kind: build.kind, foe: foeCfg.key, seeds,
     ...measurePet(build, { foeCfg, seeds, seedStart }),
     control: measurePet({ ...build, pet: null }, { foeCfg, seeds, seedStart }),
   })));
 }
-function printPetStress() {
-  console.log('PET STRESS: win% [95% Wilson interval], paired no-pet win%, seeds');
-  for (const cell of petStressCells({ seedStart: arg('--seed-start', 1) })) console.log(JSON.stringify(cell));
+// Representative equipped midgame scenario, not an estimate of the player population.
+// Level 16 spends all 15 points on the existing Crow Lord build (pit.js
+// talentPoints/TIER_GATE). Equipment uses GEAR_ITEMS, alternating rare/uncommon
+// by GEAR_SLOTS order, first eligible catalogue ID: no combat-outcome selection,
+// legendary backlog, or best-in-slot assumption. See docs/CLAIMS.md vNEXT.
+export function realisticPlayerProfile() {
+  const level = 16;
+  const selected = GEAR_SLOTS.map((slot, i) => GEAR_ITEMS.filter(g =>
+    g.slot === slot && g.minLevel <= level && g.rarity === (i % 2 ? 'uncommon' : 'rare'))
+    .sort((a, b) => a.id.localeCompare(b.id, 'en'))[0]);
+  if (selected.some(g => !g)) throw new Error('realistic gear slot has no eligible item');
+  const loadout = Object.fromEntries(selected.map(g => [g.slot, g.id]));
+  const owned = new Set(selected.map(g => g.id));
+  const sets = gearSetInfo(loadout, owned, level), bonus = gearStats(loadout, owned, level);
+  const base = deriveStats();
+  for (const k of Object.keys(base)) base[k] += bonus[k] + sets.stats[k];
+  // 30 protein days + 30 closes + 250,000 steps / 25,000 = 70 points
+  // (app.js buildFighter); spend all points evenly, no legacy migration grant.
+  const allocation = { power: 14, marrow: 14, wind: 14, reflex: 14, hype: 14 };
+  const talents = [...BUILDS.find(b => b.name === 'Crow Lord: flock').talents];
+  if (talents.length !== talentPoints(level)) throw new Error('profile must spend every talent point');
+  const taken = [];
+  for (const id of talents) {
+    const tree = TALENT_TREES.find(t => t.nodes.some(n => n.id === id));
+    if (!tree || !canTakeTalent(taken, tree.id, tree.nodes.findIndex(n => n.id === id)))
+      throw new Error(`illegal realistic talent: ${id}`);
+    taken.push(id);
+  }
+  const extra = [...gearTalents(loadout, owned, level), ...sets.talents]
+    .filter(id => !talents.includes(id) && id !== 'lightfeet'); // app.js ECONOMY_TALENTS
+  return { level, loadout, allocation, gear: selected, sets, name: 'L16 equipped Crow Lord',
+    stats: allocatedStats(base, allocation), talents: [...talents, ...extra],
+    gearArmor: gearArmor(loadout, owned, level) };
+}
+export const REALISTIC_STRESS_KINDS = ['Crow Lord', 'Crow Lord + Skewer'];
+export function petStressBuilds({ extreme = false, overpowered = false } = {}) {
+  const profile = realisticPlayerProfile();
+  return Object.keys(PET_ASSIGN).flatMap(id => REALISTIC_STRESS_KINDS.map(kind => {
+    // L6 = 30,000 steps since this hatch, PET_LEVEL_STEPS. No shiny or breeding.
+    const level = extreme ? 10 : 6;
+    const pet = buildBattlePet(id, level, petPicks(id, level),
+      extreme ? { shiny: true, lineage: HIGH_LINEAGE } : {});
+    // Destructive input control: real engine, unchanged foe and player, huge pet body.
+    if (overpowered) for (const k of ['power', 'marrow', 'wind', 'reflex', 'hp']) pet.stats[k] *= 1000;
+    return { ...profile, name: `${id} ${kind}`, id, kind, pet,
+      food: kind.includes('Skewer') ? { petFree: true } : null };
+  }));
+}
+export function petStressCells({ seeds = SEEDS, seedStart = 1, extreme = false, overpowered = false } = {}) {
+  return petStressBuilds({ extreme, overpowered }).flatMap(build => FOES.map(foeCfg => ({
+    key: `${build.name}/${foeCfg.key}`, id: build.id, kind: build.kind, foe: foeCfg.key, seeds,
+    ...measurePet(build, { foeCfg, seeds, seedStart }),
+    control: measurePet({ ...build, pet: null }, { foeCfg, seeds, seedStart }),
+  })));
+}
+function printPetStress({ extreme = process.argv.includes('--extreme-stress') } = {}) {
+  console.log('REALISTIC PROFILE ' + JSON.stringify(realisticPlayerProfile()));
+  const historical = process.argv.includes('--historical-stress');
+  console.log(historical ? 'HISTORICAL SYNTHETIC ISOLATION: v519 profile, current pet code'
+    : extreme ? 'EXTREME ONLY: realistic owner, L10 shiny lineage20 pet'
+    : 'REALISTIC PET STRESS: equipped L16 Crow Lord, ordinary L6 pet');
+  console.log('build | foe | pet win% | paired no-pet win% | delta pp');
+  const cells = historical ? historicalPetStressCells({ seedStart: arg('--seed-start', 1) })
+    : petStressCells({ seedStart: arg('--seed-start', 1), extreme });
+  for (const c of cells) console.log(`${c.id} ${c.kind} | ${c.foe} | ${(100*c.winRate).toFixed(1)} | ${(100*c.control.winRate).toFixed(1)} | ${(100*(c.winRate-c.control.winRate)).toFixed(1)}`);
 }
 
 // Historical T1 report retained for provenance. --report reads the current T2 handoff.
@@ -571,9 +635,10 @@ if (isMain) {
   if (!Number.isInteger(SEEDS) || SEEDS < 1) throw new Error('seeds must be a positive integer');
   if (process.argv.includes('--stress-only')) { printPetStress(); process.exit(0); }
   if (process.argv.includes('--envelope-only')) { printEnvelope(); process.exit(0); }
+  printPetStress();
+  printPetStress({ extreme: true });
   printPetBoard();
   printEnvelope();
-  printPetStress();
   if (process.argv.includes('--pets-only')) process.exit(0);
   console.log(`fight-sim: ${BUILDS.length} builds + ${STACKS.length} stacks x ${SEEDS} seeds`);
   console.log('damage/turn vs a dummy (offense, no AI noise) + win% vs a foe at 80% of your stats\n');

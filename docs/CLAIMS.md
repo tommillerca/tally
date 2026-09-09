@@ -1,5 +1,129 @@
 # What each patch note claims, and what backs it
 
+## v539 (2026-09-09)
+
+Changelog item: All pets now share the same base combat stats, raised without reducing existing stats. Shiny and breeding bonuses stay earned.
+
+1. PROOF: pet-parity-guard.mjs, pet-family-audit.mjs, pit.test.js, unit.test.js | REACH: all seven multipliers equal 1.36 and every tilt is identical; levels 1-10, ordinary/shiny and lineage 0-30/1000 retain at least every pre-parity numeric stat. Original-source parity guard exited 1, showing the 1.00-1.36 spread. Current guard exits 0. Family identity, talent trees, signatures and effect dispatch remain frozen; 13,552 serialized builds match 70 explicitly updated build hashes; all 54,208 effects retain their historical hashes. Original hashes and fixture are retained.
+
+Changelog item: Pet balance checks now use an equipped, fully specced player with an ordinary pet and compare every foe with the same player fighting without a pet.
+
+2. PROOF: fight-sim.mjs, pet-stress-guard.mjs, unit.test.js | REACH: step-2 pre-parity measurement below preceded the new ceiling. The ordinary board is 70 cells (7 species x 2 food states x 5 foes), each 200 paired seeds. Current maximum 77.5% passes the 85% ceiling; every daily-Glutton cell retains the matched-control +5 percentage point assertion. Actual pet-body stats multiplied by 1000, with the same engine/player/foes/seeds, make the guard exit 1: C1 Crow Lord/dailyGlutton 91.0% exceeds 85%, and the full runaway board peaks at 100%. Empty, duplicate, malformed, saturated, no-contribution and moved-control samples are also rejected.
+
+### Frozen work order and explicit deviation
+
+2026-09-09 plan SHA256: `7c7466174cd8180b6a2ce3e94c3f916edf325c22fee105678df70ba53566451a`.
+All source paths were resolved within this checkout. No version stamp is changed.
+
+A literal copy of C2's tilt cannot satisfy "no player loses power": at the existing 1.5 combined cap, C1 would lose reflex/wind and C5 marrow/HP. The reported deviation uses the componentwise maximum of the old tilts: power 1.12, marrow 1.15, wind 1.06, reflex 1.12. Every multiplier is exactly 1.36. C2's multiplier is unchanged but its tilt improves too. This is the smallest shared tilt that never reduces a capped stat. `SHINY_STAT_MULT=1.08`, `PET_LINEAGE_STEP=0.05`, and the existing combined cap 1.5 are unchanged. No pet trees, Pit ladder, foe stats, or production fight mechanics were changed.
+
+### Step 1: source-derived player, fixed before observing outcomes
+
+This is a plausible equipped midgame scenario, not a population survey or a claim that one loadout covers every competent player.
+
+- Level 16 is the first level with 15 talent points (`js/pit.js` `talentPoints`). It requires 9,180 XP (`js/game.js` `xpForLevel`). The existing `BUILDS` Crow Lord flock spends all 15 points, with every acquisition checked against `TALENT_TREES` and `canTakeTalent`, including tier gates and ranks. It is an established active player's build, not the talentless baseline.
+- Base stats use shipped `deriveStats()` (20 each) and `allocatedStats()` (+2 per training point). The explicit plausible activity budget is 30 protein days + 30 closed days + floor(250,000 lifetime steps / 25,000) = 70 training points, using `js/app.js` `buildFighter`'s grant formula. All 70 are spent, 14 per stat, without assuming a migration grant. Balanced allocation avoids selecting a stat skew after measuring wins. These activity counts are scenario assumptions, not telemetry.
+- Gear uses `js/gear.js` `GEAR_ITEMS`, derived from `data/boneheadz.js`, in `GEAR_SLOTS` order. Alternate rare/uncommon, select the first eligible catalogue ID in each slot, and treat each selected piece as owned. These tiers unlock well before level 16 (`GEAR_MIN_LEVEL` and `SLOT_LEVEL_OFFSET`); four retained uncommon pieces and four rare upgrades form a mixed progression wardrobe. No legendary or outcome-selected best-in-slot equipment is assumed. All selections appear below.
+- The shipped `gearStats`, `gearSetInfo`, `gearTalents` and `gearArmor` helpers apply ownership and level checks. Two-piece gravecaller and gravewarden bonuses yield final stats power 63, marrow 65, wind 56, reflex 57, hype 65. Gear armor is physical 26, spell 20. The harness now passes that armor to `makeFighter`, as the real caller does. Gear/set extras exclude already learned talents and `lightfeet`, matching `js/app.js` `ECONOMY_TALENTS`. This particular wardrobe grants no extra talents.
+- Each ordinary pet is level 6, non-shiny, lineage 0: 30,000 steps since this hatch from `js/pets.js` `PET_LEVEL_STEPS`. A recently hatched companion on an established account is plausible. Each takes the first legal option at levels 2, 4 and 6 from its shipped `PET_TREES`. All seven species are covered, with CX explicitly representing a founder account, not a current egg drop.
+- The two food states are no dish and Skewer (`js/cooking.js` `RECIPES`, saved `petFree` buff). The paired control removes only the pet, preserving stats, armor, talents, food, foe and seed. `smartPlayerTurn` supplies the same competent policy throughout. `FOES` remains the existing five complete encounter configurations, including talents, AI and adds.
+
+| Slot | Catalogue ID | Tier | Minimum level |
+|---|---|---|---:|
+| IR | g-IR1-slab | rare | 8 |
+| IL | g-IL1-1-gravewarden | uncommon | 2 |
+| T | g-T10-1-greyhound | rare | 8 |
+| P | g-P2-ringmaster | uncommon | 2 |
+| FW | g-FW1-boneshaman | rare | 6 |
+| H | g-H10-1-gravecaller | uncommon | 1 |
+| U | g-U1-gravecaller | rare | 6 |
+| S | g-S1-1-gravewarden | uncommon | 1 |
+
+### Step 2: full pre-parity table, before adding or moving a ceiling
+
+Command: `node tests/fight-sim.mjs --stress-only --seeds 200`.
+Each cell is **pet win% / matched no-pet win%**, seeds 1-200 multiplied by 7919. Printed in full to the operator before editing `js/pets.js` or setting the new ceiling.
+
+| Pet and loadout | Daily Glutton | Champion | Endless 1 | Glutton 10 | Wanderer 13 |
+|---|---:|---:|---:|---:|---:|
+| C1 Crow Lord | 66.0/5.5 | 32.5/1.5 | 20.0/0.5 | 18.5/2.5 | 40.5/12.0 |
+| C1 Crow Lord + Skewer | 69.0/5.5 | 39.0/1.5 | 24.5/0.5 | 25.5/2.5 | 45.0/12.0 |
+| C2 Crow Lord | 73.5/5.5 | 37.0/1.5 | 30.0/0.5 | 24.5/2.5 | 39.0/12.0 |
+| C2 Crow Lord + Skewer | 74.5/5.5 | 37.5/1.5 | 33.0/0.5 | 26.0/2.5 | 40.5/12.0 |
+| C3 Crow Lord | 49.5/5.5 | 24.0/1.5 | 11.0/0.5 | 20.5/2.5 | 49.0/12.0 |
+| C3 Crow Lord + Skewer | 52.5/5.5 | 28.5/1.5 | 13.5/0.5 | 27.5/2.5 | 51.5/12.0 |
+| C4 Crow Lord | 46.5/5.5 | 20.0/1.5 | 8.5/0.5 | 19.0/2.5 | 40.5/12.0 |
+| C4 Crow Lord + Skewer | 49.5/5.5 | 23.0/1.5 | 11.5/0.5 | 24.0/2.5 | 43.0/12.0 |
+| C5 Crow Lord | 61.0/5.5 | 34.5/1.5 | 23.5/0.5 | 18.0/2.5 | 37.5/12.0 |
+| C5 Crow Lord + Skewer | 62.5/5.5 | 34.5/1.5 | 27.0/0.5 | 20.0/2.5 | 38.0/12.0 |
+| CX Crow Lord | 55.0/5.5 | 29.5/1.5 | 14.0/0.5 | 23.5/2.5 | 48.5/12.0 |
+| CX Crow Lord + Skewer | 58.5/5.5 | 32.0/1.5 | 16.5/0.5 | 32.0/2.5 | 51.0/12.0 |
+| C6 Crow Lord | 55.0/5.5 | 29.5/1.5 | 14.0/0.5 | 23.5/2.5 | 48.5/12.0 |
+| C6 Crow Lord + Skewer | 58.5/5.5 | 32.0/1.5 | 16.5/0.5 | 32.0/2.5 | 51.0/12.0 |
+
+Finding: this profile is not steamrolling. Its pre-parity peak is 74.5%; even the easiest foe wins more than one fight in four against the strongest measured ordinary cell. This does not establish difficulty for every talent/gear combination or the separately labelled extreme pet. No ceiling was changed to obtain this finding.
+
+### Step 4: challenge gate and provenance
+
+After that table and parity, but before measuring post-parity outcomes, the new ordinary ceiling was set to 85%, giving 10.5 percentage points above the pre-parity maximum while still requiring at least 15% losses in every cell. It replaces the old synthetic median/peak bands, which have no justification on an equipped profile. It is an observed fixed-seed regression ceiling, not a population guarantee. No-pet wins are pinned to `[11, 3, 1, 5, 24]` in foe order for both food states. The +5pp daily contribution assertion survives unchanged in meaning. Current ordinary min/median/max is 18.0/37.0/77.5%.
+
+The main board has 70 cells instead of 105: on this single competent talent profile the former talentless Skewer row would duplicate Crow Lord + Skewer. Both food states and all species/foes remain represented. This sample change is explicit, not an attempt to retain the v519 distributions.
+
+The v519 board is retained as `historicalPetStressBuilds` / `historicalPetStressCells`, with the original 105 identities, maxed shiny lineage20 pets, talentless Skewer row and ungeared Crow rows. Its original `KINDS`, `FOES`, `controlWins` and assertion function with PROVENANCE comments remain in `pet-stress-guard.mjs`. `--historical-check` explicitly compares current code with that old band; it is not the ordinary gate. `--stress-only --historical-stress` prints the old scenario using current pet code. **The win-rate figures in v519 were measured on synthetic isolation profiles and do not describe real play.** The historical prose and figures below remain intact and must not be relabelled as real-player results or as measurements of the new parity code.
+
+Finding: the extreme board peaks at 96.5% (C1 Crow Lord versus the daily Glutton), with 14 of 70 cells above 85%. The top end does steamroll that foe. This is disclosed, without raising the ordinary ceiling or changing foes.
+
+The new realistic owner with a maxed shiny lineage20 pet is a separate **EXTREME ONLY** board (`--stress-only --extreme-stress`, also printed by the default simulation). It is descriptive and is not folded into the ordinary 85% ceiling.
+
+### Validation receipt
+
+- `node tests/unit.test.js`: exit 0, `384 passed, 0 failed`.
+- `node tests/pit.test.js`: exit 0, `100 passed, 0 failed`.
+- `node tests/pet-family-audit.mjs`: exit 0, `14 passed, 0 failed`; 13,552 builds and 54,208 effects checked.
+- `node tests/pet-parity-guard.mjs`: pre-parity exit 1, current exit 0. Original multipliers: C3/C4 1.00, C5 1.09, C1 1.27, C2 1.36, CX/C6 1.15. Original guard failure: `C3: multiplier must equal old top 1.36`, `1 !== 1.36`.
+- `node tests/pet-stress-guard.mjs --control-overpowered`: exit 1, `C1 Crow Lord/dailyGlutton: 91.0% exceeds 85% realistic ceiling`. The actual overpowered input peaks at 100%.
+- `node tests/pet-stress-guard.mjs`: exit 0, ordinary min/median/max `18.0/37.0/77.5%`, 70 cells x 200 paired fights, daily +5pp floor and frozen realistic controls pass.
+- `node tests/fight-sim.mjs --seeds 120`: exit 0, full build table pasted below. Its dummy column is explicitly synthetic, not the realistic stress result.
+- All **155/155 PURE audits** enumerated from the `PURE` declaration and every `PURE.push`/`PURE.unshift` in `tests/release-gate.mjs` exited 0. Enumeration asserted uniqueness and refused counts below 151. First pass was 153/155: provenance and hygiene lints caught a missing dated comment and a missing positive-control annotation in the new guards. Both were fixed without changing either lint or its thresholds, then the entire 155-audit list was rerun with all exits 0.
+- `node tests/release-gate.mjs --coverage-only`: exit 0; 406 audits on disk. This is coverage accounting, not a claim that browser audits ran. The PURE pool was run directly without a server.
+- `git diff --check`: exit 0. Forbidden files (`js/hunt.js`, `js/social.js`, `js/db.js`, `js/app.js`) and production `js/pit.js` are byte-identical to checkout HEAD. Two pending changelog items match exactly two vNEXT PROOF rows; versioned `CHANGES` is unchanged.
+
+```text
+fight-sim: 8 builds + 2 stacks x 120 seeds
+damage/turn vs a dummy (offense, no AI noise) + win% vs a foe at 80% of your stats
+
+build                         dmg/turn   x base   win%   median turns
+----------------------------------------------------------------------------
+baseline (no talents)         50.1       1.00x    78%    6
+Slab: rage stack              58.3       1.16x    96%    4
+Alchemist: catalyst           79.7       1.59x    78%    6
+lifesteal + hallowed          50.1       1.00x    98%    6
+Crow Lord: flock              56.9       1.14x    100%   5
+two free lives                50.1       1.00x    98%    6
+stamina engine                63.8       1.27x    98%    5
+Shaman: elemental             60.0       1.20x    78%    6
+STACK: alchemist + stamina    108.6      2.17x    98%    5
+STACK: alch + stamina + slab  96.7       1.93x    100%   5
+
+Same stats in every row, so the multiplier IS the talents.
+
+win% vs the game's own rungs   Glutton 1.3   Wanderer 1.45
+baseline (no talents)                  11%             3%
+Crow Lord: flock                       36%            17%
+two free lives                         29%            16%
+stamina engine                         13%             7%
+STACK: alchemist + stamina             13%             7%
+STACK: alch + stamina + slab           14%             3%
+```
+
+Denied/blocked actions: none. No commit, push, publication, or original-checkout edit was performed. The reported deviations are the shared maximum tilt needed to prevent capped-stat losses, and the explicitly documented 70-cell ordinary board with the original 105-cell historical board retained. Extreme difficulty is a finding, not a ceiling exception on the ordinary board.
+
+Unversioned pending note in `NEXT_CHANGES`, in matching order.
+
+Changelog item: The cloud opt-out audit forbids uploads and pins the allowed reads, while checking that the app still reads Crew gifts.
+
+1. PROOF: cloud-optout-audit.mjs, cloud-off-audit.mjs | REACH: PARTIAL: The real Settings Off control is graded for zero uploads in server receipts and browser attempts. GET paths are pinned to /backup, /friends, /grants and /health, with only the GET /grants preflight allowed. A gifts GET must occur in both observations. The frozen gifts disclosure is restored in Settings. Browser proof is BLOCKED: `Error: listen EPERM: operation not permitted 127.0.0.1`. Node scratch controls execute this audit's grading block against real client transport: removing the profile upload guard fails with two PUT /profile attempts, and injecting GET /audit-unlisted fails the read pin, each exit 1. The unchanged garment audit passes 8/8; unit tests pass 382/382; all 154 PURE entries enumerated from release-gate.mjs exit 0. Node controls do not substitute for browser proof; browser green and both browser RED mutations remain operator work.
+
 ## v538 (2026-09-09)
 
 Unversioned pending notes in `NEXT_CHANGES`, in matching order.

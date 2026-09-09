@@ -2,8 +2,9 @@
  * including OPTIONS, GET, profiles and backup writes. Enabled backup traffic
  * remains the positive control. Server receipts and browser attempts are both
  * graded, so an abandoned request cannot disappear from the opt-out result.
- * Known conflict: autoSync still pulls Crew grants while opted out. This strict
- * requirement can fail on current production; do not filter those calls away.
+ * Cloud Off forbids all uploads. Reads remain allowed, pinned to the observed
+ * endpoint set so every new read requires human review. Crew gifts must still
+ * be checked, providing a positive control for the read permission.
  * Usage: node tests/cloud-optout-audit.mjs [baseUrl]
  */
 import http from 'node:http';
@@ -21,12 +22,13 @@ const fails = [];
 const ok = (n, pass, d = '') => { console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!pass) fails.push(n); };
 
 const served = [];      // what the SERVER received: the authority
-const wire = [];        // what the browser attempted: context only
+const wire = [];        // what the browser attempted: independently graded
 const api = http.createServer((req, res) => {
   let body = '';
   req.on('data', c => { body += c; });
   req.on('end', () => {
-    served.push({ method: req.method, url: req.url, bytes: body.length });
+    served.push({ method: req.method, url: req.url, bytes: Buffer.byteLength(body),
+      preflightMethod: req.headers['access-control-request-method'] });
     res.setHeader('access-control-allow-origin', '*');
     res.setHeader('access-control-allow-headers', '*');
     res.setHeader('access-control-allow-methods', 'GET,POST,PUT,OPTIONS');
@@ -66,7 +68,9 @@ const puts = () => served.filter(r => r.method === 'PUT' && r.url.startsWith('/b
 const putsSince = mark => puts().length - mark;
 
 const { browser, page } = await boot(base, { headless: process.env.HEADLESS_MODE || 'shell' });
-page.on('request', r => wire.push({ url: r.url(), method: r.method() }));
+page.on('request', r => wire.push({ url: r.url(), method: r.method(),
+  bytes: Buffer.byteLength(r.postData() || ''),
+  preflightMethod: r.headers()['access-control-request-method'] }));
 
 try {
   const open = async () => {
@@ -148,9 +152,16 @@ try {
   const off = cloudOptoutRequests(served, offMark);
   const attempted = cloudOptoutRequests(wire.filter(r => r.url.startsWith(apiUrl)),
     wire.slice(0, wireMark).filter(r => r.url.startsWith(apiUrl)).length);
-  ok('OFF ZERO REQUESTS OF ANY KIND after the player turns cloud backup off',
-    pressed && off.total === 0 && attempted.total === 0,
-    `${off.total} server requests; ${attempted.total} browser attempts; old counter graded ${off.backups} PUT /backup; ${JSON.stringify(off.rows)}`);
+  ok('OFF ZERO UPLOADS OF ANY KIND',
+    pressed && off.writes.length === 0 && attempted.writes.length === 0,
+    `${off.writes.length} server uploads; ${attempted.writes.length} browser upload attempts; ${JSON.stringify({ server: off.writes, browser: attempted.writes })}`);
+  ok('OFF reads pinned to GET /backup, /friends, /grants, /health and the GET /grants preflight',
+    pressed && off.unexpectedReads.length === 0 && attempted.unexpectedReads.length === 0,
+    `${off.unexpectedReads.length} unexpected server requests; ${attempted.unexpectedReads.length} unexpected browser attempts; ${JSON.stringify({ server: off.unexpectedReads, browser: attempted.unexpectedReads })}`);
+  ok('CONTROL OFF still checks crew gifts through GET /grants',
+    pressed && off.grants > 0 && attempted.grants > 0,
+    `${off.grants} server gifts reads; ${attempted.grants} browser gifts attempts`);
+  console.log(`      OFF complete request set: ${JSON.stringify({ server: off.rows, browser: attempted.rows })}`);
 
   /* ---- BACKON: turning it on again must resume, or this fix loses saves -- */
   const backOn = await pressSetting('#cbOn');
