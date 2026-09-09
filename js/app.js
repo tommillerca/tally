@@ -11240,6 +11240,7 @@ async function renderTrends(el) {
   const stepsWk = days7.reduce((a, d) => a + d.steps, 0);
   const kmWk = stepsWk * 0.000762;
   const sleepWk = days7.filter(d => d.sleepHours != null);
+  const hasSleep14 = days14.some(d => d.sleepHours != null);
   const avgSleep = sleepWk.length ? sleepWk.reduce((a, d) => a + d.sleepHours, 0) / sleepWk.length : null;
   /* Use the paying engine's full-history dates, including zero-calorie rows
      and its legacy freeze protection. Walking alone is not a food log.
@@ -11315,8 +11316,8 @@ async function renderTrends(el) {
     <div class="card-title">SLEEP · LAST 14 DAYS</div>
     <div class="big-stat"><span class="v">${avgSleep != null ? avgSleep.toFixed(1) : '·'}<span class="d" style="margin-left:4px">h avg (7d)</span></span></div>
     <div class="chart" id="sleepChart">${barChart(days14, d => d.sleepHours, { target: 8, color: 'var(--protein)', fmt: v => v.toFixed(0) + 'h', band: [7, 9] })}
-      <p class="bc-readout note">${sleepWk.length ? 'Tap any bar for that night.' : ''}</p></div>
-    <p class="note" style="margin-top:8px">${sleepWk.length ? 'Shaded band = 7 to 9 hours. Log your hours each morning on the home screen.' : 'Log hours slept on the home screen (Daily wellness) to start your sleep trend.'}</p>
+      <p class="bc-readout note">${hasSleep14 ? 'Tap any bar for that night.' : ''}</p></div>
+    <p class="note" style="margin-top:8px">${hasSleep14 ? 'Shaded band = 7 to 9 hours. Log your hours each morning on the home screen.' : 'Log hours slept on the home screen (Daily wellness) to start your sleep trend.'}</p>
   </div>
 
   <div class="card">
@@ -11580,12 +11581,13 @@ function metricSpark(vals, color) {
 }
 
 // full drill-in chart: bars, a dashed average baseline, best day highlighted green
-function metricDetailChart(points, metricKey) {
+function metricDetailChart(points, metricKey, summaryPoints = points) {
   const metric = TREND_METRICS[metricKey];
   const vals = points.map(p => p.value).filter(v => v != null);
   if (!vals.length) return '<p class="note" style="text-align:center;padding:26px 0">No readings in this window yet.</p>';
   const maxV = Math.max(...vals), minV = Math.min(...vals);
-  const base = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const summaryVals = summaryPoints.map(p => p.value).filter(v => v != null);
+  const base = summaryVals.reduce((a, b) => a + b, 0) / summaryVals.length;
   const lo = Math.min(minV, base) * 0.94, hi = Math.max(maxV, base) * 1.06, span = (hi - lo) || 1;
   const W = 360, H = 150, P = 8, gap = 3, n = points.length, bw = (W - 2 * P - gap * (n - 1)) / n;
   const y = v => P + (1 - (v - lo) / span) * (H - 2 * P - 16);
@@ -11669,7 +11671,8 @@ async function openMetricDetail(metricKey) {
   const bodyHtml = (rangeKey) => {
     const pts = metricSeries(metricKey, rangeKey, health, weights);
     const vals = pts.map(p => p.value).filter(v => v != null);
-    const shownDays = dates.filter(d => pts.some(p => p.date === d || p.month === d.slice(0, 7))).length;
+    const shownDates = dates.filter(d => pts.some(p => p.date === d || p.month === d.slice(0, 7)));
+    const shownDays = shownDates.length;
     const historyCount = `<p class="note">Showing ${shownDays} of ${dates.length} recorded days${rangeKey === 'year' ? ', as monthly averages' : ''}.${shownDays < dates.length ? ' Some recorded days are outside this window.' : ''}</p>`;
     if (!vals.length) return `${historyCount}<div class="trend-panel"><p class="note" style="text-align:center;padding:22px 0">No readings in this window yet. They will appear here as your watch syncs.</p></div>`;
     // stats exclude the in-progress current day for cumulative metrics (steps etc.)
@@ -11682,13 +11685,15 @@ async function openMetricDetail(metricKey) {
     const stat = (l, v) => `<div class="st"><div class="l">${l}</div><div class="v">${v}</div></div>`;
     let stats;
     if (metric.goodLow == null) { // weight: Average / Range / Latest
-      stats = stat('Average', `${metricNum(metricKey, avg)}<small> ${u}</small>`) + stat('Range', `${metricNum(metricKey, mn)}-${metricNum(metricKey, mx)}`) + stat('Latest', `${metricNum(metricKey, vals[vals.length - 1])}<small> ${u}</small>`);
+      stats = stat('Average', `${metricNum(metricKey, avg)}<small> ${u}</small>`) + stat('Range', `${metricNum(metricKey, mn)}-${metricNum(metricKey, mx)}`) + stat('Latest', `${metricNum(metricKey, byDate[shownDates[shownDates.length - 1]])}<small> ${u}</small>`);
     } else {
       const exLbl = metric.goodLow ? 'Lowest' : 'Highest', exVal = metric.goodLow ? mn : mx;
       stats = stat('Average', `${metricNum(metricKey, avg)}<small> ${u}</small>`) + stat('Range', `${metricNum(metricKey, mn)}-${metricNum(metricKey, mx)}`) + stat(exLbl, `${metricNum(metricKey, exVal)}<small> ${u}</small>`);
     }
-    return `${historyCount}<div class="trend-panel">${metricDetailChart(pts, metricKey)}
-      <p class="bc-readout note">Tap any bar for that day.</p></div><div class="trend-stats">${stats}</div>${metricInsight(metricKey, pts)}`;
+    // The dashed baseline and insight use the same completed-day sample as
+    // the summary. Today's running total stays visible and tappable.
+    return `${historyCount}<div class="trend-panel">${metricDetailChart(pts, metricKey, svals.length ? statPts : pts)}
+      <p class="bc-readout note">Tap any bar for that day.</p></div><div class="trend-stats">${stats}</div>${metricInsight(metricKey, statPts)}`;
   };
 
   const range0 = 'month';
@@ -11911,11 +11916,11 @@ async function openSleepDetail() {
     <div class="trend-scroll">
       <h2 style="margin:2px 40px 6px 0;font-size:19px">Sleep</h2>
       <div class="sleep-top">
-        <div class="sleep-score" style="color:${bandCol}">${sc}<small>/100</small></div>
+        <div class="sleep-score" style="color:${bandCol}">${sc == null ? '·' : `${sc}<small>/100</small>`}</div>
         <div class="sleep-meta"><b>${hm(asleep)} asleep</b><span>${when}${r.sleepAuto ? ' · auto from your watch' : ''}</span></div>
       </div>
       ${bar}
-      <p class="note" style="margin:14px 2px 2px">Your sleep score is Boneheadz's own read of ${staged ? 'how long and how well you slept (duration, deep, REM and how settled the night was)' : 'how long you slept'}. It feeds your daily readiness up top. Apple doesn't hand apps a sleep number, so this is our take on the same data your watch records.</p>
+      <p class="note" style="margin:14px 2px 2px">${sc == null ? 'Not enough sleep recorded to score. At least 3 hours are needed. This record does not contribute a sleep score to readiness.' : `Your sleep score is Boneheadz's own read of ${staged ? 'how long and how well you slept (duration, deep, REM and how settled the night was)' : 'how long you slept'}. It feeds your daily readiness up top. Apple doesn't hand apps a sleep number, so this is our take on the same data your watch records.`}</p>
     </div>`;
   openSheet(html, { cls: 'sheet-trend' });
 }
