@@ -257,6 +257,7 @@ const PURE = [
   'dock-line-audit.mjs', // Dock band source regression and FAB flex geometry controls; rendered pixels/taps remain browser/manual proof.
   'whatsnew-boot-audit.mjs',
   'wardrobe-noise-audit.mjs',
+  'sync-clientpath-audit.mjs', // Real boot/snapshot/signing over mem-idb; failed profile retries, no sockets.
   'wardrobe-playtest-audit.mjs', 'lab-room2-audit.mjs', 'stable-stale-disclosure-audit.mjs', 'breed-last-colour-audit.mjs', 'stable-loss-disclosure-audit.mjs', 'lab-health-recovery-audit.mjs',
   'lab-integration-audit.mjs', 'lab-ui-audit.mjs', 'laboratory-audit.mjs', 'lab-foundation-audit.mjs', 'pet-stress-guard.mjs', 'crew-pet-node-guard.mjs',
   'transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-atomic-audit.mjs', 'backup-encoder-audit.mjs', 'backup-key-audit.mjs', 'backup-version-audit.mjs',
