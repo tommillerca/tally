@@ -354,26 +354,13 @@ check('ART   every wedge the module declares pixel renders decoded 48px art',
   art ? `${art.got}/${art.want} at 48px (${art.srcs})${art.bad.length ? ' BAD: ' + art.bad.join(' ') : ''}` : 'wheel never arrived');
 await page.evaluate(() => document.querySelectorAll('.dw').forEach(n => n.remove()));
 
-/* 5. LABELS LAND UPRIGHT AT EVERY REST.
-   Added 2026-08-22. Tom: "when i spun the wheel this morning some of the text
-   was upside down and hard to read." The labels ride the wheel's rotate(), so
-   any landing whose rest angle sits in the 90..270 band (3 of the 7 wedges)
-   rested EVERY label inverted, and nothing here looked at the wheel after a
-   spin. The fix is .dw-flip (js/wheel.js): a 180-degree counter-rotation of
-   each icon+label pair, applied with the landing transform.
-   This drives the REAL control (a click on #dwSpin) to five pinned landings,
-   top-half and bottom-half, via the webdriver-only __wheelIdx lever, waits for
-   the wheel to actually REST, and asserts the NET world rotation of every
-   label and icon (wheel matrix composed with the element's own matrix) lands
-   within -90..+90 degrees. Controls, because a green here must be able to go
-   red: SAMPLE (one label per wedge, wedges from the DOM, never zero), REST
-   (the wheel measurably stopped on the wedge we pinned, so a frozen transition
-   or a dead pin cannot grade a pre-spin wheel), and BAND (the driven set
-   really contained flip-band landings, so the hazard was in the sample).
-   PROVEN RED 2026-08-22 in a throwaway tree with only the two
-   `wheel.classList.add('dw-flip')` lines removed (mutation asserted applied):
-   the three flip-band landings each fail UPRIGHT with nets around +/-129..180
-   while REST stays green; this tree is green on the same rows. */
+/* 5. LABELS ARE HORIZONTAL AT EVERY REST.
+   Frozen fix-wheel-look, 2026-09-09: prize names now live in a fixed key outside
+   the wheel. The old +/-90 degree test accepted sideways text. Require zero
+   net rotation through ALL ancestors, one name per wedge and every landing.
+   SAMPLE, REST and BAND still prove the real wheel moved to the chosen prize.
+   The Node companion wheel-look-audit reproduces the original rotating-label
+   bug. These browser rows require an independent run; pixel review is owed. */
 const parseLandings = async (k) => {
   await page.evaluate(async (k) => {
     document.querySelectorAll('.dw').forEach(n => n.remove());
@@ -405,16 +392,18 @@ const parseLandings = async (k) => {
     const mul = (A, B) => [A[0] * B[0] + A[2] * B[1], A[1] * B[0] + A[3] * B[1], A[0] * B[2] + A[2] * B[3], A[1] * B[2] + A[3] * B[3], 0, 0];
     const deg = M => Math.atan2(M[1], M[0]) * 180 / Math.PI;   // -180..180
     const W = parse(getComputedStyle(wheel).transform);
-    const rows = [...wheel.querySelectorAll('svg text')].map(t =>
-      ({ kind: 'label', tag: t.textContent, net: deg(mul(W, parse(getComputedStyle(t).transform))) }));
-    rows.push(...[...wheel.querySelectorAll('.dw-ico')].map((s, i) =>
-      ({ kind: 'icon', tag: 'ico' + i, net: deg(mul(W, parse(getComputedStyle(s).transform))) })));
+    const labels = [...document.querySelectorAll('.dw-prize-name')];
+    const rows = labels.map(t => {
+      let net = [1, 0, 0, 1, 0, 0];
+      for (let el = t; el; el = el.parentElement) net = mul(parse(getComputedStyle(el).transform), net);
+      return { kind: 'label', tag: t.textContent, net: deg(net), inWheel: wheel.contains(t) };
+    });
     return { wheelDeg: ((deg(W) % 360) + 360) % 360, wedges: wheel.querySelectorAll('path').length,
-             labels: wheel.querySelectorAll('svg text').length, rows };
+             labels: labels.length, rows, rotatingLabels: wheel.querySelectorAll('text,.dw-prize-name').length };
   });
 };
 
-const LANDINGS = [0, 5, 2, 3, 4];   // rest ~334/77 (upright already) + ~231/180/129 (the flip band)
+const LANDINGS = [0, 1, 2, 3, 4, 5, 6];   // every wedge, including the old flip band
 let bandHits = 0;
 for (const k of LANDINGS) {
   const m = await parseLandings(k);
@@ -426,8 +415,8 @@ for (const k of LANDINGS) {
     `${m.labels} labels / ${m.wedges} wedges`);
   check(`REST    idx=${k}: the wheel measurably stopped on the pinned wedge`, Math.abs(m.wheelDeg - expected) < 2,
     `wheel at ${m.wheelDeg.toFixed(1)}deg, expected ${expected.toFixed(1)}deg`);
-  const down = m.rows.filter(r => r.net < -90 || r.net > 90);
-  check(`UPRIGHT idx=${k}: every label + icon nets within -90..+90 at rest`, m.rows.length > 0 && down.length === 0,
+  const down = m.rows.filter(r => Math.abs(r.net) > .1 || r.inWheel);
+  check(`UPRIGHT idx=${k}: every prize name is horizontal outside the wheel`, m.rows.length > 0 && down.length === 0 && m.rotatingLabels === 0,
     down.length ? down.map(r => `${r.kind}:${r.tag}@${r.net.toFixed(0)}deg`).join(' ') : `${m.rows.length} elements upright`);
   /* the human-eyeball frame: the worst landing (rest 180) on request */
   if (k === 3 && process.env.WHEEL_SHOT) await page.screenshot({ path: auditOutputPath(process.env.WHEEL_SHOT) });

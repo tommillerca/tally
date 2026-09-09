@@ -6221,7 +6221,7 @@ test('REV-2: TestFlight invite card is gated by the store build flag', () => {
 
 test('REV-5: wheel weights sum to 95 and comment reflects it', () => {
   const wheel = readFileSync(join(here, '..', 'js', 'wheel.js'), 'utf8');
-  assert.match(wheel, /weights\s+sum\s+to\s+95.*probabilities\s+are\s+w\/95/, 'wheel comment does not state weights sum to 95 with normalized probabilities');
+  assert.match(wheel, /weights\s+sum\s+to\s+95.*probabilities\s+are\s+w\/95/i, 'wheel comment does not state weights sum to 95 with normalized probabilities');
   const prizeMatch = wheel.match(/const\s+PRIZES\s*=\s*\[[^]*?\n\];/);
   assert.ok(prizeMatch, 'PRIZES array not found');
   const prizes = prizeMatch[0];

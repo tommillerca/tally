@@ -25,11 +25,6 @@ function prizeRaw(p) {
   if (p.iconId === 'ingredient') return bhIconRaw('ingr-sinew') || COIN_RAW; // "fresh scrap"
   return bhIconRaw(p.iconId) || COIN_RAW;
 }
-// an SVG icon positioned inside the wheel's own <svg> (nested svg scales the viewBox)
-function iconAt(p, cx, cy, size) {
-  const r = prizeRaw(p);
-  return `<svg x="${(cx - size / 2).toFixed(1)}" y="${(cy - size / 2).toFixed(1)}" width="${size}" height="${size}" viewBox="${r.vb}" style="color:${r.tint}" overflow="visible">${r.inner}</svg>`;
-}
 // a standalone SVG icon for HTML contexts (the reveal)
 function iconHtml(p, size) {
   const r = prizeRaw(p);
@@ -79,23 +74,22 @@ const pixPrizeImg = p => {
     + ` style="width:48px;height:48px" decoding="sync">` : null;
 };
 
-/* The pixel art is placed as DOM <img> SIBLINGS of the wheel svg, not inside it.
-   The svg is a 0..200 viewBox scaled to a fluid min(80vw,320px) box, so anything
-   drawn in svg units lands on a viewport-dependent fractional pixel size, and
-   this art only survives 48/24/16. Absolute-positioned children of .dw-wheel
-   ride the same rotate() transform, so they spin with their wedge exactly as the
-   nested svgs did. Percentages come from the same pt() geometry as the wedges,
-   so icon and label cannot drift apart. */
+/* Presentation only: a single 48px art ring, with names in a fixed key outside
+   the rotating wheel. Never offset individual icons to make room for text. */
 function wheelIconsHtml() {
   return PRIZES.map((p, i) => {
-    const img = pixPrizeImg(p);
-    if (!img) return '';
+    const img = pixPrizeImg(p) || iconHtml(p, 48);
     const [mx, my] = pt(100, 100, 60, i * SEG_DEG + SEG_DEG / 2);
-    /* top rides a variable so .dw-flip can move the icon to the label's slot
-       (the pair swaps around its shared anchor; an inline top would outrank
-       the class rule). --dwt is the normal slot, --dwft the flipped one. */
-    return `<span class="dw-ico" style="left:${(mx / 2).toFixed(2)}%;--dwt:${((my - 8) / 2).toFixed(2)}%;--dwft:${((my + 17) / 2).toFixed(2)}%">${img}</span>`;
+    return `<span class="dw-ico" style="left:${(mx / 2).toFixed(2)}%;top:${(my / 2).toFixed(2)}%">${img}</span>`;
   }).join('');
+}
+
+// Prize TYPE controls the spot colour. This never participates in selection.
+const prizeColour = p => p.coin ? '#E2AB36' : CRATE_PRIZE[p.iconId] ? '#F0EDD6' : '#2A2D28';
+function wheelPrizesHtml() {
+  return `<ul class="dw-prizes" aria-label="Wheel prizes">${PRIZES.map(p =>
+    `<li><span class="dw-swatch" aria-hidden="true" style="background:${prizeColour(p)}"></span><span class="dw-prize-name">${esc(p.name)}</span></li>`
+  ).join('')}</ul>`;
 }
 
 // Payout descriptions contain no writes. claimSpin commits them with the date
@@ -106,7 +100,7 @@ const coinPay = amount => ({ coinDelta: amount, kv: {
 } });
 
 // ---- prize table (wheel order; adjacent segments differ in value) ----
-// weights sum to 95; probabilities are w/95. jackpot (the Bone Crate) is the gold wedge.
+// Weights sum to 95; probabilities are w/95. Spot colours are presentation only.
 const PRIZES = [
   { key: 'c30',    coin: true,               tag: '30',     name: '30 Coins',       weight: 22, gold: false, pay: () => coinPay(30) },
   { key: 'daily',  iconId: 'crate-daily',    tag: 'Crate',  name: 'Common Crate',    weight: 12, gold: false, pay: () => ({ puts: [{ store: 'inv', val: crateRow('daily', 'wheel') }] }) },
@@ -176,87 +170,66 @@ function wedgePath(cx, cy, r, i) {
 }
 
 function wheelSvg() {
-  const cx = 100, cy = 100, R = 94;
-  const darkA = '#1c1b26', darkB = '#26242f', goldW = '#3c3016';
-  let wedges = '', labels = '';
-  for (let i = 0; i < SEG; i++) {
-    const p = PRIZES[i];
-    const fill = p.gold ? goldW : (i % 2 ? darkB : darkA);
-    wedges += `<path d="${wedgePath(cx, cy, R, i)}" fill="${fill}" stroke="rgba(165,232,71,.28)" stroke-width="1"/>`;
-    const mid = i * SEG_DEG + SEG_DEG / 2;
-    // one anchor per wedge: icon ABOVE, label BELOW, both upright + centered.
-    // Same treatment in every wedge (no radial side-by-side), so it stays tidy.
-    const [mx, my] = pt(cx, cy, 60, mid);
-    const col = p.gold ? '#e8c24d' : '#f2e9d7';
-    if (!pixPrizeImg(p)) labels += iconAt(p, mx, my - 8, 26);   // the rest ride as DOM imgs, see wheelIconsHtml
-    /* transform-origin: the midpoint between icon center (my-8) and label
-       center (my+17), in viewBox units (transform-box:view-box), so .dw-flip
-       can rotate the label 180° about the pair's shared anchor. Combined with
-       a wheel resting near 180°, that lands the label back upright AND back
-       below its icon. See the .dw-flip comment in spin(). */
-    labels += `<text x="${mx.toFixed(1)}" y="${(my + 17).toFixed(1)}" font-size="9" font-weight="800" fill="${col}" text-anchor="middle" dominant-baseline="central" style="font-family:var(--body,system-ui);letter-spacing:.02em;transform-box:view-box;transform-origin:${mx.toFixed(1)}px ${(my + 4.5).toFixed(1)}px">${p.tag}</text>`;
-  }
-  return `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="100" cy="100" r="97" fill="none" stroke="#0d0c12" stroke-width="6"/>
-    <circle cx="100" cy="100" r="94.5" fill="none" stroke="rgba(165,232,71,.5)" stroke-width="2"/>
-    ${wedges}${labels}</svg>`;
+  const cx = 100, cy = 100, R = 91;
+  const wedges = PRIZES.map((p, i) =>
+    `<path d="${wedgePath(cx, cy, R, i)}" fill="${prizeColour(p)}" stroke="#2A2D28" stroke-width="1.25"/>`
+  ).join('');
+  return `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <circle cx="100" cy="100" r="97" fill="#FD6857" stroke="#2A2D28" stroke-width="2"/>
+    ${wedges}</svg>`;
 }
 
 const STYLE = `
-.dw{position:fixed;inset:0;z-index:210;display:grid;place-items:center;padding:20px;overflow:hidden;
-  background:radial-gradient(circle at 50% 42%,#16221a 0%,#0c0f0c 55%,#070806 100%);
-  animation:dwIn .3s ease-out both}
+.dw{position:fixed;inset:0;z-index:210;display:grid;place-items:center;padding:20px;overflow:auto;
+  background:#0d0c12;animation:dwIn .3s ease-out both}
 .dw.dw-out{animation:dwOut .3s ease both}
-.dw-wisp{position:absolute;width:60%;aspect-ratio:1;border-radius:50%;filter:blur(46px);pointer-events:none;
-  background:radial-gradient(circle,rgba(120,200,120,.14),transparent 70%);animation:dwWisp 9s ease-in-out infinite alternate}
-.dw-wisp.two{right:-10%;top:30%;animation-duration:12s;animation-delay:-3s}
-.dw-card{position:relative;width:min(90vw,420px);display:grid;justify-items:center;gap:14px;text-align:center}
+.dw-card{position:relative;box-sizing:border-box;width:min(100%,420px);margin:auto;display:grid;
+  justify-items:center;gap:12px;padding:20px 16px;text-align:center;background:#EDE7D6;color:#2A2D28;
+  border:2px solid #2A2D28;border-radius:20px;box-shadow:4px 5px 0 #2A2D28}
+/* Printed paper texture sits behind the content, never filters the artwork. */
+.dw-card::before{content:'';position:absolute;inset:0;border-radius:18px;pointer-events:none;opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%232A2D28' filter='url(%23n)' d='M0 0h160v160H0z'/%3E%3C/svg%3E")}
+.dw-card>*{position:relative}
 .dw-quote{font-family:var(--display,'Bangers','Arial Black',sans-serif);font-size:clamp(20px,5.4vw,26px);
-  line-height:1.05;color:#f2e9d7;letter-spacing:.02em;text-shadow:2px 2px 0 rgba(0,0,0,.6);max-width:22ch;text-wrap:balance;
-  transform:rotate(-1.5deg)}
-.dw-title{font-size:11px;font-weight:800;letter-spacing:.28em;text-transform:uppercase;color:#a5e847;
-  animation:dwFlicker 4s steps(1,end) infinite}
-.dw-wheelwrap{position:relative;width:min(80vw,320px);aspect-ratio:1;margin:2px auto}
-.dw-wheel{width:100%;height:100%;transform:rotate(0deg);filter:drop-shadow(0 12px 26px rgba(0,0,0,.6));position:relative}
-.dw-ico{position:absolute;top:var(--dwt);transform:translate(-50%,-50%);line-height:0;pointer-events:none;
-  filter:drop-shadow(0 2px 2px rgba(0,0,0,.5))}
-/* Landing counter-flip: labels and icons ride the wheel's rotate(), so a rest
-   angle in the 90..270 band would leave every tag upside down (Tom, 2026-08-22:
-   "some of the text was upside down and hard to read"). .dw-flip rotates each
-   icon+label pair 180 deg about its wedge anchor (the text via its baked
-   transform-origin, the icon by taking the label's slot + spinning in place),
-   which at a near-180 rest restores icon-above-label, both upright. */
-.dw-flip svg text{transform:rotate(180deg)}
-.dw-flip .dw-ico{top:var(--dwft);transform:translate(-50%,-50%) rotate(180deg)}
+  line-height:1.05;letter-spacing:.02em;max-width:22ch;text-wrap:balance}
+.dw-title{font-size:11px;font-weight:800;letter-spacing:.24em;text-transform:uppercase;
+  background:#FD6857;padding:6px 14px;border:2px solid #2A2D28;border-radius:8px;box-shadow:2px 3px 0 #2A2D28}
+.dw-wheelwrap{position:relative;width:min(100%,320px);aspect-ratio:1;margin:10px auto 4px}
+.dw-wheel{width:100%;height:100%;transform:rotate(0deg);filter:drop-shadow(4px 5px 0 #2A2D28);position:relative}
+.dw-ico{position:absolute;transform:translate(-50%,-50%);line-height:0;pointer-events:none}
+.dw-ico img{display:block;width:48px;height:48px;image-rendering:pixelated}
+.dw-prizes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;
+  width:100%;margin:0;padding:0;list-style:none;text-align:left;font-size:.8125rem;font-weight:700}
+.dw-prizes li{display:flex;align-items:center;gap:7px;min-width:0}
+.dw-swatch{flex:0 0 10px;height:10px;border:2px solid #2A2D28;border-radius:3px}
+.dw-prize-name{overflow-wrap:anywhere}
 .dw-result .ri img{display:block}
 .dw-wheel svg{width:100%;height:100%;display:block}
+.dw-ico svg{width:48px;height:48px}
 .dw-spinning{transition:transform 4.4s cubic-bezier(.13,.72,.16,1)}
 .dw-hub{position:absolute;left:50%;top:50%;width:23%;aspect-ratio:1;transform:translate(-50%,-50%);
-  border-radius:50%;background:radial-gradient(circle at 50% 38%,#2a2833,#141118);
-  border:2px solid rgba(165,232,71,.55);display:grid;place-items:center;font-size:min(7vw,26px);
-  box-shadow:0 0 16px rgba(165,232,71,.25),inset 0 -3px 8px rgba(0,0,0,.6)}
+  border-radius:50%;background:#2A2D28;border:2px solid #F0EDD6;display:grid;place-items:center;
+  font-size:min(7vw,26px);box-shadow:3px 3px 0 #2A2D28}
 .dw-pointer{position:absolute;left:50%;top:-4%;transform:translateX(-50%);z-index:3;
   width:0;height:0;border-left:15px solid transparent;border-right:15px solid transparent;
-  border-top:26px solid #f2e9d7;filter:drop-shadow(0 3px 2px rgba(0,0,0,.55))}
-.dw-pointer::after{content:'';position:absolute;left:-15px;top:-30px;width:0;height:0;
-  border-left:15px solid transparent;border-right:15px solid transparent;border-top:5px solid #0d0c12}
+  border-top:26px solid #2A2D28;filter:drop-shadow(2px 3px 0 #2A2D28)}
+.dw-pointer::after{content:'';position:absolute;left:-11px;top:-24px;width:0;height:0;
+  border-left:11px solid transparent;border-right:11px solid transparent;border-top:19px solid #F0EDD6}
 .dw-cta{font-family:var(--display,'Bangers',sans-serif);font-size:22px;letter-spacing:.06em;
-  color:#16210b;background:#a5e847;border:0;border-radius:14px;padding:12px 40px;cursor:pointer;
-  box-shadow:0 4px 0 #6f9c2f,0 0 18px rgba(165,232,71,.4);transition:transform .1s}
-.dw-cta:active{transform:translateY(3px);box-shadow:0 1px 0 #6f9c2f}
+  color:#2A2D28;background:#A5E847;border:2px solid #2A2D28;border-radius:14px;padding:12px 40px;cursor:pointer;
+  box-shadow:4px 5px 0 #2A2D28;transition:transform .1s}
+.dw-cta:active{transform:translate(2px,3px);box-shadow:2px 2px 0 #2A2D28}
 .dw-cta[disabled]{opacity:.5;pointer-events:none}
 .dw-result{display:grid;justify-items:center;gap:8px;min-height:70px;animation:dwPop .45s cubic-bezier(.13,.72,.16,1) both}
-.dw-result .ri{font-size:46px;filter:drop-shadow(0 3px 4px rgba(0,0,0,.5))}
-.dw-result .rl{font-family:var(--display,'Bangers',sans-serif);font-size:24px;color:#f2e9d7}
-.dw-result .rl b{color:#a5e847}
-.dw-result.gold .rl b{color:#e8c24d}
-.dw-sub{font-size:12.5px;color:#8f8a99;font-weight:600}
+.dw-result .ri{font-size:46px}
+.dw-result .rl{font-family:var(--display,'Bangers',sans-serif);font-size:24px;color:#2A2D28;text-transform:uppercase}
+.dw-result .rl b{background:#E2AB36;padding:0 4px}
+.dw-result.gold .rl b{background:#F0EDD6}
+.dw-sub{font-size:12.5px;color:#64605A;font-weight:600}
 @keyframes dwIn{from{opacity:0}}
 @keyframes dwOut{to{opacity:0}}
-@keyframes dwWisp{from{transform:translate(-8%,4%) scale(1)}to{transform:translate(10%,-6%) scale(1.15)}}
-@keyframes dwFlicker{0%,100%{opacity:1}17%{opacity:.35}19%{opacity:1}52%{opacity:.5}54%{opacity:1}83%{opacity:.7}}
 @keyframes dwPop{from{opacity:0;transform:scale(.6)}}
-@media (prefers-reduced-motion:reduce){.dw,.dw-result{animation:none}.dw-wisp,.dw-title{animation:none}}
+@media (prefers-reduced-motion:reduce){.dw,.dw-result{animation:none}}
 `;
 
 function ensureStyle() {
@@ -368,7 +341,6 @@ function showWheel(idx, prize, result, commit, { sounds }) {
     dw.className = 'dw';
     dw.setAttribute('role', 'dialog');
     dw.innerHTML = `
-      <div class="dw-wisp"></div><div class="dw-wisp two"></div>
       <div class="dw-card">
         <div class="dw-title">Daily Spin</div>
         <div class="dw-quote">${esc(quoteForDay(dateKey()))}</div>
@@ -377,6 +349,7 @@ function showWheel(idx, prize, result, commit, { sounds }) {
           <div class="dw-wheel">${wheelSvg()}${wheelIconsHtml()}</div>
           <div class="dw-hub">💀</div>
         </div>
+        ${wheelPrizesHtml()}
         <button class="dw-cta" id="dwSpin">SPIN</button>
         <div class="dw-sub" id="dwSub">Free spin, once a day</div>
       </div>`;
@@ -430,22 +403,13 @@ function showWheel(idx, prize, result, commit, { sounds }) {
         return;
       }
       if (sounds) { try { popSound(true); } catch { /* no audio */ } }
-      /* Any landing whose rest angle sits in the 90..270 band would leave every
-         label upside down, so counter-flip them (see .dw-flip in STYLE). The
-         class goes on in the SAME frame as the landing transform: the spin's
-         fast start masks the snap, and the slow deceleration tail then settles
-         with the labels already upright, so nothing pops at rest. */
-      const rest = ((360 - (idx * SEG_DEG + SEG_DEG / 2)) % 360 + 360) % 360;
-      const flip = rest > 90 && rest < 270;
       if (reducedMotion) {
-        if (flip) wheel.classList.add('dw-flip');
         wheel.style.transform = `rotate(${360 - (idx * SEG_DEG + SEG_DEG / 2)}deg)`;
         reveal(); return;
       }
       wheel.classList.add('dw-spinning');
       // double-rAF so the transition class is live before we set the target
       requestAnimationFrame(() => requestAnimationFrame(() => {
-        if (flip) wheel.classList.add('dw-flip');
         wheel.style.transform = `rotate(${landingRotation(idx)}deg)`;
       }));
       wheel.addEventListener('transitionend', reveal, { once: true });

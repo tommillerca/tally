@@ -113,8 +113,7 @@ const DRAWERS = {
   /* v411: the four pack badges that have a drawing. Sites that pass bhIcon a
      tint are deliberately NOT routed through this and stay vector. */
   'badgePixHtml':   { size: 1, kindArg: 0, floor: 16, art: 'PIX_CUR', note: 'badge-skull / trophy / crown / signpost / footprint' },
-  'iconHtml':       { size: 1, kindArg: 0, floor: null, prefix: 'wheelprize/', note: 'js/wheel.js, the reveal card' },
-  'iconAt':         { size: 3, kindArg: 0, floor: null, prefix: 'wheelprize/', note: 'js/wheel.js, inside the wheel svg' },
+  'iconHtml':       { size: 1, kindArg: 0, floor: null, prefix: 'wheelprize/', note: 'js/wheel.js, fallback for the wheel and reveal card' },
   'pixPrizeImg':    { size: null, floor: 16, fixed: 'wheelprize', art: 'ALWAYS', note: 'js/wheel.js, always asks pixCur for 48' },
 };
 for (const k of Object.keys(DRAWERS)) {
@@ -168,7 +167,6 @@ const EMITTERS = {
   'js/app.js:crateIcon':      ['icon', 'the one function all crate/egg art goes through. Pixel at 24 and 48, vector below.'],
   'js/app.js:mapLegendHtml':  ['icon', 'the Boneyard map key: draws each marker with the same markup the map uses, so legend and map cannot drift.'],
   'js/wheel.js:pixPrizeImg':  ['icon', 'the daily wheel\'s pixel prize art. It became an EMITTER in v421: five of the seven prizes come back from pixCur, and the two crate wedges are built here as a direct <img> because assets/crates/{common,golden}/f0.png sit outside PIX_CUR, which is keyed to assets/icons-pix/. It reuses .crate-ico-pix so it inherits image-rendering:pixelated.'],
-  'js/wheel.js:iconAt':       ['icon', 'daily wheel prize icons, positioned inside the wheel svg.'],
   'js/wheel.js:iconHtml':     ['icon', 'daily wheel prize icon on the reveal card.'],
   'js/wheel.js:wheelSvg':     ['icon', 'the wheel body. Its pixel prize art is placed as <img> siblings, not inside the svg, because the svg scales to a fractional viewport size.'],
   'js/fx.js:SVG':             ['icon', 'THE CONFETTI SPRITES: a bone, a skull and a hand-inlined COPY of the app coin, rasterised once at 52px to a canvas. Vector, and a duplicate of ICONS.coin that no icon sweep has ever touched. Swapping the coin means editing it here too.'],
@@ -559,8 +557,9 @@ for (const f of files) {
     if (/(?:^|[^\w.$])pixCur\s*\(/.test(body)) grewArt.push(`js/${f}:${name}`);
   }
 }
+// fix-wheel-look removed iconAt; bhIcon and iconHtml are the two remaining vector drawers.
 ok('DRAWERS no drawer declared vector-only has quietly grown a pixCur call',
-  grewArt.length === 0 && vectorOnly.length >= 3,
+  grewArt.length === 0 && vectorOnly.length >= 2,
   grewArt.length ? `\n     ${grewArt.map(n => `${n} draws pixel art now — give it a floor in DRAWERS and name the art table that decides its concepts`).join('\n     ')}` : `${vectorOnly.length} vector-only drawers checked`);
 
 /* ASSETS: every pixel file a drawer can build a path to must exist. crateIcon
