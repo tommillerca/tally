@@ -13754,7 +13754,7 @@ function openFriendProfile(f, onChange, opts = {}) {
   /* THEIR PADDOCK. Tom, 2026-08-22: "lets make it so when you click on a friend
      in the crew you can see their paddock and how many cool pets they have."
      `yard` is crew-only (see socialSnapshot), so a STRANGER opened off the
-     leaderboard simply has none and the strip is absent rather than empty: an
+     leaderboard simply has none and the section is absent rather than empty: an
      empty paddock would read as "they own nothing", which is a different and
      false statement.
      WEAR COMES FROM HERE, NEVER FROM S.petWear. Leaving `wear` undefined means
@@ -13764,17 +13764,9 @@ function openFriendProfile(f, onChange, opts = {}) {
      null, which draws her honestly bare. */
   const yard = p.yard && Array.isArray(p.yard.pets) ? p.yard : null;
   const yardWear = (yard && yard.wear) || null;
-  const yardHtml = yard && yard.pets.length ? `
+  const yardHtml = yard && yard.n > 0 ? `
       <div class="fp-yard">
         <div class="fp-yard-h"><span>THEIR PADDOCK</span><b>${yard.n} PET${yard.n === 1 ? '' : 'S'}</b></div>
-        <div class="fp-yard-row">${yard.pets.map(x => `
-          <span class="fp-yard-pet${x.shiny ? ' shiny' : ''}" title="${esc((BH_BY_ID[x.sp] || {}).name || x.sp)}">
-            ${petPortraitHtml(x.sp, 54, !!x.shiny, { mass: true, wear: yardWear, thumb: true, morph: isMorph(x.morph) ? x.morph : 'base' })}
-          </span>`).join('')}</div>
-        ${yard.n > yard.pets.length ? `<p class="note fp-yard-more">and ${yard.n - yard.pets.length} more back at the paddock</p>` : ''}
-        <!-- THE SHELF IS THE DOOR NOW, not the destination: openFriendPaddock
-             draws them out in their own field, the same scene the player sees
-             their own herd in. Tom, 2026-08-24. -->
         <button class="btn ghost fp-yard-go" id="fpYardGo" type="button">Visit their paddock ›</button>
       </div>` : '';
   /* CREW-14: `p.stats` truthy is not "has stats" -- a never-synced account

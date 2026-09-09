@@ -263,6 +263,7 @@ const PURE = ['p1-dens-audit.mjs', 'lab-room2-audit.mjs', 'stable-stale-disclosu
      shape the merge audit never drove. */
   'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs',
   'take-and-pay-audit.mjs'];   // L1/L5: transaction-boundary kills for inventory, Shop, Pit, meal XP retry (including midnight and overlapping opens), grants and Spire recovery; Node-only.
+PURE.push('crew-yard-row-audit.mjs'); // Profile total, visit callback and absent portrait row; Node only.
 PURE.push('pet-morph-animation-audit.mjs'); // 2026-09-08: selective layers, named fallback and neutral-rest width controls; no browser.
 PURE.push('pet-palette-audit.mjs'); // r56 B1: actual PNG pairs and shipped-art CONTROL; offline Python image reads.
 PURE.push('fontscale-audit.mjs'); // R60-2: rem type seam, root doubling and px geometry controls; no browser or sockets.
