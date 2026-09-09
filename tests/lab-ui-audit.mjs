@@ -426,7 +426,8 @@ await check('interrupted fight and unknown save copy name the action without inv
   const html = ui.labInterruptedFightHtml({ phase:'open',foe:'<Slab>' });
   rejectsMutation(html,html.replaceAll('Open the Pit','Continue'),h=>{ assert.match(h,/&lt;Slab&gt;/); assert.match(h,/Open the Pit/); assert.doesNotMatch(h,/saved|sorry|!/i); });
   assert.equal(ui.labInterruptedFightHtml({ phase:'settled' }),'');
-  assert.match(ui.labStateCopy({status:'unknown'}),/before trying again/);
+  assert.match(ui.labStateCopy({status:'unknown'}),/Experiments are paused/);
+  assert.doesNotMatch(ui.labStateCopy({status:'unknown'}),/reopen|review|try again/i);
 });
 await check('six-column surfaces and Rose tint have production controls', () => {
   const palette = source.match(/const MORPH_SHELL = (\{[^;]+\});/)[1];

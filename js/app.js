@@ -1680,6 +1680,7 @@ async function boot() {
     return;
   }
   if (await guardSaveBeforeInit()) return;
+  await recoverLaboratoryAtBoot();
   const interruptedFight = await kvGet('pitFight', null);
   const interruptedDraft = await kvGet('addDraft', null);
   const unfinished = interruptionCopy({ fight: interruptedFight, draft: interruptedDraft });
@@ -21263,6 +21264,18 @@ function laboratoryEngine() {
   return engine?.version === 1 && ['snapshot', 'quote', 'animate', 'purchase', 'acknowledge', 'setUi'].every(k => typeof engine[k] === 'function') ? engine : null;
 }
 
+async function recoverLaboratoryAtBoot() {
+  try {
+    const pending = await kvGet('labIntents', {});
+    if (pending && typeof pending === 'object' && !Array.isArray(pending) && !Object.keys(pending).length) return;
+    // Run after cloud restore and before Today reads its presentation snapshot.
+    // Equipment preparation elsewhere in boot cannot invalidate this recovery.
+    await laboratoryEngine()?.snapshot();
+  } catch {
+    toast(labStateCopy({ status: 'unknown' }), 8000, { error: true });
+  }
+}
+
 // LAB UI PURE BEGIN: these renderers consume the engine's coherent snapshot.
 const labRecipes = [
   { id: 'base-base', inputs: ['base', 'base'], outputs: ['ember', 'frost'] },
@@ -21299,7 +21312,7 @@ function labPetDetails(p, compact = false) {
 function labStateCopy(s, sp = '') {
   if (s.status === 'unavailable') return 'The Laboratory is not available in this build. Explore the recipes, view Collection, or hatch eggs.';
   if (s.status === 'read-error') return 'The Laboratory could not be read. Reopen the room to check your pets and experiments.';
-  if (s.status === 'unknown') return "The experiment's save could not be checked. Reopen The Laboratory to review it before trying again.";
+  if (s.status === 'unknown') return "The experiment's save could not be verified. Experiments are paused while its status is unresolved.";
   if (s.status === 'clock-backwards') return 'Your device date is before your last experiment day. Check automatic date and time.';
   if (s.status === 'unwitnessed-day') return "Connect briefly so the app can check today's date, then reopen The Laboratory.";
   if (s.status === 'restore-conflict') return 'These saves contain conflicting experiments or incubator purchases. Your current save is unchanged. Keep both backups for recovery.';
@@ -21501,7 +21514,7 @@ function openPetDestructionReview({ title, html, typed = false, accepts = t => t
       if (result?.close && wrap.isConnected) history.back();
     } catch {
       finished = true;
-      status.textContent = 'The save could not be checked. Reopen the room to review it before trying again.';
+      status.textContent = 'The save could not be verified. This action is paused while its status is unresolved.';
     } finally { busy = false; }
   });
   return wrap;
@@ -21619,7 +21632,7 @@ async function openLaboratory() {
         const refused = ['confirmed-abort', 'stale-quote', 'ineligible', 'cap-reached', 'clock-backwards', 'unwitnessed-day', 'restore-conflict'].includes(result.reason);
         if (refused) labUncertainOperation = null;
         quote = null;
-        return { message: result.reason === 'confirmed-abort' ? 'That experiment did not save. Both pets and your experiment are still available. Cancel and review the pair to try again.' : !refused ? labStateCopy({ status: 'unknown' }) : 'Your pets or available experiments changed. Cancel and review the updated pair and odds.' };
+        return { message: result.reason === 'confirmed-abort' ? 'That experiment did not save. Cancel and review your current pets and available experiments.' : !refused ? labStateCopy({ status: 'unknown' }) : 'Your pets or available experiments changed. Cancel and review the updated pair and odds.' };
       } });
     } catch { toast('The Laboratory could not be read. Reopen the room to check your pets and experiments.'); if (wrap.isConnected) await draw(); }
   }

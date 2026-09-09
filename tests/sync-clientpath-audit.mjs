@@ -89,7 +89,7 @@ function context() {
   vm.runInContext([
     ...['APP_SOCIAL_V', 'APP_BUILD', 'RACE_EPOCH', 'RACE_DAYS', 'RACE_RULES', 'HABIT_GRANT_KEY',
       'ECONOMY_TALENTS', 'CHAMP_BADGE', 'CHAMP_TITLE'].map(constant),
-    ...['storageIsFull', 'guardSaveBeforeInit', 'boot', 'bindAppLifecycle', 'socialSnapshot', 'buildFighter',
+    ...['storageIsFull', 'guardSaveBeforeInit', 'recoverLaboratoryAtBoot', 'boot', 'bindAppLifecycle', 'socialSnapshot', 'buildFighter',
       'habitBaseGrantTp', 'raceWeekKey', 'raceWeekDates', 'weekStepsNow', 'championTitle'].map(source),
   ].join('\n'), c);
   return c;
