@@ -20079,27 +20079,13 @@ async function openStable(opts = {}) {
   // CLOSED. Both used to be null, so render() re-opened the active pet's tree
   // every time you closed it and the control looked broken.
   let openIid = focusIid || undefined;   // which pet's talent tree is expanded inline
-  /* THE KENNEL LIVES IN THE STABLE (Tom's ruling, 2026-09-05) -- but it is a
-     DOOR IN THE BODY now, not a button in the header. Tom, on v500: "Kennel
-     button placement not intuitive" and "How to use the kennel not clear at
-     all". Measured before moving it: 73.3x44 at (240, 48.5), i.e. the sheet
-     head's trailing corner, 8px from Done. That corner is where this app puts
-     DISMISS, so the newest screen in the game was sitting in the close slot
-     wearing `btn ghost small`, with a one-word name that says nothing about
-     what is behind it. Both halves are the same mistake the Paddock's own
-     entry made and the same fix it got (see the door below and its note):
-     a place gets a DOOR that names itself, says what is inside in one line and
-     counts its contents. It MOVED rather than being duplicated, so there is
-     still exactly one way in and it still carries #kennelBtn, the id every
-     handler and audit clicks. */
+  // All three rooms have one door each at the top of the Stable body.
   const wrap = openSheet(`
     <div class="sheet-head stable-head"><h2>The Stable</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body" id="stableBody"></div>`, { cls: 'full pet-a11y', onClose: () => { if (currentTab() === 'today') refresh(); } });
   async function render() {
     const body = $('#stableBody', wrap);
     if (!body) return;
-    /* eqOwn is the WORN OUTFIT (equipped()), not equippedPetIid(): the Paddock door
-       below draws your own Bonehead at the gate, the same way the scene does. */
     /* equippedPetIid FIRST, alone: it repairs the paper-doll C slot when the two
        records disagree (R39-1), and equipped() below has to read the repaired
        slot rather than race it inside the same Promise.all. */
@@ -20428,13 +20414,36 @@ async function openStable(opts = {}) {
        has: which colourways you own anywhere (the swatch strip) and how many of
        the 36 cells are filled (the count, ownedCellCount so CX cannot inflate
        it -- R39-10). Pure reads, no extra query. */
+    // Count owned colour cells, not copies. Unsupported species cannot inflate it.
     const kennelOwned = ownedPairs(insts);
-    const kennelMorphs = new Set([...kennelOwned].map(k => k.split('|')[1]));
     const kennelFound = ownedCellCount(kennelOwned, KENNEL_SPECIES.map(x => x.id));
     rememberKin(body);
+    const labWaiting = labStock?.unseen?.length || 0;
+    // A missing snapshot cannot honestly supply a remaining-experiments count.
+    const labRoomCount = labWaiting ? `${labWaiting} waiting`
+      : labStock?.status === 'ready' ? `${labStock.remaining} today`
+      : labStock ? `${labWaiting} waiting` : 'Unavailable';
+    const labRoomLabel = labWaiting ? `${labWaiting} results waiting`
+      : labStock?.status === 'ready' ? `${labStock.remaining} experiments left today`
+      : labStock ? `${labWaiting} results waiting. Open Laboratory to check availability.` : 'Laboratory availability unavailable';
     const breedLockNote = st.ready ? '' : `<p class="note" data-breed-lock>Breeding is locked. Walk ${st.cooldownLeft.toLocaleString()} more ${st.cooldownLeft === 1 ? 'step' : 'steps'} to unlock it.</p>`;
     const bodyScroll = body.scrollTop;
     body.innerHTML = `
+      <nav class="stable-rooms" aria-label="Pet rooms">
+        <button class="stable-room" id="stableToPaddock" type="button">
+          <span class="stable-room-picture" aria-hidden="true">${pixCur('badge-signpost', 48) || bhIcon('badge-signpost', 48)}</span>
+          <b>Paddock</b><small>${insts.length} pet${insts.length === 1 ? '' : 's'}</small>
+        </button>
+        <button class="stable-room" data-lab-open type="button">
+          <span class="stable-room-picture" aria-hidden="true">${pixCur('potion', 48) || t1Stroke(48, '<path d="M9 3h6M10 3v6L4 19q-1 2 2 2h12q3 0 2-2L14 9V3M7 15h10"/>')}</span>
+          <b>Laboratory</b><small aria-label="${labRoomLabel}">${labRoomCount}</small>
+          ${labWaiting ? '<i class="new-dot" aria-hidden="true"></i>' : ''}
+        </button>
+        <button class="stable-room" id="kennelBtn" type="button">
+          <span class="stable-room-picture" aria-hidden="true">${ICONS.paw(48)}</span>
+          <b>Kennel</b><small aria-label="${kennelFound} of ${KENNEL_SPECIES.length * MORPHS.length} colours collected">${kennelFound} of ${KENNEL_SPECIES.length * MORPHS.length}</small>
+        </button>
+      </nav>
       ${opts.labAction ? `<p role="status">${opts.labAction === 'melt' ? 'Choose a pet in the Stable, then use Destroy to melt that one pet for Bone Dust.' : 'Choose a keeper and a spare in the Stable, then review Breed to raise the keeper’s lineage.'}</p>` : ''}
       <!-- WAITING FOR THE SECOND PICK, AT THE TOP. Tom, 2026-08-10: "the breeding
            popup is good but it covers the breed button when you swipe to another
@@ -20468,47 +20477,6 @@ async function openStable(opts = {}) {
       ` : '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}
       ${pair ? '' : breedLockNote}
       <div class="wallet-line stable-wallet"><span>Bone Dust</span><b><span class="dust-ico">${ICONS.dust(14)}</span> ${st.dust.toLocaleString()}</b></div>
-      <nav class="stable-rooms" aria-label="Pet rooms">
-      <button class="pdk-door stable-door" id="stableToPaddock" type="button">
-        <span class="stable-door-picture" aria-hidden="true"><span class="pdk-door-scene">
-          <i class="pdk-door-moon"></i>
-          <i class="pdk-door-rail r1"></i><i class="pdk-door-rail r2"></i>
-          <i class="pdk-door-post" style="left:16px"></i><i class="pdk-door-post" style="left:70px"></i><i class="pdk-door-post" style="left:124px"></i>
-          ${/* 192, because the door draws the whole figure in a 60x78 box:
-               measured 60.2 CSS px, which is 120 device px on a 2x phone and 181
-               on a 3x, both comfortably inside the small tier. Seven layers at
-               640 was 10.9 MB standing in a thumbnail. */''}
-          <span class="pdk-door-keeper">${avatarLayersHtml(eqOwn, { skip: ['BG', 'C'], noYard: true, thumb: 192 })}</span>
-          <span class="pdk-door-pets">${doorSp.map(sp => `<span class="pdk-door-pet">${petAsideHtml(petFrom(null, sp), doorPx, { thumb: true })}</span>`).join('')}</span>
-          <i class="pdk-door-vig"></i>
-        </span></span>
-        <span class="pdk-door-tx">
-          <b>The Paddock</b>
-          <small>${insts.length} pet${insts.length === 1 ? '' : 's'} in your collection</small>
-        </span>
-        <!-- the house disclosure arrow: a plain glyph in a span, as in .gbn-chev,
-             .gd-arrow and .ul-chev. No ICONS ternary fallback here, per the note in
-             the chip row below: a ternary hides a missing icon from readers and ships
-             a bare "?" glyph.
-             NO BACKTICKS IN THIS COMMENT EITHER. The first draft of this very comment
-             quoted the ternary in backticks, closed the template literal it sits
-             inside, and broke the app on the spot: "Unexpected identifier ICONS". The
-             warning below is not decoration, it is a rake, and I stepped on it. -->
-        <span class="pdk-door-go" aria-hidden="true">›</span>
-      </button>
-      <button class="pdk-door stable-door" data-lab-open type="button">
-        <span class="pdk-door-tx"><b>The Laboratory</b><small>Make new pet colours</small></span>
-        <span class="pdk-door-go" aria-hidden="true">›</span>
-      </button>
-      </nav>
-      <button class="pdk-door kdoor stable-collection" id="kennelBtn" type="button">
-        <span class="kdoor-sw" style="--kennel-columns:${MORPHS.length}" aria-hidden="true">${MORPHS.map(m => `<i class="${kennelMorphs.has(m) ? 'on' : ''}" style="--kc:${morphSwatch(m)}"></i>`).join('')}</span>
-        <span class="pdk-door-tx">
-          <b>The Kennel</b>
-          <small>${kennelFound} of ${KENNEL_SPECIES.length * MORPHS.length} colours collected</small>
-        </span>
-        <span class="pdk-door-go" aria-hidden="true">›</span>
-      </button>
       <details class="stable-help">
         <summary>How pets work</summary>
         <p>Only the active pet levels as you walk</p>
@@ -21201,7 +21169,7 @@ const KENNEL_SPECIES = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6']
   .sort((a, b) => a.name.localeCompare(b.name));
 
 /* THE KENNEL: a sibling sheet of the Stable (scratchpad/kennel/KENNEL-UX.md
-   section 1), reached from the button openStable's header now carries.
+   section 1), reached from the room row at the top of openStable's body.
    A display screen, not a shop: no dust, no stat line, no glow anywhere on a
    pet here (KENNEL.md rulings) -- the roster and the grid below are colour and
    opacity only, never a second image, so nothing here adds a decode beyond one

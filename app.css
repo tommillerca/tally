@@ -9169,15 +9169,17 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 #stableBody .stable-danger small { flex-basis: 100%; font-size: .75rem; line-height: 1.5; color: var(--text-2); }
 #stableBody .stable-wallet { display: flex; justify-content: space-between; gap: 12px; margin: 20px 0 8px; padding: 10px 0; background: none; border: 0; border-radius: 0; color: var(--text-2); font-size: .78125rem; }
 #stableBody .stable-wallet b { font: 700 .875rem/1.4 system-ui, sans-serif; }
-#stableBody .stable-rooms { display: grid; gap: 0; margin: 0; }
-#stableBody .stable-door, #stableBody .stable-collection { margin: 0; min-height: 60px; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; }
-#stableBody .stable-door-picture { position: relative; flex: 0 0 82px; height: 47px; align-self: center; overflow: hidden; border-radius: 16px; }
-#stableBody .stable-door-picture .pdk-door-scene { position: absolute; inset: 0 auto auto 0; width: 164px; height: 94px; transform: scale(.5); transform-origin: top left; }
-#stableBody .pdk-door-tx { padding: 10px 8px; }
-#stableBody .pdk-door-tx b { font: 600 .875rem/1.3 system-ui, sans-serif; letter-spacing: 0; color: var(--text); }
-#stableBody .pdk-door-tx small { font-size: .75rem; font-weight: 400; color: var(--text-2); }
-#stableBody .pdk-door-go { color: var(--text-3); font-size: 1.25rem; }
-#stableBody .stable-collection .kdoor-sw { flex-basis: 40px; background: transparent; }
+/* Paper rims and a hard, lighter offset remain visible on the dark Stable.
+   Uneven corner cuts suggest a sticker without transforming the pixel art. */
+#stableBody .stable-rooms { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 18px; }
+#stableBody .stable-room { position: relative; display: grid; grid-template-rows: 48px auto auto; justify-items: center; align-content: center; gap: 1px; min-width: 0; min-height: 105px; margin: 0; padding: 6px 2px; border: 3px solid #fff4d9; border-radius: 9px 5px 11px 6px; background: #efe2c3; color: #292622; box-shadow: inset 0 0 0 1px #70634e, 3px 4px 0 #a79b80; }
+#stableBody .stable-room:nth-child(2) { border-radius: 5px 10px 6px 9px; }
+#stableBody .stable-room:nth-child(3) { border-radius: 10px 6px 8px 5px; }
+#stableBody .stable-room:active { transform: translateY(2px); box-shadow: inset 0 0 0 1px #70634e, 2px 2px 0 #a79b80; }
+#stableBody .stable-room-picture { display: grid; place-items: center; width: 48px; height: 48px; }
+#stableBody .stable-room b { font: 400 1rem/1.2 var(--display); letter-spacing: .02em; }
+#stableBody .stable-room small { font: 600 .6875rem/1.4 system-ui, sans-serif; overflow-wrap: anywhere; }
+#stableBody .stable-room .new-dot { top: 7px; right: 7px; }
 #stableBody .stable-help { margin-top: 8px; border-block: 1px solid var(--line); font-size: .8125rem; line-height: 1.5; }
 #stableBody .stable-help summary, #stableBody .stable-help .link { min-height: 44px; padding: 12px 0; }
 #stableBody .stable-help p { margin: 0 0 10px; }
@@ -9749,59 +9751,6 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .pdk-scene { position: relative; height: 520px; overflow: hidden; border-radius: 0;
   background: linear-gradient(#171f12 0 196px, #3a482e 212px, #36432c 360px, #303c27 520px); }
 
-/* THE DOOR: the Stable's way into the Paddock (openStable, id stableToPaddock).
-   A small window onto the same field, so the entry shows the place instead of naming
-   it. The scene panel borrows .pdk-scene's own palette on purpose: two greens that
-   disagree would read as two different fields.
-   COMPOSITION (figure contract rule 4): --pdk-door-safe is the gutter no drawing may
-   enter, and --pdk-door-ground is the single baseline every figure sits on, so the
-   Bonehead and the pets share one ground line by construction rather than by nudging.
-   The keeper holds the left third; the pets take the middle and right, the nearest one
-   close enough to read as company. */
-.pdk-door { --pdk-door-safe: 6px; --pdk-door-ground: 6px;
-  display: flex; align-items: stretch; width: 100%; text-align: left; padding: 0;
-  background: var(--surface-2, #1d1b22); border: 2.5px solid #17151d; border-radius: 15px;
-  box-shadow: 0 4px 0 #17151d; overflow: hidden; margin: 0 0 12px; }
-.pdk-door:active { transform: translateY(2px); box-shadow: 0 2px 0 #17151d; }
-.pdk-door-scene { position: relative; flex: 0 0 164px; align-self: stretch; min-height: 94px;
-  overflow: hidden; background: linear-gradient(#1b2415 0 36px, #465636 41px, #3b492e 70px, #333f28 100%); }
-.pdk-door-moon { position: absolute; right: 11px; top: 8px; width: 19px; height: 19px;
-  border-radius: 50%; background: #efe9d6; opacity: .42; box-shadow: 0 0 12px 4px rgba(239,233,214,.16); }
-.pdk-door-rail { position: absolute; left: 0; right: 0; height: 4px; background: #6f5138; opacity: .9; }
-.pdk-door-rail.r1 { top: 41px } .pdk-door-rail.r2 { top: 53px }
-.pdk-door-post { position: absolute; top: 34px; width: 5px; height: 26px; background: #5d4430; }
-/* the keeper is the same layer stack as the scene's, just smaller. It stands on
-   --pdk-door-ground, the SAME line the pets use: anchored at bottom 0 it stood 6px
-   lower than everything else, and figure-audit's PLANE measured the pet's ink 11px
-   above its feet. Declaring one ground line and then exempting the biggest figure from
-   it is how a stage ends up with two floors. */
-.pdk-door-keeper { position: absolute; left: var(--pdk-door-safe); bottom: var(--pdk-door-ground); width: 60px; height: 78px; }
-.pdk-door-keeper img { position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: contain; object-position: bottom center; }
-/* The pets sit in a flex row pinned to the safe box, NOT at hand-placed lefts. Sizes
-   here are not ours to predict: petAsideHtml mass-normalises, so a flat species renders
-   half again as wide as the px it was asked for, and rarity order decides which species
-   turn up. Measured at 150px wide the three original slots overlapped and the last one
-   was clipped 11px past the panel. One row, bottom-aligned, is size-agnostic.
-   Bottom-aligning is also the PLANE rule doing the work: every box shares one ground
-   line and petAsideHtml decides whether that species stands on it or hovers above it.
-   ANCHORED BESIDE THE KEEPER (left 72px = its right edge plus the gutter), NOT to the
-   right margin. Pinned right, a player who owns one species saw themselves at the gate
-   and their single animal in the far corner: figure-audit's NEAR measured 77px of
-   daylight and called it exile, which is exactly what that rule is for. Growing
-   rightward from the keeper keeps the pair together at one pet and still fits two at
-   their worst normalised width (84px measured, 86px available). */
-.pdk-door-pets { position: absolute; left: 72px; bottom: var(--pdk-door-ground);
-  display: flex; align-items: flex-end; gap: 4px; }
-.pdk-door-pet { display: block; }
-.pdk-door-vig { position: absolute; inset: 0; pointer-events: none;
-  box-shadow: inset -14px 0 16px -10px var(--surface-2, #1d1b22), inset 0 -8px 12px -8px rgba(0,0,0,.5); }
-.pdk-door-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center;
-  gap: 3px; padding: 10px 4px 10px 12px; }
-.pdk-door-tx b { font-family: Bangers, system-ui; font-weight: 400; font-size: 1.5rem;
-  letter-spacing: 1.2px; color: #f2e9d7; line-height: 1; }
-.pdk-door-tx small { font-size: 0.71875rem; font-weight: 700; color: #8f8578; }
-.pdk-door-go { align-self: center; font-size: 1.875rem; color: #8f8578; line-height: 1; padding: 0 12px 3px 0; }
 .pdk-scene svg.pdk-ground { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* the herd */
 .pdk-pet { position: absolute; z-index: 5; }
@@ -10048,18 +9997,6 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .pdk-tile:active, .pdk-teaser:active { transform: translateY(2px); box-shadow: 0 1px 0 #17151d; }
 .pdk-tile.on, .pdk-teaser.on { border-color: #a5e847; box-shadow: 0 3px 0 #17151d, 0 0 0 2px rgba(165, 232, 71, .35); }
 
-/* THE KENNEL DOOR, in the Stable's body (2026-09-07). It borrows .pdk-door
-   whole -- border, drop shadow, press, text column, chevron -- because it is
-   the same object as the Paddock's door and a second set of tokens for one
-   more row is how a design system grows two of everything. The only override
-   is the left panel: no scene, a strip of the six colourway swatches instead,
-   filled for the ones you own. Same reading rule as the grid behind it. */
-.kdoor .kdoor-sw { flex: 0 0 74px; align-self: stretch; display: grid; grid-template-columns: repeat(var(--kennel-columns, 6), 1fr);
-  align-items: center; gap: 4px; padding: 0 10px; background: var(--surface-3); }
-.kdoor .kdoor-sw i { display: block; height: 22px; border-radius: 4px;
-  background: var(--surface-2); border: 1px solid var(--line-strong); }
-.kdoor .kdoor-sw i.on { background: var(--kc); border-color: var(--kc); }
-.kdoor .pdk-door-tx { padding: 12px 4px 12px 12px; }
 
 /* ---------- The Kennel, Kennel Phase A (2026-09-05) ----------
    A display screen, not a shop: no glow anywhere on a pet here, deliberately

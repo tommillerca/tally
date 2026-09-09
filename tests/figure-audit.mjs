@@ -223,26 +223,9 @@ const SITES = [
   },
   { key: 'helper', claim: '!petHovers(pet.id)', paired: false, undriven: 'this IS petAsideHtml, the contract itself' },
   {
-    /* THE STABLE'S DOOR into the Paddock (W-PADDOCK-3, Tom picked this over a louder
-       button on 2026-08-11). A 150x94 window onto the field: your own Bonehead at the
-       gate via the same avatarLayersHtml call the scene makes, and your TWO rarest
-       species beside it through petAsideHtml(petFrom(null, sp), px). Two, not three:
-       petAsideHtml mass-normalises, so three sprites measured 116px against 72px of
-       usable scene and the third was clipped. DRIVEN, not
-       excused: it is a new paired surface, so the two rules that exist because a pet
-       once got exiled to a corner and once floated off the baseline are measured here
-       on the real screen. The scene is small and the figures are deliberately close, so
-       NEAR is comfortable; PLANE gets the flat tolerance because everything in the
-       panel bottom-aligns to one ground line, and a hovering species is the only thing
-       that should read above it.
-       KNOWN EDGE, deliberately not engineered around (Reggie's call, 2026-08-11): the
-       two slots are filled in RARITY order, so a player whose two rarest species BOTH
-       hover can graze the shared -6px lower bound (measured -5px with one hoverer).
-       If that goes red, LOOK at the screen before widening anything: a species-aware
-       bound is bookkeeping that drifts, and the red is a prompt for human eyes. */
-    key: 'stable-door', claim: 'pdk-door-pet', paired: true,
-    bh: '.pdk-door-keeper', pet: '.pdk-door-pet:first-child',
-    planeTol: 34,
+    // Frozen rooms-top replaces the paired thumbnail with the existing signpost.
+    // Retain this driven surface: CLIP and decoded icon checks still grade it.
+    key: 'stable-door', claim: 'stable-room-picture', icon: true, paired: false,
     drive: async page => {
       await page.evaluate(() => { location.hash = '#/pets'; });
       await sleep(900);
@@ -720,6 +703,24 @@ for (const site of SITES.filter(s => s.drive)) {
   const clips = await clipCheck();
   ok(`${site.key} CLIP nothing with words on it is sliced by its container`,
     clips.length === 0, clips.length ? '\n      ' + clips.slice(0, 6).join('\n      ') : 'no clipped labels');
+  if (site.icon) {
+    const icon = await page.evaluate(() => {
+      const button = document.getElementById('stableToPaddock');
+      const image = button?.querySelector('.stable-room-picture img');
+      const r = image?.getBoundingClientRect();
+      const row = button?.closest('.stable-rooms');
+      return { found: !!button, decoded: !!image && image.complete && image.naturalWidth === 48,
+        src: image?.getAttribute('src'), width: r?.width, height: r?.height,
+        first: !!row && row === document.getElementById('stableBody')?.firstElementChild,
+        scene: !!button?.querySelector('.pdk-door-scene') };
+    });
+    ok(`${site.key} DECODE the existing signpost replaces the retired paired scene at the top`,
+      icon.found && icon.decoded && icon.src === 'assets/icons-pix/badge-signpost.png' &&
+        icon.width === 48 && icon.height === 48 && icon.first && !icon.scene, JSON.stringify(icon));
+    await page.evaluate(() => { if (document.querySelector('.sheet')) history.back(); });
+    await sleep(500);
+    continue;
+  }
   const m = await measure(site.bh, site.pet);
   if (!m.found) {
     ok(`${site.key} the figure renders at all`, false, JSON.stringify(m));

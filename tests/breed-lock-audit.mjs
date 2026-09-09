@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { BREED_COOLDOWN_STEPS, petLastColourLoss, petColourName } from '../js/loot.js';
 
 const app = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
-const start = app.indexOf('    const breedLockNote =');
+const start = app.indexOf('    const labWaiting =');
 const end = app.indexOf('\n    body.scrollTop = bodyScroll;', start);
 assert(start >= 0 && end > start, 'production Stable render block must exist');
 const code = app.slice(start, end);
@@ -26,9 +26,9 @@ function render(cooldownLeft, picks, cfActs = '') {
     insts: [keeper, spare], roster: [keeper, spare], keeper, spare,
     canBreedNow: pair && cooldownLeft === 0,
     bank: {}, offLineage: 1, spareIsPrecious: false, spChips: '',
-    eqOwn: {}, doorSp: [], doorPx: 28, avatarLayersHtml: emptyArt,
-    MORPHS: [], kennelMorphs: new Set(), kennelFound: 0, KENNEL_SPECIES: [],
-    ICONS: { dust: emptyArt, chev: emptyArt },
+    labStock: null, pixCur: emptyArt, bhIcon: emptyArt, t1Stroke: emptyArt,
+    MORPHS: [], kennelFound: 0, KENNEL_SPECIES: [],
+    ICONS: { dust: emptyArt, chev: emptyArt, paw: emptyArt },
     PET_STAT_MULT_CAP: 2, cfWasPanelled: false, openIid: null,
     cfCards: '', cfWear: '', cfCaption: '', cfActs,
     petPortraitHtml: emptyArt, esc: String,
@@ -71,9 +71,9 @@ const gradeRoom = html => {
   const pet = html.indexOf('id="cfFrame"');
   for (const door of ['id="stableToPaddock"', 'data-lab-open', 'id="kennelBtn"']) {
     assert.equal(html.split(door).length - 1, 1, `CONTROL ${door} remains reachable once`);
-    assert(pet < html.indexOf(door), 'the pet precedes navigation');
+    assert(html.indexOf(door) < pet, 'navigation precedes the album');
   }
-  assert.match(html, /class="pdk-door kdoor stable-collection" id="kennelBtn"/);
+  assert.match(html, /class="stable-room" id="kennelBtn"/);
   assert.match(html, /class="wallet-line stable-wallet"><span>Bone Dust<\/span>/);
   assert.doesNotMatch(html, /class="chip">/);
 };
@@ -90,7 +90,7 @@ for (const remaining of [0, 2345]) {
     html.replace('data-lab-open', '') + '<button data-lab-open></button><button data-lab-open></button>',
   ]) assert.throws(() => gradeRoom(faulty), 'CONTROL restored clutter or missing capability must fail');
 }
-console.log('PASS CONTROL Stable: one collapsed explainer, labelled currency, retained doors after the pet');
+console.log('PASS CONTROL Stable: one collapsed explainer, labelled currency, retained doors before the album');
 console.log('BREED LOCK + STABLE UI: 7 passed, 0 failed (Node only; browser and sockets unrun)');
 
 // Frozen redesign: execute the actual initial action template and focus repaint.
@@ -162,19 +162,19 @@ const gradeOrder = html => {
   assert(html.indexOf('wallet-line stable-wallet') > endOfActions, 'wallet follows the pet content');
   for (const door of ['id="stableToPaddock"', 'data-lab-open', 'id="kennelBtn"']) {
     assert.equal(html.split(door).length - 1, 1, `CONTROL one ${door}`);
-    assert(html.indexOf(door) > endOfActions, 'every door is below all pet actions');
+    assert(html.indexOf(door) < html.indexOf('id="cfFrame"'), 'every door is above the album');
   }
 };
 // Execute both production templates together, so order follows the shipped DOM.
 const bodyWithActions = render(0, 0, renderActions(true));
 gradeOrder(bodyWithActions);
 for (const door of ['id="stableToPaddock"', 'data-lab-open', 'id="kennelBtn"']) {
-  const faulty = `<button ${door}></button>` + bodyWithActions.replace(door, 'data-moved-door');
-  assert.throws(() => gradeOrder(faulty), 'CONTROL a door above pet content must fail');
+  const faulty = bodyWithActions.replace(door, 'data-moved-door') + `<button ${door}></button>`;
+  assert.throws(() => gradeOrder(faulty), 'CONTROL a door below pet content must fail');
 }
 const movedWallet = bodyWithActions.match(/<div class="wallet-line stable-wallet">[\s\S]*?<\/div>/)[0];
 assert.throws(() => gradeOrder(movedWallet + bodyWithActions.replace(movedWallet, '')), 'CONTROL currency leading the pet must fail');
-console.log('PASS CONTROL Stable order: all three doors and currency follow pet content; four regressions rejected');
+console.log('PASS CONTROL Stable order: all three doors precede the album; currency follows pet content; four regressions rejected');
 
 // Execute the restored shipped paint and gesture code. This is arithmetic and
 // event-double proof, not a rendered pixel or touch-device claim.

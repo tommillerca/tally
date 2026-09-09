@@ -335,6 +335,7 @@ PURE.push('restore-debt-audit.mjs'); // Q1: stale restore must preserve pet owne
 PURE.push('p1-r48-rest-audit.mjs'); // P1: executes art coverage grading on empty-surface controls, checks Hollow probe disclosure and landed race/reward rows; Node-only.
 PURE.push('pet-a11y-audit.mjs'); // P2: production Kennel labels/clicks, swatch identity, relative pet-sheet type; Node-only, no pixel claim.
 PURE.push('kennel-copy-audit.mjs'); // R2: production Kennel/reveal/selection copy and destroy controls with real storage; Node-only, no browser or pixel claim.
+PURE.push('stable-rooms-top-audit.mjs'); // Frozen room row: production template, live counts, empty/null and order mutation controls; Node only.
 PURE.push('breed-lock-audit.mjs'); // B1: rendered cooldown disclosure and READY controls; no browser or sockets.
 PURE.push('device-loss-audit.mjs'); // L3: encrypted wipe/restore, initialization rewards, recovery choice and real IOError messages in Node doubles; no browser or network.
 PURE.push('multidevice-earnings-audit.mjs'); // L2: both offline currency histories, replay/spends, atomic import, encrypted push and simulated lifecycle; Node-only.
