@@ -85,6 +85,11 @@ export const DROP = {
    and grants all rows. A partial legacy garment is already paid and its missing
    colours are delivered for free. One owned colour represents the whole garment. */
 const ownsFootballPet = async () => (await petInstances()).some(x => FOOTBALL_PETS.includes(x.sp));
+// The same slot:artId credit as markPaid, merged inside the purchase transaction.
+// Buying a garment includes every colourway and any bundled visors.
+function paidLooksWith(cur, ids) {
+  return [...new Set([...(Array.isArray(cur) ? cur : []), ...ids.map(id => paidKey(BH_BY_ID[id].slot, id))])];
+}
 export async function buyFootballItem(itemId, stocked = footballPieceSellable()) {
   const ids = footballGrantIds(itemId);
   const cost = FOOTBALL_KIT_PRICE_PLACEHOLDER;
@@ -98,7 +103,7 @@ export async function buyFootballItem(itemId, stocked = footballPieceSellable())
     const paid = ids.some(id => owned.has(id)), balance = Number(state.coins) || 0;
     if (!paid && balance < cost) return { result: { ok: false, reason: 'coins', need: cost, have: balance } };
     return {
-      kv: { looks: cur => looksWith(cur, ids),
+      kv: { looks: cur => looksWith(cur, ids), paidlooks: cur => paidLooksWith(cur, ids),
         ...(!paid ? { coins: () => balance - cost, coinsRev: cur => (Number(cur) || 0) + cost } : {}) },
       puts: missing.map(id => ({ store: 'inv', val: cosRow(id, 'football') })),
       result: paid ? { ok: false, reason: 'owned', recovered: true }
@@ -123,7 +128,7 @@ export async function buyFootballBundle(_teamId, stocked = footballBundleSellabl
     const balance = Number(state.coins) || 0;
     if (balance < cost) return { result: { ok: false, reason: 'coins', need: cost, have: balance } };
     return {
-      kv: { looks: cur => looksWith(cur, ids),
+      kv: { looks: cur => looksWith(cur, ids), paidlooks: cur => paidLooksWith(cur, ids),
         ...(cost > 0 ? { coins: () => balance - cost, coinsRev: cur => (Number(cur) || 0) + cost } : {}) },
       puts: want.map(id => ({ store: 'inv', val: cosRow(id, 'football') })),
       result: cost === 0 ? { ok: false, reason: 'owned', recovered: true }
@@ -144,7 +149,7 @@ export async function buyDropItem(itemId) {
     if (balance < d.cost) return { result: { ok: false, reason: 'coins', need: d.cost, have: balance } };
     return {
       kv: { coins: () => balance - d.cost, coinsRev: cur => (Number(cur) || 0) + d.cost,
-        looks: cur => looksWith(cur, [itemId]) },
+        looks: cur => looksWith(cur, [itemId]), paidlooks: cur => paidLooksWith(cur, [itemId]) },
       puts: [{ store: 'inv', val: cosRow(itemId, 'drop') }],
       result: { ok: true, label: item.name, cost: d.cost, coins: balance - d.cost },
     };

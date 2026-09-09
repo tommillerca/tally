@@ -172,7 +172,9 @@ try {
   check('cloud opt-out has no failure episode or warning', () => {
     assert.equal(state.streak, null);
     assert.equal(notices.length, 2);
-    assert.ok(offRow.includes('notices are off'));
+    assert.ok(offRow.includes('Profile sync is off'));
+    assert.ok(!offRow.includes('notices are off'));
+    assert.equal(state.entries.at(-1).network, false);
     assert.ok(!offRow.includes('could not'));
   });
   await social.setCloudBackup(true);

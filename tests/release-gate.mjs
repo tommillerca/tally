@@ -284,6 +284,10 @@ PURE.push('wheel-easing-audit.mjs'); // w1: no overshooting control points, with
 PURE.unshift('store-copy-lint.mjs');
 PURE.push('storage-boot-audit.mjs'); // R54-4: throwing IndexedDB boot and normal control, no browser or sockets.
 PURE.push('crate-cadence-audit.mjs'); // c1: exact browsing cadence, outgoing overlap and a rejected 790ms control; no browser or sockets.
+PURE.push('r4-app-p1-audit.mjs'); // Frozen R4 batch: purchases, forage abort/race, GPS expiry and future-day payout refusal.
+PURE.push('water-retry-audit.mjs'); // R4-20: loader backoff and boot recovery, simulated clock/transport.
+PURE.push('cloud-off-audit.mjs'); // R4-13/R4-16: real garment callback, profile opt-out and Settings disclosure; no sockets.
+PURE.push('r4-silence-audit.mjs'); // R4: fresh-context journal, aborted multi-tab erase, four draft launches and both account notices.
 PURE.push('silence-disclosure-audit.mjs'); // L6: interrupted saves, failed writes and a normal-session control; no sockets.
 PURE.push('health-disclosure-audit.mjs'); // h1: failed/stale step sync, durable deduplication and healthy controls; Node only.
 PURE.push('paddock-pack-audit.mjs');   // 2026-09-08 R44-12/20/25: the Paddock packer honours its own header contract at 200 pets (76 pairs overlapped >20px in both axes, worst 121x72, among the 50 drawn), a breeding-armed and an equipped pet are marked in the field, and the Stable copy row keeps its scroll position (2,160px lost per tap); node-only source and geometry proof, the real-render half is paddock-pack-browser-audit.mjs

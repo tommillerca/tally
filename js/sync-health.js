@@ -2,6 +2,7 @@
 import { kvGet, kvUpdate } from './db.js';
 
 const KEY = 'syncHealth';
+const NO_ACCOUNT_NOTICE = 'This device is not connected to a Crew account. No profile request started.';
 const NOTICE = 'Your Crew profile has not finished syncing for a while. Your progress is still on this phone. Check Profile sync in Settings.';
 const ERROR_NAMES = new Set(['Error', 'TypeError', 'RangeError', 'ReferenceError', 'SyntaxError',
   'AbortError', 'TimeoutError', 'NetworkError', 'OperationError', 'DataError', 'InvalidAccessError',
@@ -58,7 +59,10 @@ async function deliverNotice() {
     }
     return state;
   }, null);
-  if (show && !(await kvGet('cloudOff', false))) noticeSink(NOTICE);
+  if (show && !(await kvGet('cloudOff', false))) {
+    const account = await kvGet('social', null);
+    noticeSink(account?.playerId ? NOTICE : NO_ACCOUNT_NOTICE);
+  }
 }
 export async function syncHealthState() {
   await pending;
@@ -75,11 +79,12 @@ const REASONS = {
   'grants-failed': 'Crew deliveries could not be checked.',
   'backup-failed': 'Sync stopped while preparing the cloud backup.',
   throttled: 'Waiting for the next scheduled sync.',
+  'opted-out': 'Profile sync is off.',
 };
 export async function syncHealthLine() {
   const state = await syncHealthState();
   const off = await kvGet('cloudOff', false).catch(() => false);
-  if (off) return 'Cloud backup is off. Profile sync notices are off.';
+  if (off) return 'Cloud backup is off. Profile sync is off. Your Crew row and leaderboard entry stop updating.';
   if (storageFailed) return 'Sync diagnostics could not be saved on this device.';
   const last = state?.entries?.at(-1);
   const date = at => new Date(at).toLocaleString();
@@ -88,6 +93,9 @@ export async function syncHealthLine() {
   if (!last) return `${reached} No sync attempt recorded yet.`;
   // A throttle skip must not hide the failure that preceded it.
   const outcome = state.lastOutcome || last;
+  if (outcome.hop === 'offline-gate' && !outcome.network) {
+    return `${reached} ${accepted} Last attempt: ${date(outcome.at)}. ${NO_ACCOUNT_NOTICE}`;
+  }
   const detail = (outcome.status ? ` HTTP ${outcome.status}.` : '') + (outcome.errorName ? ` (${outcome.errorName})` : '');
   const network = outcome.network ? ' Request started.' : ' No profile request started.';
   return `${reached} ${accepted} Last attempt: ${date(outcome.at)}. ${REASONS[outcome.hop] || 'Sync could not finish.'}${detail}${network}`;

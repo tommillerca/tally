@@ -36,7 +36,7 @@ globalThis.fetch = async (url, opts = {}) => {
   if (u.pathname === '/backup' && opts.method === 'GET') return reply({ error: 'none' }, 404);
   throw new Error(`Unexpected request: ${calls.at(-1)}`);
 };
-async function fresh({ key = true, online = false, cloudOff = true } = {}) {
+async function fresh({ key = true, online = false, cloudOff = false } = {}) {
   useDbName(`sync-identity-${++sequence}`);
   calls = []; mode = 'ok';
   await kvSet('apiBase', 'https://identity.invalid');
@@ -79,8 +79,8 @@ await check('lost registration reply leaves a key but no social; resume repairs 
   assert.ok(calls.includes('GET /grants'));
   assert.equal(await kvGet('coins'), 50, 'recovery cannot repay the welcome grant');
   assert.ok(await kvGet('socialSyncAt'));
-  assert.equal(await kvGet('cloudOff'), true);
-  assert.ok(!calls.some(c => c.includes('/backup')), 'cloud opt-out remains respected');
+  assert.equal(await kvGet('cloudOff'), false);
+  assert.ok(!calls.some(c => c.includes('/backup')), 'recent backup is not repeated');
 });
 await check('failed recovery and incomplete response stay retryable without replacing the key', async () => {
   await fresh();
@@ -114,11 +114,13 @@ await check('cloud-enabled boot already recovers missing social', async () => {
   assert.equal((await social.socialMe())?.playerId, me.playerId);
 });
 await check('cloud opt-out boot skips recovery but resume must recover public identity', async () => {
-  await fresh();
+  await fresh({ cloudOff: true });
   assert.equal((await social.bootSync()).reason, 'opted-out');
   assert.equal(await social.socialMe(), null);
   await sync();
   assert.equal((await social.socialMe())?.playerId, me.playerId);
+  assert.deepEqual(calls, ['GET /health', 'POST /register', 'GET /grants'], 'R4: recovery does not upload an opted-out profile');
+  assert.equal(await kvGet('socialSyncAt', 0), 0);
 });
 await check('replacement import preserves omitted identity and social; merge rejects incoming device overrides', async () => {
   await fresh({ online: true });

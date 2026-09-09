@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import * as art from '../data/boneheadz.js';
 import * as animation from '../js/petanim.js';
 import { morphAsset } from '../js/pets.js';
@@ -73,7 +74,7 @@ const blindResolver = { ...animation, animatedPetHtml: oldResolver.animatedPetHt
 assert.throws(() => fallback(blindResolver, renderer({ anim: blindResolver })));
 console.log('PASS MORPH-PATH, NAMED-FALLBACK; pre-fix gate/resolver CONTROL rejected');
 
-const check = spawnSync('python3', [new URL('scripts/build-pet-morph-layers.py', root).pathname, '--check'], { encoding: 'utf8' });
+const check = spawnSync('python3', [fileURLToPath(new URL('scripts/build-pet-morph-layers.py', root)), '--check'], { encoding: 'utf8' });
 assert.equal(check.status, 0, check.stdout + check.stderr);
 const measurements = JSON.parse(check.stdout);
 const helmet = Object.values(art.BH_BY_ID).find(x => x.slot === 'CH' && x.football);

@@ -1,12 +1,14 @@
-// Per-tab evidence only. A normal exit needs no warning. Storage access can be
-// refused, and a browser can discard this journal together with the tab.
+// Synchronous origin storage survives tab/process replacement and remains
+// independent of the IndexedDB write being observed. Each writer owns its key,
+// so a successful write in another tab cannot clear this tab's failed journal.
 const SAVE_STATE = 'tally-save-state';
+const WRITER_KEY = `${SAVE_STATE}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
 const pending = new Set();
 let failed = false;
 function remember(value) {
   try {
-    if (value) sessionStorage.setItem(SAVE_STATE, value);
-    else sessionStorage.removeItem(SAVE_STATE);
+    if (value) localStorage.setItem(WRITER_KEY, value);
+    else localStorage.removeItem(WRITER_KEY);
   } catch { /* unavailable storage must not stop a save */ }
 }
 export function beginSave() {
@@ -22,13 +24,28 @@ export function finishSave(token, didFail = false) {
 }
 export function takeSaveInterruption() {
   let state = null;
-  try { state = sessionStorage.getItem(SAVE_STATE); } catch { /* unavailable */ }
-  remember(null);
+  const accept = value => {
+    if (value === 'failed' || (value === 'pending' && state !== 'failed')) state = value;
+  };
+  try {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key === SAVE_STATE || key?.startsWith(`${SAVE_STATE}:`)) keys.push(key);
+    }
+    for (const key of keys) {
+      accept(localStorage.getItem(key));
+      localStorage.removeItem(key);
+    }
+  } catch { /* unavailable */ }
+  // Consume an older build's per-tab evidence during the first upgrade reload.
+  try { accept(sessionStorage.getItem(SAVE_STATE)); sessionStorage.removeItem(SAVE_STATE); } catch { /* unavailable */ }
   failed = false;
-  return state === 'pending' || state === 'failed' ? state : null;
+  return state;
 }
 
-export function writeFailureCopy(quota) {
+export function writeFailureCopy(quota, error) {
+  if (error?.wipeBlocked) return error.message;
   return quota
     ? 'Your device is out of storage, so your progress did not save. Free some space, then open Settings and export a backup.'
     : 'Your progress did not save. Open Settings and export a backup before trying again.';

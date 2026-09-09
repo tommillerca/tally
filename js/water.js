@@ -43,8 +43,32 @@ export const WATER_Z = 14;
 
 let tpl = null;          // resolved tile URL template, or null until TileJSON lands
 let tplLoading = null;
-const tiles = new Map(); // "x/y" -> { feats } | 'pending' | { retryAt }
+let tplRetry = null;
+let retryTimer = null;
+const tiles = new Map(); // "x/y" -> { feats, used } | { pending, used } | { failures, retryAt, used }
 const MAX_TILES = 64;    // ~9 cells around the player need <= ~16; cap the cache
+// 15s base, doubling to 120s; downward 20% jitter keeps the ceiling literal.
+function retryState(previous) {
+  const failures = Math.min((previous?.failures || 0) + 1, 4);
+  const delay = Math.min(15000 * 2 ** (failures - 1), 120000) * (1 - Math.random() * 0.2);
+  return { failures, retryAt: Date.now() + delay };
+}
+
+// One timer for the bounded set of requested tiles, including a failed boot
+// TileJSON. Recovery does not depend on walking or another isWater call.
+function scheduleRetry() {
+  clearTimeout(retryTimer);
+  retryTimer = null;
+  const due = tpl ? [...tiles.values()].filter(t => t.retryAt).map(t => t.retryAt)
+    : tplRetry && !tplLoading ? [tplRetry.retryAt] : [];
+  if (!due.length) return;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    if (!tpl) fetchTemplate();
+    else for (const key of tiles.keys()) fetchTile(...key.split('/').map(Number));
+    scheduleRetry();
+  }, Math.max(0, Math.min(...due) - Date.now()));
+}
 /* EVICT THE LEAST RECENTLY USED, NOT THE FIRST FETCHED, and that difference is a
    bug a player can see. A Map iterates in INSERTION order, so the old sweep threw
    away the OLDEST-FETCHED tiles: the ones under the player's own feet, fetched
@@ -61,11 +85,17 @@ const MAX_TILES = 64;    // ~9 cells around the player need <= ~16; cap the cach
 let useTick = 0;
 
 function fetchTemplate() {
-  if (tpl || tplLoading) return;
+  if (tpl || tplLoading || (tplRetry && tplRetry.retryAt > Date.now())) return;
   tplLoading = fetch(TILEJSON_URL)
-    .then(r => r.json())
-    .then(j => { tpl = j.tiles[0]; })
-    .catch(() => { tplLoading = null; }); // retried by the next isWater call
+    .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+    .then(j => {
+      if (typeof j?.tiles?.[0] !== 'string' || !j.tiles[0]) throw new Error('Missing tile template');
+      tpl = j.tiles[0];
+      tplRetry = null;
+      for (const key of tiles.keys()) fetchTile(...key.split('/').map(Number));
+    })
+    .catch(() => { tplRetry = retryState(tplRetry); })
+    .finally(() => { tplLoading = null; scheduleRetry(); });
 }
 
 async function gunzipMaybe(buf) {
@@ -79,22 +109,28 @@ async function gunzipMaybe(buf) {
 function fetchTile(tx, ty) {
   const key = `${tx}/${ty}`;
   const cur = tiles.get(key);
-  if (cur === 'pending' || (cur && cur.feats)) return;
+  if (cur && (cur.pending || cur.feats)) return;
   if (cur && cur.retryAt > Date.now()) return;
-  if (!tpl) { fetchTemplate(); return; }
-  if (tiles.size > MAX_TILES) {
+  if (!cur && tiles.size >= MAX_TILES) {
     const victims = [...tiles.entries()]
-      .filter(([, v]) => v !== 'pending')
+      .filter(([, v]) => !v.pending)
       .sort((a, b) => (a[1].used || 0) - (b[1].used || 0));
     for (const [k] of victims) { tiles.delete(k); if (tiles.size <= MAX_TILES / 2) break; }
+    if (tiles.size >= MAX_TILES) return; // all slots in flight; a later lookup retries
   }
-  tiles.set(key, 'pending');
+  if (!tpl) {
+    tiles.set(key, { used: ++useTick });
+    fetchTemplate();
+    return;
+  }
+  tiles.set(key, { pending: true, used: ++useTick });
   const url = tpl.replace('{z}', WATER_Z).replace('{x}', tx).replace('{y}', ty);
   fetch(url)
     .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer(); })
     .then(gunzipMaybe)
-    .then(bytes => { tiles.set(key, { feats: waterFeatures(bytes) }); })
-    .catch(() => { tiles.set(key, { retryAt: Date.now() + 15000 }); });
+    .then(bytes => { tiles.set(key, { feats: waterFeatures(bytes), used: ++useTick }); })
+    .catch(() => { tiles.set(key, { ...retryState(cur), used: ++useTick }); })
+    .finally(scheduleRetry);
 }
 
 /* ------------------------- Mapbox Vector Tile decode, water polygons only.
@@ -212,7 +248,7 @@ export function isWater(lat, lng) {
 }
 
 /* Resolves once every point in `points` ([lat, lng] pairs) can answer.
-   The audits use it; the app just calls isWater and lets refresh cadence retry. */
+   The audits use it; the app reads isWater on its refresh cadence. */
 export async function ensureWater(points, timeoutMs = 30000) {
   const t0 = Date.now();
   for (;;) {

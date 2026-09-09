@@ -42,8 +42,17 @@ const ok = (m, cond, detail = '') => {
   else { fails++; out.push(`FAIL ${m}${detail ? '  ' + detail : ''}`); }
 };
 
-/* A fixed date, not today: the keys are built from entry.date, and pinning it
-   keeps the run identical at 23:59 and 00:01 (lessons_clock_rotated_identity). */
+/* Fixed LOCAL noon, including the whole Date constructor. R4-22 (2026-09-09)
+   refuses rewards outside today, so changing the entry date alone is no longer
+   a rollover. Advance the clock with each fixture day; keep every payout and
+   cap assertion intact. Restored before reporting. */
+const RealDate = Date;
+let clockNow = new RealDate(2031, 4, 5, 12).getTime();
+globalThis.Date = class extends RealDate {
+  constructor(...args) { super(...(args.length ? args : [clockNow])); }
+  static now() { return clockNow; }
+};
+const setDay = date => { clockNow = new RealDate(date + 'T12:00:00').getTime(); };
 const DAY = '2031-05-05', OTHER = '2031-05-06';
 const HAMMER = 60;
 
@@ -73,6 +82,7 @@ const afterDelete = await logXp();
 ok('DELETE deleting the day and logging again mints nothing new', afterDelete === farmed,
   `${farmed} -> ${afterDelete} XP after deleting all rows and logging 5 more`);
 
+setDay(OTHER);
 await logOne(OTHER);
 ok('ROLLOVER a different date pays again', (await logXp()) === afterDelete + 10, `${await logXp()} XP`);
 
@@ -84,6 +94,7 @@ ok('ROLLOVER a different date pays again', (await logXp()) === afterDelete + 10,
    pay once per entry: awardCapped now carries `ref: entry.id` on the ledger row
    and returns 0 when a slot of that day already names this entry. */
 const THIRD = '2031-05-07';
+setDay(THIRD);
 const rep = { id: newId(), date: THIRD, meal: 0, ts: Date.now(), foodId: null, name: 'audit food', kcal: 100, p: 5, c: 5, f: 5 };
 await db.put('log', rep);
 const before = await logXp();
@@ -101,6 +112,7 @@ ok('REPEAT the same entry through onFoodLogged twice pays its log XP once', (awa
    two gets, so the loser already sees the winner's row. It pins the seam and
    documents the intent; the race itself is proven only in the browser, by
    reward-sop-audit's "TWO OVERLAPPING attempts hand over ONE lot" line. */
+setDay('2031-05-08');
 const con = { id: newId(), date: '2031-05-08', meal: 0, ts: Date.now(), foodId: null, name: 'audit food', kcal: 100, p: 5, c: 5, f: 5 };
 await db.put('log', con);
 const b2 = await logXp();
@@ -108,6 +120,7 @@ await Promise.all([g.onFoodLogged(con, { entriesForDate: [con] }), g.onFoodLogge
 ok('CONCURRENT two overlapping onFoodLogged calls for one entry pay its log XP once', (await logXp()) === b2 + 10,
   `${b2} -> ${await logXp()} XP after two simultaneous calls for one entry`);
 
+globalThis.Date = RealDate;
 console.log(out.join('\n'));
 console.log(fails ? `\nFAIL (${fails})` : `\nall green, ${out.length} checks`);
 process.exit(fails ? 1 : 0);

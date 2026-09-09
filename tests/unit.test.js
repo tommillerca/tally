@@ -72,6 +72,12 @@ let passed = 0, failed = 0;
 const QUEUE = [];
 function test(name, fn) { QUEUE.push([name, fn]); }
 
+test('cloud opt-out stops garment profile uploads and discloses stale Crew entries', () => {
+  const output = execFile_.execFileSync(process.execPath,
+    [join(here, 'cloud-off-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /Cloud off audit: 8 passed, 0 failed/);
+});
+
 test('C6 beta price correction drives real purchases, free hatches and exactly-once refunds', () => {
   const output = execFile_.execFileSync(process.execPath,
     [join(here, 'c6-price-audit.mjs')], { encoding: 'utf8' });
@@ -8304,6 +8310,18 @@ test('p1-kitchen paid cooks and dishes survive aborted delivery with CONTROLs', 
 test('P1 den rewards, Wanderer, Battle Charm and Pit failure boundaries', () => {
   const output = execFile_.execFileSync(process.execPath, [join(here, 'p1-dens-audit.mjs')], { encoding: 'utf8' });
   assert.match(output, /P1 DENS: 7 passed, 0 failed/);
+});
+
+test('R4-20 water retries grow and a boot outage recovers without another lookup', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'water-retry-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /WATER RETRY: \d+ passed, 0 failed/);
+  assert.match(output, /PASS CONTROL healthy host/);
+  assert.match(output, /PASS BOOT host returns/);
+});
+
+test('R4 app P1 shop credits, atomic forage, stale GPS and future-day rewards', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'r4-app-p1-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /R4 APP P1: 14 passed, 0 failed/);
 });
 
 await runAll();

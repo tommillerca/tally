@@ -990,7 +990,9 @@ export async function syncProfile(snapshot, appV = '', attempt = null) {
   const own = !attempt;
   attempt ||= syncAttempt('syncProfile');
   try {
-    if (own) attempt.optedOut = await kvGet('cloudOff', false);
+    // Re-read even for shared attempts: the player may opt out while building.
+    attempt.optedOut = await kvGet('cloudOff', false);
+    if (attempt.optedOut) { attempt.hop = 'opted-out'; return false; }
     const r = await signedFetch('PUT', '/profile', { snapshot, appV }, {}, attempt);
     attempt.profileStatus = r.status;
     attempt.profileAt = Date.now();
@@ -1015,6 +1017,7 @@ export async function pushProfileUpdate(buildSnapshot, appV = '') {
   let hop = 'offline-gate';
   try {
     attempt.optedOut = await kvGet('cloudOff', false);
+    if (attempt.optedOut) { attempt.hop = 'opted-out'; return; }
     if (!(await isOnline())) { syncFailure(attempt, hop); return; }
     hop = 'snapshot-failed';
     const snapshot = await buildSnapshot();
@@ -1934,8 +1937,8 @@ if (typeof document !== 'undefined' && typeof window !== 'undefined') {
 // fails. The signing key survives, but isOnline alone would then skip every
 // resume forever. bootSync retries only on a full boot with cloud backup enabled.
 // Repair this device's existing identity here too. Never mint a key for a new
-// install, and keep isOnline a read-only query. Public profile sync, like the
-// existing online path, is independent of the encrypted backup opt-out.
+// install, and keep isOnline a read-only query. Identity recovery and Crew
+// deliveries remain available; syncProfile separately guards profile uploads.
 let socialRecovery = null;
 async function recoverSocialForSync() {
   if (await isOnline()) return true;
