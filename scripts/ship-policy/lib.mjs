@@ -93,6 +93,7 @@ export function options(argv, lanesAllowed = true) {
       else if (arg === '--lane') fail('USAGE: lanes not supported');
       else result[arg.slice(2)] = value;
     } else if (arg === '--check') result.check = true;
+    else if (arg === '--allow-removals') result.allowRemovals = true;
     else fail(`USAGE: unknown option ${arg}`);
   }
   result.tree = fs.realpathSync(result.tree);
@@ -127,8 +128,24 @@ export function dependencies(root, entries) {
     for (const spec of specs) {
       if (isBuiltin(spec) || /^[a-z]+:\/\//i.test(spec)) continue;
       let resolved;
-      try { resolved = createRequire(file).resolve(spec.split('?')[0]); }
-      catch { fail(`DEPENDENCY: ${path.relative(root, file)} cannot resolve ${spec}`); }
+      /* TWO ROOTS, BECAUSE SOME OF THESE FILES ARE SERVED, NOT REQUIRED.
+         tests/godmode.js runs from the tree ROOT under serveTree, so its
+         `./js/wanderer.js` is correct there and unresolvable from tests/.
+         Grading it as a filesystem path alone made this refuse on a healthy
+         main. Try the importing file first, then the repo root. */
+      /* THESE SPECS ARE SOMETIMES URLs, NOT FILESYSTEM PATHS. Files served by
+         serveTree resolve against the tree ROOT: tests/godmode.js imports
+         './js/wanderer.js' and a browser audit imports '/js/db.js'. Both exist
+         and both are correct where they run; grading them as paths relative to
+         tests/ refused on a healthy main. Try the importing file, then the repo
+         root, treating a leading slash as root-relative. */
+      const bare = spec.split('?')[0];
+      const attempts = [
+        () => createRequire(file).resolve(bare),
+        () => createRequire(path.join(root, 'x.js')).resolve(bare.startsWith('/') ? `.${bare}` : bare),
+      ];
+      for (const attempt of attempts) { try { resolved = attempt(); break; } catch { /* try the next root */ } }
+      if (!resolved) fail(`DEPENDENCY: ${path.relative(root, file)} cannot resolve ${spec} from its own directory or the repo root`);
       if (spec.startsWith('.') && resolved.startsWith(root + path.sep)) scan(resolved);
     }
   }
