@@ -4,6 +4,16 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 527, date: '2026-09-09', title: 'An overnight sweep of eight rooms', items: [
+    'Transmog could take your coins without giving you the look, and melting could erase a look the game had promised was yours forever. Both now finish or refund.',
+    'Gifts stop going missing. The hundred-and-first unopened gift no longer silently discards the oldest one, a confirmed gift can no longer spend the same coins twice, and a gift whose reward fails to save no longer strands the Open button.',
+    'Choosing your den gear no longer consumes the entitlement without handing over the gear, and a roaming mini-boss crate can no longer be lost after the win is already recorded.',
+    'A welcome kit interrupted halfway through is delivered properly instead of vanishing, and onboarding stops promising XP for every meal when a daily limit applies.',
+    'Erase and Delete account no longer get stuck after a failed write, and an export that fails now says so instead of looking like it worked.',
+    'Progress stops reporting numbers it cannot support: a part-logged day no longer invents a decline, a year of weight no longer presents a monthly average as your latest weigh-in, and an unavailable sleep score no longer prints as a number.',
+    'Several controls that quietly died after a failed save now recover instead of leaving you tapping a dead button.',
+  ] },
+
   { n: 526, date: '2026-09-09', title: 'Nothing you earned goes missing', items: [
     'The Paddock, the Laboratory and the Kennel now sit as three tiles at the top of the Stable instead of buried under everything else, each with its own pixel icon and a live count: how many pets are in the field, how many experiments you have left today, and how many colours you have collected.',
     'Pets no longer claim a rarity. Every creature was equally likely to hatch, so calling one Legendary and another Common was telling you something that was never true. Their strength is unchanged.',

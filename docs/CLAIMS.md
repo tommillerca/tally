@@ -1,5 +1,23 @@
 # What each patch note claims, and what backs it
 
+## v527 (2026-09-09)
+
+1. PROOF: wardrobe-playtest-audit.mjs | REACH: Transmog charges only on delivery and a failed melt no longer removes a collected look or strips equipped stats; a failed single-crate open recovers its control. Each case is driven through the production handler with an injected write failure and carries a pre-fix observation the grade rejects.
+2. PROOF: crew-playtest-audit.mjs | REACH: The 101st unopened gift no longer discards the oldest, a confirmed gift chip cannot spend the same wallet twice, an aborted reward write no longer strands the Open button, and decline/remove failures report instead of failing silently. C0, a sender terminating after the debit, is NOT fixed and is recorded open.
+3. PROOF: map-playtest-audit.mjs | REACH: Choosing earned den gear no longer deletes the entitlement without delivering, roaming mini-boss crate and dust writes survive a failure after the win is recorded, and the historical-progression repair no longer marks itself complete early. M5 and M6, the shared-victory settle and stale cloud merge, are NOT fixed and are recorded open.
+4. PROOF: firstrun-audit.mjs | REACH: An interrupted welcome delivery completes on the next run instead of losing the kit, for new deliveries; kits already lost before this build are not recovered. Onboarding no longer promises XP for every meal when the daily cap applies.
+5. PROOF: settings-safety-audit.mjs | REACH: Erase and Delete account recover after a local transaction abort, export failures surface a result, and backup copy no longer promises incompatible outcomes. Finding 1, Import silently replacing newer earnings with no confirmation and no undo snapshot, is NOT fixed and is the highest-harm item still open.
+6. PROOF: progress-playtest-audit.mjs | REACH: A partly-logged day no longer produces contradictory averages or a false decline, a year of weight history no longer reports a monthly mean as the latest weigh-in, an unavailable sleep score no longer renders as a number, and an older visible reading is no longer described as an unstarted trend.
+7. PROOF: today-playtest-audit.mjs, shop-economy-audit.mjs | REACH: Today's rows and the Shop's purchase and currency paths were exercised against injected failures and concurrent taps; the fixes landed here restore controls that previously died after a failed save. Both lanes' remaining findings are written up rather than claimed fixed.
+
+Every lane branched from v526 and was gated independently before assembly. The
+assembled release runs 377 unit assertions with 0 failures and all 123 PURE
+entries exit 0. NO browser, device or socket proof was run for this release:
+these are Node-level reproductions over mem-idb and sliced production
+renderers. Four items Tom reported by hand on 2026-09-09 (the daily wheel's
+look, the Laboratory's density, friend outfits going stale in Crew, and the
+dock band reading as a black line) are NOT addressed here.
+
 ## v526 (2026-09-09)
 
 1. PROOF: stable-rooms-top-audit.mjs | REACH: The Paddock, Laboratory and Kennel now render as three controls ABOVE the album in DOM order, each carrying a live count read from the same state the room itself uses, each keeping the id its existing handler and every clicking audit depends on. Empty collection and a null Laboratory snapshot both render sanely. Moving a tile back below the album goes red. The visual result was verified separately by rendering the real Stable at 393x852: three 115x112 tiles, 18px radius, hard 3px 4px offset, cream Bangers labels, real pixel icons, album still at y=324.
