@@ -182,6 +182,10 @@ ok('PARSES every audit is something Node will actually execute',
    FIXED ONE? Delete its line. The row fails on a stale entry too, so the
    inventory cannot quietly rot into a list nobody maintains. */
 const SEAM_ONLY_KNOWN = [
+  /* 2026-09-09: the boot audit executes the production gate without forcing
+     it. It mentions the force flag only to delete the claim in a red control.
+     Automatic patch notes have no initiating click; browser proof is owed. */
+  'whatsnew-boot-audit.mjs',
   /* R48-A, 2026-09-07: executes the production settlement body with webdriver
      false and checks that the window alias is absent. It never calls the alias.
      The lexical seam scan sees the absence check; browser arrival is separately

@@ -72,6 +72,7 @@ const bootTail = (src.match(/initAnalytics\(APP_BUILD\);[\s\S]*?\n\}\n/) || ['']
 /* Every remaining launch-time scheduler, with the reason it is allowed. Anything
    else that matches the shape fails, by name. */
 const ALLOWED = {
+  maybeShowWhatsNew: 'patch notes once per update; new players are seeded caught-up',
   maybeShowDailyWheel: 'the day\'s free spin: a reward, and the only route to it',
   maybeShowRenameNotice: 'server-flagged, one device, clears itself, no other route',
   maybeNudgeRecovery: 'a toast, not a sheet: points at the Settings row',
@@ -94,6 +95,15 @@ ok('QUEUE the allowlist has no stale entries (took one off the launch path? drop
 
 /* ---------------- COLD: launch it and look ---------------- */
 const { browser, page } = await boot(base);
+/* 2026-09-09: patch notes are allowed for returning players after an update.
+   This cold-launch marketing guard models a caught-up/new player. Execute the
+   same seed as onboarding before unmasking; the PURE whatsnew-boot audit owns
+   the unseen returning-player case and verifies the production seed itself. */
+await page.evaluate(async () => {
+  const { kvSet } = await import('./js/db.js');
+  const { changelogLatest } = await import('./js/changelog.js');
+  await kvSet('changelogSeen', changelogLatest());
+});
 /* Before any app script on the next load. Setting it after boot() would be too
    late: every gate has already read the flag and returned. */
 await maskWebdriver(page);

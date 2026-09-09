@@ -41,9 +41,9 @@ import { isWater } from './water.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares, scheduleSiegeReminder, cancelSiegeReminder } from './notify.js';
 import { snapToWalkable } from './geo.js';
 /* js/changelog.js is 155KB of prose: 234 player-facing entries, the largest
-   single module in js/, and NOTHING on the boot path or on Today needs it. It
-   is imported on demand at its four use sites (What's New, the two unseen
-   badges, the onboarding catch-up mark) instead of being parsed at boot.
+   single module in js/. It is imported on demand, including by the restored
+   post-update boot gate, at its use sites (What's New, the two unseen
+   badges, the onboarding catch-up mark) rather than as a static entry import.
    sw.js still precaches it, so opening What's New offline works as before. */
 import { bhIcon, hasBhIcon, BH_ICON_TINTS } from './icons-pack.js';
 import { pixCur } from './icons-pix.js';
@@ -1863,7 +1863,9 @@ async function boot() {
   refundStreakFreezes().then(r => {
     if (r) toast(`Streak Freezes have been retired. Your ${r.count} paid out: +${r.coins.toLocaleString()} coins.`, 5200);
   }).catch(() => {});
-  /* THE BOOT TAKEOVERS ARE GONE. Tom, 2026-08-25, watching a real simulator
+  /* THE MARKETING BOOT TAKEOVERS ARE GONE. Patch notes alone were restored
+     on 2026-09-09 after Tom clarified that the old popup was fine.
+     Historical removal, Tom, 2026-08-25, watching a real simulator
      launch: "i see in the simulator you have popups showing i told you to remove
      all those from the game? the only news things staying are the new one with
      the wanderer on it and the ones on crew that link the discord."
@@ -1874,9 +1876,9 @@ async function boot() {
      So the whole class leaves the launch path. Not one of them, all of them:
      the cosmetic teaser, the drop, the spire / bestiary / Live Wire / race
      intros, the settled-race poster, the Discord card, the TestFlight card,
-     the What's New sheet, the recovery sheet, the name builder, the iOS
-     notification ask and the Day One survey. NOTHING here opens a sheet, a veil
-     or an OS dialog on its own any more.
+     the What's New sheet (now restored alone), the recovery sheet, the name
+     builder, the iOS notification ask and the Day One survey. The marketing
+     sheets, veils and OS dialog remain off the launch path.
      WHAT WAS NOT DELETED. Every card still exists and every one is still
      reachable, on purpose: the News tab in What's New lists all of them (Tom
      asked for that list himself, 2026-08-09, "so people can catch up if they
@@ -1902,6 +1904,8 @@ async function boot() {
      was built for this and carries MORE than the poster did (every place's full
      purse, not just the winner's haul). */
   maybeShowRenameNotice();
+  // 2026-09-09: patch notes alone return after an update. Marketing stays off boot.
+  maybeShowWhatsNew();
   maybeNudgeRecovery();
   setTimeout(checkFriendRequests, 3000);
   /* Survey v2 S3: a submit whose POST failed left its body in kv; one retry per
@@ -1977,7 +1981,23 @@ async function maybeWelcomeBack() {
   return true;
 }
 
-/* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeShowWhatsNew opened the What's New sheet over the app on the first launch after every update. What's New is still reachable from Settings and from the Crew tab, and the unseen-entry dot still points at it */
+// R2 (v151): the first time the app opens after an update, pop the What's New
+// sheet once so players (and friends) actually see what changed. Gated so it
+// never nags: only when there ARE unseen entries, never over onboarding / the
+// daily wheel / any open sheet (retries next boot), and new players are seeded
+// caught-up at onboarding so they don't get the historical backlog. Opening the
+// sheet sets changelogSeen = latest, so it won't fire again until the next patch.
+async function maybeShowWhatsNew() {
+  try {
+    if (CALM_BOOT() || !S.settings) return;
+    const { changelogUnseen } = await import('./changelog.js');
+    if (changelogUnseen(await kvGet('changelogSeen', 0)) <= 0) return;
+    await new Promise(r => setTimeout(r, 1700)); // let splash/wheel settle
+    if ($('#sheets')?.children.length) return;   // something already open. Try again next launch
+    if (!claimBootSheet(window.__whatsNewForce)) return;   // another sheet already had this open
+    openWhatsNew();
+  } catch { /* never block boot */ }
+}
 
 /* ---------- Dark Spires: the announcement + the pinned explainer ---------- */
 // Shown once (kv flag), then the Today banner carries it, same etiquette as the
