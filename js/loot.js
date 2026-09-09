@@ -8,7 +8,7 @@ import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOT
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { COMMON_INGREDIENT_IDS } from './cooking.js';
 import { dateKey } from './nutrition.js';
-import { LAB_RULES, LAB_PRICES, LAB_DEFAULTS, labInput, labMorph, labDistribution, labPreview, labCapacity, labDayProjection, labEqual, labRefuse, resolveLabOutcome, validateLabSave } from './laboratory.js';
+import { LAB_RULES, LAB_PRICES, LAB_DEFAULTS, labInput, labMorph, labDistribution, labPreview, labCapacity, labDayProjection, labReconciliation, labEqual, labRefuse, resolveLabOutcome, validateLabSave } from './laboratory.js';
 import { isMorph, MORPH_LABEL, morphAsset, isKnownPet, legalPicks, petLevel, MORPHS, PET_TREES } from './pets.js';
 
 // Use the same colour identity as the art. Shinies and CX never wear morph art.
@@ -1734,6 +1734,7 @@ function labReceipt(r, s) {
   const annotations=labPresentQuote(r.request);
   const clock=dayDecision(dateKey(),s.dayHighWater,s.dayWitnessOrd,true);
   return {...r, inputs:annotations.inputs, branches:annotations.branches,
+    reconciliation:labReconciliation(s.labExperiments).recovered.find(x=>x.opId===r.opId)||null,
     resultPresent:(s.petInst||[]).some(p=>p?.iid===r.result.iid),
     remaining:clock.fresh ? Math.max(0,labCapacity(s.labIncubators)-(s.labDaily[dateKey()]?.used||0)) : 0};
 }
@@ -1779,7 +1780,8 @@ function labPresentation(s, rows, recoveredOpIds=[]) {
   const meter=effectivePetSteps(rows.health);
   const prepared=s.petLvlV===2&&s.pettalents?.__iidV===2&&s.petStepCredit===meter;
   const status=Object.keys(s.labIntents).length ? 'unknown' : !clock.fresh ? labUiReason(clock.reason) : !prepared ? 'unavailable' : 'ready';
-  return {status,token:labPurchaseToken(s),used,capacity,remaining:status==='ready'?capacity-used:0,
+  return {status,token:labPurchaseToken(s),used,capacity,remaining:status==='ready'?Math.max(0,capacity-used):0,
+    reconciliation:labReconciliation(s.labExperiments),
     resetTime:'00:00',zone:labZone(),coins:s.coins??0,incubators:s.labIncubators,ownedCells,
     collectionCount:ownedCells.length,hasExperiment:Object.keys(s.labExperiments).length>0,
     priorDay:rows.xp.some(r=>/^(dayclose|dayeffort)-\d{4}-\d{2}-\d{2}$/.test(r.key)&&r.key.slice(-10)<day),

@@ -364,6 +364,7 @@ PURE.push('crew-playtest-audit.mjs'); // Frozen Crew playtest: owed gifts, abort
 PURE.push('firstrun-audit.mjs'); // Frozen first-run: interrupted kit, onboarding handlers and day-one play; Node only.
 PURE.push('settings-safety-audit.mjs'); // Settings/file-import loss review, durable undo, quota refusal, stale review and transaction abort/retry; Node only.
 PURE.push('progress-playtest-audit.mjs'); // Frozen Progress lane: badge abort/retry, real charts, sleep and detail handlers; no sockets.
+PURE.push('lab-conflict-audit.mjs'); // Offline pet/slot collisions, encrypted reconnect, retained receipts and honest recovery copy; Node only.
 PURE.push('leaderboard-honesty-audit.mjs'); // Staleness copy across crew, leaderboard, podium and race; Node only.
 PURE.push('breed-two-tap-audit.mjs'); // Real #doBreed handler driven through a full two-tap breed; roster 4->3.
 PURE.push('after-await-event-lint.mjs'); // No async listener may read currentTarget after an await.
