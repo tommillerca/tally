@@ -4,6 +4,15 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 526, date: '2026-09-09', title: 'Nothing you earned goes missing', items: [
+    'The Paddock, the Laboratory and the Kennel now sit as three tiles at the top of the Stable instead of buried under everything else, each with its own pixel icon and a live count: how many pets are in the field, how many experiments you have left today, and how many colours you have collected.',
+    'Pets no longer claim a rarity. Every creature was equally likely to hatch, so calling one Legendary and another Common was telling you something that was never true. Their strength is unchanged.',
+    'Restoring a backup no longer quietly erases what you earned since. Kitchen ingredients, banked dishes, diary corrections, deleted entries and potions earned on two devices all survive the merge instead of being overwritten.',
+    'A quest claim that fails to save no longer burns the slot. Retrying used to tell you it was already claimed when nothing had been paid, and Monday dailies could lock every weekly quest for the rest of the week.',
+    'The Kitchen and the Pit stop charging before they deliver. Cooking, serving, eating, queueing, buying a third cauldron, activating a Battle Charm and setting up a fight all either finish or refund now.',
+    'A friend\'s crew profile no longer scrolls their whole pet collection past you. Their paddock and the way in are still there.',
+  ] },
+
   { n: 525, date: '2026-09-08', title: 'The Stable, rebuilt around your pet', items: [
     'The Stable has been redesigned. The album you swipe through is still there, with the neighbouring pets peeking at the edges, but the pet itself is bigger, the writing has a proper hierarchy instead of five things shouting at once, and there is one clear action instead of a wall of buttons.',
     'Ember, Frost, Toxic, Rose and Midnight pets now breathe and blink like the ordinary ones. Before this, choosing a colour quietly cost you the animation.',

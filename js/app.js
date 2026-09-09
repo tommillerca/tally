@@ -20398,18 +20398,6 @@ async function openStable(opts = {}) {
        Registered as `stable-door` in tests/figure-audit.mjs. Keeps the id
        `stableToPaddock` so the existing handler and every audit that clicks it are
        untouched. */
-    /* TWO pets, not three, and laid out by FLEX rather than by hand-placed slots.
-       Measured, not guessed: petAsideHtml mass-normalises, so the px asked for is not
-       the px drawn (a 34px duck renders 48 wide), and there is only 72px of scene to
-       the right of the keeper. Three sprites measured 48 + 29 + 39 = 116px and the
-       third one's box ended at 161 inside a 150px panel, so it was clipped and all
-       three overlapped. Per-species tuning is not available either: `order` is
-       rarity-sorted, so which species land here changes per player. A flex row anchored
-       to the safe box holds whatever two species turn up, at any normalised size, and
-       two animals beside you reads as a field with company rather than a contact sheet.
-       Two companions preview the field. */
-    const doorSp = order.slice(0, 2);
-    const doorPx = 28;
     /* The Kennel door's own numbers, from the same instances this render already
        has: which colourways you own anywhere (the swatch strip) and how many of
        the 36 cells are filled (the count, ownedCellCount so CX cannot inflate
@@ -24312,7 +24300,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v525'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v526'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
