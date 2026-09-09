@@ -76,6 +76,7 @@ const DAY_MS = 86400000;
    across five runs of the same tree, which is a check that reports a different
    number every time it is asked. */
 let RAND = () => 0.5;
+let UUID_SEQUENCE = 0;
 function mulberry32(a) {
   return function () {
     a |= 0; a = (a + 0x6D2B79F5) | 0;
@@ -89,7 +90,8 @@ Object.defineProperty(globalThis, 'crypto', {
   configurable: true,
   value: {
     subtle: realCrypto?.subtle,
-    randomUUID: () => `u${Math.floor(RAND() * 1e15).toString(36)}`,
+    // Receipt ids must be unique even before the seeded payout stream starts.
+    randomUUID: () => `audit-uuid-${++UUID_SEQUENCE}`,
     getRandomValues(arr) { for (let i = 0; i < arr.length; i++) arr[i] = Math.floor(RAND() * 0xffffffff); return arr; },
   },
 });

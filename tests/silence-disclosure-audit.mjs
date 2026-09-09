@@ -24,7 +24,7 @@ indexedDB.open = (...args) => {
       const transaction = req.result.transaction;
       req.result.transaction = (...a) => {
         if (a[1] === 'readwrite' && failure) throw failure;
-        if (a[1] === 'readwrite' && hold) return { objectStore: () => ({ put: () => ({}) }) };
+        if (a[1] === 'readwrite' && hold) return { objectStore: () => ({ get: () => ({}), put: () => ({}) }) };
         return transaction(...a);
       };
       success?.(event);

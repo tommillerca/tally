@@ -98,7 +98,7 @@ const PIX_CUR = {
      "swap the cookbook icon to a cauldron in the kitchen it doesnt currently read"
      as one. He picked the cold pot on 2026-08-24, and cold is the right one for
      that slot: the card next to it says "Empty pot". */
-  cauldron: 'cauldron',
+  cauldron: 'cauldron', potion: 'potion',
   tombstone: 'tombstone',
   /* keyed by the icons-pack id, so badgePixHtml can look it up directly. */
   'badge-skull': 'badge-skull', 'badge-trophy': 'badge-trophy',

@@ -1016,7 +1016,7 @@ test('battle charm: cannot stack a second charm over a running one', () => {
     .replace(/\/\/[^\n]*/g, ' ')
     .replace(/'[^']*'|"[^"]*"|`[^`]*`/g, "''");
   const guard = bare.search(/if\s*\(\s*\(?\s*buffs\.xp2[^)]*\)?[^)]*\)\s*return/);
-  const spend = bare.search(/db\.(?:del|takeInv)\(/);   // 2026-09-06: the consume is db.takeInv (delete + receipt, one transaction)
+  const spend = bare.search(/dels:\s*\[/); // P1: atomic snapshot plan removes the item with the buffs write
   assert.ok(guard >= 0, 'activateBattleCharm must refuse while charges remain (guard missing)');
   assert.ok(spend >= 0, 'activateBattleCharm should still consume the item when it DOES activate');
   assert.ok(guard < spend, 'the refusal must come BEFORE the item is consumed, or the charm is eaten anyway');
@@ -5823,10 +5823,10 @@ test('R26-O11 two overlapping spin claims on one day grant exactly once', async 
   }
   assert.equal(await claimSpin('2026-09-04'), false, 'a later claim on the same day is refused');
   assert.equal(await claimSpin('2026-09-05'), true, 'the next day is a fresh claim');
-  // the shape pin: the commit asks claimSpin BEFORE it grants, and returns `already` to the loser
+  // The commit supplies the payout to its atomic claim and discloses a loser.
   const wheel = readFileSync(join(here, '..', 'js', 'wheel.js'), 'utf8');
-  const c = wheel.slice(wheel.indexOf('const commit = async () => {'), wheel.indexOf('prize.grant(rng)'));
-  assert.ok(c.length > 0 && /await claimSpin\(today\)/.test(c), 'the wheel commit does not claim the spin with claimSpin before granting');
+  const c = wheel.slice(wheel.indexOf('const commit = async () => {'), wheel.indexOf('  const result =', wheel.indexOf('const commit = async () => {')));
+  assert.ok(c.length > 0 && /await claimSpin\(today, pay\)/.test(c), 'the wheel commit must pass its payout into the spin transaction');
   assert.match(c, /already: true/, 'the loser must be told (already: true), not handed a silent coinDelta 0');
   assert.match(wheel, /result\.already \? 'Already spun today'/, "the reveal must say 'Already spun today' to the loser, not 'You won'");
 });
@@ -8248,6 +8248,31 @@ test('Stable redesign preserves named destruction, body controls and navigation 
   assert.match(output, /PASS CONTROL Stable order:/);
   assert.match(output, /PASS CONTROL Stable album:/);
   assert.match(output, /STABLE REDESIGN: 4 guard groups passed, 0 failed/);
+});
+
+test('P1 backup merge preserves Kitchen earnings, diary maintenance and offline potions', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'p1-merge-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /P1 MERGE: \d+ passed, 0 failed/);
+  assert.match(output, /PASS CONTROL replacement/);
+});
+
+test('P1 quest budgets and wheel payouts survive aborted writes', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'quest-wheel-budget-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /0 failed/);
+  assert.match(output, /PASS F04/);
+  assert.match(output, /PASS F05/);
+  assert.match(output, /PASS F21/);
+});
+
+test('p1-kitchen paid cooks and dishes survive aborted delivery with CONTROLs', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'kitchen-delivery-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /KITCHEN DELIVERY: \d+ passed, 0 failed/);
+  assert.match(output, /PASS CONTROL concurrent Serve/);
+});
+
+test('P1 den rewards, Wanderer, Battle Charm and Pit failure boundaries', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'p1-dens-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /P1 DENS: 7 passed, 0 failed/);
 });
 
 await runAll();

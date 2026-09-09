@@ -273,7 +273,7 @@ const r = await page.evaluate(async () => {
        deleting `${esc(c.name)}` from packCardHtml and watching the row stay
        green. Assert against .pc-name specifically, with a note that cannot
        satisfy it by accident. */
-    window.__packReveal([{ imgSrc: bhAsset(it), name: it.name, rarity: it.rarity, kind: 'CREW DELIVERY', stats: 'Back where it belongs. Sorry about that!' }], { coins: 0 });
+    window.__packReveal([{ imgSrc: bhAsset(it), name: it.name, pet: true, kind: 'CREW DELIVERY', stats: 'Back where it belongs. Sorry about that!' }], { coins: 0 });
     /* THE ART IS A CANVAS, NOT AN <img>. packCardHtml renders imgSrc into
        `<canvas class="pc-canvas">` and hydratePackArt paints it, so the obvious
        `img.naturalWidth > 0` check reads some OTHER image on the page and passes
@@ -314,6 +314,7 @@ const r = await page.evaluate(async () => {
         coverage: total ? Math.round((ink / total) * 1000) / 10 : 0,
         visible: box.width > 40 && box.height > 40,
         plate: (el.querySelector('.pc-name')?.textContent || '').trim(),
+        rarityFree: !el.querySelector('.pc-rar') && !/\br-(common|uncommon|rare|epic|legendary)\b/.test(el.className),
       };
     }
   }
@@ -361,6 +362,7 @@ ok('REVEAL-PIXELS the granted pet is PAINTED in the reveal, not a blank or a fal
   r.pixels.colours >= 8 && r.pixels.coverage > 2 && r.pixels.visible, JSON.stringify(r.pixels));
 ok('REVEAL-NAME the nameplate says which species arrived',
   r.pixels.plate === r.giveName, `nameplate "${r.pixels.plate}" should be "${r.giveName}"`);
+ok('REVEAL-PET the delivery claims no pet rarity', r.pixels.rarityFree === true, JSON.stringify(r.pixels));
 
 await browser.close();
 if (srv) srv.close();

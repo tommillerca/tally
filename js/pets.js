@@ -208,7 +208,7 @@ export function petStatMultiplier(petId, shiny = false, lineage = 0) {
 }
 export function petStatBonusText(petId, shiny = false, lineage = 0) {
   const mult = petStatMultiplier(petId, shiny, lineage);
-  return `Combined rarity, shiny and lineage: ${Number(mult.toFixed(3))}x base stats${mult >= PET_STAT_MULT_CAP ? ' (cap reached)' : ` (cap ${PET_STAT_MULT_CAP}x)`}. Stats round individually.`;
+  return `Combined species, shiny and lineage: ${Number(mult.toFixed(3))}x base stats${mult >= PET_STAT_MULT_CAP ? ' (cap reached)' : ` (cap ${PET_STAT_MULT_CAP}x)`}. Stats round individually.`;
 }
 export function petBreedGainText(petId, level, shiny, lineage) {
   const before = petBattleStats(petId, level, shiny, Math.max(0, lineage - 1));

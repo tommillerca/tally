@@ -215,27 +215,29 @@ try {
   const hasBtn = await page.evaluate(() => !!document.getElementById('kennelBtn'));
   setup('SAMPLE the Stable has a #kennelBtn to click', hasBtn, hasBtn ? 'present' : 'no #kennelBtn in the Stable');
 
-  /* DOOR (2026-09-07, v500: "Kennel button placement not intuitive" / "How to
-     use the kennel not clear at all"). The way in is a DOOR IN THE BODY, not a
-     button in the sheet head: it must sit inside #stableBody (the head's
-     trailing corner is where Done lives, and that is where this used to be),
-     it must name itself and say what is inside in one line, and it must be a
-     real target. The count is graded loosely (a number over 30) because the
-     seeded roster changes between phases of this file; NAMING is the part that
-     regresses. */
+  // The Kennel now shares the first body row with Paddock and Laboratory.
+  // Grade the decoded paw, accessible collection unit and actual DOM position.
   const door = await page.evaluate(() => {
     const b = document.getElementById('kennelBtn');
     if (!b) return null;
     const r = b.getBoundingClientRect();
-    const small = b.querySelector('small')?.textContent || '';
+    const small = b.querySelector('small');
+    const icon = b.querySelector('.stable-room-picture img');
+    const row = b.closest('.stable-rooms');
+    const album = document.querySelector('#stableBody .cf');
     return { inBody: !!b.closest('#stableBody'), inHead: !!b.closest('.sheet-head'),
-      name: (b.querySelector('b')?.textContent || '').trim(), small, w: r.width, h: r.height,
+      name: (b.querySelector('b')?.textContent || '').trim(), small: small?.textContent || '',
+      label: small?.getAttribute('aria-label') || '', w: r.width, h: r.height,
+      topRow: !!row && row === document.getElementById('stableBody').firstElementChild && row.children.length === 3,
+      beforeAlbum: !!album && !!(b.compareDocumentPosition(album) & Node.DOCUMENT_POSITION_FOLLOWING),
       lands: (() => { const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!at && (at === b || b.contains(at)); })(),
+      paw: !!icon && icon.getAttribute('src') === 'assets/icons-pix/paw.png' && icon.complete && icon.naturalWidth === 48,
       swatches: b.querySelectorAll('.kdoor-sw i').length };
   });
-  ok('DOOR the way into the Kennel is a door in the Stable\'s BODY (never the sheet head\'s dismiss corner), naming itself and saying what is inside in one line, at least 44px tall and hit-testable',
-    !!door && door.inBody && !door.inHead && /KENNEL/i.test(door.name) && /colour/i.test(door.small) && /\d+ of 30/.test(door.small) && door.h >= 44 && door.lands && door.swatches === 5,
-    door ? `in body=${door.inBody} in head=${door.inHead} "${door.name}" / "${door.small}" ${door.w.toFixed(1)}x${door.h.toFixed(1)} lands=${door.lands} swatches=${door.swatches}` : 'no #kennelBtn');
+  ok('DOOR Kennel is in the three-room row above the album, with a decoded paw, collection count and a hit-testable target',
+    !!door && door.inBody && !door.inHead && door.topRow && door.beforeAlbum && /KENNEL/i.test(door.name) &&
+      /colours collected/.test(door.label) && /^\d+ of 36$/.test(door.small) && door.h >= 44 && door.lands && door.paw && door.swatches === 0,
+    door ? JSON.stringify(door) : 'no #kennelBtn');
 
   await page.evaluate(() => document.getElementById('kennelBtn')?.click());
   await sleep(900);

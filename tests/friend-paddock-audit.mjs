@@ -48,8 +48,8 @@ import { auditOutputPath } from './lib/audit-output.mjs';
  *             property of the query rather than of anyone's intention.
  *   WEARHOME  the wardrobe is NOT on `snapshot.pet`, which is leaderboard-public.
  *   VAULT     nothing about the yard is read out of the encrypted backup path.
- *   RENDER    a friend's profile draws their pets, decoded and visible, with the
- *             count, driven through the real __openFriendProfile seam.
+ *   RENDER    a friend's profile draws the true paddock count and visit button,
+ *             with no portrait row, through the real __openFriendProfile seam.
  *   THEIRS    their Bumbleseal wears THEIR wardrobe. The viewer is wearing a
  *             DIFFERENT set in the same run, so a render that reached for
  *             S.petWear draws the wrong clothes and this row names them. This is
@@ -65,7 +65,7 @@ import { auditOutputPath } from './lib/audit-output.mjs';
  *             their Bonehead standing in it. Driven by a real tap, continuing
  *             REACH's chain, so the whole path from the crew deck to the field is
  *             one thing a player did.
- *   DRESSED   THEIRS one surface further in. The shelf can be right and the field
+ *   DRESSED   THEIRS one surface further in. The hero can be right and the field
  *             wrong: the scene is a different render path and it is the path that
  *             used to answer S.petWear for everybody, because the player's own
  *             field was the only one it had ever drawn.
@@ -397,7 +397,8 @@ try {
       sheet: !!document.querySelector('.sheet-fp .fp-facts'),
       present: !!box,
       count: box ? (box.querySelector('.fp-yard-h b') || {}).textContent.trim() : null,
-      pets: box ? [...box.querySelectorAll('.fp-yard-pet')].map(p => layers(p.querySelector('.petcrop') || p)) : [],
+      header: box?.querySelector('.fp-yard-h span')?.textContent,
+      portraits: document.querySelectorAll('.fp-yard-row, .fp-yard-pet, .fp-yard-more').length,
       hero: layers(hero),
       /* The way through to their FIELD. Present exactly when there is a yard to
          walk into: a door onto nothing is worse than no door. */
@@ -415,20 +416,24 @@ try {
   const shown = await readYard();
   await shot(page, '00-friend-paddock');
   const drawn = st => st && st.length > 0 && st.every(l => l.nw > 0 && l.w > 0 && l.h > 0);
-  ok('RENDER a friend\'s profile draws their paddock, decoded and visible, with the true count',
-    shown.sheet && shown.present && shown.pets.length === THEIR_YARD.pets.length
-      && shown.pets.every(drawn) && /12/.test(shown.count || '') && !shown.bodyScrolls,
-    `strip=${shown.present}, ${shown.pets.length} pets, count "${shown.count}", all decoded=${shown.pets.every(drawn)}, body scrolls sideways=${shown.bodyScrolls}`);
+  ok('RENDER a friend\'s profile shows the paddock header and visit button without a portrait row',
+    shown.sheet && shown.present && shown.header === 'THEIR PADDOCK'
+      && shown.count === '12 PETS' && shown.door && shown.portraits === 0 && !shown.bodyScrolls,
+    `section=${shown.present}, count "${shown.count}", door=${shown.door}, portrait elements=${shown.portraits}`);
 
-  /* THEIRS. Their Bumbleseal must wear DIDS[0]; the viewer is wearing DIDS[1]
-     right now, so a render that consulted S.petWear names the wrong file here. */
-  const theirPet = shown.pets[0] || [];
-  const theirIds = theirPet.map(l => l.f).filter(Boolean).slice(1);
+  /* CONTROL: the equipped hero still draws their wardrobe while the viewer
+     wears a different item in the same slot. */
   const heroIds = (shown.hero || []).map(l => l.f).filter(Boolean).slice(1);
-  ok('THEIRS their pet wears THEIR wardrobe, not the viewer\'s, on the shelf and on the hero',
-    theirIds.includes(DIDS[0]) && !theirIds.includes(DIDS[1])
-      && heroIds.includes(DIDS[0]) && !heroIds.includes(DIDS[1]),
-    `shelf [${theirIds.join(',') || 'bare'}], hero [${heroIds.join(',') || 'bare'}] | theirs=${DIDS[0]} viewer's=${DIDS[1]}`);
+  ok('THEIRS the equipped pet still wears THEIR wardrobe on the hero',
+    drawn(shown.hero) && heroIds.includes(DIDS[0]) && !heroIds.includes(DIDS[1]),
+    `hero [${heroIds.join(',') || 'bare'}] | theirs=${DIDS[0]} viewer's=${DIDS[1]}`);
+
+  await openFriend({ ...THEIR_YARD, pets: [] }, 'EMPTY SAMPLE');
+  const unsampled = await readYard();
+  ok('TOTAL a positive true total keeps the paddock section even with an empty sample',
+    unsampled.sheet && unsampled.present && unsampled.count === '12 PETS'
+      && unsampled.door && unsampled.portraits === 0,
+    `section=${unsampled.present}, count "${unsampled.count}", door=${unsampled.door}`);
 
   /* OLDBUILD: no yard at all. */
   await openFriend(null, 'MARROW MAX');

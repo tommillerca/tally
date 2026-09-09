@@ -66,7 +66,7 @@ globalThis.fetch = async (url, opts = {}) => {
   return response(200, { ok: true, updatedAt: version, version });
 };
 
-const { db, kvGet, kvSet, useDbName } = await import('../js/db.js');
+const { db, kvGet, kvSet, useDbName, exportAll, importAll } = await import('../js/db.js');
 const social = await import('../js/social.js');
 
 let bad = 0;
@@ -81,15 +81,19 @@ await kvSet('apiBase', API);
 const online = await social.goOnline();
 ok('SETUP  client registered', !!(online && online.ok), JSON.stringify(online));
 
+const sharedBase = await exportAll();
 await db.put('log', row('from-a'));
 ok('SETUP  initial push landed', await social.pushBackup('audit'));
 ok('SETUP  successful push stored the returned version', (await kvGet('backupVersion', null)) === version,
   `local=${await kvGet('backupVersion', null)} server=${version}`);
 
-/* Turn the local database into device B while retaining its identity and base
-   version. The server still holds device A's row. Device B adds its own row,
-   then another winner advances the server version before B's PUT arrives. */
-await db.clear('log');
+/* Fork an actual second database from the shared baseline. Clearing A's diary
+   is a deletion, and its tombstone must not masquerade as a new device. */
+// The first encrypted push lazily minted aesJwk after the shared baseline.
+sharedBase.kv.find(r => r.k === 'identity').v = await kvGet('identity');
+useDbName('backup-conflict-client-b');
+await importAll(sharedBase);
+await kvSet('backupVersion', version);
 await db.put('log', row('from-b'));
 forceConflict = true;
 const pushed = await social.pushBackup('audit');

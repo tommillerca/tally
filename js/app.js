@@ -5322,7 +5322,7 @@ async function renderToday(el) {
        itself instead of leaving a dead button. */
     if (res?.capped) {
       const when = period === 'day' ? 'today' : period === 'week' ? 'this week' : 'this month';
-      toast(`All ${res.cap} quests for ${when} are already claimed. Fresh ones ${period === 'day' ? 'tomorrow' : 'next ' + period}.`, 3600);
+      toast(`The ${res.cap} quest rewards for ${when} have been paid. Fresh ones ${period === 'day' ? 'tomorrow' : 'next ' + period}.`, 3600);
       refresh();
       return;
     }
@@ -8678,11 +8678,15 @@ async function openKitchen() {
       const price = nextPotPrice(cook.potsOwned);
       armToConfirm($('#buyPot', body), price != null ? `Spend ${price.toLocaleString()}?` : 'Spend?', async () => {
         if (price == null) return;
-        if ((await coins()) < price) { toast(`Need ${price.toLocaleString()} coins for another pot.`, 2800); return; }
-        await coinsAdd(-price);
-        await addPot();
+        const result = await addPot(cook.potsOwned);
+        if (!result.ok) {
+          toast(result.reason === 'coins' ? `Need ${price.toLocaleString()} coins for another pot.`
+            : 'Your cauldrons have changed. Check the current pot offer.', 2800);
+          render();
+          return;
+        }
         popSound(S.sounds);
-        toast(`New cauldron bought! You can now cook ${cook.potsOwned + 1} dishes at once.`, 3200);
+        toast(`New cauldron bought! You can now cook ${result.owned} dishes at once.`, 3200);
         render();
       });
     }
@@ -10183,7 +10187,6 @@ function petShelfHtml(ownedCos, coinBal) {
     <span class="pet-new">NEW ARRIVAL</span>
     <div class="pet-hero-art">${petSpriteHtml(PET_SHOP.pet.id, 176, true, { thumb: true })}</div>
     <div class="pet-hero-copy">
-      <div class="pet-kind">${esc((pet.rarity || '').toUpperCase())} PET</div>
       <div class="pet-name">${esc(pet.name)}</div>
       <p>${esc(PET_SHOP.pet.blurb)}</p>
       <button class="t3-price pet-buy" data-petbuy="${PET_SHOP.pet.id}" data-amt="${PET_SHOP.pet.coin}"
@@ -10198,9 +10201,8 @@ function petShelfHtml(ownedCos, coinBal) {
     const a = BH_BY_ID[it.id]; if (!a) return '';
     const owned = ownedCos.has(it.id);
     const locked = !hasPet;
-    return `<div class="rk r-${a.rarity}${owned ? ' owned' : ''}${locked ? ' pet-locked' : ''}">
+    return `<div class="rk${owned ? ' owned' : ''}${locked ? ' pet-locked' : ''}">
       <div class="rk-stage">${petShotHtml(it.id, 112)}</div>
-      <div class="rk-rar">${esc((a.rarity || '').toUpperCase())}</div>
       <div class="rk-name">${esc(a.name)}</div>
       ${owned ? `<div class="rk-owned">In your Wardrobe</div>`
         : locked ? `<div class="pet-lock">Needs ${esc(pet.name)}</div>`
@@ -13750,7 +13752,7 @@ function openFriendProfile(f, onChange, opts = {}) {
   /* THEIR PADDOCK. Tom, 2026-08-22: "lets make it so when you click on a friend
      in the crew you can see their paddock and how many cool pets they have."
      `yard` is crew-only (see socialSnapshot), so a STRANGER opened off the
-     leaderboard simply has none and the strip is absent rather than empty: an
+     leaderboard simply has none and the section is absent rather than empty: an
      empty paddock would read as "they own nothing", which is a different and
      false statement.
      WEAR COMES FROM HERE, NEVER FROM S.petWear. Leaving `wear` undefined means
@@ -13760,17 +13762,9 @@ function openFriendProfile(f, onChange, opts = {}) {
      null, which draws her honestly bare. */
   const yard = p.yard && Array.isArray(p.yard.pets) ? p.yard : null;
   const yardWear = (yard && yard.wear) || null;
-  const yardHtml = yard && yard.pets.length ? `
+  const yardHtml = yard && yard.n > 0 ? `
       <div class="fp-yard">
         <div class="fp-yard-h"><span>THEIR PADDOCK</span><b>${yard.n} PET${yard.n === 1 ? '' : 'S'}</b></div>
-        <div class="fp-yard-row">${yard.pets.map(x => `
-          <span class="fp-yard-pet${x.shiny ? ' shiny' : ''}" title="${esc((BH_BY_ID[x.sp] || {}).name || x.sp)}">
-            ${petPortraitHtml(x.sp, 54, !!x.shiny, { mass: true, wear: yardWear, thumb: true, morph: isMorph(x.morph) ? x.morph : 'base' })}
-          </span>`).join('')}</div>
-        ${yard.n > yard.pets.length ? `<p class="note fp-yard-more">and ${yard.n - yard.pets.length} more back at the paddock</p>` : ''}
-        <!-- THE SHELF IS THE DOOR NOW, not the destination: openFriendPaddock
-             draws them out in their own field, the same scene the player sees
-             their own herd in. Tom, 2026-08-24. -->
         <button class="btn ghost fp-yard-go" id="fpYardGo" type="button">Visit their paddock ›</button>
       </div>` : '';
   /* CREW-14: `p.stats` truthy is not "has stats" -- a never-synced account
@@ -16052,7 +16046,7 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
         <div class="reveal-eyebrow">New arrival</div>
         <div class="reveal-sub">${esc(it.name || newPet.sp)} is yours</div>
         <div class="reveal-body">
-          <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar newpet-avatar r-${it.rarity || 'common'}">${petPortraitHtml(newPet.sp, 104, false, { thumb: true })}</div></div>
+          <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar newpet-avatar">${petPortraitHtml(newPet.sp, 104, false, { thumb: true })}</div></div>
           <div class="cele-bubble">Out with you now, and home in your Stable whenever you visit.</div>
         </div>
         <div class="reveal-foot">
@@ -16327,11 +16321,11 @@ function openHatchReveal(res, charWrap) {
   const hatchName = `A ${MORPH_LABEL[res.morph] || ''} ${item ? item.name : ''}`.replace(/\s+/g, ' ').trim() + '!';
   const revealHtml = item
     ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? `${sparkIco(24)} SHINY! ${sparkIco(24)}` : res.dupe ? 'ANOTHER ONE!' : esc(hatchName)}</div>
-       <div class="hatch-prize r-${item.rarity}${res.shiny ? ' is-shiny' : ''}">
+       <div class="hatch-prize${res.shiny ? ' is-shiny' : ''}">
          <canvas class="hatch-art" width="512" height="512"></canvas>
          <b>${esc(petInstanceName({ sp: item.id, morph: res.morph, shiny: res.shiny }))}${res.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</b>
          <small>${res.shiny ? 'Ultra-rare variant · follows your bonehead' : res.dupe ? 'A spare pet · keep it for recipes, melt it or breed' : 'Pet · follows your bonehead'}</small>
-         <span class="rar-chip" style="color:${res.shiny ? 'var(--gold)' : RARITIES[item.rarity].color}">${res.shiny ? 'SHINY' : RARITIES[item.rarity].label}</span>
+         ${res.shiny ? '<span class="rar-chip" style="color:var(--gold)">SHINY</span>' : ''}
        </div>`
     : `<div class="lvl-stamp" style="font-size:26px">A FAMILIAR FRIEND</div>
        <p class="note">This egg hatched a pet you already know. It scampered back into your crew and left you +${res.coins} coins. Keep hatching for shinies.</p>`;
@@ -18308,15 +18302,14 @@ function petPanelHtml(petId, fighter) {
   const passives = { yourDamage: 'your attacks hit harder', damageTaken: 'you take less damage', hypeGain: 'you build Hype faster' };
   const shiny = S.shinyPets.has(petId);
   const lineage = meta.lineage || 0;
-  const rarity = (BH_BY_ID[petId] || {}).rarity || 'common';
-  const bs = petBattleStats(petId, lvl, shiny, lineage); // intrinsic battle stats (rarity + tilt + shiny + lineage)
+  const bs = petBattleStats(petId, lvl, shiny, lineage); // intrinsic battle stats (species + tilt + shiny + lineage)
   const statLine = `<span class="pet-stats"><b>${bs.power}</b> PWR · <b>${bs.hp}</b> HP · <b>${bs.reflex}</b> REF</span>`;
   return `
-    <div class="pet-card r-${rarity} lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">
+    <div class="pet-card lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">
       ${petSpriteHtml(petId, 60, false, { thumb: true })}
       <div class="pet-card-meta">
         <b>${esc(fam.name)}${lineage ? ` <span class="lin-tag">${ICONS.star(11)}${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(10)} SHINY</span>` : ''} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
-        <small><span class="rar-lbl r-${rarity}">${(RARITIES[rarity] || {}).label || rarity}</span> · Pet level ${lvl}${lvl < PET_MAX_LEVEL ? ` · ${toNext.toLocaleString()} steps to Lv ${lvl + 1}` : ' · maxed'}</small>
+        <small>Pet level ${lvl}${lvl < PET_MAX_LEVEL ? ` · ${toNext.toLocaleString()} steps to Lv ${lvl + 1}` : ' · maxed'}</small>
         ${statLine}
         <span class="note" style="font-size:11.5px">${esc(fam.blurb)} Passive: ${passives[fam.passive]}. ${esc(petStatBonusText(petId, shiny, lineage))}</span>
       </div>
@@ -18555,11 +18548,11 @@ function drawTrimmedArt(canvas, src, pad = 0.08, tints = null) {
 }
 
 // Shared pack-card markup.
-// card: {imgSrc?|iconHtml?, name, rarity, kind, lvl?, statList?, talent?, plain?, stats?, statsHtml?, id?}
+// card: {imgSrc?|iconHtml?, name, rarity?, pet?, kind, lvl?, statList?, talent?, plain?, stats?, statsHtml?, id?}
 // Image art uses a canvas that hydratePackArt() fills (trimmed + centered).
 function packCardHtml(c, { selectable = false } = {}) {
-  const rar = RARITIES[c.rarity] || RARITIES.common;
-  const holo = RAR_ORDER.indexOf(c.rarity) >= 2 ? ' holo' : '';
+  const rar = c.pet ? null : RARITIES[c.rarity] || RARITIES.common;
+  const holo = !c.pet && RAR_ORDER.indexOf(c.rarity) >= 2 ? ' holo' : '';
   /* `wear` (a Boneheadz art id) DRAWS THE PIECE ON A MANNEQUIN and beats the
      loose PNG. It is set at the card-building sites rather than derived here
      because only they know whether the thing being revealed is worn at all: a
@@ -18569,7 +18562,7 @@ function packCardHtml(c, { selectable = false } = {}) {
   const art = c.wear && canWear(c.wear) ? wornArtHtml(c.wear, PC_WEAR_CSS)
     : c.imgSrc ? `<canvas class="pc-canvas" width="600" height="600" data-art="${esc(c.imgSrc)}"></canvas>`
     : `<div class="pc-icon">${c.iconHtml || ''}</div>`;
-  const sparks = RAR_ORDER.indexOf(c.rarity) >= 3
+  const sparks = !c.pet && RAR_ORDER.indexOf(c.rarity) >= 3
     ? `<span class="pc-spark k1">${sparkIco(16)}</span><span class="pc-spark k2">${sparkIco(11)}</span><span class="pc-spark k3">${sparkIco(12)}</span><span class="pc-spark k4">${sparkIco(15)}</span>`
     : '';
   /* The BAND under the plate is where a drop says what it does: real stat chips
@@ -18601,11 +18594,11 @@ function packCardHtml(c, { selectable = false } = {}) {
     + `<div class="pc-head"><span class="pc-kind">${esc(c.kind || '')}</span>${c.lvl ? `<span class="pc-lvl">${esc(c.lvl)}</span>` : ''}</div>`
     + `<div class="pc-art">${art}</div>`
     + `<div class="pc-plate"><div class="pc-name">${esc(c.name)}</div>`
-    + `<div class="pc-rar">${rar.label}</div></div>`
+    + (rar ? `<div class="pc-rar">${rar.label}</div>` : '') + '</div>'
     + (bandBits ? `<div class="pc-band">${bandBits}</div>` : '');
   return selectable
-    ? `<button class="pack-card selectable r-${c.rarity}${holo}" data-gear="${esc(c.id || '')}" aria-pressed="false">${inner}</button>`
-    : `<div class="pack-card r-${c.rarity}${holo}">${inner}</div>`;
+    ? `<button class="pack-card selectable${c.pet ? '' : ` r-${c.rarity}${holo}`}" data-gear="${esc(c.id || '')}" aria-pressed="false">${inner}</button>`
+    : `<div class="pack-card${c.pet ? '' : ` r-${c.rarity}${holo}`}">${inner}</div>`;
 }
 
 /* How much of the crate icon is LID, per crate kind, as a percentage of its own
@@ -19013,7 +19006,7 @@ function wirePackArtFallback(scope) {
 
    A crate deals a HAND, not a card: the rest of the pack stacks behind the one
    you are looking at, and you tap or drag the top one away to get to the next.
-   cards: [{imgSrc?|iconHtml?, name, rarity, kind, lvl?, statList?, talent?, stats?}]. */
+   cards: [{imgSrc?|iconHtml?, name, rarity?, pet?, kind, lvl?, statList?, talent?, stats?}]. */
 /* Test seam, webdriver-gated like __spireSheet / __friendProfile. The reveal is
    the one screen an audit cannot reach by clicking: a legendary card depends on
    RNG that never produced one for the original author, and the boss-loot grid
@@ -19242,7 +19235,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
          painted and the retimed beats never applied: measured, --b-card still
          resolved to 1.38s with the class reading "pack-reveal opening r-common".
          It is a property of the CRATE, not of the card being shown. */
-      reveal.className = `pack-reveal ${first ? 'opening' : 'browsing'} r-${c.rarity}${CRATE_SEQ[crate] ? ' pix-crate' : ''}`;
+      reveal.className = `pack-reveal ${first ? 'opening' : 'browsing'} ${c.pet ? '' : `r-${c.rarity}`}${CRATE_SEQ[crate] ? ' pix-crate' : ''}`;
       if (countEl) countEl.textContent = cards.length > 1 ? `${i + 1} of ${cards.length}` : '';
       if (hintEl) hintEl.textContent = i >= cards.length - 1
         ? (crate ? 'Tap to close the crate' : 'Tap to close')
@@ -19497,8 +19490,8 @@ function crateResultToCard(r) {
     return gearToCard(g);
   }
   const isPet = r.item && r.item.slot === 'C';
-  if (r.type === 'dupe') return { wear: r.item.id, imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET · DUPE' : 'DUPE', statsHtml: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
-  return { wear: r.item.id, imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET' : (esc((BH_SLOTS.find(s => s.code === r.item.slot) || {}).label || 'COSMETIC').toUpperCase()), stats: `New · ${(RARITIES[r.item.rarity] || RARITIES.common).label}` };
+  if (r.type === 'dupe') return { wear: r.item.id, imgSrc: bhAsset(r.item), name: r.item.name, ...(isPet ? { pet: true } : { rarity: r.item.rarity }), kind: isPet ? 'PET · DUPE' : 'DUPE', statsHtml: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
+  return { wear: r.item.id, imgSrc: bhAsset(r.item), name: r.item.name, ...(isPet ? { pet: true } : { rarity: r.item.rarity }), kind: isPet ? 'PET' : (esc((BH_SLOTS.find(s => s.code === r.item.slot) || {}).label || 'COSMETIC').toUpperCase()), stats: isPet ? 'New' : `New · ${(RARITIES[r.item.rarity] || RARITIES.common).label}` };
 }
 
 async function openCrateReveal(result) {
@@ -19655,7 +19648,7 @@ function openPetLevelUp(petId, level, prevLevel, newTalent, inst = null) {
   confettiRain(70); levelSound(S.sounds);
   const wrap = openSheet(`
     <div class="sheet-body" style="text-align:center;padding-top:12px">
-      <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${(BH_BY_ID[petId] || {}).rarity || 'common'} lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">${petPortraitHtml(petId, 104, shiny, { thumb: true, morph })}</div></div>
+      <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">${petPortraitHtml(petId, 104, shiny, { thumb: true, morph })}</div></div>
       <div class="lvl-stamp" style="font-size:30px">PET LEVEL ${level}!</div>
       <div class="cele-sub" style="font-size:15px;margin-top:2px">${esc(petName)}${lineage ? ` <span class="lin-tag">${ICONS.star(11)}${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
       <div class="pet-gains">${gains}</div>
@@ -19716,7 +19709,7 @@ function openPetsHelp() {
       </section>
       <section>
         <h3>When to stop</h3>
-        <p>Rarity, shiny and lineage share a <b>${PET_STAT_MULT_CAP}x base-stat cap</b>. At the cap, more lineage adds <b>no combat stats</b>. Check the stat gains before destroying a spare. Each rank still records another ${BREED_COOLDOWN_STEPS.toLocaleString()} steps walked.</p>
+        <p>Species, shiny and lineage share a <b>${PET_STAT_MULT_CAP}x base-stat cap</b>. At the cap, more lineage adds <b>no combat stats</b>. Check the stat gains before destroying a spare. Each rank still records another ${BREED_COOLDOWN_STEPS.toLocaleString()} steps walked.</p>
         <p>Two things never transfer: a fed-in pet's <b>levels</b> and its <b>bloodline</b>. Feed in plain spares, not the pet you have been walking.</p>
       </section>
       <section>
@@ -19803,8 +19796,6 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
     const p = places[r.iid];
     if (!p) return '';
     const art = petSpriteHtml(r.sp, p.w, p.kind === 'walk' || p.kind === 'flop', { shiny: r.shiny, wear: r.wear || null, thumb: true, morph: r.morph });   // 2026-09-06: the paddock scene carries the Kennel morph like it carries shiny (own instance record, or the friend's wire)
-    const rarity = (BH_BY_ID[r.sp] || {}).rarity;
-    const glow = p.kind === 'fly' && rarity === 'legendary' ? ' pdk-gold' : p.kind === 'hover' && rarity === 'epic' ? ' pdk-epic' : '';
     const pos = p.kind === 'walk'
       ? `left:${p.x0}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px;--pdk-range:${Math.max(0, (p.x1 - p.x0) - p.w)}px;--pdk-dur:${9 + ([...r.iid].reduce((a, c) => a + c.charCodeAt(0), 0) % 5)}s`
       : p.kind === 'fly'
@@ -19825,7 +19816,7 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
        iid is what the bond is banked against, so it is what the tap has to carry. A
        friend's field passes positional ids (`y0`, `y1`) and opens nothing, which is
        unchanged: it has no card to open. */
-    return `<div class="pdk-pet pdk-${p.kind}${glow}" data-pdk="${r.sp}" data-iid="${r.iid}" style="${pos}">
+    return `<div class="pdk-pet pdk-${p.kind}" data-pdk="${r.sp}" data-iid="${r.iid}" style="${pos}">
       <span class="pdk-flip"><span class="pdk-bob">${art}</span></span>
       ${r.equipped || r.breeding ? `<span class="pdk-state">${r.equipped ? '<span>OUT WITH YOU</span>' : ''}${r.breeding ? '<span class="pdk-breeding">BREEDING</span>' : ''}</span>` : ''}
       ${p.kind === 'walk' || p.kind === 'flop' ? '<span class="pdk-shadow"></span>' : ''}
@@ -20088,27 +20079,13 @@ async function openStable(opts = {}) {
   // CLOSED. Both used to be null, so render() re-opened the active pet's tree
   // every time you closed it and the control looked broken.
   let openIid = focusIid || undefined;   // which pet's talent tree is expanded inline
-  /* THE KENNEL LIVES IN THE STABLE (Tom's ruling, 2026-09-05) -- but it is a
-     DOOR IN THE BODY now, not a button in the header. Tom, on v500: "Kennel
-     button placement not intuitive" and "How to use the kennel not clear at
-     all". Measured before moving it: 73.3x44 at (240, 48.5), i.e. the sheet
-     head's trailing corner, 8px from Done. That corner is where this app puts
-     DISMISS, so the newest screen in the game was sitting in the close slot
-     wearing `btn ghost small`, with a one-word name that says nothing about
-     what is behind it. Both halves are the same mistake the Paddock's own
-     entry made and the same fix it got (see the door below and its note):
-     a place gets a DOOR that names itself, says what is inside in one line and
-     counts its contents. It MOVED rather than being duplicated, so there is
-     still exactly one way in and it still carries #kennelBtn, the id every
-     handler and audit clicks. */
+  // All three rooms have one door each at the top of the Stable body.
   const wrap = openSheet(`
     <div class="sheet-head stable-head"><h2>The Stable</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body" id="stableBody"></div>`, { cls: 'full pet-a11y', onClose: () => { if (currentTab() === 'today') refresh(); } });
   async function render() {
     const body = $('#stableBody', wrap);
     if (!body) return;
-    /* eqOwn is the WORN OUTFIT (equipped()), not equippedPetIid(): the Paddock door
-       below draws your own Bonehead at the gate, the same way the scene does. */
     /* equippedPetIid FIRST, alone: it repairs the paper-doll C slot when the two
        records disagree (R39-1), and equipped() below has to read the repaired
        slot rather than race it inside the same Promise.all. */
@@ -20125,7 +20102,7 @@ async function openStable(opts = {}) {
     sel = sel.filter(iid => insts.some(x => x.iid === iid));
     /* THE PRIVATE NICKNAME, beside the species name and never instead of it.
        Same shape as nameWithAlias() for friends: the real identity stays the
-       headline, because breed, rarity and family are what this screen is FOR
+       headline, because breeding and family are what this screen is FOR
        and a pet called BISCUIT with no species is unreadable. dir="auto" so an
        Arabic or Hebrew nickname renders in its own direction without dragging
        the punctuation around it; bidi control characters are refused upstream
@@ -20226,14 +20203,12 @@ async function openStable(opts = {}) {
     const focusIdx = Math.max(0, roster.findIndex(x => x.iid === (cfIid || eqIid)));
     const focused = roster[focusIdx] || roster[0] || null;
     const cfCards = roster.map((x, i) => {
-      const it = BH_BY_ID[x.sp] || {};
       const lvl = petLevel(bank[x.iid] || 0);
       const isEq = x.iid === eqIid;
       const inSel = sel.includes(x.iid);
-      return `<div class="cf-card r-${it.rarity || 'common'}${x.shiny ? ' is-shiny' : ''}${isEq ? ' active' : ''}${inSel ? ' picked' : ''}"
+      return `<div class="cf-card${x.shiny ? ' is-shiny' : ''}${isEq ? ' active' : ''}${inSel ? ' picked' : ''}"
           data-cfi="${i}" data-petsel="${x.iid}" data-sp="${x.sp}">
-        <span class="cf-chip r-${it.rarity || 'common'}">${x.shiny ? `${sparkIco(9)} SHINY` : esc((RARITIES[it.rarity] || {}).label || it.rarity || '')}</span>
-        ${x.shiny ? '' : `<span class="cf-chip" style="top:38px">${esc(petColourName(x))}</span>`}
+        <span class="cf-chip">${x.shiny ? `${sparkIco(9)} SHINY` : esc(petColourName(x))}</span>
         <span class="cf-lv">LV ${lvl}</span>
         <!-- Base pets keep their shipped animation. Shiny pets use the shipped
              portrait asset: the shared animation path hue-rotates its layers. -->
@@ -20256,7 +20231,7 @@ async function openStable(opts = {}) {
       if (focused.lineage) rows.push(['Lineage', `${focused.lineage}. ${petStatBonusText(focused.sp, focused.shiny, focused.lineage)}`]);
       return `<div class="cf-cap">
           <b>${esc(petInstanceName(focused))}${focused.shiny ? ' ✦' : ''}${nickTag(focused.iid)}</b>
-          <span class="role"><span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}</span>
+          <span class="role"><span class="dot"></span>${esc(fam.name || fam.key || '')}</span>
           <dl class="cf-meta">${rows.map(([k, v]) => `<div class="row${k === 'Level' ? ' cf-level' : k === 'Lineage' || k.startsWith('Steps') ? ' cf-progress' : ''}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
         </div>
         <div class="cf-colour-label"${bySp[focused.sp].length < 2 ? ' hidden' : ''}>Colour / copy</div>
@@ -20338,7 +20313,7 @@ async function openStable(opts = {}) {
         // 192 from the Locker Room's much bigger tiles (measured there to
         // legitimately clear no tier) was reading a 384-eligible box as 192.
         const tile = a.football ? croppedPetImg(sp, 62, false, morphAsset(sp, (S.petMorphs && S.petMorphs[sp]) || 'base') || null, { [a.slot]: i.id }, true) : petShotHtml(i.id, 62);
-        return `<button class="pw-item r-${a.rarity}${fam ? ' fam' : ''}${on ? ' on' : ''}" type="button" data-petwear="${i.id}" aria-pressed="${on}"${fam ? ` aria-label="${esc(a.name)}, ${fam.length} colourways"` : ''}>
+        return `<button class="pw-item${fam ? ' fam' : ''}${on ? ' on' : ''}" type="button" data-petwear="${i.id}" aria-pressed="${on}"${fam ? ` aria-label="${esc(a.name)}, ${fam.length} colourways"` : ''}>
           <span class="pw-art">${tile}${fam ? `<span class="ward-fam-n" aria-hidden="true">${fam.length}</span>` : ''}</span>
           <b>${esc(a.name)}</b>
           <small>${on ? 'WORN' : esc(slotLbl)}</small>
@@ -20423,29 +20398,40 @@ async function openStable(opts = {}) {
        Registered as `stable-door` in tests/figure-audit.mjs. Keeps the id
        `stableToPaddock` so the existing handler and every audit that clicks it are
        untouched. */
-    /* TWO pets, not three, and laid out by FLEX rather than by hand-placed slots.
-       Measured, not guessed: petAsideHtml mass-normalises, so the px asked for is not
-       the px drawn (a 34px duck renders 48 wide), and there is only 72px of scene to
-       the right of the keeper. Three sprites measured 48 + 29 + 39 = 116px and the
-       third one's box ended at 161 inside a 150px panel, so it was clipped and all
-       three overlapped. Per-species tuning is not available either: `order` is
-       rarity-sorted, so which species land here changes per player. A flex row anchored
-       to the safe box holds whatever two species turn up, at any normalised size, and
-       two animals beside you reads as a field with company rather than a contact sheet.
-       Your two RAREST, because that is the collection worth walking out to see. */
-    const doorSp = order.slice(0, 2);
-    const doorPx = 28;
     /* The Kennel door's own numbers, from the same instances this render already
        has: which colourways you own anywhere (the swatch strip) and how many of
        the 36 cells are filled (the count, ownedCellCount so CX cannot inflate
        it -- R39-10). Pure reads, no extra query. */
+    // Count owned colour cells, not copies. Unsupported species cannot inflate it.
     const kennelOwned = ownedPairs(insts);
-    const kennelMorphs = new Set([...kennelOwned].map(k => k.split('|')[1]));
     const kennelFound = ownedCellCount(kennelOwned, KENNEL_SPECIES.map(x => x.id));
     rememberKin(body);
+    const labWaiting = labStock?.unseen?.length || 0;
+    // A missing snapshot cannot honestly supply a remaining-experiments count.
+    const labRoomCount = labWaiting ? `${labWaiting} waiting`
+      : labStock?.status === 'ready' ? `${labStock.remaining} today`
+      : labStock ? `${labWaiting} waiting` : 'Unavailable';
+    const labRoomLabel = labWaiting ? `${labWaiting} results waiting`
+      : labStock?.status === 'ready' ? `${labStock.remaining} experiments left today`
+      : labStock ? `${labWaiting} results waiting. Open Laboratory to check availability.` : 'Laboratory availability unavailable';
     const breedLockNote = st.ready ? '' : `<p class="note" data-breed-lock>Breeding is locked. Walk ${st.cooldownLeft.toLocaleString()} more ${st.cooldownLeft === 1 ? 'step' : 'steps'} to unlock it.</p>`;
     const bodyScroll = body.scrollTop;
     body.innerHTML = `
+      <nav class="stable-rooms" aria-label="Pet rooms">
+        <button class="stable-room" id="stableToPaddock" type="button">
+          <span class="stable-room-picture" aria-hidden="true">${pixCur('badge-signpost', 48) || bhIcon('badge-signpost', 48)}</span>
+          <b>Paddock</b><small>${insts.length} pet${insts.length === 1 ? '' : 's'}</small>
+        </button>
+        <button class="stable-room" data-lab-open type="button">
+          <span class="stable-room-picture" aria-hidden="true">${pixCur('potion', 48) || t1Stroke(48, '<path d="M9 3h6M10 3v6L4 19q-1 2 2 2h12q3 0 2-2L14 9V3M7 15h10"/>')}</span>
+          <b>Laboratory</b><small aria-label="${labRoomLabel}">${labRoomCount}</small>
+          ${labWaiting ? '<i class="new-dot" aria-hidden="true"></i>' : ''}
+        </button>
+        <button class="stable-room" id="kennelBtn" type="button">
+          <span class="stable-room-picture" aria-hidden="true">${ICONS.paw(48)}</span>
+          <b>Kennel</b><small aria-label="${kennelFound} of ${KENNEL_SPECIES.length * MORPHS.length} colours collected">${kennelFound} of ${KENNEL_SPECIES.length * MORPHS.length}</small>
+        </button>
+      </nav>
       ${opts.labAction ? `<p role="status">${opts.labAction === 'melt' ? 'Choose a pet in the Stable, then use Destroy to melt that one pet for Bone Dust.' : 'Choose a keeper and a spare in the Stable, then review Breed to raise the keeper’s lineage.'}</p>` : ''}
       <!-- WAITING FOR THE SECOND PICK, AT THE TOP. Tom, 2026-08-10: "the breeding
            popup is good but it covers the breed button when you swipe to another
@@ -20479,47 +20465,6 @@ async function openStable(opts = {}) {
       ` : '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}
       ${pair ? '' : breedLockNote}
       <div class="wallet-line stable-wallet"><span>Bone Dust</span><b><span class="dust-ico">${ICONS.dust(14)}</span> ${st.dust.toLocaleString()}</b></div>
-      <nav class="stable-rooms" aria-label="Pet rooms">
-      <button class="pdk-door stable-door" id="stableToPaddock" type="button">
-        <span class="stable-door-picture" aria-hidden="true"><span class="pdk-door-scene">
-          <i class="pdk-door-moon"></i>
-          <i class="pdk-door-rail r1"></i><i class="pdk-door-rail r2"></i>
-          <i class="pdk-door-post" style="left:16px"></i><i class="pdk-door-post" style="left:70px"></i><i class="pdk-door-post" style="left:124px"></i>
-          ${/* 192, because the door draws the whole figure in a 60x78 box:
-               measured 60.2 CSS px, which is 120 device px on a 2x phone and 181
-               on a 3x, both comfortably inside the small tier. Seven layers at
-               640 was 10.9 MB standing in a thumbnail. */''}
-          <span class="pdk-door-keeper">${avatarLayersHtml(eqOwn, { skip: ['BG', 'C'], noYard: true, thumb: 192 })}</span>
-          <span class="pdk-door-pets">${doorSp.map(sp => `<span class="pdk-door-pet">${petAsideHtml(petFrom(null, sp), doorPx, { thumb: true })}</span>`).join('')}</span>
-          <i class="pdk-door-vig"></i>
-        </span></span>
-        <span class="pdk-door-tx">
-          <b>The Paddock</b>
-          <small>${insts.length} pet${insts.length === 1 ? '' : 's'} in your collection</small>
-        </span>
-        <!-- the house disclosure arrow: a plain glyph in a span, as in .gbn-chev,
-             .gd-arrow and .ul-chev. No ICONS ternary fallback here, per the note in
-             the chip row below: a ternary hides a missing icon from readers and ships
-             a bare "?" glyph.
-             NO BACKTICKS IN THIS COMMENT EITHER. The first draft of this very comment
-             quoted the ternary in backticks, closed the template literal it sits
-             inside, and broke the app on the spot: "Unexpected identifier ICONS". The
-             warning below is not decoration, it is a rake, and I stepped on it. -->
-        <span class="pdk-door-go" aria-hidden="true">›</span>
-      </button>
-      <button class="pdk-door stable-door" data-lab-open type="button">
-        <span class="pdk-door-tx"><b>The Laboratory</b><small>Make new pet colours</small></span>
-        <span class="pdk-door-go" aria-hidden="true">›</span>
-      </button>
-      </nav>
-      <button class="pdk-door kdoor stable-collection" id="kennelBtn" type="button">
-        <span class="kdoor-sw" style="--kennel-columns:${MORPHS.length}" aria-hidden="true">${MORPHS.map(m => `<i class="${kennelMorphs.has(m) ? 'on' : ''}" style="--kc:${morphSwatch(m)}"></i>`).join('')}</span>
-        <span class="pdk-door-tx">
-          <b>The Kennel</b>
-          <small>${kennelFound} of ${KENNEL_SPECIES.length * MORPHS.length} colours collected</small>
-        </span>
-        <span class="pdk-door-go" aria-hidden="true">›</span>
-      </button>
       <details class="stable-help">
         <summary>How pets work</summary>
         <p>Only the active pet levels as you walk</p>
@@ -20912,7 +20857,7 @@ async function openStable(opts = {}) {
         if (inst.lineage) rows.push(['Lineage', `${inst.lineage}. ${petStatBonusText(inst.sp, inst.shiny, inst.lineage)}`]);
         $('b', cap).innerHTML = `${esc(petInstanceName(inst))}${inst.shiny ? ' ✦' : ''}${nickTag(inst.iid)}`;
         const role = $('.role', cap);
-        if (role) role.innerHTML = `<span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}`;
+        if (role) role.innerHTML = `<span class="dot"></span>${esc(fam.name || fam.key || '')}`;
         const meta = $('.cf-meta', cap);
         if (meta) meta.innerHTML = rows.map(([k, v]) => `<div class="row${k === 'Level' ? ' cf-level' : k === 'Lineage' || k.startsWith('Steps') ? ' cf-progress' : ''}"><dt>${k}</dt><dd>${v}</dd></div>`).join('');
       }
@@ -21212,7 +21157,7 @@ const KENNEL_SPECIES = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6']
   .sort((a, b) => a.name.localeCompare(b.name));
 
 /* THE KENNEL: a sibling sheet of the Stable (scratchpad/kennel/KENNEL-UX.md
-   section 1), reached from the button openStable's header now carries.
+   section 1), reached from the room row at the top of openStable's body.
    A display screen, not a shop: no dust, no stat line, no glow anywhere on a
    pet here (KENNEL.md rulings) -- the roster and the grid below are colour and
    opacity only, never a second image, so nothing here adds a decode beyond one
@@ -21746,7 +21691,7 @@ function openPetBreedResult(off, level) {
       <div class="reveal-stamp">Lineage ${off.lineage}</div>
       <div class="reveal-sub">${esc(it.name || off.sp)} gained a lineage rank</div>
       <div class="reveal-body">
-        <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${it.rarity || 'common'} lin-${Math.min(off.lineage, 6)}${off.shiny ? ' is-shiny' : ''}">${petPortraitHtml(off.sp, 104, off.shiny, { thumb: true, morph: off.morph })}</div></div>
+        <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar lin-${Math.min(off.lineage, 6)}${off.shiny ? ' is-shiny' : ''}">${petPortraitHtml(off.sp, 104, off.shiny, { thumb: true, morph: off.morph })}</div></div>
         <div class="reveal-sub" style="font-size:var(--fs-3)">${esc(it.name || off.sp)}${off.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
         <div class="cele-bubble">${esc(petBreedGainText(off.sp, level, off.shiny, off.lineage))} ${esc(petStatBonusText(off.sp, off.shiny, off.lineage))}</div>
         ${parents.length ? `<div class="fused">
@@ -24355,7 +24300,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v525'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v526'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
@@ -24410,7 +24355,7 @@ function drawGrantDelivery(r) {
        got a Day One Lizard back with no reveal, no toast and nothing to look at.
        That is the end of the chain and it is the only part she experiences.
        Same shape as the crate line above; a pet is drawn from its own art. */
-    if (p.pet && BH_BY_ID[p.pet]) { const it = BH_BY_ID[p.pet]; cards.push({ imgSrc: bhAsset(it), name: it.name, rarity: it.rarity, kind, stats: note }); hadCard = true; }
+    if (p.pet && BH_BY_ID[p.pet]) { const it = BH_BY_ID[p.pet]; cards.push({ imgSrc: bhAsset(it), name: it.name, pet: true, kind, stats: note }); hadCard = true; }
     if (p.egg) { cards.push({ iconHtml: crateIcon('egg', 120), name: CRATES.egg.label, rarity: 'rare', kind, stats: note }); hadCard = true; }
     if (p.gearId && GEAR_BY_ID[p.gearId]) { cards.push({ ...gearToCard(GEAR_BY_ID[p.gearId]), kind }); hadCard = true; }
     if (p.consumable && CONSUMABLES[p.consumable]) { cards.push({ iconHtml: consumableIcon(p.consumable, 120), name: CONSUMABLES[p.consumable].label, rarity: 'uncommon', kind, stats: note }); hadCard = true; }
@@ -24994,8 +24939,8 @@ async function renderPit(wrap) {
       }
       return;   // no charge spent, no fight opened
     }
-    const spent = await spendPitFight();
-    if (!spent.ok) { toast('Rest up! Log a meal or take a walk to earn Vigor. Free fights refill tomorrow.', 3400); renderPit(wrap); return; }
+    const spent = await reservePitFight(foeCfg);
+    if (!spent.ok) { toast('Rest up! Take a walk to earn Vigor. Free fights refill tomorrow.', 3400); renderPit(wrap); return; }
     await openFight(wrap, fighter, foeCfg);   // awaited so the guard above holds until the arena is up
   };
   $$('[data-spar]', body).forEach(b => b.addEventListener('click', () =>
@@ -25172,6 +25117,26 @@ const FIGHT_ROW_LABEL = {
   glutton: 'Glutton win', spire: 'Spire fight', mimic: 'Boneyard win', wanderer: 'Boneyard win',
 };
 
+// Commit the charge and its recoverable arena record together, before setup
+// can reject. A second tab also checks the live record inside this transaction.
+async function reservePitFight(foeCfg) {
+  await refreshPitEnergy();
+  const { payAtomic } = await import('./db.js');
+  const { VIGOR_CAP } = await import('./energy.js');
+  return payAtomic({ snapshot: { keys: ['pitEnergy', 'pitFight'] },
+    decide: ({ pitEnergy: energy = {}, pitFight }) => {
+      if (pitFight) return { result: { ok: false } };
+      const free = (energy.freeUsed || 0) < FREE_FIGHTS;
+      if (!free && !(energy.vigor > 0)) return { result: { ok: false } };
+      return { result: { ok: true }, kv: {
+        pitEnergy: () => free ? { ...energy, freeUsed: (energy.freeUsed || 0) + 1 }
+          : { ...energy, vigor: Math.max(0, Math.min(VIGOR_CAP, energy.vigor - 1)) },
+        pitFight: () => ({ phase: 'open', mode: foeCfg.mode, foe: foeCfg.name, at: Date.now() }),
+      } };
+    },
+  });
+}
+
 async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
   const food = await foodCombatBuff(); // active dish buffs (damage / hype / regen / pet-free)
@@ -25205,15 +25170,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
     outfit: foeOutfitFor(foeCfg.add.name),
   }) : null;
   trackEvent('fight_start', { mode: foeCfg.mode || 'pit', pet: !!fighter.petMeta });
-  /* The staked-fight record, written at the one moment a charge is genuinely
-     spent (startPit debited it just before calling us). From here the fight is
-     OPEN until settle() or onClose resolves it; see the lifecycle comment
-     above openFight. Awaited so the record exists before the player can act. */
+  // reservePitFight already committed the staked record with the charge.
+  // Setup failures from here retain the existing interrupted-fight recovery.
   const staked = PIT_STAKED_MODES.includes(foeCfg.mode);
   // QA round 28 P4: the spar ledger's `ref`. One id per arena, so settle() can
   // only ever take one spar-<date>-<n> slot for this fight (see claimSpar).
   const fightId = newId();
-  if (staked) await kvSet('pitFight', { phase: 'open', mode: foeCfg.mode, foe: foeCfg.name, at: Date.now() });
   /* THE FIRST FIGHT IS UNLOSABLE, and it is derived HERE because openFight is the
      one door every fight in the app walks through: the Pit ladder, the Champion,
      the Gauntlet, spars, spires, world-boss dens and minis are twelve call sites
@@ -25460,7 +25422,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <div class="bh-stage fstage" id="youStage">${avatarLayersHtml(player.outfit, { noYard: true, skip: ['BG', 'C'] })}</div>
         ${petBody ? `
         <div class="pet-fighter" id="petG">
-          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''}${petArtId && petFacesLeft(petArtId) ? ' faces-away' : ''} r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'} lin-${Math.min((petBody.kit && petBody.kit.lineage) || 0, 6)}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, petFightPx(petArtId, 76), !petHovers(petArtId), { thumb: true, morph: petArtMorph }) : ''}</div>
+          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''}${petArtId && petFacesLeft(petArtId) ? ' faces-away' : ''} lin-${Math.min((petBody.kit && petBody.kit.lineage) || 0, 6)}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, petFightPx(petArtId, 76), !petHovers(petArtId), { thumb: true, morph: petArtMorph }) : ''}</div>
         </div>` : ''}
       </div>
       <div id="floats"></div>
@@ -26560,9 +26522,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
         confettiRain(90); levelSound(S.sounds);
         if (r?.badges.length) queueCelebration({ newBadges: r.badges });
       } else {
-      await awardCapped('fight', 'fight', 10, FIGHT_ROW_LABEL[foeCfg.mode] || 'Pit win', XP_DAILY_CAP.fight);
+      xp += await awardCapped('fight', 'fight', 10, FIGHT_ROW_LABEL[foeCfg.mode] || 'Pit win', XP_DAILY_CAP.fight);
       trackEvent(foeCfg.mode === 'boss' ? 'boss_win' : foeCfg.mode === 'mini' ? 'mini_win' : 'pit_win', { mode: foeCfg.mode });
-      xp += 10;
       /* QA round 28 P4: 15 coins per spar win used to be assigned here with no
          ledger key and no cap (start() skips spendPitFight on purpose). The
          coins now come off claimSpar's daily slot; past SPAR_DAILY_CAP, or on a
@@ -26772,8 +26733,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
            His path is a derived loop, so a player who knows where he is can walk
            back into the light every thirty seconds, and without a key that is
            150 XP, 200 coins and a Step Egg every time. One payout per cell per
-           45-minute instance, resolved by db.addIfAbsent, which is a single
-           IndexedDB request rather than a read-then-write pair (a kvGet/kvSet
+           45-minute instance, resolved by db.claimAndPay, which is a single
+           IndexedDB transaction rather than a read-then-write pair (a kvGet/kvSet
            version of this exact claim was once measured paying 16,500 coins to
            three concurrent callers).
            A LOSS OR A FLEE CLAIMS NOTHING, on purpose, and the map's
@@ -26795,15 +26756,16 @@ async function openFight(pitWrap, fighter, foeCfg) {
            a marker later is easy; taking one back is not. Tom confirmed this on
            2026-08-21. Asserted by name in tests/wanderer-boneyard-audit.mjs
            (CEILING). */
-        const g = await award(foeCfg.claimKey, 'wanderer', foeCfg.xp, 'Boneyard: the Wanderer', foeCfg.date);
-        if (g) {
-          xp += g;
-          coins = foeCfg.coins;
-          await grantCrate('egg', 'boneyard');
+        const { claimWandererWin } = await import('./loot.js');
+        const reward = await claimWandererWin(foeCfg, await foodCoinMult());
+        if (reward) {
+          xp += reward.xp; coins = reward.coins; extras.push(...reward.extras);
           extraCards.push(crateCard('egg'));
         }
         dispatchEvent(new CustomEvent('bh-wanderer-beaten', { detail: { key: foeCfg.claimKey } }));
       }
+      // The Wanderer already paid coins and consumed its charm atomically.
+      if (foeCfg.mode !== 'wanderer') {
       // Battle Charm: spend a charge on the win for +25% coins.
       if (coins > 0) {
         const bonusPct = await consumeBattleCharmCharge();
@@ -26821,6 +26783,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         extras.push(`Feast +${bonus} coins`);
       }
       if (coins) await coinsAdd(coins);
+      }
       window.__refreshWalletPill?.();   // the hub behind this sheet shows the balance this just changed
       const badges = await evaluateBadges();
       /* THE CARD REPORTS WHAT WAS MINTED, BADGES INCLUDED (QA round 20, R20-P6).

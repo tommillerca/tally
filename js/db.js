@@ -319,6 +319,177 @@ function guard(store, val, op, run) {
   });
 }
 
+/* P1 merge history stays in kv so it travels in existing backups. Count maps
+   union signed, uniquely identified mutations. Other rows retain causal versions,
+   including null diary tombstones. Concurrent non-additive edits refuse the entire
+   import: neither save is discarded and the caller receives a recovery error.
+   No pruning is safe while an unacknowledged offline backup can return. */
+const MERGE_KV = new Set(['ingredients', 'potions', 'pantry', 'foodbuffs']);
+const MERGE_COUNTS = new Set(['ingredients', 'potions']);
+const MERGE_PREFIX = 'mergeHistory:';
+const mergeKey = (store, key) => `${MERGE_PREFIX}${store}:${JSON.stringify(key)}`;
+const sameValue = (a, b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+function canonical(v) {
+  if (Array.isArray(v)) return v.map(canonical);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.keys(v).sort().map(k => [k, canonical(v[k])]));
+  return v;
+}
+function historyFailure(key) {
+  return new Error(`Cannot merge ${key}: missing, damaged or conflicting merge history. Your local save is unchanged. Keep both saves for recovery; no merge was applied.`);
+}
+const countMap = v => v && typeof v === 'object' && !Array.isArray(v) &&
+  Object.values(v).every(n => Number.isSafeInteger(n) && n >= 0);
+function historyValue(h, counts) {
+  if (!counts) return h.head === null ? h.base : h.ops[h.head];
+  const value = Object.assign(Object.create(null), h.base);
+  for (const delta of Object.values(h.ops)) for (const [id, n] of Object.entries(delta)) value[id] = (value[id] || 0) + n;
+  for (const id of Object.keys(value)) if (value[id] === 0) delete value[id];
+  return value;
+}
+function normalized(v, counts) {
+  if (!counts) return v ?? null;
+  const out = { ...(v || {}) };
+  for (const id of Object.keys(out)) if (out[id] === 0) delete out[id];
+  return out;
+}
+function validHistory(h, counts) {
+  if (!h || h.format !== 1 || typeof h.id !== 'string' || !h.id || !Object.hasOwn(h, 'base') ||
+      !h.ops || typeof h.ops !== 'object' || Array.isArray(h.ops)) return false;
+  if (!counts) return (h.head === null && !Object.keys(h.ops).length) ||
+    (typeof h.head === 'string' && Object.hasOwn(h.ops, h.head));
+  return countMap(h.base) && Object.values(h.ops).every(d => d && typeof d === 'object' && !Array.isArray(d) &&
+    Object.values(d).every(Number.isSafeInteger)) && countMap(historyValue(h, true));
+}
+function newHistory(value, counts) {
+  const base = normalized(value, counts);
+  return { format: 1, id: (counts ? !Object.keys(base).length : base === null) ? 'empty' : crypto.randomUUID(),
+    base, ops: {}, ...(!counts ? { head: null } : {}) };
+}
+function mergeRecorder(os, store, key, receipt) {
+  const hk = mergeKey(store, key), counts = store === 'kv' && MERGE_COUNTS.has(key);
+  const hg = os.get(hk);
+  return (before, next) => {
+    before = normalized(before, counts); next = normalized(next, counts);
+    const h = hg.result?.v ?? newHistory(before, counts);
+    if (!validHistory(h, counts) || !sameValue(historyValue(h, counts), before)) throw historyFailure(key);
+    if (sameValue(before, next)) return;
+    const id = receipt || crypto.randomUUID();
+    let change = next;
+    if (counts) {
+      if (!countMap(next)) throw historyFailure(key);
+      change = Object.fromEntries([...new Set([...Object.keys(before), ...Object.keys(next)])]
+        .map(k => [k, (next[k] || 0) - (before[k] || 0)]).filter(([, n]) => n !== 0));
+    }
+    if (Object.hasOwn(h.ops, id)) throw historyFailure(key);
+    const updated = { ...h, ops: { ...h.ops, [id]: change }, ...(!counts ? { head: id } : {}) };
+    if (!validHistory(updated, counts)) throw historyFailure(key);
+    os.put({ k: hk, v: updated });
+  };
+}
+function joinHistory(key, a, b, av, bv, counts) {
+  for (const [h, v] of [[a, av], [b, bv]]) if (h !== undefined &&
+    (!validHistory(h, counts) || !sameValue(historyValue(h, counts), normalized(v, counts)))) throw historyFailure(key);
+  if (!a && !b) {
+    // Equal legacy counts can hide two independent grants. Never certify a
+    // max/count tie as a lossless merge without distinct mutation receipts.
+    if (counts && Object.keys(normalized(av, true)).length) throw historyFailure(key);
+    if (!sameValue(normalized(av, counts), normalized(bv, counts))) throw historyFailure(key);
+    return null;
+  }
+  if (!a || !b) {
+    const h = a || b, legacy = normalized(a ? bv : av, counts);
+    // An old opening snapshot contributes no new mutations. Other untracked
+    // states have no reliable order or independent-earning evidence.
+    if (!sameValue(legacy, h.base)) throw historyFailure(key);
+    return h;
+  }
+  if (a.id !== b.id || !sameValue(a.base, b.base)) throw historyFailure(key);
+  for (const id of Object.keys(a.ops)) if (Object.hasOwn(b.ops, id) && !sameValue(a.ops[id], b.ops[id])) throw historyFailure(key);
+  if (!counts) {
+    const aInB = Object.keys(a.ops).every(id => Object.hasOwn(b.ops, id));
+    const bInA = Object.keys(b.ops).every(id => Object.hasOwn(a.ops, id));
+    if (aInB && bInA && a.head !== b.head) throw historyFailure(key);
+    if (aInB) return b;
+    if (bInA) return a;
+    throw historyFailure(key);
+  }
+  const h = { ...a, ops: { ...a.ops, ...b.ops } };
+  if (!validHistory(h, true)) throw historyFailure(key);
+  return h;
+}
+// Diary writes use the same transaction for the row and its causal tombstone.
+function diaryWrite(t, key, next, die) {
+  const record = mergeRecorder(t.objectStore('kv'), 'log', key);
+  const g = t.objectStore('log').get(key);
+  g.onsuccess = () => {
+    try {
+      record(g.result ?? null, next);
+      if (next === null) t.objectStore('log').delete(key);
+      else t.objectStore('log').put(next);
+    }
+    catch (e) { die(e); }
+  };
+}
+function diaryMutation(key, next, clear = false) {
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
+  return open().then(idb => new Promise((resolve, reject) => {
+    const t = idb.transaction(['log', 'kv'], 'readwrite');
+    let error;
+    const die = e => { error = e; t.abort(); };
+    if (clear) {
+      const g = t.objectStore('log').getAll();
+      g.onsuccess = () => { for (const row of g.result) diaryWrite(t, row.id, null, die); };
+    } else diaryWrite(t, key, next, die);
+    t.oncomplete = () => resolve(next === null ? undefined : key);
+    t.onerror = t.onabort = () => reject(error || t.error || new Error('Diary write aborted'));
+  }));
+}
+
+function historyTarget(k) {
+  const match = /^mergeHistory:(kv|log):(.+)$/.exec(k);
+  if (!match) throw historyFailure(k);
+  let key;
+  try { key = JSON.parse(match[2]); } catch { throw historyFailure(k); }
+  if ((typeof key !== 'string' && typeof key !== 'number') ||
+      (match[1] === 'kv' && !MERGE_KV.has(key)) || k !== mergeKey(match[1], key)) throw historyFailure(k);
+  return { store: match[1], key };
+}
+function validateMergeHistory(kv, log) {
+  const values = new Map(kv.map(r => [r.k, r.v]));
+  const meals = new Map(log.map(r => [r.id, r]));
+  for (const { k, v } of kv) {
+    if (!k.startsWith(MERGE_PREFIX)) continue;
+    const { store, key } = historyTarget(k), counts = store === 'kv' && MERGE_COUNTS.has(key);
+    if (!validHistory(v, counts) || (store === 'kv' && !values.has(key)) ||
+        !sameValue(historyValue(v, counts), normalized(store === 'kv' ? values.get(key) : meals.get(key), counts))) throw historyFailure(key);
+  }
+}
+function mergeProgress(localKv, fileKv, localLog, fileLog) {
+  const local = new Map(localKv.map(r => [r.k, r.v])), file = new Map(fileKv.map(r => [r.k, r.v]));
+  const kv = [], log = [], deleted = [];
+  for (const key of MERGE_KV) {
+    if (!file.has(key)) continue;
+    const hk = mergeKey('kv', key), a = local.get(hk), b = file.get(hk), counts = MERGE_COUNTS.has(key);
+    if (!local.has(key)) continue; // a genuinely new resource row imports as-is
+    const h = joinHistory(key, a, b, local.get(key), file.get(key), counts);
+    if (h) kv.push({ k: hk, v: h }, { k: key, v: historyValue(h, counts) });
+  }
+  const meals = new Map(localLog.map(r => [r.id, r])), incoming = new Map(fileLog.map(r => [r.id, r]));
+  const ids = new Set(incoming.keys());
+  for (const k of file.keys()) if (k.startsWith(`${MERGE_PREFIX}log:`)) ids.add(historyTarget(k).key);
+  for (const key of ids) {
+    const hk = mergeKey('log', key), a = local.get(hk), b = file.get(hk);
+    const av = meals.get(key) ?? null, bv = incoming.get(key) ?? null;
+    let h;
+    if (!a && !meals.has(key)) h = b; // different-id meals still join
+    else h = joinHistory(key, a, b, av, bv, false);
+    if (h) kv.push({ k: hk, v: h });
+    const value = h ? historyValue(h, false) : bv;
+    if (value === null) deleted.push(key); else log.push(value);
+  }
+  return { kv, log, deleted };
+}
+
 /* L2 currency history. A balance is a projection of one shared opening balance
    and a union of signed mutations. Replays add nothing; independent credits and
    debits both survive. The opening id is exported with the save, never a device
@@ -342,6 +513,10 @@ function openingHistory(balance, revision) {
 // Queue reads BEFORE the balance updater, including before its sibling revision
 // updater. Everything below runs within the caller's existing transaction.
 function currencyRecorder(os, k, receipt = null) {
+  if (MERGE_KV.has(k)) {
+    const record = mergeRecorder(os, 'kv', k, receipt), before = os.get(k);
+    return (_before, next) => record(before.result?.v, next);
+  }
   if (!Object.hasOwn(CURRENCY, k)) return () => {};
   const hg = os.get(historyKey(k)), rg = os.get(CURRENCY[k]);
   return (before, next) => {
@@ -409,9 +584,13 @@ export function addIfAbsent(store, val) {
      against exactly this: see awardOnce. */
   bumpStore(store);
   return guard(store, val, 'addIfAbsent', () => open().then(db => new Promise((resolve, reject) => {
-    const t = db.transaction(store, 'readwrite');
-    let inserted = true;
+    const t = db.transaction(store === 'log' ? ['log', 'kv'] : store, 'readwrite');
+    let inserted = true, error;
+    const diary = store === 'log' ? mergeRecorder(t.objectStore('kv'), 'log', val.id) : null;
     const req = t.objectStore(store).add(val);
+    if (diary) req.onsuccess = () => {
+      try { diary(null, val); } catch (e) { error = e; t.abort(); }
+    };
     req.onerror = e => {
       if (req.error && req.error.name === 'ConstraintError') {
         inserted = false;
@@ -421,7 +600,7 @@ export function addIfAbsent(store, val) {
     };
     t.oncomplete = () => resolve(inserted);
     t.onerror = () => reject(t.error);
-    t.onabort = () => reject(t.error || new Error('addIfAbsent aborted'));
+    t.onabort = () => reject(error || t.error || new Error('addIfAbsent aborted'));
   })));
 }
 
@@ -445,13 +624,14 @@ export function addIfAbsent(store, val) {
 export function claimAndPay(store, row, { kv = {}, puts = [] } = {}) {
   if (frozen) return Promise.reject(new Error(FROZEN_MSG));
   const kvKeys = Object.keys(kv);
-  const stores = [...new Set([store, ...(kvKeys.length ? ['kv'] : []), ...puts.map(p => p.store)])];
+  const stores = [...new Set([store, ...(kvKeys.length || store === 'log' || puts.some(p => p.store === 'log') ? ['kv'] : []), ...puts.map(p => p.store)])];
   for (const s of stores) bumpStore(s);   // same stamp discipline as addIfAbsent
   return guard(store, row, 'claimAndPay', () => open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction(stores, 'readwrite');
     let inserted = true;
     let threw = null;
     const die = e => { threw = e; try { t.abort(); } catch { /* already going */ } };
+    const diary = store === 'log' ? mergeRecorder(t.objectStore('kv'), 'log', row.id) : null;
     const req = t.objectStore(store).add(row);
     req.onerror = e => {
       if (req.error && req.error.name === 'ConstraintError') {
@@ -462,6 +642,7 @@ export function claimAndPay(store, row, { kv = {}, puts = [] } = {}) {
     };
     req.onsuccess = () => {
       try {
+        if (diary) diary(null, row);
         const os = kvKeys.length ? t.objectStore('kv') : null;
         for (const k of kvKeys) {
           const record = currencyRecorder(os, k, `claim:${store}:${row.key ?? row.k ?? row.id}:${k}`);
@@ -473,7 +654,10 @@ export function claimAndPay(store, row, { kv = {}, puts = [] } = {}) {
             } catch (e) { die(e); }
           };
         }
-        for (const p of puts) t.objectStore(p.store).put(p.val);
+        for (const p of puts) {
+          if (p.store === 'log') diaryWrite(t, p.val.id, p.val, die);
+          else t.objectStore(p.store).put(p.val);
+        }
       } catch (e) { die(e); }
     };
     t.oncomplete = () => resolve(inserted);
@@ -494,6 +678,7 @@ export function claimAndPay(store, row, { kv = {}, puts = [] } = {}) {
  * openCrate has to know WHAT it took before it can roll it, and every caller
  * that only wants the yes/no reads the same answer off truthiness. */
 export function take(store, key) {
+  if (store === 'log') return atomic({ take: { store, key } }, 'take');
   if (frozen) return Promise.reject(new Error(FROZEN_MSG));
   bumpStore(store);
   return guard(store, key, 'take', () => open().then(db => new Promise((resolve, reject) => {
@@ -541,7 +726,7 @@ function atomic({ take = null, kv = {}, puts = [], dels = [], snapshot = null, d
   if (frozen) return Promise.reject(new Error(FROZEN_MSG));
   const kvKeys = Object.keys(kv);
   const receipts = [...(take && take.store === 'inv' ? [take.key] : []), ...dels.filter(d => d.store === 'inv').map(d => d.key)];
-  const stores = [...new Set([...(take ? [take.store] : []), ...(kvKeys.length || receipts.length || snapshot ? ['kv'] : []), ...(snapshot?.stores || []),
+  const stores = [...new Set([...(take ? [take.store] : []), ...(kvKeys.length || receipts.length || snapshot || take?.store === 'log' || puts.some(p => p.store === 'log') || dels.some(d => d.store === 'log') ? ['kv'] : []), ...(snapshot?.stores || []),
     ...puts.map(p => p.store), ...dels.map(d => d.store)])];
   for (const s of stores) bumpStore(s);   // same stamp discipline as addIfAbsent
   const [label, labelKey] = take ? [take.store, take.key] : ['kv', kvKeys[0]];
@@ -563,8 +748,14 @@ function atomic({ take = null, kv = {}, puts = [], dels = [], snapshot = null, d
             } catch (e) { die(e); }
           };
         }
-        for (const p of puts) t.objectStore(p.store).put(p.val);
-        for (const d of dels) t.objectStore(d.store).delete(d.key);
+        for (const p of puts) {
+          if (p.store === 'log') diaryWrite(t, p.val.id, p.val, die);
+          else t.objectStore(p.store).put(p.val);
+        }
+        for (const d of dels) {
+          if (d.store === 'log') diaryWrite(t, d.key, null, die);
+          else t.objectStore(d.store).delete(d.key);
+        }
         if (receipts.length) {
           const kvs = t.objectStore('kv');
           const tg = kvs.get('invTaken');
@@ -606,7 +797,12 @@ function atomic({ take = null, kv = {}, puts = [], dels = [], snapshot = null, d
     } else if (take) {
       const os = t.objectStore(take.store);
       const g = os.get(take.key);
-      g.onsuccess = () => { row = g.result; if (row === undefined) return; os.delete(take.key); pay(); };
+      g.onsuccess = () => {
+        row = g.result; if (row === undefined) return;
+        if (take.store === 'log') diaryWrite(t, take.key, null, die);
+        else os.delete(take.key);
+        pay();
+      };
     } else pay();
     t.oncomplete = () => resolve(row);
     t.onerror = () => reject(threw || t.error);
@@ -768,10 +964,14 @@ export function kvBumpRevisioned(k, revKey, n, { requireFunds = false } = {}) {
 export function takeInv(id) { return atomic({ take: { store: 'inv', key: id } }, 'takeInv'); }
 
 export const db = {
-  put: (store, val) => { bumpStore(store); return guard(store, val, 'put', () => tx(store, 'readwrite', s => s.put(val))); },
-  del: (store, key) => { bumpStore(store); return guard(store, key, 'del', () => tx(store, 'readwrite', s => s.delete(key))); },
+  put: (store, val) => {
+    if (store === 'kv' && MERGE_KV.has(val.k)) return kvUpdate(val.k, () => val.v).then(() => val.k);
+    bumpStore(store);
+    return guard(store, val, 'put', () => store === 'log' ? diaryMutation(val.id, val) : tx(store, 'readwrite', s => s.put(val)));
+  },
+  del: (store, key) => { bumpStore(store); return guard(store, key, 'del', () => store === 'log' ? diaryMutation(key, null) : tx(store, 'readwrite', s => s.delete(key))); },
   get: (store, key) => tx(store, 'readonly', s => s.get(key)),
-  clear: (store) => { bumpStore(store); return guard(store, null, 'clear', () => tx(store, 'readwrite', s => s.clear())); },
+  clear: (store) => { bumpStore(store); return guard(store, null, 'clear', () => store === 'log' ? diaryMutation(undefined, null, true) : tx(store, 'readwrite', s => s.clear())); },
   all: (store) => tx(store, 'readonly', s => s.getAll()),
   count: (store) => tx(store, 'readonly', s => s.count()),
   epoch: (store) => storeEpoch(store),
@@ -1054,13 +1254,33 @@ export async function exportAll() {
     const t = idb.transaction(STORES, 'readwrite');
     const snapshot = { app: 'tally', version: DB_VERSION, exportedAt: new Date().toISOString() };
     let threw;
+    const seedDiary = () => {
+      if (!snapshot.log || !snapshot.kv) return;
+      try {
+        const rows = new Map(snapshot.kv.map(r => [r.k, r.v]));
+        for (const row of snapshot.log) {
+          const k = mergeKey('log', row.id);
+          if (rows.has(k)) continue;
+          const receipt = { k, v: newHistory(row, false) };
+          t.objectStore('kv').put(receipt); snapshot.kv.push(receipt);
+        }
+        validateMergeHistory(snapshot.kv, snapshot.log);
+      } catch (e) { threw = e; t.abort(); }
+    };
     for (const store of STORES) {
       const g = t.objectStore(store).getAll();
       g.onsuccess = () => {
         snapshot[store] = g.result;
+        if (store === 'log') seedDiary();
         if (store !== 'kv') return;
         try {
           const rows = new Map(g.result.map(r => [r.k, r.v]));
+          for (const k of MERGE_KV) {
+            if (!rows.has(k) || rows.has(mergeKey('kv', k))) continue;
+            const row = { k: mergeKey('kv', k), v: newHistory(rows.get(k), MERGE_COUNTS.has(k)) };
+            t.objectStore('kv').put(row); snapshot.kv.push(row);
+          }
+          seedDiary();
           for (const [k, rev] of Object.entries(CURRENCY)) {
             if (rows.has(historyKey(k))) {
               const h = rows.get(historyKey(k));
@@ -1256,6 +1476,7 @@ export async function importAll(data, { replace = true } = {}) {
       }
     }
   }
+  validateMergeHistory(data.kv || [], data.log);
   const idb = await open();
   const declared = new Set(STORES.filter(s => Array.isArray(data[s])));
   const skipped = STORES.filter(s => !declared.has(s));
@@ -1269,10 +1490,21 @@ export async function importAll(data, { replace = true } = {}) {
     catch { reject(new Error('the restore could not open storage. Your old data is unchanged. Try again.')); return; }
     t.oncomplete = () => resolve({ foods: (data.foods || []).length, log: (data.log || []).length, weights: (data.weights || []).length, skipped });
     t.onerror = t.onabort = () => reject(mergeError || new Error('the restore did not finish. Your old data is unchanged. Try again.'));
+    const localLogRead = t.objectStore('log').getAll();
     const read = t.objectStore('kv').getAll();
     read.onsuccess = () => {
       try {
         const localKv = read.result;
+        if (!replace) validateMergeHistory(localKv, localLogRead.result);
+        if (replace && !declared.has('kv')) {
+          for (const row of localKv) if (row.k.startsWith(`${MERGE_PREFIX}log:`)) t.objectStore('kv').delete(row.k);
+        }
+        let logRows = data.log;
+        const logDeletes = [];
+        if (!replace) {
+          const merged = mergeProgress(localKv, data.kv || [], localLogRead.result, data.log);
+          keptKv.push(...merged.kv); logRows = merged.log; logDeletes.push(...merged.deleted);
+        }
         if (declared.has('kv')) {
           const payloadKeys = new Set(data.kv.map(r => r && r.k));
           if (replace) keptKv = localKv.filter(r => DEVICE_KV.includes(r.k) && !payloadKeys.has(r.k));
@@ -1313,24 +1545,16 @@ export async function importAll(data, { replace = true } = {}) {
                earned. 'dustRev' moves with 'bonedust' in the same transaction
                (kvBumpRevisioned above) and rides the same rule. */
             keepRevisionedBalance('bonedust', 'dustRev');
-            // Q1: each potion id is its own balance. Use the currency revision shape,
-            // so spending one kind cannot erase another kind earned on another device.
+            // Potion counts now use signed receipts. Retain monotonic legacy
+            // revisions for older readers, without letting a revision-only file
+            // advance the ordering of a balance it does not contain.
             const localValue = k => localKv.find(r => r.k === k)?.v;
             const fileValue = k => data.kv.find(r => r.k === k)?.v;
-            if (payloadKeys.has('potions')) {
-              const local = localValue('potions') || {}, file = fileValue('potions') || {};
-              const lr = localValue('potionsRev') || {}, fr = fileValue('potionsRev') || {};
-              const balance = {}, revisions = {};
-              for (const id of new Set([...Object.keys(local), ...Object.keys(file), ...Object.keys(lr), ...Object.keys(fr)])) {
-                const a = Number(lr[id]) || 0, b = Number(fr[id]) || 0;
-                const count = a > b ? (local[id] || 0) : b > a ? (file[id] || 0) : Math.max(local[id] || 0, file[id] || 0);
-                if (count > 0) balance[id] = count;
-                revisions[id] = Math.max(a, b);
-              }
-              keptKv.push({ k: 'potions', v: balance }, { k: 'potionsRev', v: revisions });
-            } else {
-              // A revision alone must not advance the ordering of an absent balance.
-              kvRows = kvRows.filter(r => r.k !== 'potionsRev');
+            if (!payloadKeys.has('potions')) kvRows = kvRows.filter(r => r.k !== 'potionsRev');
+            else {
+              const a = localValue('potionsRev') || {}, b = fileValue('potionsRev') || {};
+              keptKv.push({ k: 'potionsRev', v: Object.fromEntries([...new Set([...Object.keys(a), ...Object.keys(b)])]
+                .map(id => [id, Math.max(Number(a[id]) || 0, Number(b[id]) || 0)])) });
             }
 
             // Ownership is a union by INSTANCE, minus permanent take receipts.
@@ -1457,8 +1681,9 @@ export async function importAll(data, { replace = true } = {}) {
           /* Clear and puts in one transaction, so they land together or not
              at all. Only for stores the file declares: see the header. */
           if (replace && declared.has(s)) os.clear();
-          for (const row of (s === 'kv' ? (kvRows || []) : s === 'inv' ? (invRows || []) : (data[s] || []))) os.put(row);
+          for (const row of (s === 'kv' ? (kvRows || []) : s === 'inv' ? (invRows || []) : s === 'log' ? logRows : (data[s] || []))) os.put(row);
           if (s === 'kv') for (const row of keptKv) os.put(row);
+          if (s === 'log') for (const id of logDeletes) os.delete(id);
           // A remote receipt also removes a LOCAL ownership row. Otherwise the
           // next Stable boot can reclaim a pet whose instance was just removed.
           if (s === 'inv') for (const id of takenInv) os.delete(id);

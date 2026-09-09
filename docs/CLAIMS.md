@@ -1,5 +1,22 @@
 # What each patch note claims, and what backs it
 
+## v526 (2026-09-09)
+
+1. PROOF: stable-rooms-top-audit.mjs | REACH: The Paddock, Laboratory and Kennel now render as three controls ABOVE the album in DOM order, each carrying a live count read from the same state the room itself uses, each keeping the id its existing handler and every clicking audit depends on. Empty collection and a null Laboratory snapshot both render sanely. Moving a tile back below the album goes red. The visual result was verified separately by rendering the real Stable at 393x852: three 115x112 tiles, 18px radius, hard 3px 4px offset, cream Bangers labels, real pixel icons, album still at y=324.
+2. PROOF: pet-rarity-audit.mjs | REACH: No pet surface emits a rarity word or a pet rarity tier class; gear, crate and weapon-rack rarity still do, because those drops are genuinely weighted. PET_STATS mult (1.00 to 1.36) and petDustValue (10 to 120) are unchanged, so no owned pet lost strength or salvage value. Shiny survives everywhere. Restoring one removed label goes red. The removal is display only: the rarity field in data/boneheadz.js is untouched.
+3. PROOF: p1-merge-audit.mjs | REACH: A merge restore preserves Kitchen earnings, banked dishes, diary deletions and corrections, and potions earned independently on two devices. Each case carries a pre-fix observation the grade rejects. This is the js/db.js importer exercised over mem-idb in Node; real multi-device cloud timing is NOT claimed and still needs devices.
+4. PROOF: quest-wheel-budget-audit.mjs | REACH: A claim whose payout transaction aborts no longer consumes the period's reservation, and the retry pays instead of reporting already-claimed. Monday's daily and the week's Monday key no longer collide, so weekly quests are claimable in a week whose dailies were claimed. Fault injection drives the real claim and wheel commit paths; reverting either fix goes red.
+5. PROOF: kitchen-delivery-audit.mjs, p1-dens-audit.mjs | REACH: Cook, Line up, Serve, Eat, the cauldron purchase, den reward delivery, the Wanderer settle, Battle Charm activation and Pit setup either complete or leave the player whole under an injected write failure. Overlapping and double-tapped actions are driven concurrently. Every fix has an aborted-write control that goes red without it. The roaming and remote boss 'bossfirst' markers that raise the Pit ceiling are preserved through the den consolidation.
+6. PROOF: crew-yard-row-audit.mjs | REACH: A friend's profile renders the paddock header and the visit control and renders no per-pet portrait row. Restoring the row goes red. The friend paddock scene itself and the profile's equipped-pet portrait are untouched.
+
+Two integration breaks found while stitching the seven lanes were fixed here, not
+carried: `release-gate.mjs` gained a duplicate `const PURE` declaration from a
+keep-both resolution, and the room-tile change orphaned `doorSp`/`doorPx`, whose
+dead `order.slice(0, 2)` then fell inside an audit's source slice and made a
+healthy guard read red. The assembled release runs 377 unit assertions with 0
+failures and all 115 PURE entries exit 0. Browser and socket proofs beyond the
+Stable render above were not run.
+
 ## v525 (2026-09-08)
 
 1. PROOF: breed-lock-audit.mjs | REACH: The Stable's album survives the redesign. Executed paint geometry proves the neighbouring cards still peek at the frame edges; swipe, velocity snap, vertical axis lock, keyboard navigation, dot taps and neighbour taps are driven through the production handlers with reduced motion on and off. Body order, typography scale and the single primary action are asserted against the shipped tokens. Removing the peek, the depth transform or the primary-action class each goes red. This is source and executed-handler evidence in Node, not a browser screenshot.

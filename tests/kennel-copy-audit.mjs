@@ -58,6 +58,8 @@ await test('R44-14 copy chips name both colours even with a nickname', async () 
 await test('R44-14 card chip and initial caption name the displayed colour', async () => {
   const html = await run(cut('    const cfCards =', '    const cfDots =') + '\nreturn cfCards;', selection);
   assert.match(html, /class="cf-chip"[^>]*>Frost<\/span>/, 'card has no Frost chip');
+  assert.equal((html.match(/class="cf-chip"/g) || []).length, 1, 'one colour chip replaces the old rarity/colour pair');
+  assert.doesNotMatch(html, /\b(?:common|uncommon|rare|epic|legendary)\b/i, 'pet card must not claim a rarity');
   const caption = await run(cut('    const cfCaption =', '    const cfActs =') + '\nreturn cfCaption;', { ...selection, kinChips: () => '' });
   assert(caption.includes('Frost Drizzle'), 'initial caption loses colour');
 });
@@ -69,7 +71,7 @@ await test('R44-14 carousel repaint preserves the new focused colour', async () 
   assert(nodes.b.innerHTML.includes('Frost Drizzle'), 'repaint omitted Frost');
 });
 await test('R44-14 breed picker and irreversible facts name colour and level', async () => {
-  const html = await run(cut('    const spChips =', '    /* THE WAY IN.') + '\nreturn spChips;',
+  const html = await run(cut('    const spChips =', '    // Count owned colour cells,') + '\nreturn spChips;',
     { ...selection, pair: true, a: frost, b: ember, offSp: frost.iid });
   assert(html.includes('Frost Drizzle'), 'nicknamed keeper lost colour/species');
   assert(html.includes('Ember Drizzle'), 'spare lost colour/species');

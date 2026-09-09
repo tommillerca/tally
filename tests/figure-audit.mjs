@@ -180,24 +180,6 @@ const SITES = [
     },
   },
   {
-    /* The friend's PADDOCK shelf (v425): a row of their pets on their profile,
-       beside the paired hero above. Not `paired`: these are a SHELF of portraits
-       with no Bonehead standing next to them, so plane and near have nothing to
-       measure against and would be asserting a relationship the design does not
-       have. What matters here is the OTHER half of the figure contract, and the
-       static rules cover it exactly: the pets come from a snapshot, so shiny is
-       read off each instance rather than off S.shinyPets, and `wear` is named
-       from the friend's own yard rather than left undefined (which would mean
-       "ask the viewer's wardrobe" and dress their Bumbleseal in yours).
-       tests/friend-paddock-audit.mjs drives this surface for real and its THEIRS
-       row is that exact assertion, measured with the viewer deliberately wearing
-       a different item in the same slot. */
-    key: 'friend-yard', claim: 'fp-yard-pet', paired: false, undriven:
-      'a shelf of portraits with no Bonehead beside them, so paired alignment has nothing '
-      + 'to measure; driven for real by tests/friend-paddock-audit.mjs (RENDER decodes every '
-      + 'portrait, THEIRS pins that it is the FRIEND\'s wardrobe and not the viewer\'s)',
-  },
-  {
     key: 'fight-arena', claim: 'petStage', paired: false, undriven:
       'reaching it means winning into a live fight; the arena stage is covered for '
       + 'decode by tests/fx-audit.js, which drives real moves',
@@ -241,26 +223,9 @@ const SITES = [
   },
   { key: 'helper', claim: '!petHovers(pet.id)', paired: false, undriven: 'this IS petAsideHtml, the contract itself' },
   {
-    /* THE STABLE'S DOOR into the Paddock (W-PADDOCK-3, Tom picked this over a louder
-       button on 2026-08-11). A 150x94 window onto the field: your own Bonehead at the
-       gate via the same avatarLayersHtml call the scene makes, and your TWO rarest
-       species beside it through petAsideHtml(petFrom(null, sp), px). Two, not three:
-       petAsideHtml mass-normalises, so three sprites measured 116px against 72px of
-       usable scene and the third was clipped. DRIVEN, not
-       excused: it is a new paired surface, so the two rules that exist because a pet
-       once got exiled to a corner and once floated off the baseline are measured here
-       on the real screen. The scene is small and the figures are deliberately close, so
-       NEAR is comfortable; PLANE gets the flat tolerance because everything in the
-       panel bottom-aligns to one ground line, and a hovering species is the only thing
-       that should read above it.
-       KNOWN EDGE, deliberately not engineered around (Reggie's call, 2026-08-11): the
-       two slots are filled in RARITY order, so a player whose two rarest species BOTH
-       hover can graze the shared -6px lower bound (measured -5px with one hoverer).
-       If that goes red, LOOK at the screen before widening anything: a species-aware
-       bound is bookkeeping that drifts, and the red is a prompt for human eyes. */
-    key: 'stable-door', claim: 'pdk-door-pet', paired: true,
-    bh: '.pdk-door-keeper', pet: '.pdk-door-pet:first-child',
-    planeTol: 34,
+    // Frozen rooms-top replaces the paired thumbnail with the existing signpost.
+    // Retain this driven surface: CLIP and decoded icon checks still grade it.
+    key: 'stable-door', claim: 'stable-room-picture', icon: true, paired: false,
     drive: async page => {
       await page.evaluate(() => { location.hash = '#/pets'; });
       await sleep(900);
@@ -343,6 +308,9 @@ const unclaimed = callSites.filter(c => !SITES.some(s => c.ctx.includes(s.claim)
 ok('COVERAGE every pet call site in the app is registered here',
   unclaimed.length === 0,
   unclaimed.length ? unclaimed.map(c => `js/app.js:${c.line}  ${c.text.slice(0, 90)}`).join('\n      ') : `${callSites.length} sites, all claimed`);
+
+ok('STATIC friend profile has no per-pet paddock row',
+  !/fp-yard-(?:row|pet|more)\b/.test(APP), 'the equipped pet remains covered by friend-profile');
 
 /* The exact shape that drops shiny: a pet object built out of an outfit slot.
    An outfit has a species id and nothing else, so shiny/level/lineage are gone
@@ -735,6 +703,24 @@ for (const site of SITES.filter(s => s.drive)) {
   const clips = await clipCheck();
   ok(`${site.key} CLIP nothing with words on it is sliced by its container`,
     clips.length === 0, clips.length ? '\n      ' + clips.slice(0, 6).join('\n      ') : 'no clipped labels');
+  if (site.icon) {
+    const icon = await page.evaluate(() => {
+      const button = document.getElementById('stableToPaddock');
+      const image = button?.querySelector('.stable-room-picture img');
+      const r = image?.getBoundingClientRect();
+      const row = button?.closest('.stable-rooms');
+      return { found: !!button, decoded: !!image && image.complete && image.naturalWidth === 48,
+        src: image?.getAttribute('src'), width: r?.width, height: r?.height,
+        first: !!row && row === document.getElementById('stableBody')?.firstElementChild,
+        scene: !!button?.querySelector('.pdk-door-scene') };
+    });
+    ok(`${site.key} DECODE the existing signpost replaces the retired paired scene at the top`,
+      icon.found && icon.decoded && icon.src === 'assets/icons-pix/badge-signpost.png' &&
+        icon.width === 48 && icon.height === 48 && icon.first && !icon.scene, JSON.stringify(icon));
+    await page.evaluate(() => { if (document.querySelector('.sheet')) history.back(); });
+    await sleep(500);
+    continue;
+  }
   const m = await measure(site.bh, site.pet);
   if (!m.found) {
     ok(`${site.key} the figure renders at all`, false, JSON.stringify(m));

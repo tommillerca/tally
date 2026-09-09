@@ -931,21 +931,6 @@ a { color: var(--accent); text-decoration: none; }
 .ward-cell.r-epic { border-color: rgba(155,146,232,0.65); box-shadow: 0 0 11px rgba(155,146,232,0.22); }
 .ward-cell.r-legendary { border-color: rgba(255, 201, 97, 0.8); box-shadow: 0 0 12px rgba(255, 201, 97, 0.25); }
 
-/* rarity glow on pets: the pet CARD, and nowhere in the Pit.
-   Tom, 2026-08-22: "bumble seal shouldnt have a glow in the pit like that". The
-   halo was `.fstage.petmini.r-{rare,epic,legendary} img`, and .petmini exists in
-   exactly one place in the app, the fight arena, so those three rules WERE the
-   Pit glow and deleting them is the whole fix. Measured on the render: an 8px
-   gold drop-shadow painted 8.5px of light past her silhouette on every side, and
-   she is the one pet drawn as a solid round mass filling her canvas, so what
-   reads as a rim light on a flat lizard reads as an aura on her.
-   THE OTHER FIGHTERS KEEP THEIRS. .petmini.beast (the enemy add's red tint),
-   .petmini.is-shiny and the lineage glows are earned marks on a specific
-   creature rather than a label printed on every legendary, and none of them is
-   what Tom is looking at. A rarity is a fact about the shop, not a light
-   source. */
-.pet-card.r-epic { box-shadow: 0 0 14px rgba(155,146,232,0.28); }
-.pet-card.r-legendary { box-shadow: 0 0 16px rgba(255, 201, 97, 0.3); }
 /* per-meal cap + auto-sync label */
 .meal-head .kcal.over { color: var(--danger); }
 .card-title .link.auto { color: var(--accent); font-weight: 700; cursor: default; }
@@ -3702,10 +3687,7 @@ body::before {
 }
 .fp-fact b { display: block; font-size: 18px; font-weight: 800; }
 .fp-fact span { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; }
-/* THEIR PADDOCK on a friend's profile (v425). A horizontal shelf rather than a
-   grid: the count is the brag and the row is the evidence, so it should read at
-   a glance and scroll if there is more. Crew-only, so it is simply absent on a
-   stranger opened from the leaderboard. */
+/* Their paddock total and the way into their field, on a friend's profile. */
 .fp-yard { margin: 14px 0 6px; }
 .fp-yard-h {
   display: flex; align-items: baseline; justify-content: space-between;
@@ -3713,24 +3695,6 @@ body::before {
   margin-bottom: 8px;
 }
 .fp-yard-h b { font-family: var(--display); font-weight: 400; font-size: 15px; color: var(--gold); letter-spacing: .06em; }
-/* Scrolls INSIDE its own box. The profile sheet must never scroll sideways, and
-   a 24-pet shelf is wider than any phone. */
-.fp-yard-row {
-  display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden;
-  -webkit-overflow-scrolling: touch; padding-bottom: 4px;
-}
-.fp-yard-row::-webkit-scrollbar { display: none; }
-.fp-yard-pet {
-  position: relative; flex: 0 0 auto; width: 54px; height: 54px;
-  display: grid; place-items: center; overflow: hidden;
-  background: var(--surface-2); border: 1px solid var(--line); border-radius: 13px;
-}
-/* A shiny announces itself on the shelf the same way it does on a Paddock tile:
-   the rarity glow, not a badge, because at 54px a badge is bigger than the pet. */
-.fp-yard-pet.shiny { border-color: rgba(255, 201, 97, .55); box-shadow: 0 0 10px rgba(255, 201, 97, .3); }
-.fp-yard-more { margin: 6px 0 0; text-align: center; }
-/* The way through to their field (openFriendPaddock). The shelf above it is the
-   evidence; this is the door. */
 .fp-yard-go { width: 100%; margin-top: 10px; }
 /* A friend's paddock has no collection panel to mount (their bonds and levels
    never leave their phone), so the panel below the scene is just the count. */
@@ -4053,8 +4017,6 @@ body::before {
 @keyframes hatchFlash { 0% { opacity: 0.9; transform: scale(0.3) } 100% { opacity: 0; transform: scale(3.4) } }
 .hatch-pet { position: absolute; transform: scale(0.1); opacity: 0; z-index: 3; }
 .hatch-pet img { width: 150px; height: 150px; object-fit: contain; filter: drop-shadow(0 6px 6px rgba(0, 0, 0, 0.45)); }
-.hatch-pet.r-epic img { filter: drop-shadow(0 0 10px rgba(155,146,232,0.85)) drop-shadow(0 6px 6px rgba(0, 0, 0, 0.4)); }
-.hatch-pet.r-legendary img { filter: drop-shadow(0 0 12px rgba(255, 201, 97, 0.95)) drop-shadow(0 6px 6px rgba(0, 0, 0, 0.4)); }
 .hatch-stage.egg-burst .hatch-pet { animation: hatchRise 0.7s cubic-bezier(0.2, 1.4, 0.4, 1) 0.12s forwards; }
 @keyframes hatchRise { 0% { transform: scale(0.1) translateY(18px); opacity: 0 } 60% { opacity: 1 } 100% { transform: scale(1) translateY(0); opacity: 1 } }
 .bone-egg {
@@ -4142,11 +4104,9 @@ body::before {
 @keyframes shardFly { 0% { opacity: 1; transform: rotate(var(--a)) translateY(0) scale(1) } 100% { opacity: 0; transform: rotate(var(--a)) translateY(-92px) scale(0.4) } }
 .hatch-reveal { opacity: 0; transform: translateY(8px); transition: opacity 0.35s ease, transform 0.35s ease; }
 .hatch-reveal.show { opacity: 1; transform: none; }
-/* the hatched pet, front & centre: big portrait, name + rarity below */
+/* The hatched pet: big portrait, name and earned shiny below. */
 .hatch-prize { display: grid; justify-items: center; gap: 5px; margin: 6px auto 0; }
 .hatch-prize img { width: 148px; height: 148px; object-fit: contain; filter: drop-shadow(0 7px 8px rgba(0, 0, 0, 0.5)); }
-.hatch-prize.r-epic img { filter: drop-shadow(0 0 12px rgba(155,146,232,0.85)) drop-shadow(0 7px 8px rgba(0, 0, 0, 0.45)); }
-.hatch-prize.r-legendary img { filter: drop-shadow(0 0 15px rgba(255, 201, 97, 0.95)) drop-shadow(0 7px 8px rgba(0, 0, 0, 0.45)); }
 .hatch-prize b { font-size: 20px; letter-spacing: -0.01em; }
 .hatch-prize small { color: var(--text-3); font-size: 12.5px; }
 .hatch-reveal.show .hatch-prize img { animation: hatchRise 0.7s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
@@ -4768,8 +4728,6 @@ body::before {
 /* ===== pets in battle: card + mini-tree + fx ===== */
 .pet-card { display: flex; gap: 12px; align-items: center; padding: 10px; margin: 8px 0 4px;
   background: var(--surface); border: 1.5px solid var(--line-strong); border-radius: 15px; }
-.pet-card.r-legendary { border-color: #ffb454; box-shadow: 0 0 14px rgba(255,180,84,.4); }
-.pet-card.r-epic { border-color: rgba(155,146,232,.53); }
 .pet-card img { width: 60px; height: 60px; object-fit: contain; flex: none; }
 .pet-card-meta { display: grid; gap: 2px; min-width: 0; }
 .pet-card-meta b { font-size: 14px; }
@@ -4840,12 +4798,6 @@ body::before {
 .crate-ico { position: relative; }
 .pet-stats { font-size: 11.5px; letter-spacing: .02em; color: var(--muted); }
 .pet-stats b { font-size: 12.5px; font-weight: 800; color: var(--ink); }
-.rar-lbl { font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
-.rar-lbl.r-common { color: #9fac9f; }
-.rar-lbl.r-uncommon { color: var(--mint); }
-.rar-lbl.r-rare { color: var(--protein); }
-.rar-lbl.r-epic { color: var(--violet); }
-.rar-lbl.r-legendary { color: #ffc961; }
 .pet-tree { display: grid; gap: 8px; margin: 4px 0 6px; }
 .pet-tier { display: grid; gap: 4px; }
 .pet-tier.locked { opacity: .5; }
@@ -5061,7 +5013,7 @@ body::before {
    `.fstage.petmini.r-epic img` owned the img's filter for rarity and a second
    filter rule there simply replaced it (measured: the shiny lizard came out
    epic-violet with no gold at all). That rarity rule is gone as of v425 (see the
-   note by .pet-card.r-epic), so the img's filter is free again, but this stays on
+   Pit glow removal), so the img's filter is free again, but this stays on
    the container: a filter there composes over whatever the child draws, which is
    what keeps a shiny animated pet's own layer filters intact. */
 .petmini.is-shiny { box-shadow: none; filter: drop-shadow(0 0 7px rgba(var(--gold-rgb),.9)); }
@@ -8636,16 +8588,12 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .t3-seed.out { opacity: .5; }
 
 /* --- stable -------------------------------------------------------------- */
-/* the pet card joins the Tier 2 trading-card language: rarity IS the frame */
+/* Pet trading card layout. */
 .t3-petcard {
   display: flex; gap: 12px; background: var(--surface); border: 3px solid var(--text-3);
   border-radius: 15px; box-shadow: 0 0 0 2px var(--ink), 4px 5px 0 rgba(0, 0, 0, .55);
   padding: 11px 12px; margin-bottom: 11px;
 }
-.t3-petcard.r-uncommon { border-color: var(--mint); }
-.t3-petcard.r-rare { border-color: var(--protein); }
-.t3-petcard.r-epic { border-color: var(--violet); }
-.t3-petcard.r-legendary { border-color: var(--gold); }
 .t3-petcard.active { border-color: var(--accent); }
 .t3-petcard .portrait {
   flex: none; width: 74px; height: 74px; border-radius: 12px;
@@ -9088,37 +9036,6 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   background: var(--surface-2);
   will-change: transform; box-shadow: 0 10px 18px rgba(0, 0, 0, .45);
 }
-/* THE PLATE EARNS ITS COLOUR. Tom, 2026-08-08: "should the pets also be in front
-   of the dark background? or does it look better with a different brand colour"
-   A flat brand wash was the wrong answer twice over: coral is the deck's hero
-   accent and spending it on a background dilutes it, and a single colour behind
-   every pet says nothing. So the tint is the pet's RARITY, which is the mockup's
-   own spec and the one piece of information the plate can carry for free.
-   Kept low (0x33 alpha over near-black) for a measured reason: a LIGHT plate was
-   tried and the pale species disappear into it. The cloud is white-blue, so it
-   read as a smudge on bone, while the orange lizard popped. A dark ground is the
-   only one that treats every species fairly. */
-.cf-card.r-common { background: radial-gradient(120% 90% at 50% 18%, rgba(143, 133, 120, .2), #1a1820 68%); }
-.cf-card.r-uncommon { background: radial-gradient(120% 90% at 50% 18%, rgba(165, 232, 71, .2), #1a1820 68%); }
-.cf-card.r-rare { background: radial-gradient(120% 90% at 50% 18%, rgba(124, 196, 255, .2), #1a1820 68%); }
-.cf-card.r-epic { background: radial-gradient(120% 90% at 50% 18%, rgba(155, 146, 232, .2), #1a1820 68%); }
-.cf-card.r-legendary { background: radial-gradient(120% 90% at 50% 18%, rgba(255, 201, 97, .2), #1a1820 68%); }
-/* THE PLATE EARNS ITS COLOUR. Tom, 2026-08-08: "should the pets also be in front
-   of the dark background? or does it look better with a different brand colour"
-   -> he picked the rarity tint over a flat brand wash.
-   Which is the right call twice over: coral is the deck's hero accent and spending
-   it on a background dilutes it, and one flat colour behind every pet says
-   nothing. The tint is the pet's RARITY, so the plate carries information for
-   free. This is also the original mockup's spec, which I had dropped.
-   Kept low (.2 alpha over near-black) for a MEASURED reason: a light plate was
-   rendered and the pale species disappear into it. The cloud is white-blue, so on
-   bone it read as a smudge while the orange lizard popped. A dark ground is the
-   only one that treats every species fairly. */
-.cf-card.r-common { background: radial-gradient(120% 90% at 50% 18%, rgba(143, 133, 120, .2), #1a1820 68%); }
-.cf-card.r-uncommon { background: radial-gradient(120% 90% at 50% 18%, rgba(165, 232, 71, .2), #1a1820 68%); }
-.cf-card.r-rare { background: radial-gradient(120% 90% at 50% 18%, rgba(124, 196, 255, .2), #1a1820 68%); }
-.cf-card.r-epic { background: radial-gradient(120% 90% at 50% 18%, rgba(155, 146, 232, .2), #1a1820 68%); }
-.cf-card.r-legendary { background: radial-gradient(120% 90% at 50% 18%, rgba(255, 201, 97, .2), #1a1820 68%); }
 .cf-card.active { border-color: var(--accent); }
 .cf-card.picked { border-color: var(--violet); }
 .cf-art { position: absolute; inset: 0; display: grid; place-items: center; }
@@ -9173,10 +9090,6 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   font-size: var(--fs-1); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-2);
 }
 .cf-cap .dot { width: 9px; height: 9px; border-radius: 50%; border: 2px solid #17151d; background: var(--text-3); }
-.cf-cap .dot.r-uncommon { background: var(--accent); }
-.cf-cap .dot.r-rare { background: #7cc4ff; }
-.cf-cap .dot.r-epic { background: var(--violet); }
-.cf-cap .dot.r-legendary { background: var(--gold); }
 .cf-meta { margin: 12px auto 0; max-width: 240px; }
 .cf-meta .row { display: flex; justify-content: space-between; padding: 5px 0; border-top: 1px solid rgba(242, 233, 215, .1); }
 .cf-meta .row:first-child { border-top: 0; }
@@ -9256,15 +9169,15 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 #stableBody .stable-danger small { flex-basis: 100%; font-size: .75rem; line-height: 1.5; color: var(--text-2); }
 #stableBody .stable-wallet { display: flex; justify-content: space-between; gap: 12px; margin: 20px 0 8px; padding: 10px 0; background: none; border: 0; border-radius: 0; color: var(--text-2); font-size: .78125rem; }
 #stableBody .stable-wallet b { font: 700 .875rem/1.4 system-ui, sans-serif; }
-#stableBody .stable-rooms { display: grid; gap: 0; margin: 0; }
-#stableBody .stable-door, #stableBody .stable-collection { margin: 0; min-height: 60px; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; }
-#stableBody .stable-door-picture { position: relative; flex: 0 0 82px; height: 47px; align-self: center; overflow: hidden; border-radius: 16px; }
-#stableBody .stable-door-picture .pdk-door-scene { position: absolute; inset: 0 auto auto 0; width: 164px; height: 94px; transform: scale(.5); transform-origin: top left; }
-#stableBody .pdk-door-tx { padding: 10px 8px; }
-#stableBody .pdk-door-tx b { font: 600 .875rem/1.3 system-ui, sans-serif; letter-spacing: 0; color: var(--text); }
-#stableBody .pdk-door-tx small { font-size: .75rem; font-weight: 400; color: var(--text-2); }
-#stableBody .pdk-door-go { color: var(--text-3); font-size: 1.25rem; }
-#stableBody .stable-collection .kdoor-sw { flex-basis: 40px; background: transparent; }
+/* Option B: dark tiles, a light rim and a hard near-black sticker drop. */
+#stableBody .stable-rooms { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 18px; }
+#stableBody .stable-room { --dim: var(--text-3); position: relative; display: grid; grid-template-rows: 54px auto auto; justify-items: center; align-content: center; gap: 1px; min-width: 0; min-height: 112px; margin: 0; padding: 6px 2px; border: 2px solid #3a3647; border-radius: 18px; background: var(--surface-2); color: var(--text); box-shadow: 3px 4px 0 #05040a; }
+#stableBody .stable-room:active { transform: translate(2px, 3px); box-shadow: 1px 1px 0 #05040a; }
+#stableBody .stable-room-picture { display: grid; place-items: center; width: 100%; height: 54px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
+#stableBody .stable-room-picture img { image-rendering: pixelated; }
+#stableBody .stable-room b { font: 400 .96875rem/1.2 var(--display); letter-spacing: .02em; }
+#stableBody .stable-room small { color: var(--dim); font: 600 .6875rem/1.4 system-ui, sans-serif; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+#stableBody .stable-room .new-dot { top: 7px; right: 7px; width: 13px; height: 13px; background: var(--coral); box-shadow: 0 0 0 2px var(--surface-2); }
 #stableBody .stable-help { margin-top: 8px; border-block: 1px solid var(--line); font-size: .8125rem; line-height: 1.5; }
 #stableBody .stable-help summary, #stableBody .stable-help .link { min-height: 44px; padding: 12px 0; }
 #stableBody .stable-help p { margin: 0 0 10px; }
@@ -9836,59 +9749,6 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .pdk-scene { position: relative; height: 520px; overflow: hidden; border-radius: 0;
   background: linear-gradient(#171f12 0 196px, #3a482e 212px, #36432c 360px, #303c27 520px); }
 
-/* THE DOOR: the Stable's way into the Paddock (openStable, id stableToPaddock).
-   A small window onto the same field, so the entry shows the place instead of naming
-   it. The scene panel borrows .pdk-scene's own palette on purpose: two greens that
-   disagree would read as two different fields.
-   COMPOSITION (figure contract rule 4): --pdk-door-safe is the gutter no drawing may
-   enter, and --pdk-door-ground is the single baseline every figure sits on, so the
-   Bonehead and the pets share one ground line by construction rather than by nudging.
-   The keeper holds the left third; the pets take the middle and right, the nearest one
-   close enough to read as company. */
-.pdk-door { --pdk-door-safe: 6px; --pdk-door-ground: 6px;
-  display: flex; align-items: stretch; width: 100%; text-align: left; padding: 0;
-  background: var(--surface-2, #1d1b22); border: 2.5px solid #17151d; border-radius: 15px;
-  box-shadow: 0 4px 0 #17151d; overflow: hidden; margin: 0 0 12px; }
-.pdk-door:active { transform: translateY(2px); box-shadow: 0 2px 0 #17151d; }
-.pdk-door-scene { position: relative; flex: 0 0 164px; align-self: stretch; min-height: 94px;
-  overflow: hidden; background: linear-gradient(#1b2415 0 36px, #465636 41px, #3b492e 70px, #333f28 100%); }
-.pdk-door-moon { position: absolute; right: 11px; top: 8px; width: 19px; height: 19px;
-  border-radius: 50%; background: #efe9d6; opacity: .42; box-shadow: 0 0 12px 4px rgba(239,233,214,.16); }
-.pdk-door-rail { position: absolute; left: 0; right: 0; height: 4px; background: #6f5138; opacity: .9; }
-.pdk-door-rail.r1 { top: 41px } .pdk-door-rail.r2 { top: 53px }
-.pdk-door-post { position: absolute; top: 34px; width: 5px; height: 26px; background: #5d4430; }
-/* the keeper is the same layer stack as the scene's, just smaller. It stands on
-   --pdk-door-ground, the SAME line the pets use: anchored at bottom 0 it stood 6px
-   lower than everything else, and figure-audit's PLANE measured the pet's ink 11px
-   above its feet. Declaring one ground line and then exempting the biggest figure from
-   it is how a stage ends up with two floors. */
-.pdk-door-keeper { position: absolute; left: var(--pdk-door-safe); bottom: var(--pdk-door-ground); width: 60px; height: 78px; }
-.pdk-door-keeper img { position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: contain; object-position: bottom center; }
-/* The pets sit in a flex row pinned to the safe box, NOT at hand-placed lefts. Sizes
-   here are not ours to predict: petAsideHtml mass-normalises, so a flat species renders
-   half again as wide as the px it was asked for, and rarity order decides which species
-   turn up. Measured at 150px wide the three original slots overlapped and the last one
-   was clipped 11px past the panel. One row, bottom-aligned, is size-agnostic.
-   Bottom-aligning is also the PLANE rule doing the work: every box shares one ground
-   line and petAsideHtml decides whether that species stands on it or hovers above it.
-   ANCHORED BESIDE THE KEEPER (left 72px = its right edge plus the gutter), NOT to the
-   right margin. Pinned right, a player who owns one species saw themselves at the gate
-   and their single animal in the far corner: figure-audit's NEAR measured 77px of
-   daylight and called it exile, which is exactly what that rule is for. Growing
-   rightward from the keeper keeps the pair together at one pet and still fits two at
-   their worst normalised width (84px measured, 86px available). */
-.pdk-door-pets { position: absolute; left: 72px; bottom: var(--pdk-door-ground);
-  display: flex; align-items: flex-end; gap: 4px; }
-.pdk-door-pet { display: block; }
-.pdk-door-vig { position: absolute; inset: 0; pointer-events: none;
-  box-shadow: inset -14px 0 16px -10px var(--surface-2, #1d1b22), inset 0 -8px 12px -8px rgba(0,0,0,.5); }
-.pdk-door-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center;
-  gap: 3px; padding: 10px 4px 10px 12px; }
-.pdk-door-tx b { font-family: Bangers, system-ui; font-weight: 400; font-size: 1.5rem;
-  letter-spacing: 1.2px; color: #f2e9d7; line-height: 1; }
-.pdk-door-tx small { font-size: 0.71875rem; font-weight: 700; color: #8f8578; }
-.pdk-door-go { align-self: center; font-size: 1.875rem; color: #8f8578; line-height: 1; padding: 0 12px 3px 0; }
 .pdk-scene svg.pdk-ground { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* the herd */
 .pdk-pet { position: absolute; z-index: 5; }
@@ -9913,7 +9773,6 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 @keyframes pdkCross { from { transform: translateX(-170px); } to { transform: translateX(440px); } }
 .pdk-fly .pdk-bob { display: block; animation: pdkWing 1.9s ease-in-out infinite alternate; }
 @keyframes pdkWing { from { transform: translateY(-9px) rotate(-2deg); } to { transform: translateY(9px) rotate(2deg); } }
-.pdk-fly.pdk-gold { filter: drop-shadow(0 0 8px rgba(255, 201, 97, .95)); }
 /* hoverers: drift + bob, epic glow */
 /* the delay is the per-pet phase js/app.js derives from the iid: without it a
    row of clouds drifts and bobs as one animal. Drift and bob run on different
@@ -9922,7 +9781,6 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 @keyframes pdkDrift { from { transform: translateX(0); } to { transform: translateX(var(--pdk-range, 0px)); } }
 .pdk-hover .pdk-bob { display: block; animation: pdkHoverBob 3s ease-in-out infinite alternate; animation-delay: var(--pdk-phase, 0s); }
 @keyframes pdkHoverBob { from { transform: translateY(-6px); } to { transform: translateY(6px); } }
-.pdk-hover.pdk-epic { filter: drop-shadow(0 0 7px rgba(155, 146, 232, .9)); }
 /* floppers: one flop per cycle, origin low so it pivots off the ground */
 .pdk-flop .pdk-bob { display: block; transform-origin: 50% 90%; animation: pdkFlop 4.8s ease-in-out infinite; animation-delay: var(--pdk-phase, 0s); }
 @keyframes pdkFlop { 0%, 64%, 84%, 100% { transform: none; } 72% { transform: translateY(-4px) rotate(-2deg); } }
@@ -10108,8 +9966,6 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .pdk-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .pdk-tile { position: relative; aspect-ratio: 1; background: #201d28; border: 2px solid #17151d; border-radius: 13px; box-shadow: 0 3px 0 #17151d; display: grid; place-items: center; overflow: hidden; }
 .pdk-tile img { width: 84%; height: 84%; object-fit: contain; }
-.pdk-tile.r-legendary { box-shadow: 0 3px 0 #17151d, 0 0 14px rgba(255,201,97,.28); }
-.pdk-tile.r-epic { box-shadow: 0 3px 0 #17151d, 0 0 12px rgba(155,146,232,.26); }
 .pdk-lockt { background: #17161d; border-style: dashed; }
 /* .4, not .55: ink-fitting the art made these silhouettes fill their tile, and at .55
    the blob and the centred "?" fought each other. Dimming the hint keeps the glyph in
@@ -10139,23 +9995,10 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .pdk-tile:active, .pdk-teaser:active { transform: translateY(2px); box-shadow: 0 1px 0 #17151d; }
 .pdk-tile.on, .pdk-teaser.on { border-color: #a5e847; box-shadow: 0 3px 0 #17151d, 0 0 0 2px rgba(165, 232, 71, .35); }
 
-/* THE KENNEL DOOR, in the Stable's body (2026-09-07). It borrows .pdk-door
-   whole -- border, drop shadow, press, text column, chevron -- because it is
-   the same object as the Paddock's door and a second set of tokens for one
-   more row is how a design system grows two of everything. The only override
-   is the left panel: no scene, a strip of the six colourway swatches instead,
-   filled for the ones you own. Same reading rule as the grid behind it. */
-.kdoor .kdoor-sw { flex: 0 0 74px; align-self: stretch; display: grid; grid-template-columns: repeat(var(--kennel-columns, 6), 1fr);
-  align-items: center; gap: 4px; padding: 0 10px; background: var(--surface-3); }
-.kdoor .kdoor-sw i { display: block; height: 22px; border-radius: 4px;
-  background: var(--surface-2); border: 1px solid var(--line-strong); }
-.kdoor .kdoor-sw i.on { background: var(--kc); border-color: var(--kc); }
-.kdoor .pdk-door-tx { padding: 12px 4px 12px 12px; }
 
 /* ---------- The Kennel, Kennel Phase A (2026-09-05) ----------
    A display screen, not a shop: no glow anywhere on a pet here, deliberately
-   (Tom's ruling) -- .k-cell and .k-dot carry no box-shadow at all, unlike the
-   Paddock's rarity glow above. Ownership uses filled versus hollow dots and the existing locked silhouettes. */
+   (Tom's ruling). Ownership uses filled versus hollow dots and locked silhouettes. */
 .k-gwart { background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 0.8125rem; color: var(--text-2); margin: 4px 0 14px; }
 .k-gwart b { color: var(--text); }
 /* SIX ROWS, ONE SCREEN, EVEN AT 320x568 (the narrowest phone this app
@@ -11067,7 +10910,6 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   letter-spacing: .14em; padding: 3px 8px; border-radius: 999px; background: var(--text); color: var(--ink); }
 .pet-hero-art { flex: none; margin-top: 6px; }
 .pet-hero-copy { flex: 1; min-width: 0; padding-bottom: 10px; }
-.pet-kind { font-size: 10.5px; font-weight: 800; letter-spacing: .12em; color: var(--gold); }
 .pet-name { font-family: var(--display); font-size: 26px; line-height: 1.02; margin: 2px 0 5px; }
 .pet-hero-copy p { font-size: 11.5px; opacity: .74; line-height: 1.38; margin: 0 0 9px; }
 .pet-buy { font-size: 14px; }

@@ -11,8 +11,8 @@
 
 import { db, kvGet, kvSet, claimDay } from './db.js';
 import { dateKey } from './nutrition.js';
-import { coinsAdd, grantCrate, grantConsumable, coins } from './loot.js';
-import { grantIngredient, INGREDIENTS, COMMON_INGREDIENT_IDS } from './cooking.js';
+import { crateRow, consumableRow } from './loot.js';
+import { INGREDIENTS, COMMON_INGREDIENT_IDS } from './cooking.js';
 import { popSound, levelSound, reducedMotion } from './fx.js';
 import { bhIconRaw } from './icons-pack.js';
 import { pixCur } from './icons-pix.js';
@@ -98,12 +98,22 @@ function wheelIconsHtml() {
   }).join('');
 }
 
+// Payout descriptions contain no writes. claimSpin commits them with the date
+// and receipt, so a failed storage write leaves the whole spin available.
+const coinPay = amount => ({ coinDelta: amount, kv: {
+  coins: cur => Math.max(0, (Number(cur) || 0) + amount),
+  coinsRev: cur => Math.max(0, (Number(cur) || 0) + amount),
+} });
+
 // ---- prize table (wheel order; adjacent segments differ in value) ----
 // weights sum to 95; probabilities are w/95. jackpot (the Bone Crate) is the gold wedge.
 const PRIZES = [
-  { key: 'c30',    coin: true,               tag: '30',     name: '30 Coins',       weight: 22, gold: false, grant: () => coinsAdd(30) },
-  { key: 'daily',  iconId: 'crate-daily',    tag: 'Crate',  name: 'Common Crate',    weight: 12, gold: false, grant: () => grantCrate('daily', 'wheel') },
-  { key: 'ingr',   iconId: 'ingredient',     tag: 'Scrap',  name: 'a Fresh Scrap',  weight: 20, gold: false, grant: (rng) => grantIngredient(seededIngredient(rng), 1) },
+  { key: 'c30',    coin: true,               tag: '30',     name: '30 Coins',       weight: 22, gold: false, pay: () => coinPay(30) },
+  { key: 'daily',  iconId: 'crate-daily',    tag: 'Crate',  name: 'Common Crate',    weight: 12, gold: false, pay: () => ({ puts: [{ store: 'inv', val: crateRow('daily', 'wheel') }] }) },
+  { key: 'ingr',   iconId: 'ingredient',     tag: 'Scrap',  name: 'a Fresh Scrap',  weight: 20, gold: false, pay: rng => {
+    const id = seededIngredient(rng);
+    return { kv: { ingredients: inv => ({ ...(inv || {}), [id]: ((inv && inv[id]) || 0) + 1 }) } };
+  } },
   /* 'Bone', not 'Golden', and the same fix one level up. v421 renamed this tag
      from 'GOLD' to 'Golden' because the drawing and the grant agreed with each
      other and only the word was the odd one out. Tom, 2026-08-21: "we need to
@@ -112,14 +122,14 @@ const PRIZES = [
      was still describing the vector treasure chest it replaced, so this time it
      is the PRODUCT that was the odd one out, not one wedge.
      WHAT DID NOT MOVE: `key: 'golden'`, `iconId: 'crate-golden'` and
-     grantCrate('golden') are save keys and shop ids. Only the words changed.
+     crateRow('golden') are save keys and shop ids. Only the words changed.
      The tag has to be a WHOLE WORD of the Shop's label for the art this wedge
      draws, which tests/pixel-art-swap-audit.mjs grades by scraping loot.js, so
      'Bone' tracks 'Bone Crate' automatically and 'Golden' now fails there. */
-  { key: 'golden', iconId: 'crate-golden',   tag: 'Bone',   name: 'a Bone Crate', weight: 3,  gold: true,  grant: () => grantCrate('golden', 'wheel') },
-  { key: 'c75',    coin: true,               tag: '75',     name: '75 Coins',       weight: 18, gold: false, grant: () => coinsAdd(75) },
-  { key: 'c150',   coin: true,               tag: '150',    name: '150 Coins',      weight: 8,  gold: false, grant: () => coinsAdd(150) },
-  { key: 'charm',  iconId: 'charm',          tag: 'Charm',  name: 'a Battle Charm', weight: 12, gold: false, grant: () => grantConsumable('xp2', 'wheel') },
+  { key: 'golden', iconId: 'crate-golden',   tag: 'Bone',   name: 'a Bone Crate', weight: 3,  gold: true,  pay: () => ({ puts: [{ store: 'inv', val: crateRow('golden', 'wheel') }] }) },
+  { key: 'c75',    coin: true,               tag: '75',     name: '75 Coins',       weight: 18, gold: false, pay: () => coinPay(75) },
+  { key: 'c150',   coin: true,               tag: '150',    name: '150 Coins',      weight: 8,  gold: false, pay: () => coinPay(150) },
+  { key: 'charm',  iconId: 'charm',          tag: 'Charm',  name: 'a Battle Charm', weight: 12, gold: false, pay: () => ({ puts: [{ store: 'inv', val: consumableRow('xp2', 'wheel') }] }) },
 ];
 // Derived, never hardcoded: the Streak Freeze prize was removed in v253 and the
 // wheel went from 8 segments to 7 without a single other change.
@@ -327,37 +337,25 @@ export async function maybeShowDailyWheel({ sounds = true, force = false } = {})
   if (navigator.webdriver && Number.isInteger(window.__wheelIdx)) idx = ((window.__wheelIdx % SEG) + SEG) % SEG;
   const prize = PRIZES[idx];
 
-  // Gate + grant happen ON SPIN, not on show — so closing the wheel without
-  // spinning does NOT burn your daily spin (it comes back next open). Setting
-  // the date BEFORE the grant still blocks a mid-spin reload double-dip, and the
-  // prize is date-seeded so it can't be rerolled by reloading.
+  // Freeze random ingredients and inventory ids for retries of this spin.
+  const pay = prize.pay(rng);
   const commit = async () => {
     if (preview) return { coinDelta: 0 };
     if ((await kvGet('wheelLastDate', null)) === today) return { coinDelta: 0, already: true };
-    /* THE SPIN IS ONE addIfAbsent (QA round 26 O11). The get-then-put above was
-       the whole gate, and executed as written it answered granted, granted: two
-       overlapping spins (one page, or two tabs) both read a stale date and both
-       paid. Measured bound: two real spins, one prize, so a primitive defect
-       rather than a farm, but the same shape the ledger's addIfAbsent exists to
-       close (js/db.js). The per-day kv row is the claim; the loser is told
-       'already spun' and grants nothing. wheelLastDate is still written because
-       the SHOW gate above and tests/wheel-audit.mjs read it; it is no longer
-       what decides. */
-    if (!(await claimSpin(today))) return { coinDelta: 0, already: true };
-    await kvSet('wheelLastDate', today);
-    const before = await coins();
-    await prize.grant(rng);
-    return { coinDelta: (await coins()) - before };
+    if (!(await claimSpin(today, pay))) return { coinDelta: 0, already: true };
+    return { coinDelta: pay.coinDelta || 0 };
   };
   const result = { iconHtml: pixPrizeImg(prize) || iconHtml(prize, 40), name: prize.name, gold: prize.gold, coinDelta: 0 };
   return showWheel(idx, prize, result, commit, { sounds });
 }
 
-/* The day's spin claim: a test-and-set on kv `wheelspin:<date>`. Exactly one
-   caller anywhere on the device is ever told true for a given day. Exported so
-   the race can be driven in node (tests/unit.test.js, mem-idb). */
-export function claimSpin(today) {
-  return db.addIfAbsent('kv', { k: `wheelspin:${today}`, v: Date.now() });
+/* The day's spin claim and payout share one transaction. Exactly one caller
+   is told true for a given day. An abort leaves neither receipt nor spent date.
+   Exported so the race can be driven in node (tests/unit.test.js, mem-idb). */
+export function claimSpin(today, pay = {}) {
+  return db.claimAndPay('kv', { k: `wheelspin:${today}`, v: Date.now() }, {
+    ...pay, kv: { ...(pay.kv || {}), wheelLastDate: () => today },
+  });
 }
 
 function sheetStackOpen() {
@@ -387,6 +385,7 @@ function showWheel(idx, prize, result, commit, { sounds }) {
     const spinBtn = dw.querySelector('#dwSpin');
     const sub = dw.querySelector('#dwSub');
 
+    let spinning = false;
     let done = false;
     const finish = () => { if (done) return; done = true; dw.classList.add('dw-out'); setTimeout(() => { dw.remove(); resolve(true); }, 300); };
 
@@ -418,9 +417,18 @@ function showWheel(idx, prize, result, commit, { sounds }) {
     };
 
     const spin = async () => {
+      if (spinning) return;
+      spinning = true;
       spinBtn.disabled = true;
-      // consume the day + grant the prize the moment they commit to spinning
-      try { const c = await commit(); result.coinDelta = c.coinDelta; result.already = !!c.already; } catch { /* grant best-effort */ }
+      try {
+        const c = await commit(); result.coinDelta = c.coinDelta; result.already = !!c.already;
+      } catch {
+        spinning = false;
+        spinBtn.disabled = false;
+        spinBtn.textContent = 'RETRY';
+        sub.textContent = 'Your spin was not saved. Retry to collect your prize.';
+        return;
+      }
       if (sounds) { try { popSound(true); } catch { /* no audio */ } }
       /* Any landing whose rest angle sits in the 90..270 band would leave every
          label upside down, so counter-flip them (see .dw-flip in STYLE). The
@@ -454,7 +462,7 @@ function showWheel(idx, prize, result, commit, { sounds }) {
       }, { once: true });
     };
 
-    spinBtn.addEventListener('click', spin, { once: true });
+    spinBtn.addEventListener('click', spin);
     // test hook (headless only): deterministic drive
     /* `coin` is exposed because the KEY cannot be used to infer it. Coin prizes
        are c30/c75/c150 and a test that reads "starts with c" also catches

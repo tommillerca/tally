@@ -4,7 +4,7 @@
 // (stew / zombie-fajita flavor), fully separate from real calorie logging, and
 // buffs only ever ADD (wellbeing-safe: nothing here rewards eating less).
 
-import { kvGet, kvSet, kvUpdate, kvUpdateMulti, claimDay } from './db.js';
+import { kvGet, kvSet, kvUpdate, kvUpdateMulti, payAtomic, claimDay } from './db.js';
 import { dateKey } from './nutrition.js';
 
 export const INGREDIENTS = {
@@ -207,11 +207,23 @@ export const MAX_POTS = 3;
 export const POT_PRICES = [1000, 3000]; // coins for the 2nd pot, then the 3rd
 export async function potsOwned() { return Math.min(MAX_POTS, Math.max(1, (await kvGet('potsOwned', 1)) || 1)); }
 export function nextPotPrice(owned) { return owned >= MAX_POTS ? null : POT_PRICES[owned - 1]; }
-export async function addPot() { // caller charges coins; this just grows the count
-  const owned = await potsOwned();
-  if (owned >= MAX_POTS) return owned;
-  await kvSet('potsOwned', owned + 1);
-  return owned + 1;
+// The displayed ownership is the purchase target. A stale confirmation cannot
+// charge for a different (more expensive) pot. Balance, revision and ownership
+// are decided from one live snapshot and commit together.
+export async function addPot(expectedOwned) {
+  return payAtomic({ snapshot: { keys: ['potsOwned', 'coins', 'coinsRev'] }, decide: state => {
+    const owned = Math.min(MAX_POTS, Math.max(1, state.potsOwned || 1));
+    const price = nextPotPrice(owned);
+    if (price == null) return { result: { ok: false, reason: 'full' } };
+    if (expectedOwned != null && expectedOwned !== owned) return { result: { ok: false, reason: 'stale' } };
+    const balance = Number(state.coins) || 0;
+    if (balance < price) return { result: { ok: false, reason: 'coins' } };
+    return { result: { ok: true, owned: owned + 1 }, kv: {
+      coins: () => balance - price,
+      coinsRev: () => (Number(state.coinsRev) || 0) + price,
+      potsOwned: () => owned + 1,
+    } };
+  } });
 }
 /* Pure so it can run INSIDE a kvUpdate transaction, where nothing may await. */
 function slotsFrom(raw, n) {
@@ -244,106 +256,81 @@ async function readSlots() { return slotsFrom(await kvGet('cooking', null), awai
 export const QUEUE_MAX = 2;
 async function readQueue() { const q = await kvGet('cookq', []); return Array.isArray(q) ? q : []; }
 
-/* Pay for a cook in ONE transaction, or refuse inside it. Every caller used to
-   read the larder, await something, then write the whole inventory back, which
-   lost whatever a harvest or a map spawn had granted in between. Returns true
-   when the ingredients were really taken. */
-async function payIngredients(recipe) {
-  return !!(await kvUpdate('ingredients', inv => {
-    const cur = { ...(inv || {}) };
-    if (!canCook(recipe, cur)) return undefined;   // short inside the transaction: nothing owed, nothing written
-    for (const [id, n] of Object.entries(recipe.needs)) cur[id] -= n;
-    return cur;
-  }, {}));
-}
-// hand back what payIngredients took, when the pot or the queue turned it away
-async function refundIngredients(recipe) {
-  for (const [id, n] of Object.entries(recipe.needs)) await grantIngredient(id, n);
+// Used only after affordability is decided inside the job's transaction.
+function spentIngredients(recipe, inv) {
+  const next = { ...(inv || {}) };
+  for (const [id, n] of Object.entries(recipe.needs)) next[id] -= n;
+  return next;
 }
 
 export async function queueCook(recipeId) {
   const r = RECIPE_BY_ID[recipeId];
   if (!r) return { ok: false, reason: 'unknown' };
-  if ((await readQueue()).length >= QUEUE_MAX) return { ok: false, reason: 'full' };  // cheap refusal, the real one is below
-  if (!(await payIngredients(r))) return { ok: false, reason: 'ingredients' };
-  /* PUSHING ONTO THE QUEUE IS ONE TRANSACTION, because advanceQueue TAKES from
-     this row. `q` was read before the ingredient spend, so writing it whole put
-     back an entry advanceQueue had already moved into a pot, and the same
-     paid-for cook ran a second time for free. */
-  const next = await kvUpdate('cookq', cur => {
-    const a = Array.isArray(cur) ? cur : [];
-    return a.length >= QUEUE_MAX ? undefined : [...a, { recipeId }];
-  }, []);
-  if (!next) { await refundIngredients(r); return { ok: false, reason: 'full' }; }
-  return { ok: true, queued: next.length };
+  return payAtomic({ snapshot: { keys: ['ingredients', 'cookq'] }, decide: state => {
+    const q = Array.isArray(state.cookq) ? state.cookq : [];
+    if (q.length >= QUEUE_MAX) return { result: { ok: false, reason: 'full' } };
+    if (!canCook(r, state.ingredients || {})) return { result: { ok: false, reason: 'ingredients' } };
+    return { result: { ok: true, queued: q.length + 1 }, kv: {
+      ingredients: () => spentIngredients(r, state.ingredients),
+      cookq: () => [...q, { recipeId }],
+    } };
+  } });
 }
 
-/* Move the queue along, on the CLOCK. A pot that finished while the app was shut
- * hands its dish over AT THE MOMENT IT FINISHED, and the next cook starts there
- * rather than whenever the player happened to look, so a queue lined up on Monday
- * has really drained by Tuesday instead of waiting for a tap it never got.
- * Returns the dishes it collected on the player's behalf so the caller can pay
- * the same XP a manual Serve pays. It has exactly ONE caller for that reason.
- *
- * EMPTYING THE POT IS THE CLAIM HERE TOO, same as collectDish below. Reading the
- * slots, awaiting the grant and writing the slots back used to be three separate
- * transactions, so two overlapping ticks both found the same finished cook and
- * both banked it: measured 2026-09-01 on origin/main 3d4b208c, one cook paid TWO
- * Pantry dishes from one ingredient set in a single context, and a true two-tab
- * race double-banked 10 of 12 attempts. Overlapping ticks are the ordinary case
- * rather than a contrivance: the Kitchen re-renders on a 1000ms setInterval that
- * calls an async render() without awaiting it, and render() opens with this.
- *
- * The queue is a SECOND kv row, so it cannot ride in the pot transaction. It is
- * TAKEN first instead (kvUpdate on 'cookq': the read and the shift are one
- * transaction, so no entry can be carried into two pots), and whatever the pots
- * turn out not to have room for goes back at the front. Both halves are needed:
- * claiming the pot alone still let two ticks start one paid-for queue entry in
- * two different pots, which is the same free dish by another door. */
+// Delivery updaters join the SAME transaction that clears/replaces the pot.
+// Potion revisions must ride along too, including a failed delivery.
+function deliveryUpdates(banked) {
+  const dishes = banked.filter(b => !b.recipe.potion);
+  const potions = banked.filter(b => b.recipe.potion);
+  return {
+    ...(dishes.length ? { pantry: list => [...(list || []), ...dishes.map(({ recipe, at }) => ({
+      recipeId: recipe.id, name: recipe.name, icon: recipe.icon, iconId: recipe.iconId, cookedAt: at,
+    }))] } : {}),
+    ...(potions.length ? {
+      potions: inv => {
+        const next = { ...(inv || {}) };
+        for (const { recipe } of potions) next[recipe.id] = (next[recipe.id] || 0) + 1;
+        return next;
+      },
+      potionsRev: rev => {
+        const next = { ...(rev || {}) };
+        for (const { recipe } of potions) next[recipe.id] = (next[recipe.id] || 0) + 1;
+        return next;
+      },
+    } : {}),
+  };
+}
+
+/* Advance on the clock: each successor starts when the previous cook finished.
+ * Queue removal, pot replacement and delivery all commit or abort together.
+ * Returns only dishes banked by this transaction, for drainCookQueue's XP.
+ * Unsupported paid entries are retained for recovery instead of being dropped. */
 export async function advanceQueue(now = Date.now()) {
-  const arr0 = await readSlots();
-  /* Cheap pre-check, and it is what keeps the take below off the common path:
-     with every pot busy and none finished there is nothing to advance, which is
-     what almost every one of those per-second ticks looks like. */
-  const room = arr0.filter(c => !c || c.readyAt <= now).length;
-  if (!room) return [];
-  const pots = arr0.length;
-  let mine = [];
-  await kvUpdate('cookq', cur => {
-    const a = Array.isArray(cur) ? cur : [];
-    if (!a.length) return undefined;
-    mine = a.slice(0, room);
-    return a.slice(mine.length);
-  }, []);
-  if (!mine.length) return [];
-  const banked = [];
-  await kvUpdate('cooking', raw => {
-    const arr = slotsFrom(raw, pots);
-    while (mine.length) {
-      let idx = arr.findIndex(c => !c);
-      let at = now;
+  // Avoid a write transaction on the common busy/empty-queue render path.
+  if (!(await readSlots()).some(c => !c || c.readyAt <= now) || !(await readQueue()).length) return [];
+  return payAtomic({ snapshot: { keys: ['potsOwned', 'cooking', 'cookq'] }, decide: state => {
+    const arr = slotsFrom(state.cooking, Math.min(MAX_POTS, Math.max(1, state.potsOwned || 1)));
+    const queue = Array.isArray(state.cookq) ? state.cookq.slice() : [];
+    const banked = [];
+    let moved = 0;
+    while (queue.length) {
+      const r = RECIPE_BY_ID[queue[0].recipeId];
+      if (!r) break;
+      let idx = arr.findIndex(c => !c), at = now;
       if (idx < 0) {
-        // the pot that came free EARLIEST, so the line runs in the order it was laid
-        const done = arr.map((c, i) => ({ i, t: c.readyAt })).filter(x => x.t <= now).sort((a, b) => a.t - b.t)[0];
+        const done = arr.map((c, i) => ({ i, t: c.readyAt }))
+          .filter(x => x.t <= now && RECIPE_BY_ID[arr[x.i].recipeId]).sort((a, b) => a.t - b.t)[0];
         if (!done) break;
         idx = done.i; at = done.t;
-        const prev = RECIPE_BY_ID[arr[idx].recipeId];
-        arr[idx] = null;
-        // granted AFTER the transaction, so only a pot THIS call emptied pays
-        if (prev) banked.push({ recipe: prev, at });
+        banked.push({ recipe: RECIPE_BY_ID[arr[idx].recipeId], at });
       }
-      const r = RECIPE_BY_ID[mine.shift().recipeId];
-      arr[idx] = r ? { recipeId: r.id, startedAt: at, readyAt: at + r.cookMin * 60e3 } : null;
+      queue.shift(); moved++;
+      arr[idx] = { recipeId: r.id, startedAt: at, readyAt: at + r.cookMin * 60e3 };
     }
-    return arr;
-  }, null);
-  /* Anything the pots could not take after all goes back at the FRONT. It was
-     paid for in ingredients at queueCook and must never be dropped. */
-  if (mine.length) await kvUpdate('cookq', cur => [...mine, ...(Array.isArray(cur) ? cur : [])], []);
-  for (const { recipe, at } of banked) {
-    if (recipe.potion) await grantPotion(recipe.id); else await addToPantry(recipe, at);
-  }
-  return banked.map(b => b.recipe);
+    return { result: banked.map(b => b.recipe), kv: moved ? {
+      cookq: () => queue, cooking: () => arr, ...deliveryUpdates(banked),
+    } : {} };
+  } });
 }
 
 /* WHAT A DRAIN WOULD COLLECT, WITHOUT COLLECTING IT. Pure: no kv, no XP, no
@@ -397,54 +384,32 @@ export async function cookState(now = Date.now()) {
     recipe: readySlots[0] ? readySlots[0].recipe : null,
   };
 }
-/* TAKING THE POT IS A CLAIM TOO, the same claim collectDish and advanceQueue
-   make on this row. `arr` used to be read here, carried across the ingredient
-   spend (two whole transactions) and written back whole, which put a finished
-   dish back in a pot one of those two had just emptied and banked it twice.
-   Ingredients first, pot second, and the pot hands them back if it turned out
-   to have no room: that is the same take-first ordering harvestPlot documents,
-   and a refused start must never cost the player a cook. */
+// Affordability, vacancy and ingredient payment use the same live snapshot.
 export async function startCook(recipeId, now = Date.now()) {
   const r = RECIPE_BY_ID[recipeId];
   if (!r) return { ok: false, reason: 'unknown' };
-  const arr = await readSlots();
-  if (!arr.some(c => !c)) return { ok: false, reason: 'busy' }; // every pot occupied
-  const pots = arr.length;
-  if (!(await payIngredients(r))) return { ok: false, reason: 'ingredients' };
-  let free = -1;
-  await kvUpdate('cooking', raw => {
-    const slots = slotsFrom(raw, pots);
-    free = slots.findIndex(c => !c);
-    if (free < 0) return undefined;
-    slots[free] = { recipeId, startedAt: now, readyAt: now + r.cookMin * 60e3 };
-    return slots;
-  }, null);
-  if (free < 0) { await refundIngredients(r); return { ok: false, reason: 'busy' }; }
-  return { ok: true, slot: free };
+  return payAtomic({ snapshot: { keys: ['potsOwned', 'cooking', 'ingredients'] }, decide: state => {
+    const arr = slotsFrom(state.cooking, Math.min(MAX_POTS, Math.max(1, state.potsOwned || 1)));
+    const free = arr.findIndex(c => !c);
+    if (free < 0) return { result: { ok: false, reason: 'busy' } };
+    if (!canCook(r, state.ingredients || {})) return { result: { ok: false, reason: 'ingredients' } };
+    arr[free] = { recipeId, startedAt: now, readyAt: now + r.cookMin * 60e3 };
+    return { result: { ok: true, slot: free }, kv: {
+      ingredients: () => spentIngredients(r, state.ingredients), cooking: () => arr,
+    } };
+  } });
 }
-/* EMPTYING THE POT IS THE CLAIM. Reading the slot and nulling it used to be two
-   transactions, so two overlapping serves of one pot both found a finished dish
-   and both banked it: measured 2026-08-17, two concurrent collectDish(0) both
-   returned the recipe, and only a lost update inside addToPantry stopped the
-   Pantry gaining two. The read and the null are one transaction now. */
+
+// Clearing the pot claims the dish, and banking it completes that same write.
 export async function collectDish(slotIndex = null, now = Date.now()) {
-  const pots = await potsOwned();
-  let r = null;
-  await kvUpdate('cooking', (raw) => {
-    const arr = slotsFrom(raw, pots);
-    let idx = slotIndex;
-    if (idx == null) idx = arr.findIndex(c => c && now >= c.readyAt); // first ready
-    if (idx < 0 || !arr[idx]) return undefined;
-    const rec = RECIPE_BY_ID[arr[idx].recipeId];
-    if (!rec || now < arr[idx].readyAt) return undefined;
-    r = rec;
+  return payAtomic({ snapshot: { keys: ['potsOwned', 'cooking'] }, decide: state => {
+    const arr = slotsFrom(state.cooking, Math.min(MAX_POTS, Math.max(1, state.potsOwned || 1)));
+    const idx = slotIndex == null ? arr.findIndex(c => c && now >= c.readyAt && RECIPE_BY_ID[c.recipeId]) : slotIndex;
+    const c = arr[idx], r = c && RECIPE_BY_ID[c.recipeId];
+    if (!r || now < c.readyAt) return { result: null };
     arr[idx] = null;
-    return arr;
-  }, null);
-  if (!r) return null;
-  if (r.potion) await grantPotion(r.id); // potions go to your satchel, drunk mid-fight
-  else await addToPantry(r, now);         // dishes stockpile in the Pantry; activated on demand
-  return r;
+    return { result: r, kv: { cooking: () => arr, ...deliveryUpdates([{ recipe: r, at: now }]) } };
+  } });
 }
 
 /* R38-23: A DAY-ONE COOK CAN STRAND THEMSELVES. Bone Broth needs {marrow:2,
@@ -503,15 +468,8 @@ export async function cancelCook(slotIndex) {
  * for the fight/day you actually want it. Additive + data-safe: existing active
  * buffs (kv 'foodbuffs') are untouched; potions still go straight to the satchel. */
 export async function pantryDishes() { return (await kvGet('pantry', [])) || []; }
-async function addToPantry(recipe, now = Date.now()) {
-  // one transaction, same reason as grantIngredient
-  await kvUpdate('pantry', list => [...(list || []),
-    { recipeId: recipe.id, name: recipe.name, icon: recipe.icon, iconId: recipe.iconId, cookedAt: now }], []);
-}
-/* TAKING THE DISH OUT OF THE PANTRY IS THE CLAIM, the same shape collectDish
-   uses one row over. Reading the list, splicing it and writing it whole dropped
-   any dish addToPantry banked in between, and addToPantry runs off a 1000ms
-   Kitchen tick, so a cooked dish could simply vanish on a Serve. */
+// Discard claims the current pantry row in one transaction, so it preserves
+// dishes banked concurrently by Serve or the Kitchen's queue tick.
 async function takePantryDish(index) {
   let item = null;
   await kvUpdate('pantry', list => {
@@ -522,13 +480,27 @@ async function takePantryDish(index) {
   }, []);
   return item;
 }
+// Index buttons remain visible while their async handler saves. Reject a
+// second in-flight action on that index before it can target the shifted dish.
+const pantryEats = new Set();
 export async function activatePantryDish(index, now = Date.now()) {
-  const item = await takePantryDish(index);
-  if (!item) return null;
-  const r = RECIPE_BY_ID[item.recipeId];
-  if (!r) return null;   // stale entry: the take above is what drops it
-  await addFoodBuff(r, now);
-  return r;
+  if (!Number.isInteger(index) || index < 0 || pantryEats.has(index)) return null;
+  pantryEats.add(index);
+  try {
+    // Bind the action to the entry present at invocation, also across modules.
+    const before = await pantryDishes();
+    if (!before[index]) return null;
+    return await payAtomic({ snapshot: { keys: ['pantry'] }, decide: state => {
+      const list = state.pantry || [];
+      if (JSON.stringify(list) !== JSON.stringify(before)) return { result: null };
+      const r = RECIPE_BY_ID[list[index]?.recipeId];
+      if (!r || !r.buff) return { result: null };
+      return { result: r, kv: {
+        pantry: () => list.filter((_, i) => i !== index),
+        foodbuffs: buffs => [...(buffs || []), newFoodBuff(r, now)],
+      } };
+    } });
+  } finally { pantryEats.delete(index); }
 }
 export async function discardPantryDish(index) {
   return !!(await takePantryDish(index));
@@ -618,13 +590,11 @@ export async function doTransmute(now = Date.now()) {
 
 /* ---------- active food buffs (kv 'foodbuffs' = []) ---------- */
 export async function foodBuffs() { return (await kvGet('foodbuffs', [])) || []; }
-async function addFoodBuff(recipe, now = Date.now()) {
-  const buffs = await foodBuffs();
+function newFoodBuff(recipe, now) {
   const b = { recipe: recipe.id, name: recipe.name, icon: recipe.icon, ...recipe.buff };
   if (b.kind === 'coins') b.untilMs = now + b.hours * 3600e3;
   if (b.kind === 'combat') b.fightsLeft = b.fights;
-  buffs.push(b);
-  await kvSet('foodbuffs', buffs);
+  return b;
 }
 // Only understood lifetimes may be pruned or spent. Opaque future rows stay
 // byte-identical in storage and do not contribute effects in this build.
