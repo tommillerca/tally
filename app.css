@@ -9202,18 +9202,17 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .cf-dots i.on { opacity: 1; transform: scale(1.25); background: var(--accent); }
 .cf-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; padding: 16px 0 0; }
 .cf-acts .btn { width: 100%; }
-/* Stable redesign: one printed portrait, quiet controls, separate permanent changes.
+/* Stable redesign: a featured album portrait, quiet controls, separate permanent changes.
    Scoped to this sheet so the shared pet wardrobe and other rooms keep their skin. */
 .stable-head h2 { font-family: inherit; font-weight: 700; letter-spacing: 0; }
 #stableBody button { font-family: inherit; }
 #stableBody { padding-bottom: calc(var(--pad) + var(--sab)); }
-#stableBody .cf { --card: min(280px, calc(100vw - 64px)); display: flex; flex-direction: column; }
+#stableBody .cf { --card: min(280px, calc((100vw - 2 * var(--pad)) * .68)); display: flex; flex-direction: column; }
 #stableBody .cf-frame {
-  order: 2; width: calc(var(--card) * var(--cf-scale) + 12px); max-width: 100%;
-  margin: 12px auto 0; padding: 4px 0 8px; --cf-pad: 12px;
-  perspective: none; transition: none;
+  /* Leave both edges open to the shipped ring, including its compact state. */
+  order: 2; width: 100%; max-width: calc(var(--card) * 1.55 * var(--cf-scale));
+  margin: 0 auto;
 }
-#stableBody .cf-track { transform-style: flat; transition: none; }
 #stableBody .cf-card { border: 2px solid var(--ink); border-radius: 18px 20px 17px 19px; box-shadow: var(--sh); }
 @media (max-width: 343px) {
   #stableBody .cf-art { transform: scale(.88); }
@@ -9228,14 +9227,13 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 #stableBody .cf-cap .alias-tag { font: 500 .875rem/1.4 system-ui, sans-serif; }
 #stableBody .cf-cap .role { order: 1; justify-content: center; font-size: .75rem; }
 #stableBody .pet-wear { order: 3; }
-#stableBody .cf-kin { order: 4; margin: 10px 0 0; padding: 0 2px; }
+#stableBody .cf-kin { order: 4; margin: 4px 0 0; padding: 0 2px; }
 #stableBody .cf-kin .chip { font: 600 .8125rem/1.3 system-ui, sans-serif; letter-spacing: 0; background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0; box-shadow: none; }
 #stableBody .cf-kin .chip.on { color: var(--text); border-bottom-color: var(--text); background: var(--surface-2); }
-#stableBody .cf-switch { order: 5; display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-top: 8px; }
-#stableBody .cf-switch button { min-width: 44px; min-height: 44px; padding: 8px; border: 0; background: none; color: var(--text); font: 600 .8125rem/1.3 system-ui, sans-serif; }
-#stableBody .cf-switch button:disabled { color: var(--text-3); }
-#stableBody .cf-position { font-size: .75rem; color: var(--text-2); text-align: center; font-variant-numeric: tabular-nums; }
-#stableBody .cf-dots { order: 6; gap: 0; margin: 0; padding: 0; max-height: none; opacity: 1; overflow: visible; }
+#stableBody .cf-pet-hint, #stableBody .cf-colour-label { font: 500 .75rem/1.4 system-ui, sans-serif; color: var(--text-2); }
+#stableBody .cf-pet-hint { order: 2; text-align: center; margin: 10px 0 0; }
+#stableBody .cf-colour-label { order: 4; margin-top: 10px; }
+#stableBody .cf-dots { order: 2; gap: 0; margin: 0; padding: 0; max-height: none; opacity: 1; overflow: visible; }
 #stableBody .cf-dots button { display: grid; place-items: center; width: 44px; min-height: 44px; padding: 0; border: 0; background: none; }
 #stableBody .cf-dots i { pointer-events: none; background: var(--text-2); opacity: .5; transform: none; }
 #stableBody .cf-dots .on i { background: var(--text); opacity: 1; outline: 1px solid var(--text); outline-offset: 3px; }

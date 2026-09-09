@@ -8241,6 +8241,7 @@ test('Stable redesign preserves named destruction, body controls and navigation 
   assert.match(output, /PASS CONTROL Stable loss:/);
   assert.match(output, /PASS CONTROL Stable type:/);
   assert.match(output, /PASS CONTROL Stable order:/);
+  assert.match(output, /PASS CONTROL Stable album:/);
   assert.match(output, /STABLE REDESIGN: 4 guard groups passed, 0 failed/);
 });
 

@@ -176,30 +176,114 @@ const movedWallet = bodyWithActions.match(/<div class="wallet-line stable-wallet
 assert.throws(() => gradeOrder(movedWallet + bodyWithActions.replace(movedWallet, '')), 'CONTROL currency leading the pet must fail');
 console.log('PASS CONTROL Stable order: all three doors and currency follow pet content; four regressions rejected');
 
-// Execute the production paint arithmetic, including the one-pet opacity case.
-// This checks resting geometry only. Browser clipping and gestures remain unrun.
-const paintCards = slice('        const CW = cards[0].offsetWidth;', '        const idx = indexAt(pos);');
-const gradeCarousel = source => {
-  for (const N of [1, 2, 6]) for (const pos of [0, N - 1]) for (const scale of [1, .62]) {
-    const cards = Array.from({ length: N }, () => ({ offsetWidth: 280, style: {}, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } }));
-    new Function('cards', 'N', 'pos', 'GAP', 'indexAt', source)(cards, N, pos, .1, p => ((Math.round(p) % N) + N) % N);
-    const viewport = 280 * scale + 12;
-    let visible = 0;
-    cards.forEach((card, i) => {
-      const match = card.style.transform.match(/^translateX\(calc\(-50% \+ (-?[\d.]+)px\)\)$/);
-      assert(match, 'flat translation, no tilted neighbour');
-      const centre = viewport / 2 + Number(match[1]) * scale;
-      if (centre + 140 * scale > 0 && centre - 140 * scale < viewport) visible++;
-      if (i === pos) assert.equal(card.style.opacity, '1', 'CONTROL focused portrait is fully opaque even with one pet');
-      assert.equal(card.attrs['aria-hidden'], String(i !== pos));
-    });
-    assert.equal(visible, 1, 'exactly one portrait intersects the resting viewport');
+// Execute the restored shipped paint and gesture code. This is arithmetic and
+// event-double proof, not a rendered pixel or touch-device claim.
+const gradeAlbum = (source, styles) => {
+  const begin = source.indexOf('        const CW = cardPx();', source.indexOf('const cfFrame ='));
+  const finish = source.indexOf('        const idx = indexAt(pos);', begin);
+  assert(begin >= 0 && finish > begin, 'shipped album paint exists');
+  const paintCards = source.slice(begin, finish);
+  const constants = source.match(/const GAP = ([\d.]+), ROTATE = ([\d.]+), DEPTH = ([\d.]+), FADE = ([\d.]+), FALLOFF = ([\d.]+);/);
+  assert(constants, 'shipped depth, rotation and fade constants exist');
+  const values = constants.slice(1).map(Number);
+  assert.match(styles, /\.cf-frame\s*\{[^}]*overflow: hidden[^}]*touch-action: pan-y[^}]*perspective: calc\(var\(--card\) \* 2\.1\)/);
+  assert.match(styles, /\.cf-track\s*\{[^}]*transform-style: preserve-3d/);
+  assert.doesNotMatch(styles, /perspective: none|transform-style: flat/);
+  const frame = styles.match(/#stableBody \.cf-frame\s*\{([^}]+)\}/)?.[1];
+  assert.match(frame || '', /width: 100%; max-width: calc\(var\(--card\) \* 1\.55 \* var\(--cf-scale\)\)/, 'frame reserves peeking edges in both panel sizes');
+  assert.match(styles, /--card: min\(280px, calc\(\(100vw - 2 \* var\(--pad\)\) \* \.68\)\)/);
+  assert.match(source, /const cardPx = \(\) => cards\[0\] \? cards\[0\]\.offsetWidth/, 'card pitch must not feed a transformed width back into itself');
+  for (const N of [1, 2, 3, 4, 6]) for (const pos of [0, N - 1]) for (const scale of [1, .62]) {
+    const CW = 240;
+    const cards = Array.from({ length: N }, () => ({ style: {}, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } }));
+    new Function('cards', 'N', 'pos', 'cardPx', 'GAP', 'ROTATE', 'DEPTH', 'FADE', 'FALLOFF', 'indexAt', paintCards)(
+      cards, N, pos, () => CW, ...values, p => ((Math.round(p) % N) + N) % N);
+    for (const ratio of [1 / .68, 1.55]) {
+      const width = CW * ratio * scale, perspective = CW * 2.1;
+      let leftPeek = 0, rightPeek = 0;
+      cards.forEach((card, i) => {
+        const m = card.style.transform.match(/^translateX\(calc\(-50% \+ (-?[\d.]+)px\)\) translateZ\((-?[\d.]+)px\) rotateY\((-?[\d.]+)deg\)$/);
+        assert(m, 'shipped 3D translation and rotation');
+        const [, x, z, angle] = m.map(Number), theta = angle * Math.PI / 180;
+        const corners = [-CW / 2, CW / 2].map(u => width / 2 + (x + u * Math.cos(theta)) * scale * perspective / (perspective - (z - u * Math.sin(theta))));
+        const lo = Math.min(...corners), hi = Math.max(...corners);
+        if (i === pos) {
+          assert.equal(card.style.opacity, '1', 'focused pet is fully opaque, including a single pet');
+          assert.equal(Number(card.style.zIndex), 100, 'active card is raised above its neighbours');
+          assert(lo >= 0 && hi <= width, 'whole active card fits');
+        } else if (Number(card.style.opacity) > 0) {
+          if (lo < 0 && hi > 0) leftPeek++;
+          if (lo < width && hi > width) rightPeek++;
+          assert(Number(card.style.zIndex) < 100, 'neighbour is behind the active card');
+        }
+        assert.equal(card.attrs['aria-hidden'], String(i !== pos));
+      });
+      if (N >= 3) assert(leftPeek > 0 && rightPeek > 0, 'neighbours intersect both viewport edges');
+      if (N === 2) assert.equal(leftPeek + rightPeek, 1, 'two pets have one visible neighbour, without cloned pets');
+    }
   }
+  assert.doesNotMatch(source, /data-cfstep|cf-position/, 'no redundant previous/next controls or count');
+  assert.match(source, /Pets · Swipe to choose/);
+  assert.match(source, />Colour \/ copy<\/div>/);
+  assert.match(source, /aria-label="Colour and copy of/);
+  assert.match(source, /kin\.setAttribute\('aria-label', `Colour and copy of/);
+  assert.match(source, /colourLabel\.hidden = bySp\[inst.sp\]\.length < 2/);
+  assert.match(source, /kin\.innerHTML = kinChips\(inst\)/);
+  assert.match(source, /restoreKin\(body, inst.sp\)/);
 };
-gradeCarousel(paintCards);
-for (const faulty of [paintCards.replace('CW * (1 + GAP)', 'CW * .5'), paintCards.replace("card.style.opacity = '1'", "card.style.opacity = '.5'")]) {
-  assert.notEqual(faulty, paintCards);
-  assert.throws(() => gradeCarousel(faulty), 'CONTROL slivers or dimmed single pet must fail');
+gradeAlbum(app, css);
+for (const [faultyApp, faultyCss] of [
+  [app.replace('const GAP = 0.10, ROTATE = 46', 'const GAP = 1.10, ROTATE = 46'), css],
+  [app.replace('N <= 2 ? 1 : Math.min', 'N <= 2 ? 0 : Math.min'), css],
+  [app, css.replace('width: 100%; max-width: calc(var(--card) * 1.55 * var(--cf-scale))', 'width: calc(var(--card) * var(--cf-scale) + 12px); max-width: 100%')],
+  [app, css.replace('transform-style: preserve-3d', 'transform-style: flat')],
+]) {
+  assert(faultyApp !== app || faultyCss !== css, 'CONTROL mutation applied');
+  assert.throws(() => gradeAlbum(faultyApp, faultyCss), 'CONTROL missing peek, dim pet or flattened album must fail');
 }
-console.log('PASS CONTROL Stable carousel: one full portrait at rest for 1/2/6 species in both panel sizes; two regressions rejected');
+// Exercise production swipe, vertical axis lock, release snap, keys and dots.
+const gesture = slice('      let vel = 0;', '      // (no per-card click handler:');
+for (const reduced of [false, true]) {
+  const handlers = {}, dots = [0, 1, 2, 3].map(i => ({ dataset: { cfdot: String(i) }, addEventListener(_, fn) { this.click = fn; } }));
+  const frames = [];
+  let now = 0;
+  const frame = { addEventListener(k, fn) { handlers[k] = fn; }, setPointerCapture() {}, getBoundingClientRect: () => ({ left: 0, width: 360 }) };
+  const run = new Function('cfFrame', '$$', 'body', 'reduced', 'performance', 'requestAnimationFrame', 'cancelAnimationFrame', `
+    let pos = 0, target = 0, raf = null;
+    const N = 4, GAP = .1, cardPx = () => 240, indexAt = p => ((Math.round(p) % N) + N) % N;
+    const setMoving = () => {}, paint = () => {}, render = () => {};
+    ${gesture}
+    return () => ({ pos, target });
+  `)(frame, () => dots, {}, reduced, { now: () => now += 16 }, fn => { frames.push(fn); return frames.length; }, () => {});
+  const flush = () => { let n = 0; while (frames.length) { assert(n++ < 2000, 'spring converges'); frames.shift()(); } };
+  const event = (x, y = 0) => ({ pointerId: 1, clientX: x, clientY: y });
+  handlers.pointerdown(event(180)); handlers.pointermove(event(-84)); handlers.pointerup(event(-84)); flush();
+  assert.equal(run().pos, 1, 'horizontal swipe snaps to the next pet');
+  handlers.pointerdown(event(180)); handlers.pointermove(event(175, 80)); handlers.pointerup(event(175, 80)); flush();
+  assert.equal(run().pos, 1, 'vertical page scroll does not change pet');
+  handlers.keydown({ key: 'ArrowLeft', preventDefault() {} }); flush();
+  assert.equal(run().pos, 0, 'keyboard selects previous pet');
+  dots[3].click(); flush();
+  assert.equal(run().pos, -1, 'dot wraps by the shortest route');
+  handlers.pointerdown(event(350)); handlers.pointerup(event(350)); flush();
+  assert.equal(run().pos, 0, 'tap on neighbour advances the album');
+}
+// The existing copy rail still selects an instance and retains its colours.
+const copyRows = ['Base', 'Frost', 'Ember'].map((colour, i) => ({ iid: colour.toLowerCase(), sp: 'C1', colour }));
+const chipScope = { bySp: { C1: copyRows }, byBest: () => 0, nicks: {}, bank: {}, eqIid: 'base', sel: [],
+  petPortraitHtml: () => '', esc: String, petColourName: x => x.colour, petLevel: () => 1 };
+const chips = new Function(...Object.keys(chipScope), slice('    const kinChips =', '    const focusIdx =') + '\nreturn kinChips;')(...Object.values(chipScope));
+const clickCopy = slice("    $('.cf-kin', body)?.addEventListener('click'", "    $$('[data-petnick]', body).forEach");
+let onCopy, renders = 0;
+const picked = new Function('$', 'body', 'popSound', 'S', 'render', 'let cfIid = null;\n' + clickCopy + '\nreturn () => cfIid;')(
+  () => ({ addEventListener(_, fn) { onCopy = fn; } }), {}, () => {}, {}, () => renders++);
+for (const copy of copyRows) {
+  onCopy({ target: { closest: () => ({ dataset: { kin: copy.iid } }) } });
+  assert.equal(picked(), copy.iid, 'copy tap selects the actual instance');
+  const html = chips(copy);
+  for (const row of copyRows) assert(html.includes(row.colour + ' · Lv 1'), 'all three colours remain visible in chips');
+  assert.match(html, new RegExp('data-kin="' + copy.iid + '" role="option" aria-selected="true"'));
+}
+assert.equal(renders, 3, 'each copy pick repaints the portrait and actions');
+console.log('PASS CONTROL Stable album: peeking edges, raised active card, swipe snap, axis lock, keys, dots and reduced motion; four regressions rejected');
 console.log('STABLE REDESIGN: 4 guard groups passed, 0 failed (Node only; scroll height and pixels unmeasured)');

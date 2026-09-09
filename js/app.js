@@ -20249,13 +20249,9 @@ async function openStable(opts = {}) {
           <span class="role"><span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}</span>
           <dl class="cf-meta">${rows.map(([k, v]) => `<div class="row${k === 'Level' ? ' cf-level' : k === 'Lineage' || k.startsWith('Steps') ? ' cf-progress' : ''}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
         </div>
-        <div class="cf-kin" role="listbox" aria-label="Your ${esc(it.name || focused.sp)}s">${kinChips(focused)}</div>
-        <div class="cf-switch" aria-label="Switch pets">
-          <button type="button" data-cfstep="-1" aria-label="Previous pet"${roster.length < 2 ? ' disabled' : ''}>‹ Previous</button>
-          <span class="cf-position" aria-live="polite">Pet ${focusIdx + 1} of ${roster.length}</span>
-          <button type="button" data-cfstep="1" aria-label="Next pet"${roster.length < 2 ? ' disabled' : ''}>Next ›</button>
-        </div>
-        <div class="cf-dots">${cfDots}</div>`;
+        <div class="cf-colour-label"${bySp[focused.sp].length < 2 ? ' hidden' : ''}>Colour / copy</div>
+        <div class="cf-kin" role="listbox" aria-label="Colour and copy of ${esc(it.name || focused.sp)}">${kinChips(focused)}</div>
+        <div class="cf-dots" aria-label="Choose pet">${cfDots}</div>`;
     })();
     const cfActs = (() => {
       if (!focused) return '';
@@ -20461,7 +20457,8 @@ async function openStable(opts = {}) {
                removed: .cf-card is overflow:hidden, so the copies were clipped to
                the card and never trailed past it. The ring's motion reads through
                depth, rotation and fade. -->
-          <div class="cf-frame" id="cfFrame" tabindex="0" role="region" aria-roledescription="carousel" aria-label="Your pets">
+          <p class="cf-pet-hint" id="cfPetHint">Pets · Swipe to choose</p>
+          <div class="cf-frame" id="cfFrame" tabindex="0" role="region" aria-roledescription="carousel" aria-label="Choose pet. Swipe or use arrow keys." aria-describedby="cfPetHint">
             <div class="cf-track" id="cfTrack">${cfCards}</div>
           </div>
           ${cfWear}
@@ -20622,7 +20619,7 @@ async function openStable(opts = {}) {
     if (cfFrame && cfTrack && roster.length) {
       const cards = [...cfTrack.children];
       const N = cards.length;
-      const GAP = 0.10;
+      const GAP = 0.10, ROTATE = 46, DEPTH = 0.34, FADE = 0.26, FALLOFF = 0.62;
       let pos = focusIdx, target = focusIdx, raf = null, shown = -1;
       /* Motion blur, driven by measured velocity rather than a fixed keyframe, so
          a slow drag blurs barely at all and a flick smears. `reduced` disables it
@@ -20655,20 +20652,27 @@ async function openStable(opts = {}) {
         const cf = $('.cf', body);
         if (cf) cf.classList.toggle('moving', on);
       };
-      const cardPx = () => cards[0] ? cards[0].getBoundingClientRect().width || 150 : 150;
+      const cardPx = () => cards[0] ? cards[0].offsetWidth || 150 : 150;
       const indexAt = p => ((Math.round(p) % N) + N) % N;
       const paint = () => {
-        /* MEASURE ONCE. cardPx() is a getBoundingClientRect, and it was being
-           called again INSIDE this loop, immediately after writing a transform:
-           six forced synchronous layouts per frame, each invalidated by the write
-           before it. That is the drag lag. Read once, write many. */
-        const CW = cards[0].offsetWidth;
+        /* Read the untransformed width once. Measuring a tilted card would
+           feed its projected width back into the next frame's pitch. */
+        const CW = cardPx();
         const PITCH = CW * (1 + GAP);
         cards.forEach((card, i) => {
-          let off = ((i - pos) % N + N) % N;
+          let off = i - pos;
+          off = ((off % N) + N) % N;
           if (off > N / 2) off -= N;
-          card.style.transform = `translateX(calc(-50% + ${off * PITCH}px))`;
-          card.style.opacity = '1';
+          const dist = Math.abs(off);
+          const ramp = Math.pow(dist, FALLOFF);
+          const tilt = Math.min(ROTATE * ramp, 82) * Math.sign(off);
+          const x = off * PITCH;
+          card.style.transform = `translateX(calc(-50% + ${x}px)) translateZ(${-DEPTH * CW * ramp}px) rotateY(${-tilt}deg)`;
+          // Fade the far side of the ring. With only one or two pets there is
+          // no hidden back row, so keep the pet and its sole neighbour visible.
+          const edge = N <= 2 ? 1 : Math.min(1, Math.max(0, N / 2 - dist));
+          card.style.opacity = String(Math.max(0, 1 - FADE * dist) * edge);
+          card.style.zIndex = String(100 - Math.round(dist));
           card.setAttribute('aria-hidden', String(i !== indexAt(pos)));
         });
         const idx = indexAt(pos);
@@ -20688,8 +20692,6 @@ async function openStable(opts = {}) {
             d.classList.toggle('on', i === idx);
             d.setAttribute('aria-current', String(i === idx));
           });
-          const position = $('.cf-position', body);
-          if (position) position.textContent = `Pet ${idx + 1} of ${N}`;
           /* THE TRAY BELONGS TO THE PET YOU ARE LOOKING AT. Tom, 2026-08-10:
              "switching to another pet while one pet's talents are open doesn't
              close the tray then swipe to the next pet like it should. The talents
@@ -20833,9 +20835,6 @@ async function openStable(opts = {}) {
         if (e.key === 'ArrowLeft') { e.preventDefault(); settle(Math.round(pos) - 1); }
         if (e.key === 'ArrowRight') { e.preventDefault(); settle(Math.round(pos) + 1); }
       });
-      $$('[data-cfstep]', body).forEach(button => button.addEventListener('click', () => {
-        settle(Math.round(pos) + Number(button.dataset.cfstep));
-      }));
       $$('[data-cfdot]', body).forEach(d => d.addEventListener('click', () => {
         // travel the SHORT way round, or the ring unwinds the long way to index 0
         const to = +d.dataset.cfdot;
@@ -20925,7 +20924,9 @@ async function openStable(opts = {}) {
       if (kin) {
         rememberKin(body);
         kin.innerHTML = kinChips(inst);
-        kin.setAttribute('aria-label', `Your ${it.name || inst.sp}s`);
+        kin.setAttribute('aria-label', `Colour and copy of ${it.name || inst.sp}`);
+        const colourLabel = $('.cf-colour-label', body);
+        if (colourLabel) colourLabel.hidden = bySp[inst.sp].length < 2;
         restoreKin(body, inst.sp);
       }
     }
