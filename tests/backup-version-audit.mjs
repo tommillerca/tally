@@ -77,7 +77,10 @@ ok('V1-SKIPPED  summary names the missing stores', !!s1 && /Restored 5 of 7 stor
   importSummary ? JSON.stringify(s1) : 'importSummary/STORE_WORDS not found in app.js');
 
 /* ---- SAME-CLEAN (control) ---------------------------------------------- */
-const same = { ...(await exportAll()), log: [row('L-same', 300)] };
+// Produce a consistent current snapshot, including diary merge history.
+await db.clear('log');
+await db.put('log', row('L-same', 300));
+const same = await exportAll();
 const c2 = await importAll(same);
 ok('SAME-CLEAN  a current-version file with all seven stores skips nothing', c2.skipped.length === 0, JSON.stringify(c2.skipped));
 const s2 = importSummary ? importSummary(c2) : null;

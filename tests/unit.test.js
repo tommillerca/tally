@@ -8250,6 +8250,12 @@ test('Stable redesign preserves named destruction, body controls and navigation 
   assert.match(output, /STABLE REDESIGN: 4 guard groups passed, 0 failed/);
 });
 
+test('P1 backup merge preserves Kitchen earnings, diary maintenance and offline potions', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'p1-merge-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /P1 MERGE: \d+ passed, 0 failed/);
+  assert.match(output, /PASS CONTROL replacement/);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

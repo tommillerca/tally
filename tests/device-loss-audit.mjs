@@ -60,7 +60,9 @@ globalThis.fetch = async (url, opts = {}) => {
   throw new Error(`Unexpected test fetch: ${url}`);
 };
 async function device(name) { useDbName(`L3-${name}`); await kvSet('apiBase', API); }
-async function countRows() { return (await Promise.all(STORES.map(s => db.all(s)))).reduce((n, a) => n + a.length, 0); }
+// Incident row counts describe player records, excluding additive merge metadata.
+async function countRows() { return (await Promise.all(STORES.map(s => db.all(s)))).reduce((n, a, i) =>
+  n + (STORES[i] === 'kv' ? a.filter(r => !r.k.startsWith('mergeHistory:')).length : a.length), 0); }
 async function wipeToSix(keep = []) {
   for (const store of STORES) await db.clear(store);
   for (const [k, v] of keep) await kvSet(k, v);
