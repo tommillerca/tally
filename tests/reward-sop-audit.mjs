@@ -416,7 +416,7 @@ const ACTIONS = [
      seven awards (log, firstlog, weigh, protein, dayclose, meals3, levelup),
      byte for byte the same keys and amounts, so nothing was added or lost. */
   { id: 'js/game.js:runInitBackfill', sites: 7, undriven: "one-time retroactive backfill behind kv 'game-init', reached only through initGameIfNeeded, and every award inside is ledger-keyed anyway" },
-  { id: 'js/game.js:initLootIfNeeded', sites: 7, undriven: "the welcome kit, behind kv 'loot-init'; site 6 is the starter egg (goal 0, hatch on arrival), added 2026-08-30 from the playtest; site 7 is the DAY-ONE COIN TOP-UP (DAYONE_TOPUP, 2026-09-07, master handoff B4), and it is the only site in the kit that is itself ledger-keyed: awardOnce('dayone-topup') pays the coins inside the claim's own transaction, so it is doubly guarded (the kv flag above it and its own ledger row) and tests/dayone-topup-audit.mjs ONCE drives the second attempt" },
+  { id: 'js/game.js:initLootIfNeeded', sites: 1, undriven: "firstrun-audit.mjs drives transaction interruption, abort/retry and overlapping first boots. payAtomic reads loot-init and the existing dayone-topup receipt, then commits the full kit, coins and receipt together; seven separate grants became one payout site. Legacy completed kits remain no-ops." },
   { id: 'js/game.js:backfillStarterSeedsIfNeeded', sites: 2, undriven: 'one-time backfill behind its own kv flag. Pays ingredients rather than seeds since 2026-08-18; the ledger key and the write-before-pay order are unchanged' },
   /* THE GARDEN'S CLOSING PAYOUT. Transition: "this save still holds a live Bone
      Garden" becomes "it has been settled", once per save, and nothing about play

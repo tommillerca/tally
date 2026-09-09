@@ -1452,23 +1452,30 @@ test('health: nativeSyncNow must forward every field the plugin returns', () => 
   assert.deepEqual(dropped, [],
     `nativeSyncNow drops plugin fields before ingestHealth ever sees them: ${dropped.join(', ')}`);
 });
-test('transmog: the paid-once credit must be persisted, not derived', () => {
-  // Regression. paidLooks() used to seed purely from the live transmog map, so a
-  // v221 player who cleared the slot lost the evidence and paid twice for a look
-  // they already owned. The seed must be written back to kv.
-  const src = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
-  const fn = src.match(/export async function paidLooks\(\)\s*\{[\s\S]*?\n\}/);
-  assert.ok(fn, 'paidLooks present');
-  /* EITHER WRITING PRIMITIVE. What this test is about is that the seed is
-     WRITTEN BACK rather than re-derived; it is not about which call does it.
-     Pinned to kvSet alone until 2026-09-02, when paidLooks moved to kvUpdate so
-     that a receipt markPaid banks during the transmogMap await is not dropped,
-     and this row went red on a strictly better version of the same behaviour. */
-  assert.ok(/kv(?:Set|Update)\('paidlooks'/.test(fn[0]), 'paidLooks persists the grandfathered seed');
-  // and re-confirming a look you are already wearing must bank it too
-  const ap = src.match(/export async function applyTransmog[\s\S]*?\n\}/);
-  assert.ok(/already: true/.test(ap[0]) && /markPaid[\s\S]*?already: true/.test(ap[0]),
-    'the already-worn early return banks the look before returning');
+test('transmog: paid credits survive clearing, and free re-taps never buy credit', async () => {
+  // 2026-09-08: execute the production ledger. The old regex accidentally
+  // matched a comment about markPaid and demanded the retired free-wear bug.
+  await import('./mem-idb.mjs');
+  const { kvSet, kvGet, useDbName } = await import('../js/db.js');
+  const loot = await import('../js/loot.js');
+  useDbName('unit-transmog-persisted-credit');
+  const hat = 'g-H10-1-gravecaller', look = 'H10-2';
+  await loot.grantGear(hat, 'unit');
+  await loot.grantGear('g-H10-2-ringmaster', 'unit');
+  await loot.equipGear('H', hat);
+  // CONTROL: grandfather a legacy paid look while its statted gear is worn.
+  await kvSet('transmog', { H: look });
+  assert((await loot.paidLooks()).has(`H:${look}`));
+  await loot.clearTransmog('H');
+  assert((await kvGet('paidlooks', [])).includes(`H:${look}`));
+  assert.equal(await loot.transmogPrice('H', look), 0);
+  await kvSet('paidlooks', []);
+  await loot.equipGear('H', null);
+  assert.equal((await loot.applyTransmog('H', look)).cost, 0);
+  assert.equal((await loot.applyTransmog('H', look)).already, true);
+  assert(!(await loot.paidLooks()).has(`H:${look}`), 'free re-tap must not bank a purchase');
+  await loot.equipGear('H', hat);
+  assert.equal(await loot.transmogPrice('H', look), loot.transmogCost(look));
 });
 test('collection: every locked piece must be indistinguishable', () => {
   // The Looks browser renders locked pieces from a single constant string with no
@@ -2688,10 +2695,10 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
        below moved 3 -> 2 with it. */
     buyDustEgg: 'NOT COSMETIC, BY RULING (Tom, 2026-08-31): the dust shop egg was removed unintentionally, and dust is the deterministic hatch route for a non-walker. One Mystery Egg per ISO week for 60 dust, bounded by the dustegg:<week> receipt. If dust is ever sold for real money, this is the first thing to look at.',
   };
-  /* The one dust spend allowed to reach a grant, and ONLY grantEgg. Not a skip:
+  /* The one dust spend allowed to deliver an egg, using eggRow in its transaction. Not a skip:
      row 3 still forbids it every other grant, so the crate and the charm cannot
      ride back in on the egg's ruling. */
-  const POWER_EXCEPTIONS = { buyDustEgg: /grantEgg/ };
+  const POWER_EXCEPTIONS = { buyDustEgg: /eggRow/ };
   const owners = [...src.matchAll(/^(?:export\s+)?(?:async\s+)?function\s+(\w+)/gm)].map(m => [m.index, m[1]]);
   const ownerAt = i => { let n = '(top level)'; for (const [ix, name] of owners) { if (ix <= i) n = name; else break; } return n; };
   /* WIDENED AGAIN 2026-09-05 (offline crash seam OFF-2a): buyRackItem folded
@@ -2700,7 +2707,8 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
      no receipt. The debit is a `bonedust:` kv callback inside that call rather
      than `await spendDust(`, so the pattern needs the third shape or this
      census goes blind on buyRackItem the same way it did on 2026-08-31. */
-  const DUST_SPEND = /boneDustAdd\(\s*-|await spendDust\(|\bbonedust:\s*\w+/g;
+  // 2026-09-08: include the transmog debit staged inside payAtomic.
+  const DUST_SPEND = /boneDustAdd\(\s*-|await spendDust\(|\bbonedust:\s*\w+|bumpPay\('bonedust',\s*'dustRev',\s*-/g;
   const spends = [...src.matchAll(DUST_SPEND)].map(m => ownerAt(m.index));
   assert.ok(spends.length >= 2, `found ${spends.length} dust spends; the lint is reading the wrong thing`);
   assert.deepEqual([...new Set(spends)].sort(), Object.keys(DECLARED).sort(),
@@ -2708,7 +2716,7 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
 
   // 3. and none of them hands out an item, except the one declared exception,
   //    which may reach EXACTLY its declared grant and nothing else
-  const GRANTS = /grantEgg|grantCrate|grantConsumable|grantGear|grantPet\b|addPetInstance/;
+  const GRANTS = /eggRow|grantEgg|grantCrate|grantConsumable|grantGear|grantPet\b|addPetInstance/;
   for (const fn of Object.keys(DECLARED)) {
     const from = src.slice(src.indexOf(`function ${fn}(`));
     const body = from.slice(0, from.indexOf('\n}\n'));
@@ -6705,11 +6713,19 @@ test('football BUNDLE-CONCURRENCY: an overlapping single-garment buy no longer o
     loot.buyFootballItem(cleatsId, true),
   ]);
   assert.equal(bundleR.ok, true, `bundle must sell, got ${JSON.stringify(bundleR)}`);
-  assert.equal(itemR.ok, true, `single buy must sell, got ${JSON.stringify(itemR)}`);
-  assert.equal(bundleR.cost, 13400, `4 missing at quote time prorates to 13,400, got ${JSON.stringify(bundleR)}`);
-  assert.equal(itemR.cost, 4200, `one garment must cost one garment's price, got ${JSON.stringify(itemR)}`);
+  // Both serial orders are legal: the bundle can win first and refuse the
+  // now-owned single, or the single can land first and lower the bundle quote.
   const spent = WALLET - await loot.coins();
-  assert.equal(spent, 14300, `single (4,200) + what the bundle actually delivered (3 new garments, re-quoted and refunded to 10,100) must total 14,300 and never more, got ${spent}`);
+  if (itemR.ok) {
+    assert.equal(itemR.cost, 4200);
+    assert.equal(bundleR.cost, 10100, 'bundle reports only the three garments it charges for');
+    assert.equal(spent, 14300);
+  } else {
+    assert.equal(itemR.reason, 'owned');
+    assert.equal(bundleR.cost, 13400);
+    assert.equal(spent, 13400);
+  }
+  assert.equal(spent, bundleR.cost + (itemR.ok ? itemR.cost : 0), 'receipts must equal the actual debit');
   const owned = await loot.ownedCosmeticIds();
   const garmentsOwned = FB.FOOTBALL_SOLD.filter(g => FB.FOOTBALL_TEAMS.some(t => owned.has(FB.footballItemId(t.id, g.key))));
   assert.equal(garmentsOwned.length, FB.FOOTBALL_SOLD.length, `all ${FB.FOOTBALL_SOLD.length} garments must be owned after both purchases land, got ${garmentsOwned.map(g => g.key)}`);

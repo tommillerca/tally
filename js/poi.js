@@ -5,8 +5,8 @@
 // `boss-<week>-<denId>` makes each den claimable once per week, server-verifiable
 // later, exactly like hunt spawns.
 import { award, awardOnce, levelFor, totalXp } from './game.js';
-import { coinsAdd, grantCrate, crateRow, eggRow, grantGear, ownedGearIds, boneDustAdd } from './loot.js';
-import { kvGet, kvSet, kvUpdate, db, claimDay } from './db.js';
+import { coinsAdd, crateRow, eggRow, gearRow, grantGear, ownedGearIds, boneDustAdd } from './loot.js';
+import { kvGet, kvSet, db, claimDay } from './db.js';
 import { GEAR_ITEMS } from './gear.js';
 import { TALENT_TREES } from './pit.js';
 import { distanceM, bearingDeg } from './hunt.js';
@@ -425,22 +425,27 @@ export async function claimDenWin(den, day = dateKey(), week = isoWeekKey()) {
   return claim.claimed ? { ...r, xp: claim.xp, gearChoices: choices } : null;
 }
 
-// Player picked a piece from a pending boss drop. Grants + clears the entry.
-/* TAKING THE PENDING ENTRY IS THE CLAIM. Reading it and then rewriting the list
-   without it was two transactions, so two overlapping picks both found the same
-   open choice and both reported a claim (only grantGear's own owned-check kept
-   a second copy out of the inventory). One transaction, so exactly one caller
-   can take a drop. */
+// The choice, inventory piece and collected appearance commit together. Read
+// ownership in that transaction too, so an existing slimed variant is retained.
 export async function claimDenLoot(key, gearId) {
-  let entry = null;
-  await kvUpdate('denloot', (list) => {
-    const pending = list || [];
-    entry = pending.find(p => p.key === key && p.choices.includes(gearId)) || null;
-    return entry ? pending.filter(p => p.key !== key) : undefined;
-  }, []);
-  if (!entry) return null;
-  const g = await grantGear(gearId, 'boss-den');
-  return g || GEAR_ITEMS.find(x => x.id === gearId) || null;
+  const gear = GEAR_ITEMS.find(g => g.id === gearId);
+  if (!gear) return null;
+  return db.payAtomic({
+    snapshot: { keys: ['denloot', 'looks'], stores: ['inv'] },
+    decide: (state, rows) => {
+      const pending = state.denloot || [];
+      if (!pending.some(p => p.key === key && p.choices.includes(gearId))) return { result: null };
+      const owned = rows.inv.some(r => r.kind === 'gear' && r.gearId === gearId);
+      return {
+        result: gear,
+        kv: {
+          denloot: () => pending.filter(p => p.key !== key),
+          looks: cur => gear.artId && !(cur || []).includes(gear.artId) ? [...(cur || []), gear.artId] : undefined,
+        },
+        puts: owned ? [] : [{ store: 'inv', val: gearRow(gearId, 'boss-den') }],
+      };
+    },
+  });
 }
 
 /* ================= Boneyard mini-bosses (v75) =================
@@ -500,11 +505,15 @@ export function miniKey(date, mini) { return `mini-${date}-${mini.id}`; }
 // caller (settle) so the Battle Charm + food coin boost apply uniformly.
 export async function claimMiniWin(mini, date = dateKey()) {
   const r = mini.reward;
-  const xp = await award(miniKey(date, mini), 'mini', r.xp || 20, `Boneyard: ${mini.name}`);
-  if (xp === 0) return null; // already beaten today
-  if (r.crate) await grantCrate(r.crate, 'mini');
-  if (r.dust) await boneDustAdd(r.dust);
-  return { xp, ...r };
+  const puts = r.crate ? [{ store: 'inv', val: r.crate === 'egg'
+    ? await eggRow('mini') : crateRow(r.crate, 'mini') }] : [];
+  const kv = r.dust ? {
+    bonedust: cur => Math.max(0, (Number(cur) || 0) + r.dust),
+    dustRev: cur => (Number(cur) || 0) + r.dust,
+  } : {};
+  const claim = await awardOnce(miniKey(date, mini), 'mini', r.xp || 20,
+    `Boneyard: ${mini.name}`, date, null, { kv, puts });
+  return claim.claimed ? { ...r, xp: claim.xp } : null;
 }
 
 /* ================= easter-egg secret dens (v178) ================= */
@@ -658,14 +667,11 @@ export async function claimGluttonWin(day = dateKey(), slot = 0) {
  * branches already minted their own correct markers at claim time, so touching
  * them would double-count.
  *
- * The kv flag is written BEFORE any award, matching backfillStarterSeedsIfNeeded:
- * a crash midway must leave a player short rather than run the whole thing twice.
- * award() is idempotent per key anyway, so a re-run could not duplicate, but the
- * ordering is the house rule and it costs nothing to keep.
+ * Mark completion only after every idempotent marker has committed. The v2
+ * flag also retries devices whose old completion flag preceded a failed write.
  */
 export async function backfillDenCeilingIfNeeded() {
-  if (await kvGet('denceil-backfill')) return null;
-  await kvSet('denceil-backfill', true);
+  if (await kvGet('denceil-backfill-v2')) return null;
   const rows = await db.all('xp');
   const owed = new Set();
   for (const r of rows) {
@@ -678,8 +684,9 @@ export async function backfillDenCeilingIfNeeded() {
   let added = 0;
   for (const id of owed) {
     if (await db.get('xp', `bossfirst-${id}`)) continue;
-    await award(`bossfirst-${id}`, 'bossfirst', 0, 'Past boss den clear (restored)');
-    added++;
+    const claim = await awardOnce(`bossfirst-${id}`, 'bossfirst', 0, 'Past boss den clear (restored)');
+    if (claim.claimed) added++;
   }
+  await kvSet('denceil-backfill-v2', true);
   return added ? { added, ranks: added * 3 } : null;
 }

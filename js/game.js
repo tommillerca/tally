@@ -2,9 +2,9 @@
 // XP events are append-only rows in the 'xp' store, keyed for idempotency:
 // awarding the same key twice is a no-op, so backfills and retries are safe.
 
-import { db, kvGet, kvSet, claimDay } from './db.js';
+import { db, kvGet, kvSet, claimDay, payAtomic } from './db.js';
 import { dayTotals, addDays, dateKey, streakFrom } from './nutrition.js';
-import { grantCrate, crateRow, cosRow, grantConsumable, coinsAdd, boneDustAdd, grantEgg, equipped, BATTLE_CHARM_BONUS } from './loot.js';
+import { grantCrate, crateRow, cosRow, consumableRow, eggRow, grantConsumable, coinsAdd, boneDustAdd, grantEgg, equipped, BATTLE_CHARM_BONUS } from './loot.js';
 import { gardenState, clearGarden, PLOT_PRICES, PLOTS_FREE, HARVEST_BASE, HARVEST_BASE_RARE } from './garden.js';
 import { grantIngredient } from './cooking.js';
 import { BH_SLOTS } from '../data/boneheadz.js';
@@ -659,15 +659,19 @@ export async function earnedBadgeIds() {
 
 const STREAK_MILESTONES = [3, 7, 14, 30, 50, 100];
 
-async function streakAwards(streak) {
-  let gained = 0, milestone = null;
+async function streakAwards(streak, { deliverCrates = false } = {}) {
+  let gained = 0, milestone = null, crates = 0;
   for (const n of STREAK_MILESTONES) {
     if (streak >= n) {
-      const g = await award(`streak-${n}`, 'streakms', 100, `${n}-day streak`);
-      if (g) { gained += g; milestone = n; }
+      // Live food rewards deliver inside the claim, as day-close already does.
+      // A failed crate write rolls back its XP too. Historical initialization
+      // keeps its existing XP-only baseline and does not retro-drop crates.
+      const pay = deliverCrates ? { puts: [{ store: 'inv', val: crateRow('golden', 'streak-' + n) }] } : null;
+      const r = await awardOnce(`streak-${n}`, 'streakms', 100, `${n}-day streak`, null, null, pay);
+      if (r.claimed) { gained += r.xp; milestone = n; if (deliverCrates) crates++; }
     }
   }
-  return { gained, milestone };
+  return { gained, milestone, crates };
 }
 
 // Called after a log entry is written. Returns {xp, newBadges, streakMilestone, boosted}.
@@ -720,9 +724,8 @@ async function finishFoodLogged(entry, { via = null, targets = null, entriesForD
 
   const [log, xpRows] = await Promise.all([db.all('log'), db.all('xp')]);
   const streak = streakFrom([...streakDateSet(log, xpRows)], dateKey());
-  const sa = await streakAwards(streak);
+  const sa = await streakAwards(streak, { deliverCrates: true });
   gained += sa.gained;
-  if (sa.milestone) await grantCrate('golden', 'streak-' + sa.milestone);
 
   const newBadges = await evaluateBadges();
   gained += newBadges.length * 25;
@@ -751,7 +754,7 @@ async function finishFoodLogged(entry, { via = null, targets = null, entriesForD
     boosted,
     // streak crates only. Level crates are granted and counted by the level
     // crossing's own owner (awardOnce -> grantLevelRewards).
-    crates: sa.milestone ? 1 : 0,
+    crates: sa.crates,
   };
   if (entry.foodXp?.id === entry.id) await kvSet(`foodXpDone:${entry.id}`, true);
   return result;
@@ -1239,91 +1242,42 @@ async function runInitBackfill(targets, onProgress) {
 }
 
 // One-time welcome kit when the RPG layer first arrives (or on fresh install).
-/* CLAIM HYGIENE, 2026-09-05 (welcome-kit cross-tab duplication). This used to
-   read kvGet('loot-init') and only write the flag at the very end, so two tabs
-   booting a fresh install at the same instant both read it absent and both
-   granted the whole kit: two golden crates, two daily crates, two Draughts,
-   doubled ingredients, two eggs. addIfAbsent on the SAME 'kv' key is the
-   test-and-set retireGardenIfNeeded/retireMerchantIfNeeded already use below:
-   the check and the write are one IndexedDB request, so exactly one caller
-   gets true and the loser returns null before touching a single grant. */
-/* The size of the day-one grant. 40, so a perfect first day clears the 300 rack
-   floor with room for the seed-to-seed spread of the crates rather than by one
-   coin: see tests/dayone-topup-audit.mjs SIM for the measured wallet. */
+// Keep the existing day-one coin floor and ready-to-hatch egg tier.
 export const DAYONE_TOPUP = 40;
 export async function initLootIfNeeded() {
-  if (!(await db.addIfAbsent('kv', { k: 'loot-init', v: true }))) return null;
-  await grantCrate('golden', 'welcome');
-  await grantCrate('daily', 'welcome');
-  /* A Draught in the kit, because logging stopped earning Vigor on 2026-08-15.
-     An established player buys fights at 90 coins for 3; a brand new player who
-     cannot walk has neither coins nor crates, so day one would be the free
-     three and nothing else. This covers exactly that gap without paying anybody
-     for what they type into their food diary. */
-  await grantConsumable('vigor', 'welcome');
-  /* STARTER POUCH. Rewarded-actions SOP, the state transition: "this device has
-     never been given the welcome kit" becomes "it has", recorded by the
-     'loot-init' kv flag that guards the whole function above. There is no second
-     transition, so a second call pays nothing at all: it returns null at the
-     guard before reaching any grant. grantIngredient is purely additive and
-     would happily pay twice, so the guard is the only thing standing between this and
-     a farm, which is why the grants stay INSIDE it.
-     Two Marrow and one Grave Salt is not an arbitrary handful: it is exactly
-     Bone Broth, the first recipe, so the pouch is a legible errand instead of an
-     empty Kitchen with a coach mark.
-     THESE USED TO BE SEEDS. The Bone Garden left the player's path on
-     2026-08-18, so a seed is unplantable: the pouch pays the INGREDIENTS the
-     seeds would have grown into, which is the same first errand one step
-     shorter. Strictly less generous than before (a seed harvested for 2). */
-  await grantIngredient('marrow', 2);
-  await grantIngredient('salt', 1);
-  /* STARTER EGG (playtest P2, 2026-08-30): one pet egg in the kit, so day one
-     ends with a pet instead of a locked mechanic the player has only read
-     about. It lives INSIDE the 'loot-init' guard with the rest of the kit, so
-     it is granted exactly once per save through the same state transition, and
-     it sits HERE rather than in the onboarding screens because BOTH onboarding
-     paths (the full form and "skip, use defaults") land on saveInitialSettings
-     -> initLootIfNeeded: a skipped onboarding still gets it, and the render
-     layer stays untouched.
-     goal 0 is not an invented number, it is the smaller of the only two egg
-     goal tiers that exist (0 and EGG_GOAL_STEPS 8000), and it is the tier v307
-     created for exactly this moment: loot.js's own words are that a goal-0 egg
-     "is how the Crew channel can hand a new player one they can crack straight
-     away". It renders as READY TO HATCH with a live HATCH button, so the first
-     visit to the Backpack teaches the whole egg loop instead of opening on a
-     progress bar at zero. If day one should instead teach incubation by
-     walking, the only honest alternative is dropping this argument to take the
-     8,000-step default; anything in between would be a number no other egg in
-     the game has ever carried. */
-  await grantEgg('welcome', 0);
-  /* DAY-ONE TOP-UP (Tom's ruling, 2026-09-07; master handoff B4 / R39-27).
-     QA drove two PERFECT first days and finished on 298 and 307 coins against a
-     cheapest rack item of 300, so the best possible first day either just
-     missed the shelf or just cleared it on a coin flip. The ruling is a fixed
-     one-time grant, not a change to the price ladder, the crate coin ranges,
-     the quest rewards or the spar cap: all four of those are standing rulings
-     and none of them moves here.
-     Rewarded-actions SOP. THE TRANSITION is the same one the whole kit rides
-     on: "this save has never been handed a welcome kit" becomes "it has". THE
-     AUTHORITY is the ledger, asked and answered inside awardOnce's own
-     addIfAbsent, and the coins ride in the SAME transaction as the row
-     (db.claimAndPay), so a death between the two cannot spend the claim and pay
-     nothing. One key, no date and no random id in it, so a second boot, a
-     second tab and a restore all pay nothing.
-     WHY HERE AND NOT ON THE CREW PATH: js/social.js already pays a local
-     social-welcome so a 429 from /register cannot strand a fresh player at
-     zero, but that grant is still ABOUT going online. This one is not: the kit
-     is paid from saveInitialSettings and from boot(), neither of which needs a
-     network, so a player who never opts in, or whose signup fails, has it
-     anyway. tests/dayone-topup-audit.mjs REG429 pins exactly that.
-     0 XP on purpose: this is a coin floor, and XP is a level curve nobody asked
-     to move. */
-  await awardOnce('dayone-topup', 'welcome', 0, `Day-one coins: +${DAYONE_TOPUP}`, undefined, null, { kv: {
-    coins: cur => (Number(cur) || 0) + DAYONE_TOPUP,
-    coinsRev: cur => (Number(cur) || 0) + DAYONE_TOPUP,
+  // A completed legacy kit is still completed. Avoid scanning its ledger at boot.
+  if (await kvGet('loot-init', false)) return null;
+  const items = [crateRow('golden', 'welcome'), crateRow('daily', 'welcome'),
+    consumableRow('vigor', 'welcome'), await eggRow('welcome', 0)];
+  /* FIRSTRUN-1: "no welcome kit" becomes "the whole kit delivered" in ONE
+     transaction. Reserving loot-init first stranded everything after an abort.
+     Re-read the authority inside the write so overlapping boots cannot pay twice.
+     The existing dayone-topup receipt remains authoritative even in a partial
+     imported save. It, the currencies and every item commit together or retry.
+     No repair is guessed for legacy true flags: consumed goods and a historic
+     interrupted kit cannot be distinguished from that flag alone. */
+  return payAtomic({ snapshot: { keys: ['loot-init'], stores: ['inv', 'xp'] }, decide: (state, rows) => {
+    if (state['loot-init']) return { result: null };
+    const coins = rows.xp.some(r => r.key === 'dayone-topup') ? 0 : DAYONE_TOPUP;
+    return {
+      result: { crates: 2, draught: true, ingredients: 3, egg: true, coins },
+      currencyReceipts: { coins: 'claim:xp:dayone-topup:coins' },
+      kv: {
+        'loot-init': () => true,
+        ingredients: cur => ({ ...(cur || {}), marrow: ((cur || {}).marrow || 0) + 2,
+          salt: ((cur || {}).salt || 0) + 1 }),
+        ...(coins ? {
+          coins: cur => (Number(cur) || 0) + coins,
+          coinsRev: cur => (Number(cur) || 0) + coins,
+        } : {}),
+      },
+      puts: [
+        ...items.map(val => ({ store: 'inv', val })),
+        ...(coins ? [{ store: 'xp', val: { key: 'dayone-topup', type: 'welcome', xp: 0,
+          label: `Day-one coins: +${DAYONE_TOPUP}`, date: dateKey(), ts: Date.now() } }] : []),
+      ],
+    };
   } });
-  // the claim (and the flag) already landed at the top of this function
-  return { crates: 2, draught: true, ingredients: 3, egg: true, coins: DAYONE_TOPUP };
 }
 
 /* THE STARTER POUCH, BACKFILLED TO INSTALLS THAT ALREADY EXIST.

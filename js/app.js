@@ -12,7 +12,7 @@ import {
   bagPick, seedBagFromRecent, GW_RECENT_CAP,
 } from './game.js';
 import {
-  RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, grantCosmetic, inventory, ownedCosmeticIds,
+  RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, spendCoins, grantCrate, grantCosmetic, inventory, ownedCosmeticIds,
   unopenedCrates, openCrate, crateOdds, buyShopItem, equipped, equip, activateBattleCharm,
   ownedGearIds, grantGear, gearLoadout, equipGear,
   migrateLegacyEggs, eggProgress, repairEggAnchors, hatchEgg, lifetimeStepsSum,
@@ -29,7 +29,7 @@ import {
   setWornAura, ownsAura,
   rack, rerollRack, rackRerollCost, buyRackItem, wornAura,
   buyPetItem,
-  DUST_EGG, buyDustEgg, dustEggBought,
+  DUST_EGG, buyDustEgg, dustEggBought, dustEggPending,
 } from './loot.js';
 import * as labLoot from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
@@ -100,7 +100,7 @@ import { HERO_EDGE } from '../data/hero-edge.js';
 import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers, petWornTints, petWornItems, petCanWear,
   BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK, bhFamilyKey, bhFamilies } from '../data/boneheadz.js';
 // Football kit, 2026-09-04
-import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SHELF, FOOTBALL_PETS, footballItemId, footballTints, footballBundleMath, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
+import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SHELF, FOOTBALL_PETS, footballItemId, footballGrantIds, footballBundleIds, footballTints, footballBundleMath, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays, dayOrdinal, armMidnightTimer,
@@ -1931,12 +1931,14 @@ async function rollDayIfNeeded() {
     // If you had deliberately paged back to an earlier day, stay there: only
     // follow the clock forward when you were actually sitting on "today".
     const wasOnToday = S.date === _dayAnchor;
-    _dayAnchor = today;
-    if (wasOnToday) {
-      S.date = today;
-      await kvSet('lastOpenDay', today);
-    }
+    // Keep the old checkpoint until settlement succeeds, so a rejected write
+    // can retry on the next resume, timer tick or Add tap in this session.
     const closed = await awardDayCloseIfDue(S.settings.targets);
+    if (wasOnToday) {
+      await kvSet('lastOpenDay', today);
+      S.date = today;
+    }
+    _dayAnchor = today;
     // The router defers its repaint while inputs are open; the day and its
     // close-out still roll before commitLogEntry writes a fresh row.
     if (wasOnToday) route({ dayRoll: true });
@@ -4259,7 +4261,6 @@ async function renderToday(el) {
   const yEntries = await entriesFor(copySourceDate);
   const allLog = await db.all('log');
   const firstDate = firstDiaryDate(S.settings.createdAt, allLog);
-  const streak = streakFrom([...new Set(allLog.map(e => e.date))], dateKey());
   /* ONE READ PER STORE PER DRAW (QA round 28 G3). M13 stopped renderToday's own
      body re-reading log/xp/health, and tests/today-reads-lint.mjs graded that
      body; the screen a player opens still paid three whole-inv scans from
@@ -4270,6 +4271,7 @@ async function renderToday(el) {
      whole draw (every function this one calls in the tick) at exactly one scan
      per store. Same rows, same snapshot, same screen. */
   const allXp = await db.all('xp');
+  const streak = streakFrom([...streakDateSet(allLog, allXp)], dateKey());
   const inv = await db.all('inv');
   const xp = allXp.reduce((a, r) => a + (r.xp || 0), 0);   // the same sum totalXp keeps, off the rows in hand
   const lvl = levelFor(xp);
@@ -7325,9 +7327,8 @@ function openDenSheet(den, { cleared = false, inRange = false, onFight = null } 
       <div class="hd">
         <h2>${den.roaming ? 'Roaming den' : 'Boss den'}</h2>
         <div class="sub">${den.roaming ? 'Here today, gone tomorrow'
-          /* his dens do not reroll, so do not tell people they do */
-          : den.theme && den.theme.art === 'mage' ? 'His, and he is not moving'
-          : 'Rerolls its boss every Monday'}</div>
+          : den.theme && den.theme.art === 'mage' ? 'His den moves every Monday; the boss stays'
+          : 'Moves and rerolls its boss every Monday'}</div>
       </div>
       <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Close">${ICONS.close(17)}</button></div>
     </div>
@@ -7344,11 +7345,11 @@ function openDenSheet(den, { cleared = false, inRange = false, onFight = null } 
       <div class="den-pays">
         ${pay.map(([ico, big, lab]) => `<div class="p"><span>${ico}</span><b>${esc(big)}</b><small>${lab}</small></div>`).join('')}
       </div>` : ''}
-      ${t1Sect('Gear drop')}
+      ${!den.roaming && !den.remote ? `${t1Sect('Gear drop')}
       <p class="note" style="margin-bottom:7px">Two pieces drop, you keep one. This den's odds:</p>
       <div class="den-odds">
         ${odds.map(o => `<span class="${o.rarity}"><i>${o.pct}%</i>${o.rarity.toUpperCase()}</span>`).join('')}
-      </div>
+      </div>` : ''}
       <div class="den-walk">
         <span class="ic">${badgePixHtml('badge-signpost', 20)}</span>
         <div><div class="d">${den.dist != null ? esc(fmtDist(den.dist)) : 'Nearby'}</div><small>${inRange ? 'You are close enough to fight' : `Get within ${DEN_RADIUS_M} m to start`}</small></div>
@@ -10280,7 +10281,7 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
      Impeccable's football-kit critique). */
   const kit = footballBundleMath();
   const quote = footballBundleQuote(ownedHere);
-  const bundleOwned = ownedHere === sold.length;
+  const bundleOwned = ownedHere === sold.length && footballBundleIds().every(id => ownedCos.has(id));
   /* skip: ['C'] sits on the call line on purpose: figure-audit STACK reads each
      avatarLayersHtml call in a two-line window (2026-09-05).
      A comment placed HERE, above `return`, not between the markup lines below:
@@ -10361,7 +10362,9 @@ function footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundl
       <div class="drop-grid">
         ${sold.map(g => {
           const id = footballItemId(team.id, g.key);   // the PREVIEW id: the tile sells the garment, in every team
-          const owned = ownedCos.has(id);
+          const ids = footballGrantIds(id);
+          const owned = ids.every(piece => ownedCos.has(piece));
+          const pending = !owned && ids.some(piece => ownedCos.has(piece));
           /* THE PET TILE (g.pets) IS 384 NOW, matching fb-hero-pet above (same
              lizard, same crop). It used to be pinned to 192: Tom, 2026-09-05,
              "in the shop itself, the lizards are all blurry". Her PET_CROP puts
@@ -10386,6 +10389,7 @@ function footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundl
             ${teamStripHtml()}
             ${owned
               ? `<button class="drop-buy" disabled>In your Wardrobe</button>`
+              : pending ? `<button class="drop-buy" data-buyfb="${id}" data-amt="0">Collect paid colours</button>`
               : `<button class="drop-buy${sellable && !canBuy ? ' cant' : ''}" data-buyfb="${id}" data-amt="${price}" ${sellable ? '' : 'disabled'} aria-label="Buy the ${esc(g.label)}${sellable ? `, ${price.toLocaleString()} coins` : ''}, all ${FOOTBALL_TEAMS.length} teams">${sellable ? `${ICONS.coin(12)} ${price.toLocaleString()}` : 'Soon'}</button>`}
           </div>`;
         }).join('')}
@@ -10422,8 +10426,8 @@ function footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundl
 }
 
 async function renderShop(el) {
-  const [fighter, coinBal, dustBal, ownedCos, rk, playerEq, auraWorn, eggBought] =
-    await Promise.all([buildFighter(), coins(), boneDust(), ownedCosmeticIds(), rack(), equipped(), wornAura(), dustEggBought()]);
+  const [fighter, coinBal, dustBal, ownedCos, rk, playerEq, auraWorn, eggBought, eggPending] =
+    await Promise.all([buildFighter(), coins(), boneDust(), ownedCosmeticIds(), rack(), equipped(), wornAura(), dustEggBought(), dustEggPending()]);
   const rerender = () => renderShop(el);
 
   // No page heading or back button: the Shop is a tab inside Your Bonehead now,
@@ -10848,10 +10852,10 @@ async function renderShop(el) {
        and the charm stay gone. -->
   <div class="t3-sect"><b>Bone Dust</b><i></i></div>
   <div class="t3-cells">
-    <button class="t3-cell" data-dustegg="1" ${eggBought || dustBal < DUST_EGG.cost ? 'disabled' : ''}>
+    <button class="t3-cell" data-dustegg="1" ${eggBought || (!eggPending && dustBal < DUST_EGG.cost) ? 'disabled' : ''}>
       <span class="art">${crateIcon('egg', 54)}</span>
       <b>${esc(DUST_EGG.label).toUpperCase()}</b>
-      <span class="t3-price${eggBought ? '' : ' dust'}">${eggBought ? `${ICONS.check(13)} Yours this week` : `${ICONS.dust(13)} ${DUST_EGG.cost}`}</span>
+      <span class="t3-price${eggBought ? '' : ' dust'}">${eggBought ? `${ICONS.check(13)} Yours this week` : `${ICONS.dust(13)} ${eggPending ? 'Collect paid egg' : DUST_EGG.cost}`}</span>
       <small>${eggBought ? 'A new one lands Monday' : `${DUST_EGG.desc} · 1 a week`}</small>
     </button>
   </div>
@@ -10871,10 +10875,9 @@ async function renderShop(el) {
     toast(`${r.label} bought. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left. You now have ${r.owned}.`, 3000);
     rerender();
   }));
-  /* THE DUST EGG. armToConfirm like every spend. buyDustEgg claims the weekly
-     receipt before the dust moves and recovers a paid-but-ungranted week on the
-     next tap, the same shape as buyRackItem, so nothing here needs to know. */
-  el.querySelectorAll('[data-dustegg]').forEach(b => armToConfirm(b, `Spend ${DUST_EGG.cost}?`, async () => {
+  /* THE DUST EGG. Receipt, debit and delivery commit together. Legacy paid
+     deliveries stay clickable without requiring another 60 dust. */
+  el.querySelectorAll('[data-dustegg]').forEach(b => armToConfirm(b, eggPending ? 'Collect paid egg?' : `Spend ${DUST_EGG.cost}?`, async () => {
     const r = await buyDustEgg();
     if (!r.ok) {
       toast(r.reason === 'limit' ? (r.recovered ? 'The egg you already paid for is in the nest now. Walk it warm.' : 'One a week. A fresh egg lands Monday.')
@@ -10938,7 +10941,8 @@ async function renderShop(el) {
         : b.dataset.buyfb ? buyFootballItem(b.dataset.buyfb)
         : buyDropItem(b.dataset.buydrop)).finally(() => { busy = false; reset(); });
       if (!r.ok) {
-        toast(r.reason === 'owned' ? 'Already in your Wardrobe.' : r.reason === 'not-stocked' ? 'Not for sale yet.' : `Not enough coins. That costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`, 2600);
+        toast(r.reason === 'owned' ? (r.recovered ? 'Your paid colours are in your Wardrobe now.' : 'Already in your Wardrobe.') : r.reason === 'not-stocked' ? 'Not for sale yet.' : `Not enough coins. That costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`, 2600);
+        if (r.recovered) rerender();
         return;
       }
       levelSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
@@ -10979,7 +10983,7 @@ async function renderShop(el) {
     const sold = FOOTBALL_SHELF;
     const ownedHere = footballOwnedGarmentCount(ownedCos);
     const quote = footballBundleQuote(ownedHere);
-    const bundleOwned = ownedHere === sold.length;
+    const bundleOwned = ownedHere === sold.length && footballBundleIds().every(id => ownedCos.has(id));
     // the LIVE balance, for the reason in wireDropBuyButtons above: this body is
     // built when the player opens the room, not when the shop was rendered.
     body.innerHTML = footballDropBodyHtml(ownedCos, await coins(), team, sold, price, quote, bundleOwned);
@@ -11052,8 +11056,8 @@ async function renderShop(el) {
   }
   wireRackBuys(el);
   /* THE PET BUYS. armToConfirm on every one, the app-wide rule that one tap can
-     never spend. buyPetItem does the atomic claim before the money moves and
-     recovers a receipt whose grant never landed, the same shape as the rack, so
+     never spend. buyPetItem commits the payment with the goods and
+     recovers a legacy receipt whose grant never landed, so
      nothing here needs to know about that. */
   el.querySelectorAll('[data-petbuy]').forEach(b => armToConfirm(b, 'Buy?', async () => {
     const id = b.dataset.petbuy, amt = +b.dataset.amt;
@@ -11239,6 +11243,7 @@ async function renderTrends(el) {
   const stepsWk = days7.reduce((a, d) => a + d.steps, 0);
   const kmWk = stepsWk * 0.000762;
   const sleepWk = days7.filter(d => d.sleepHours != null);
+  const hasSleep14 = days14.some(d => d.sleepHours != null);
   const avgSleep = sleepWk.length ? sleepWk.reduce((a, d) => a + d.sleepHours, 0) / sleepWk.length : null;
   /* Use the paying engine's full-history dates, including zero-calorie rows
      and its legacy freeze protection. Walking alone is not a food log.
@@ -11314,8 +11319,8 @@ async function renderTrends(el) {
     <div class="card-title">SLEEP · LAST 14 DAYS</div>
     <div class="big-stat"><span class="v">${avgSleep != null ? avgSleep.toFixed(1) : '·'}<span class="d" style="margin-left:4px">h avg (7d)</span></span></div>
     <div class="chart" id="sleepChart">${barChart(days14, d => d.sleepHours, { target: 8, color: 'var(--protein)', fmt: v => v.toFixed(0) + 'h', band: [7, 9] })}
-      <p class="bc-readout note">${sleepWk.length ? 'Tap any bar for that night.' : ''}</p></div>
-    <p class="note" style="margin-top:8px">${sleepWk.length ? 'Shaded band = 7 to 9 hours. Log your hours each morning on the home screen.' : 'Log hours slept on the home screen (Daily wellness) to start your sleep trend.'}</p>
+      <p class="bc-readout note">${hasSleep14 ? 'Tap any bar for that night.' : ''}</p></div>
+    <p class="note" style="margin-top:8px">${hasSleep14 ? 'Shaded band = 7 to 9 hours. Log your hours each morning on the home screen.' : 'Log hours slept on the home screen (Daily wellness) to start your sleep trend.'}</p>
   </div>
 
   <div class="card">
@@ -11579,12 +11584,13 @@ function metricSpark(vals, color) {
 }
 
 // full drill-in chart: bars, a dashed average baseline, best day highlighted green
-function metricDetailChart(points, metricKey) {
+function metricDetailChart(points, metricKey, summaryPoints = points) {
   const metric = TREND_METRICS[metricKey];
   const vals = points.map(p => p.value).filter(v => v != null);
   if (!vals.length) return '<p class="note" style="text-align:center;padding:26px 0">No readings in this window yet.</p>';
   const maxV = Math.max(...vals), minV = Math.min(...vals);
-  const base = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const summaryVals = summaryPoints.map(p => p.value).filter(v => v != null);
+  const base = summaryVals.reduce((a, b) => a + b, 0) / summaryVals.length;
   const lo = Math.min(minV, base) * 0.94, hi = Math.max(maxV, base) * 1.06, span = (hi - lo) || 1;
   const W = 360, H = 150, P = 8, gap = 3, n = points.length, bw = (W - 2 * P - gap * (n - 1)) / n;
   const y = v => P + (1 - (v - lo) / span) * (H - 2 * P - 16);
@@ -11668,7 +11674,8 @@ async function openMetricDetail(metricKey) {
   const bodyHtml = (rangeKey) => {
     const pts = metricSeries(metricKey, rangeKey, health, weights);
     const vals = pts.map(p => p.value).filter(v => v != null);
-    const shownDays = dates.filter(d => pts.some(p => p.date === d || p.month === d.slice(0, 7))).length;
+    const shownDates = dates.filter(d => pts.some(p => p.date === d || p.month === d.slice(0, 7)));
+    const shownDays = shownDates.length;
     const historyCount = `<p class="note">Showing ${shownDays} of ${dates.length} recorded days${rangeKey === 'year' ? ', as monthly averages' : ''}.${shownDays < dates.length ? ' Some recorded days are outside this window.' : ''}</p>`;
     if (!vals.length) return `${historyCount}<div class="trend-panel"><p class="note" style="text-align:center;padding:22px 0">No readings in this window yet. They will appear here as your watch syncs.</p></div>`;
     // stats exclude the in-progress current day for cumulative metrics (steps etc.)
@@ -11681,13 +11688,15 @@ async function openMetricDetail(metricKey) {
     const stat = (l, v) => `<div class="st"><div class="l">${l}</div><div class="v">${v}</div></div>`;
     let stats;
     if (metric.goodLow == null) { // weight: Average / Range / Latest
-      stats = stat('Average', `${metricNum(metricKey, avg)}<small> ${u}</small>`) + stat('Range', `${metricNum(metricKey, mn)}-${metricNum(metricKey, mx)}`) + stat('Latest', `${metricNum(metricKey, vals[vals.length - 1])}<small> ${u}</small>`);
+      stats = stat('Average', `${metricNum(metricKey, avg)}<small> ${u}</small>`) + stat('Range', `${metricNum(metricKey, mn)}-${metricNum(metricKey, mx)}`) + stat('Latest', `${metricNum(metricKey, byDate[shownDates[shownDates.length - 1]])}<small> ${u}</small>`);
     } else {
       const exLbl = metric.goodLow ? 'Lowest' : 'Highest', exVal = metric.goodLow ? mn : mx;
       stats = stat('Average', `${metricNum(metricKey, avg)}<small> ${u}</small>`) + stat('Range', `${metricNum(metricKey, mn)}-${metricNum(metricKey, mx)}`) + stat(exLbl, `${metricNum(metricKey, exVal)}<small> ${u}</small>`);
     }
-    return `${historyCount}<div class="trend-panel">${metricDetailChart(pts, metricKey)}
-      <p class="bc-readout note">Tap any bar for that day.</p></div><div class="trend-stats">${stats}</div>${metricInsight(metricKey, pts)}`;
+    // The dashed baseline and insight use the same completed-day sample as
+    // the summary. Today's running total stays visible and tappable.
+    return `${historyCount}<div class="trend-panel">${metricDetailChart(pts, metricKey, svals.length ? statPts : pts)}
+      <p class="bc-readout note">Tap any bar for that day.</p></div><div class="trend-stats">${stats}</div>${metricInsight(metricKey, statPts)}`;
   };
 
   const range0 = 'month';
@@ -11910,11 +11919,11 @@ async function openSleepDetail() {
     <div class="trend-scroll">
       <h2 style="margin:2px 40px 6px 0;font-size:19px">Sleep</h2>
       <div class="sleep-top">
-        <div class="sleep-score" style="color:${bandCol}">${sc}<small>/100</small></div>
+        <div class="sleep-score" style="color:${bandCol}">${sc == null ? '·' : `${sc}<small>/100</small>`}</div>
         <div class="sleep-meta"><b>${hm(asleep)} asleep</b><span>${when}${r.sleepAuto ? ' · auto from your watch' : ''}</span></div>
       </div>
       ${bar}
-      <p class="note" style="margin:14px 2px 2px">Your sleep score is Boneheadz's own read of ${staged ? 'how long and how well you slept (duration, deep, REM and how settled the night was)' : 'how long you slept'}. It feeds your daily readiness up top. Apple doesn't hand apps a sleep number, so this is our take on the same data your watch records.</p>
+      <p class="note" style="margin:14px 2px 2px">${sc == null ? 'Not enough sleep recorded to score. At least 3 hours are needed. This record does not contribute a sleep score to readiness.' : `Your sleep score is Boneheadz's own read of ${staged ? 'how long and how well you slept (duration, deep, REM and how settled the night was)' : 'how long you slept'}. It feeds your daily readiness up top. Apple doesn't hand apps a sleep number, so this is our take on the same data your watch records.`}</p>
     </div>`;
   openSheet(html, { cls: 'sheet-trend' });
 }
@@ -12650,7 +12659,13 @@ async function renderFriends(el) {
         $$('[data-gift]', giftList).forEach(b => b.addEventListener('click', async () => {
           if (b.dataset.busy === '1') return;
           b.dataset.busy = '1';
-          const g = await social.openGift(b.dataset.gift);
+          let g;
+          try { g = await social.openGift(b.dataset.gift); }
+          catch {
+            b.dataset.busy = '0';
+            toast('Could not open that gift. Try again.', 3400);
+            return;
+          }
           if (!g) { b.remove(); return; }
           b.classList.add('popping');
           await new Promise(r => setTimeout(r, 260));
@@ -13191,7 +13206,8 @@ async function renderFriends(el) {
     if (!r.ok) {
       toast(r.reached === false ? 'Could not reach the Crew server. Try again when you have signal.'
         : r.error === 'that is your own code' ? "That's your own code!"
-        : 'No Bonehead has that code. Double-check it.', 3200);
+        : r.error === 'no player with that code' ? 'No Bonehead has that code. Double-check it.'
+        : 'Could not send that request. Try again in a bit.', 3200);
       return;
     }
     inp.value = '';
@@ -13691,6 +13707,7 @@ async function renderFriends(el) {
       await paint();
     } else if (rem) {
       if (await social.removeFriend(rem.dataset.remove)) { toast('Removed.'); await paint(); }
+      else toast('Could not remove that friend. Try again.', 3200);
     }
   });
 
@@ -13873,6 +13890,7 @@ function openFriendProfile(f, onChange, opts = {}) {
   });
   $('#fpRemove', wrap)?.addEventListener('click', async () => {
     if (await social.removeFriend(f.playerId)) { toast('Removed.'); onChange && onChange(); history.back(); }
+    else toast('Could not remove that friend. Try again.', 3200);
   });
 }
 
@@ -13895,7 +13913,7 @@ async function openGiftSheet(f) {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Send a gift</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
-      <p class="note" style="margin:0 0 14px">To <b>${esc(f.alias || f.name)}</b>. Gifts land in their Backpack the next time they open the app.</p>
+      <p class="note" style="margin:0 0 14px">To <b>${esc(f.alias || f.name)}</b>. They open your gift in Crew the next time they use the app. Coins go to their balance; items go to their Backpack.</p>
       <div class="gift-free ${alreadyFree ? 'done' : ''}" id="giftFreeCard">
         <div class="gift-free-l"><div class="gift-free-t">${ICONS.coin(16)} Free daily gift</div><div class="note">A surprise drop: coins, a crate, sometimes an egg. Once a day per friend, on the house.</div></div>
         <button class="btn small" id="giftFree"${alreadyFree ? ' disabled' : ''}>${alreadyFree ? `Sent ${ICONS.check(11)}` : 'Send'}</button>
@@ -13955,10 +13973,14 @@ async function openGiftSheet(f) {
   $$('.gift-amt', wrap).forEach(b => armToConfirm(b, `Send ${b.dataset.amt}?`, async () => {
     if (b.disabled) return;
     const amt = +b.dataset.amt;
-    const have = await coins();
-    if (amt > have) { toast("You don't have that many coins."); return; }
     b.disabled = true;
-    await coinsAdd(-amt); // deduct locally first; refund if the send fails
+    // Check and debit together: two confirmed chips can otherwise both spend
+    // the same pre-send balance. Refund a refused send below as before.
+    if (await spendCoins(amt) === null) {
+      b.disabled = false;
+      toast("You don't have that many coins.");
+      return;
+    }
     if (!giftKeys.has(amt)) giftKeys.set(amt, social.newSendKey());
     const r = await social.sendGift(f.playerId, 'spend', amt, giftKeys.get(amt));
     if (r.ok) {
@@ -14902,7 +14924,7 @@ async function renderSettings(el) {
   const restoreLine = !restore ? ''
     : restore.restorable ? 'Restore it on any device with your recovery code.'
       : restore.why === 'no-backup' ? 'Nothing has backed up yet.'
-        : restore.why === 'no-recovery' ? 'Reinstalling THIS device brings it back automatically; a new device needs a recovery code, which is not set.'
+        : restore.why === 'no-recovery' ? 'A recovery code is not set. Set one before relying on recovery on another device.'
           : 'The cloud could not be reached to confirm this.';
   const backupAge = backupAt ? (Date.now() - backupAt < 36e5 ? 'just now' : Math.round((Date.now() - backupAt) / 36e5) + 'h ago') : 'never';
   /* A FAILED PUSH USED TO READ EXACTLY LIKE A HEALTHY ONE. pushBackup returned a
@@ -14958,13 +14980,13 @@ async function renderSettings(el) {
       <div class="lab"><b>Cloud backup</b><span>${backupLabel}</span></div>
       <div class="seg" style="width:130px"><button id="cbOn" class="${backupOn ? 'on' : ''}">On</button><button id="cbOff" class="${backupOn ? '' : 'on'}">Off</button></div>
     </div>
-    <p class="note" style="margin:8px 0 0">Your whole save backs up automatically, end-to-end <b>encrypted</b> so only your phone can read it (the server can't). ${restoreLine} Share your friend code so friends can add you.</p>`
+    <p class="note" style="margin:8px 0 0">When cloud backup is on, your whole save backs up automatically, end-to-end <b>encrypted</b> so only your phone can read it (the server can't). ${restoreLine} Share your friend code so friends can add you.</p>`
     : `
     <p class="note" style="margin:0 0 10px">Go online to back up your progress (end-to-end encrypted, only your phone can read it) and join the Crew: friend codes, and soon trading and PvP.</p>
     <button class="btn" id="goOnlineBtn">Go Online</button>
     <button class="btn small ghost" id="restoreAcctBtn" style="margin-top:8px">I already have an account</button>`}
     ${me ? `<div class="settings-row" style="margin-top:10px">
-      <div class="lab"><b>Recovery code</b><span>${recoverySet ? (myRid ? `Set. Restore anywhere with <b>${esc(myRid)}</b> and your phrase.` : 'Set. Add a recovery ID so you do not need your friend code to restore.') : 'NOT SET. Delete the app and this account is gone for good.'}</span></div>
+      <div class="lab"><b>Recovery code</b><span>${recoverySet ? (myRid ? `Set. Restore anywhere with <b>${esc(myRid)}</b> and your phrase.` : 'Set. Add a recovery ID so you do not need your friend code to restore.') : 'NOT SET. Set a recovery code to restore on another device.'}</span></div>
       <button class="btn small ${recoverySet ? 'ghost' : ''}" id="recoveryBtn">${recoverySet ? 'Change' : 'Set it'}</button>
     </div>` : ''}
     ${vaultRowHtml(vault)}
@@ -15288,19 +15310,22 @@ async function renderSettings(el) {
   $('#hkGuide')?.addEventListener('click', openHealthGuide);
   $('#hkSyncNow')?.addEventListener('click', syncFromClipboard);
   $('#exportBtn').addEventListener('click', async () => {
-    // On the native shells the WebView can't save a blob download, so don't fake
-    // success - your progress is already safe via the auto cloud backup. The file
-    // export is a web-only convenience.
-    if (isNative()) { toast('Your progress is auto-saved to the cloud (end-to-end encrypted). A downloadable file export is available in the web version.', 4600); return; }
-    const data = await exportAll();
-    const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `tally-backup-${dateKey()}.json`;
-    a.click();
-    await kvSet('lastExportAt', Date.now());
-    toast('Backup exported');
-    refresh(); // the "Never backed up yet" / "Last backup" row reads lastExportAt
+    // The native WebView cannot download a blob. This says nothing about
+    // whether cloud backup is enabled or has delivered a save.
+    if (isNative()) { toast('A downloadable file export is available in the web version. Check Cloud backup in Settings for your backup status.', 4600); return; }
+    try {
+      const data = await exportAll();
+      const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `tally-backup-${dateKey()}.json`;
+      a.click();
+      await kvSet('lastExportAt', Date.now());
+      toast('Backup exported');
+      refresh(); // the export row reads lastExportAt
+    } catch {
+      toast('Could not finish exporting the backup. Try again and check that a file was downloaded.', 4600);
+    }
   });
   $('#importBtn').addEventListener('click', () => $('#importFile').click());
   $('#importFile').addEventListener('change', async e => {
@@ -15346,24 +15371,29 @@ async function renderSettings(el) {
     go.addEventListener('click', async () => {
       if (input.value.trim().toUpperCase() !== 'ERASE') return;   // belt and braces
       go.disabled = true; go.textContent = 'Erasing...';
-      await social.forgetIdentity();   // else the vault re-adopts this account on the next boot
-      /* EVERY store db.js defines, never a hand-copied list, and in ONE
-         transaction, and with every OTHER TAB stopped first.
-         The literal that used to sit here had six of the seven names: 'inv'
-         was missing, so an erase kept the entire inventory (crates, gear,
-         cosmetics, pets) and wiped only the kv flag recording that the welcome
-         kit had been paid. Inventory was strictly non-decreasing across an
-         erase and every erase-then-reonboard handed out another kit.
-         The seven-transaction loop that replaced it was still not true with the
-         app open twice: driven with a second tab writing, the erase finished
-         and left 30 inv rows, a kv row and 150 coins standing, and this tab
-         then reloaded onto a save it thought it had destroyed. db.js's
-         eraseAll() freezes the other tabs, waits for them to confirm it, clears
-         every store together, and tells them to reload. Measured against a
-         second tab writing continuously: zero rows in every store.
-         See js/db.js STORES and eraseAll. */
-      await eraseAll();
-      location.reload();
+      try {
+        await social.forgetIdentity();   // else the vault re-adopts this account on the next boot
+        /* EVERY store db.js defines, never a hand-copied list, and in ONE
+           transaction, and with every OTHER TAB stopped first.
+           The literal that used to sit here had six of the seven names: 'inv'
+           was missing, so an erase kept the entire inventory (crates, gear,
+           cosmetics, pets) and wiped only the kv flag recording that the welcome
+           kit had been paid. Inventory was strictly non-decreasing across an
+           erase and every erase-then-reonboard handed out another kit.
+           The seven-transaction loop that replaced it was still not true with the
+           app open twice: driven with a second tab writing, the erase finished
+           and left 30 inv rows, a kv row and 150 coins standing, and this tab
+           then reloaded onto a save it thought it had destroyed. db.js's
+           eraseAll() freezes the other tabs, waits for them to confirm it, clears
+           every store together, and tells them to reload. Measured against a
+           second tab writing continuously: zero rows in every store.
+           See js/db.js STORES and eraseAll. */
+        await eraseAll();
+        location.reload();
+      } catch {
+        go.disabled = false; go.textContent = 'Erase it all';
+        toast('Could not erase the local save. Try again.', 4200);
+      }
     });
   });
   /* Account deletion (App Store 5.1.1(v)). Same typed-confirm pattern as Erase.
@@ -15383,19 +15413,30 @@ async function renderSettings(el) {
       </div>
       <div class="t1-foot"><button class="btn danger-ish" id="daGo" disabled>Delete account</button></div>`, { cls: 't1', name: 'DeleteAccount' });
     const input = $('#daIn', wrap), go = $('#daGo', wrap);
+    let cloudDeleted = false;
     input.addEventListener('input', () => { go.disabled = input.value.trim().toUpperCase() !== 'DELETE'; });
     go.addEventListener('click', async () => {
       if (input.value.trim().toUpperCase() !== 'DELETE') return;   // belt and braces
       go.disabled = true; go.textContent = 'Deleting...';
-      const res = await social.deleteAccount();
-      if (!res.ok) {
+      try {
+        if (!cloudDeleted) {
+          const res = await social.deleteAccount();
+          if (!res.ok) {
+            go.disabled = false; go.textContent = 'Delete account';
+            toast('Could not confirm account deletion with the server. Your local save is unchanged. Try again when you are online.', 4600);
+            return;
+          }
+          cloudDeleted = true;
+        }
+        await social.forgetIdentity();   // clear the vault before wiping this device
+        await eraseAll();
+        location.reload();
+      } catch {
         go.disabled = false; go.textContent = 'Delete account';
-        toast('Could not reach the server. Nothing was deleted. Try again when you are online.', 3600);
-        return;
+        toast(cloudDeleted
+          ? 'Your cloud account was deleted, but this phone could not finish clearing its local save. Tap Delete account again to retry local cleanup.'
+          : 'Could not confirm account deletion. Your local save is unchanged. Try again.', 5600);
       }
-      await social.forgetIdentity();   // else the vault re-adopts the dead identity on the next boot
-      await eraseAll();                // the same everything-in-one-transaction wipe Erase uses
-      location.reload();
     });
   });
   // Force-fetch the latest build: drop the service worker + all caches, then
@@ -15713,7 +15754,7 @@ function renderOnboarding(step = 0, ctx = {}) {
         <button class="onb-reroll" id="onbReroll" aria-label="New name">${t1Stroke(18, '<path d="M20 11a8 8 0 1 0-2.3 6.3"/><path d="M20 5v6h-6"/>')}</button>
       </div>
       <div class="onb-earns">
-        <div class="onb-earn"><span class="ic">${ICONS.star(18)}</span><b>LOG FOOD</b><small>XP, every meal</small></div>
+        <div class="onb-earn"><span class="ic">${ICONS.star(18)}</span><b>LOG FOOD</b><small>XP: first ${XP_DAILY_CAP.log} logs today</small></div>
         ${/* pixCur first, like its two siblings: ICONS.star and ICONS.pit both ask
              18 and both serve the 16 step, so a vector egg here left one of three
              icons in a three-icon row drawn in a different medium. */''}
@@ -15875,10 +15916,10 @@ async function commitLogEntry(e, btn, via = null) {
      So the commit asks the clock first. If the roll moved the day, a FRESH row
      built for the day that just ended follows it; an edit (a row already in the
      store) keeps the day it was eaten on. The timer stays for the idle case. */
-  const dayBefore = S.date;
-  await rollDayIfNeeded();
-  if (S.date !== dayBefore && e.date === dayBefore && !(await db.get('log', e.id))) e.date = S.date;
   try {
+    const dayBefore = S.date;
+    await rollDayIfNeeded();
+    if (S.date !== dayBefore && e.date === dayBefore && !(await db.get('log', e.id))) e.date = S.date;
     // L5: entitlement travels with the meal's first write. A copied row gets
     // its own intent; a backdated edit cannot acquire a new reward entitlement.
     const previous = await db.get('log', e.id);
@@ -18029,10 +18070,17 @@ async function renderCharacter(wrap, tab, opts = {}) {
       openHatchReveal(res, wrap);
     }));
     $$('[data-open]', content).forEach(b => b.addEventListener('click', async () => {
+      if (b.disabled) return;
       b.disabled = true;
-      const result = await openCrate(b.dataset.open);
-      await openCrateReveal(result);
-      renderCharacter(wrap, 'crates');
+      try {
+        const result = await openCrate(b.dataset.open);
+        await openCrateReveal(result);
+      } catch {
+        toast('Could not finish opening. Your Backpack has the saved result. Try again if the crate is still there.', 4000);
+      } finally {
+        b.disabled = false;
+        renderCharacter(wrap, 'crates');
+      }
     }));
     $$('[data-open-all]', content).forEach(b => b.addEventListener('click', async () => {
       b.disabled = true;
@@ -18281,7 +18329,13 @@ function wireLootChoice(scope, claimFn, onDone) {
   keep?.addEventListener('click', async () => {
     if (!sel || busy) return;
     busy = true;
-    const picked = await claimFn(sel);
+    let picked;
+    try { picked = await claimFn(sel); }
+    catch {
+      busy = false;
+      toast('Could not save your gear choice. Please try Keep again.', 3600);
+      return;
+    }
     if (!picked) { busy = false; return; }
     // the piece you KEPT stays bright + gets a "kept" ring; the one you left
     // behind greys out. (Previously inverted: it greyed the kept one.)
@@ -24300,7 +24354,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v526'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v527'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
