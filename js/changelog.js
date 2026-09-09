@@ -9,6 +9,10 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 541, date: '2026-09-09', title: 'Off-hand art back to where it was', items: [
+    'The off-hand toothbrush and spade artwork is restored to its state before the rejected adjustment. The underlying hand misalignment remains open and unfixed.',
+  ] },
+
   { n: 540, date: '2026-09-09', title: 'The Boneyard scrolls again', items: [
     'The Boneyard intro and location error screens now allow scrolling as text grows.',
   ] },

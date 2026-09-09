@@ -1,8 +1,14 @@
-/* PURE: full-census hand registration on B0-1. No browser, writes or offsets.
- * Ink is alpha > 30. Boxes are half-open. Dilation uses four neighbors
- * (Manhattan distance), reproducing the frozen 3584px IL core and 203..2510
- * healthy ring band. A ring floor catches detached art, not every bad grip:
- * the pre-fix spades already pass it. See docs/offhand-registration/.
+/* SOURCE-ONLY DIAGNOSTIC, retained during the v536 revert (2026-09-09).
+ * A source composite is not evidence of rendered registration. This scores
+ * 640x640 master PNG ink against B0-1 in source coordinates, not the shipping
+ * avatar renderer. It cannot prove on-body alignment or a correct grip.
+ * The original floor, controls, census and failure exit are unchanged. Restored
+ * pre-v536 brushes fail this historical floor; that is expected, not evidence
+ * that the rejected offsets should return. No useful rendered-registration
+ * assertion remains here. Proposed follow-up: remove this as a release guard
+ * and replace it with measurements of the final artifact in the shipping
+ * renderer. Keep it present and red until that change is explicitly reviewed.
+ * Ink is alpha > 30; boxes are half-open; dilation is Manhattan distance.
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -78,6 +84,7 @@ assert.equal(control[322 * SIZE + 322], 4, 'CONTROL dilation is Manhattan, not s
 assert.equal(Array.from(control).filter(d => d <= 14 && d > 2).length, 408, 'CONTROL ring area');
 assert.equal(passes(149), false, 'CONTROL below floor rejected');
 assert.equal(passes(150), true, 'CONTROL floor accepted');
+console.log('SOURCE-ONLY: not evidence of rendered registration; historical assertions retained.');
 console.log('PASS CONTROL Manhattan dilation and ring boundary 149 FAIL / 150 PASS');
 
 const body = readPng(path.join(ROOT, 'assets/bh/B/B0-1.png'));
@@ -114,5 +121,5 @@ for (const { slot, box, coreSize, count } of slots) {
   }
   console.log(`${slot}: ${clean}/${files.length} pass`);
 }
-console.log(`hand registration: ${failed} FAILED`);
+console.log(`source-composite diagnostic (not rendered registration): ${failed} FAILED`);
 process.exitCode = failed ? 1 : 0;

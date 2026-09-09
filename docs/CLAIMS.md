@@ -1,5 +1,12 @@
 # What each patch note claims, and what backs it
 
+
+## v541 (2026-09-09)
+
+Changelog item: The off-hand brushes and spades are back to how they looked before the last change.
+
+1. PROOF: hand-registration-audit.mjs | REACH: Tom, on the live build: "you made the offhand problem worse now the shovel tooth bursh and flag are further off the bonehead wtf". v536 translated four off-hand masters (IL10-1/2 by +30,+104 and IL17-1/2 by +44,+68) on the strength of a Python composite over assets/bh/B/B0-1.png. That is NOT the renderer the app ships and no screenshot of the real avatar was ever taken, which is exactly what the verification contract forbids. All thirteen files (four masters, eight 192/384 thumbnails, one trim) are restored to their pre-v536 bytes, verified by git hash-object against the v535 blobs, four of four masters matching. tests/hand-registration-audit.mjs is demoted in the same commit: it grades a source composite and its header now says so, because it cannot evidence rendered registration. THE UNDERLYING DEFECT IS STILL OPEN: the off-hand items were misaligned before v536 and are misaligned again now. This change only removes a regression that made it worse; it is not a fix, and the CHANGELOG says so in the player's words.
+
 ## v540 (2026-09-09)
 
 Changelog item: The Boneyard intro and location error screens now allow scrolling as text grows.
