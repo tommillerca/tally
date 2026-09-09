@@ -1478,6 +1478,7 @@ async function boot() {
   // Explain and stop before reads, migrations, cloud recovery, or lifecycle setup.
   if (!(await storageStatus()).ok) { renderStorageUnavailable(); return; }
   // Register before boot can write, including migrations and demo seeding.
+  social.onResponseFailure(message => toast(message, 8000, { error: true }));
   const interruptedSave = takeSaveInterruption();
   onWriteFailure(({ store, key, op, quiet, quota, error }) => {
     quota ||= storageIsFull(error);

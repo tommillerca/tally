@@ -54,6 +54,7 @@ const ctx = vm.createContext({ ...art, ...pets, ...anim,
   sparkIco: () => '<svg></svg>',
 });
 const pieces = [
+  cut(social, '// Validate parsed responses', '/* ---------------- account').replaceAll('export ', ''),
   cut(app, 'async function socialSnapshot()', '// Push the public profile snapshot'),
   cut(social, 'export async function syncProfile(', '/* ---------------- full encrypted backup').replace('export ', ''),
   cut(social, 'export async function listFriends()', '// Incoming friend requests').replace('export ', ''),
@@ -90,7 +91,7 @@ for (const [name, id, shiny, morph, wear] of rows) {
     assert.deepEqual(stored.pet, input.pet, 'sanitized pet fields');
     assert.deepEqual(stored.yard.wear, Object.keys(wear).length ? wear : null, 'sanitized wardrobe');
     serverCtx.me = 'viewer';
-    serverCtx.row = { a: 'viewer', b: 'friend', status: 'accepted', b_profile: JSON.stringify(stored) };
+    serverCtx.row = { a: 'viewer', b: 'friend', status: 'accepted', b_handle: 'Skull', b_profile: JSON.stringify(stored) };
     const friend = vm.runInContext('shape(row)', serverCtx);
     assert.deepEqual(clean(friend.profile), stored, 'accepted friend profile');
     response = { friends: [friend], incoming: [], outgoing: [] };

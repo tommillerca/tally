@@ -386,6 +386,65 @@ async function signedFetch(method, path, bodyObj = null, fetchOpts = {}) {
   });
 }
 
+// Validate parsed responses before any state, ownership or receipt can change.
+// Match the local db.onWriteFailure idiom: the UI owns the disclosure sink.
+let responseFailureSink = null;
+export function onResponseFailure(fn) { responseFailureSink = typeof fn === 'function' ? fn : null; }
+const bodyObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+const bodyText = v => typeof v === 'string' && v.length > 0;
+const bodyCount = v => Number.isSafeInteger(v) && v >= 0;
+const bodyLevel = v => bodyCount(v) && v > 0;
+const bodyNullable = (v, test) => v === null || test(v);
+const bodyOptional = (v, key, test) => !(key in v) || test(v[key]);
+const bodyList = (v, test) => Array.isArray(v) && v.every(test);
+const bodyPerson = v => bodyObject(v) && bodyText(v.playerId) && bodyText(v.name);
+const bodyProfile = v => bodyNullable(v, p => bodyObject(p)
+  && ['level', 'badges', 'gearCount'].every(k => bodyOptional(p, k, x => bodyNullable(x, bodyCount)))
+  && ['outfit', 'pet', 'stats'].every(k => bodyOptional(p, k, x => bodyNullable(x, bodyObject))));
+const bodyReward = p => bodyObject(p)
+  && ['coins', 'dust', 'xp', 'cheer', 'place', 'steps'].every(k => bodyOptional(p, k, bodyCount))
+  && ['crate', 'consumable', 'egg', 'gearId', 'pet', 'note', 'from', 'cheerFrom', 'rename'].every(k => bodyOptional(p, k, bodyText));
+const bodySpire = s => bodyObject(s) && bodyText(s.id) && bodyText(s.name)
+  && bodyLevel(s.level) && bodyCount(s.claimedAt) && bodyCount(s.tendedAt)
+  && bodyNullable(s.siegeUntil, bodyCount) && bodyNullable(s.siegeName, bodyText)
+  && bodyNullable(s.owner, bodyText) && bodyNullable(s.ownerName, bodyText)
+  && typeof s.mine === 'boolean' && bodyProfile(s.defender);
+const bodyBoardPlayer = p => bodyPerson(p) && bodyLevel(p.level) && typeof p.you === 'boolean'
+  && bodyProfile(p) && bodyOptional(p, 'addToken', v => bodyNullable(v, bodyText))
+  && ['lastSeen', 'joinedAt', 'spires', 'spireDays'].every(k => bodyOptional(p, k, bodyCount));
+const RESPONSE_BODIES = {
+  register: d => bodyText(d.playerId) && bodyText(d.handle) && bodyText(d.friendCode)
+    && bodyOptional(d, 'name', v => bodyNullable(v, bodyText)),
+  name: d => d.ok === true && bodyText(d.name),
+  friends: d => ['friends', 'incoming', 'outgoing'].every(k => bodyList(d[k], p => bodyPerson(p)
+    && bodyText(p.handle) && bodyProfile(p.profile)))
+    && bodyOptional(d, 'truncated', t => bodyObject(t) && ['friends', 'incoming', 'outgoing'].every(k => typeof t[k] === 'boolean')),
+  spires: d => bodyList(d.spires, bodySpire),
+  claim: d => d.ok === true && bodyLevel(d.level)
+    && (d.already === true || bodyNullable(d.tookFrom, bodyText))
+    && bodyOptional(d, 'already', v => typeof v === 'boolean'),
+  race: d => bodyText(d.week) && bodyCount(d.racers) && bodyNullable(d.yourRank, bodyLevel)
+    && bodyList(d.players, p => bodyBoardPlayer(p) && bodyLevel(p.rank) && bodyCount(p.steps))
+    && bodyReward(d.prize) && bodyList(d.podium, p => bodyObject(p) && bodyCount(p.coins)
+      && bodyCount(p.dust) && bodyText(p.crate) && bodyText(p.place))
+    && bodyNullable(d.champion, p => bodyObject(p) && bodyText(p.name) && bodyCount(p.steps) && bodyText(p.week)),
+  settled: d => bodyText(d.week) && bodyList(d.podium, p => bodyObject(p) && bodyLevel(p.place)
+    && bodyText(p.name) && bodyCount(p.steps) && bodyCount(p.coins) && bodyCount(p.dust)
+    && bodyNullable(p.crate, bodyText) && bodyNullable(p.outfit, bodyObject)),
+  defend: d => d.ok === true && bodyLevel(d.level),
+  leaderboard: d => bodyList(d.players, bodyBoardPlayer),
+  grants: d => bodyCount(d.cursor) && bodyList(d.grants, g => bodyObject(g) && bodyLevel(g.id)
+    && bodyText(g.key) && bodyText(g.type) && bodyCount(g.ts) && bodyReward(g.payload))
+    && (d.grants.length === 0 || d.cursor === d.grants[d.grants.length - 1].id),
+};
+async function readResponseBody(response, kind, action) {
+  const data = await response.json();
+  if (bodyObject(data) && RESPONSE_BODIES[kind](data)) return data;
+  const message = `Could not ${action}. The Crew server sent an incomplete reply. Try again in a bit.`;
+  try { responseFailureSink?.(message); } catch { /* disclosure cannot turn refusal into success */ }
+  throw new Error('bad-body');
+}
+
 /* ---------------- account ---------------- */
 export async function isOnline() { return !!(await apiBase()) && !!(await kvGet('social', null)); }
 export async function socialMe() { return kvGet('social', null); }
@@ -442,7 +501,7 @@ async function registerKey(id, { retryDelayMs = 600 } = {}) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ pubkey: id.pubJwk, ...(driven() ? { run: `webdriver ${new Date().toISOString()}` } : {}) }),
       });
-      if (r.ok) return { ok: true, me: await r.json() };
+      if (r.ok) return { ok: true, me: await readResponseBody(r, 'register', 'finish Crew signup') };
       if (r.status !== 429 || attempt === 1) return { ok: false, reason: 'register-failed', status: r.status };
       await new Promise(resolve => setTimeout(resolve, retryDelayMs));
     } catch { return { ok: false, reason: 'network' }; }
@@ -556,7 +615,7 @@ export async function setName(adj, noun, num) {
       return { ok: false, reason: 'taken', name: d.name, suggestNum: d.suggestNum ?? null };
     }
     if (!r.ok) return { ok: false };
-    const data = await r.json();
+    const data = await readResponseBody(r, 'name', 'save your name');
     const me = (await kvGet('social', null)) || {};
     me.name = data.name; await kvSet('social', me);
     // a rename we asked for is now satisfied; never ask again
@@ -669,7 +728,7 @@ export async function listFriends() {
       }
       return unreached;
     }
-    data = await r.json();
+    data = await readResponseBody(r, 'friends', 'load your Crew');
   }
   catch { return unreached; }
   const aliases = (await kvGet('friendAliases', null)) || {};
@@ -716,7 +775,7 @@ export async function fetchSpires(ids) {
   try {
     const r = await signedFetch('GET', `/spires?ids=${encodeURIComponent(ids.join(','))}`);
     if (!r.ok) return null;
-    return (await r.json()).spires || [];
+    return (await readResponseBody(r, 'spires', 'check these towers')).spires;
   } catch { return null; }
 }
 
@@ -733,7 +792,7 @@ export async function claimSpireRemote(spire) {
       return { ok: false, reason: b.error === 'shielded' ? 'shielded' : 'cap', until: b.until || 0, cap: b.cap || 3 };
     }
     if (!r.ok) return { ok: false, reason: 'server' };
-    return await r.json();
+    return await readResponseBody(r, 'claim', 'confirm the tower claim');
   } catch { return { ok: false, reason: 'offline' }; }
 }
 
@@ -762,8 +821,9 @@ export async function fetchStepRace(weekKey) {
       await kvSet('raceFail', null);
       return null;
     }
+    const data = await readResponseBody(r, 'race', 'load the step race');
     await kvSet('raceFail', null);
-    return await r.json();
+    return data;
   } catch { return null; }
 }
 
@@ -846,7 +906,7 @@ export async function fetchSettledRace(weekKey) {
     if (!(await isOnline())) return null;
     const r = await signedFetch('GET', `/steps/settled?week=${encodeURIComponent(weekKey)}`);
     if (!r.ok) return null;
-    return (await r.json()).podium || [];
+    return (await readResponseBody(r, 'settled', 'load the race results')).podium;
   } catch { return null; }
 }
 
@@ -875,7 +935,7 @@ export async function defendSpireRemote(id) {
       const b = await r.json().catch(() => ({}));
       return { ok: false, reason: b.reason || 'server' };
     }
-    return await r.json();
+    return await readResponseBody(r, 'defend', 'confirm the tower defense');
   } catch { return { ok: false, reason: 'offline' }; }
 }
 
@@ -901,8 +961,9 @@ export async function leaderboard() {
       await kvSet('lbFail', null);
       return null;
     }
+    const data = await readResponseBody(r, 'leaderboard', 'load the leaderboard');
     await kvSet('lbFail', null);
-    return (await r.json()).players || [];
+    return data.players;
   } catch { return null; }
 }
 
@@ -1299,7 +1360,12 @@ export async function pullGrants() {
   const since = (await kvGet('grantCursor', 0)) || 0;
   const r = await signedFetch('GET', `/grants?since=${since}`);
   if (!r.ok) return { applied: 0 };
-  const data = await r.json();
+  let data;
+  try { data = await readResponseBody(r, 'grants', 'check your Crew deliveries'); }
+  catch (error) {
+    if (error.message === 'bad-body') return { applied: 0, reason: 'bad-body' };
+    throw error;
+  }
   let applied = 0, heldCount = 0;
   const appliedGrants = []; // the grants that actually landed (for the reveal UI)
   const seen = new Set((await kvGet('grantsSeen', [])) || []);
