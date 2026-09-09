@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { webcrypto } from 'node:crypto';
 const root = process.argv[2] || fileURLToPath(new URL('..', import.meta.url));
 const app = readFileSync(`${root}/js/app.js`, 'utf8');
 const sources = await import(pathToFileURL(`${root}/js/sources.js`));
@@ -19,7 +20,7 @@ function fn(name) {
   return app.slice(start, app.indexOf('\n}', start) + 2);
 }
 function load(names, context = {}) {
-  const c = vm.createContext(context);
+  const c = vm.createContext({ crypto: webcrypto, ...context });
   vm.runInContext(names.map(fn).join('\n'), c);
   return c;
 }

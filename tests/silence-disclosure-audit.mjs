@@ -8,11 +8,14 @@ import { db, kvGet, kvSet, kvUpdate, useDbName, onWriteFailure } from '../js/db.
 
 const app = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 const memory = new Map();
-globalThis.sessionStorage = {
+globalThis.localStorage = {
+  get length() { return memory.size; },
+  key: i => [...memory.keys()][i] ?? null,
   getItem: key => memory.get(key) ?? null,
   setItem: (key, value) => memory.set(key, String(value)),
   removeItem: key => memory.delete(key),
 };
+globalThis.sessionStorage = globalThis.localStorage;
 let failure = null, hold = false;
 const realOpen = indexedDB.open;
 indexedDB.open = (...args) => {
@@ -49,7 +52,7 @@ function ui(extra = {}) {
     get textContent() { return this.text; },
   };
   const c = vm.createContext({
-    ...notices, sessionStorage, kvGet, onWriteFailure, $: () => el, reducedMotion: true,
+    ...notices, sessionStorage, localStorage, kvGet, onWriteFailure, $: () => el, reducedMotion: true,
     trackEvent() {}, lastWriteFailToast: -Infinity, WRITE_FAIL_QUIET_MS: 8000,
     setTimeout(fn) { timers.set(++id, fn); return id; }, clearTimeout(i) { timers.delete(i); },
     ...extra,
@@ -176,20 +179,20 @@ await check('an interrupted in-flight write discloses uncertainty on return', as
   await new Promise(resolve => setImmediate(resolve));
   hold = false;
   // The original promise never settles, modelling termination before its callback.
-  assert.equal(sessionStorage.getItem('tally-save-state'), 'pending');
+  assert.ok([...memory.entries()].some(([key, value]) => key.startsWith('tally-save-state:') && value === 'pending'));
   const returned = ui({ takeSaveInterruption: fresh.takeSaveInterruption }); boot(returned);
   errorPaint(returned, /ended before a save was confirmed.*Check your saved progress/);
 });
-await check('refused session storage does not prevent the live failure disclosure', () => {
-  const saved = globalThis.sessionStorage;
-  globalThis.sessionStorage = { setItem() { throw Error('denied'); }, removeItem() { throw Error('denied'); }, getItem() { throw Error('denied'); } };
+await check('refused journal storage does not prevent the live failure disclosure', () => {
+  const saved = globalThis.localStorage;
+  globalThis.localStorage = { get length() { throw Error('denied'); }, setItem() { throw Error('denied'); }, removeItem() { throw Error('denied'); }, getItem() { throw Error('denied'); } };
   try {
     const token = notices.beginSave(); notices.finishSave(token);
     assert.equal(notices.takeSaveInterruption(), null);
     const u = ui(); boot(u);
     vm.runInContext(`toast(writeFailureCopy(false), 8000, { error: true })`, u.c);
     errorPaint(u, /progress did not save.*export a backup/);
-  } finally { globalThis.sessionStorage = saved; }
+  } finally { globalThis.localStorage = saved; }
 });
 
 onWriteFailure(null);

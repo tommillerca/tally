@@ -30,7 +30,7 @@ Impact: the player cannot retry within the sheet and receives no explanation of 
 
 Fix: catch failures, restore the buttons and explain the outcome. Delete retains the successful cloud result in the open sheet, so retry performs local cleanup without sending another account-deletion request. The audit verifies that all 125 coins survive the aborted transaction, no reload occurs, retry clears every store, and exactly one server-deletion call is made across the two taps.
 
-Limits: the successful-cloud flag belongs to this sheet and does not survive closing it or restarting the app. Durable recovery of a partially completed account deletion remains outside this fix. Native vault errors remain governed by the existing best-effort `forgetIdentity()` behavior. Multi-tab freeze/reload behavior was not exercised by this audit.
+Limits: the successful-cloud flag belongs to this sheet and does not survive closing it or restarting the app. Durable recovery of a partially completed account deletion remains outside this fix. Native vault errors remain governed by the existing best-effort `forgetIdentity()` behavior. Multi-tab freeze/reload behavior was not exercised by this original audit. The R4-6 follow-up now exercises an aborted erase, peer disclosure, reload recovery and the successful erase control using production database modules with an in-process BroadcastChannel double; physical browser timing remains unverified.
 
 **3. Export failures have no player-facing result. Fixed.**
 
@@ -129,3 +129,13 @@ Ignored environment addition: `node_modules/esprima`, verified version 4.0.1. Pa
 No permission denial occurred. Missing dependencies temporarily blocked four checks and were resolved offline. No browser, socket binding, deployment, remote Wrangler invocation, production D1 write, secret setting, commit, push, publication or PR was attempted. `native/ASC-SUBMISSION.md`, artwork and original checkouts were untouched. Existing native preflight audits ran only their local disposable fixtures.
 
 No implementation deviation was silently made. The unresolved replacement policy and proposed preservation approach are disclosed in finding 1. Full visual layout, hit targets, real native file delivery, native vault removal, live cloud behavior and multi-tab timing remain unverified. Cosmetic and layout issues could not be seen and are not claimed as findings. The fixes and this report remain advisory for the independent reviewer.
+
+
+R4-6 follow-up (2026-09-09): an aborted erase previously left the other tab showing its intact save while every write failed with the false claim that it was erased, and no toast. `tests/r4-silence-audit.mjs` reproduced that failure before production changes. Erase failures now broadcast their outcome, the peer's error toast says the erase attempt failed and saving is paused, and it directs the player to reload. The guard retains 125 coins after the abort, checks the peer toast before another write, then proves a fresh module can save 126 coins. Its successful erase control still clears the save and requests peer reloads. See `docs/R4-SILENCE-REPORT.md` for full proof and limitations.
+
+Finish-checkout verification (2026-09-09): the failed-erase source fix was
+already present, while its named R4 guard was missing. The reconstructed guard
+passes the aborted multi-tab transaction, proactive error-toast callback,
+125-coin preservation, reload recovery to 126 coins and successful erase
+control. Historical pre-fix reproduction above was not independently observed
+in this checkout. See `R4-FINISH-REPORT.md` for current evidence and limits.

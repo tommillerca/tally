@@ -2,7 +2,25 @@
 // changes. Newest first. Written in plain language (no build numbers in the copy
 // itself) - the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
+// Pending train notes. The operator assigns a build number and moves these
+// into CHANGES when assembling the release. No version stamp is advanced here.
+export const NEXT_CHANGES = [
+];
+
 export const CHANGES = [
+
+  { n: 535, date: '2026-09-09', title: 'Ten things that were quietly costing you', items: [
+  'Shop cosmetics no longer charge Bone Dust a second time to wear. Football garments include all 32 team colourways.',
+  'Foraging in the Kitchen saves the coin payment and ingredient together. A failed save keeps your coins.',
+  'The Boneyard clears an old driving-speed reading after GPS has been silent for 20 seconds.',
+  'The next-day arrow stops at today. Future food entries cannot earn XP, crates or level-up rewards.',
+  'Turning Cloud backup off also stops profile uploads. Your Crew row and leaderboard entry stop updating until you turn it back on.',
+  'A failed-save warning survives closing the tab or restarting the app when device storage survives.',
+  'If erasing fails in another tab, that tab says saving is paused and tells you to reload to continue.',
+  'Restoring the same unfinished food entry no longer repeats its error notice on every launch.',
+  'A device without a Crew account no longer gets a warning claiming its Crew profile is behind.',
+  'The Boneyard water classifier backs off failed tile requests and retries after an outage without another lookup.',
+  ] },
 
   { n: 534, date: '2026-09-09', title: 'Bumbleseal costs what it is worth', items: [
     'Bumbleseal was 50,000 coins from the shop, back when that was the only way to get one. It hatches from ordinary eggs now, so it costs 5,000. If you paid the old price, the 45,000 difference is back in your wallet and you keep the pet and everything you did with it.',

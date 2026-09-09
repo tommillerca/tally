@@ -1,5 +1,5 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, storageStatus, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG, dayIsUnwitnessed } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, payAtomic, newId, exportAll, importAll, STORES, useDbName, storageStatus, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG, dayIsUnwitnessed } from './db.js';
 import { validateImport, fileReplacementPreview, readFileSave, sameSaveRows, saveFileRestorePoint, fileRestorePoints, restoreFileSave } from './db.js';
 import { takeSaveInterruption, interruptionCopy, writeFailureCopy, ERASED_COPY, stepSyncStatus, healthSyncInfo, healthSyncCopy } from './save-disclosure.js';
 import { haptic, setHaptics } from './haptics.js';
@@ -1499,9 +1499,9 @@ async function boot() {
     try { trackEvent('write_fail', { store, key, op, quiet, quota }); } catch { /* reporting cannot hide the disclosure */ }
     if (quiet) return;
     const now = Date.now();
-    if (now - lastWriteFailToast < WRITE_FAIL_QUIET_MS) return;
+    if (now - lastWriteFailToast < WRITE_FAIL_QUIET_MS && !error?.wipeBlocked) return;
     lastWriteFailToast = now;
-    toast(writeFailureCopy(quota), 8000, { error: true });
+    toast(writeFailureCopy(quota, error), 8000, { error: true });
   });
   if (interruptedSave) toast(interruptionCopy({ save: interruptedSave }), 8000, { error: true });
   saveWitness.settings ||= !!S.settings;
@@ -1684,17 +1684,17 @@ async function boot() {
   const interruptedFight = await kvGet('pitFight', null);
   const interruptedDraft = await kvGet('addDraft', null);
   const unfinished = interruptionCopy({ fight: interruptedFight, draft: interruptedDraft });
-  // Once per unchanged interrupted action in this tab, including later reloads.
+  // Once per interrupted action, including later reloads and fresh tabs.
   if (unfinished) {
     let seen = false;
     try {
-      const evidence = JSON.stringify([interruptedFight?.phase, interruptedFight?.mode, interruptedFight?.at, interruptedDraft?.ts]);
-      seen = sessionStorage.getItem('tally-interruption-seen') === evidence;
-      sessionStorage.setItem('tally-interruption-seen', evidence);
+      const evidence = JSON.stringify([interruptedFight?.phase, interruptedFight?.mode, interruptedFight?.at, interruptedDraft?.id ?? interruptedDraft?.ts]);
+      seen = localStorage.getItem('tally-interruption-seen') === evidence;
+      localStorage.setItem('tally-interruption-seen', evidence);
     } catch { /* unavailable storage: show the evidence-backed notice */ }
     if (!seen) toast(unfinished, 10000, { error: true });
   } else {
-    try { sessionStorage.removeItem('tally-interruption-seen'); } catch { /* unavailable */ }
+    try { localStorage.removeItem('tally-interruption-seen'); } catch { /* unavailable */ }
   }
 
   /* FIRST PAINT COMES BEFORE THE AWARDING WORK, NOT AFTER IT.
@@ -4935,7 +4935,7 @@ async function renderToday(el) {
       <h1>${title}</h1><div class="sub">${sub}</div>
     </div>
     <button class="icon-btn" id="prevDay" aria-label="Previous day" ${S.date <= firstDate ? 'disabled' : ''}><svg viewBox="0 0 24 24"><path d="M14.5 5l-7 7 7 7"/></svg></button>
-    <button class="icon-btn" id="nextDay" aria-label="Next day"><svg viewBox="0 0 24 24"><path d="M9.5 5l7 7-7 7"/></svg></button>
+    <button class="icon-btn" id="nextDay" aria-label="Next day" ${S.date >= dateKey() ? 'disabled' : ''}><svg viewBox="0 0 24 24"><path d="M9.5 5l7 7-7 7"/></svg></button>
     <button class="icon-btn" id="todaySettings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke-width="2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2z" fill="none" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
   </div>
 
@@ -5059,7 +5059,7 @@ async function renderToday(el) {
   $('[data-interrupted-pit]', el)?.addEventListener('click', () => openPit());
   $('#todaySettings', el)?.addEventListener('click', () => { location.hash = '#/settings'; });
   $('#prevDay').addEventListener('click', () => { if (S.date <= firstDate) return; S.date = addDays(S.date, -1); refresh(); });
-  $('#nextDay').addEventListener('click', () => { S.date = addDays(S.date, 1); refresh(); });
+  $('#nextDay').addEventListener('click', () => { if (S.date >= dateKey()) return; S.date = addDays(S.date, 1); refresh(); });
   $('#lvlChip').addEventListener('click', () => { location.hash = '#/progress'; });
   $('#trendsBtn').addEventListener('click', () => { location.hash = '#/progress'; });
   /* GWART SPEAKS. Both halves of what Tom asked for, and they are the same one
@@ -8792,10 +8792,17 @@ async function openKitchen() {
     });
     armToConfirm($('#forageBtn', body), 'Spend 45?', async () => {
       const FORAGE_COST = 45;
-      if ((await coins()) < FORAGE_COST) { toast('Not enough coins to forage. Walk the Boneyard for free ingredients.', 3000); return; }
-      await coinsAdd(-FORAGE_COST);
       const ing = COMMON_INGREDIENT_IDS[Math.floor(Math.random() * COMMON_INGREDIENT_IDS.length)];
-      await grantIngredient(ing);
+      const bought = await payAtomic({ snapshot: { keys: ['coins'] }, decide: state => {
+        const balance = Number(state.coins) || 0;
+        if (balance < FORAGE_COST) return { result: false };
+        return { kv: {
+          coins: () => balance - FORAGE_COST,
+          coinsRev: cur => (Number(cur) || 0) + FORAGE_COST,
+          ingredients: inv => ({ ...(inv || {}), [ing]: ((inv && inv[ing]) || 0) + 1 }),
+        }, result: true };
+      } });
+      if (!bought) { toast('Not enough coins to forage. Walk the Boneyard for free ingredients.', 3000); return; }
       popSound(S.sounds);
       toast(`Foraged ${INGREDIENTS[ing].icon} ${INGREDIENTS[ing].name}.`, 2400);
       render();
@@ -8992,7 +8999,7 @@ async function restoreAddDraft() {
   const d = await kvGet('addDraft', null);
   if (!addDraftUsable(d) || currentTab() !== 'today' || sheetStack.length) return;
   const meal = await mealDefault();   // L10: the one precedence; a usable draft's meal wins here
-  openAdd(meal, d.q || '');
+  openAdd(meal, d.q || '', d.id ?? d.ts);
   /* Only a food findFood still resolves (built-in or custom): an online result
      lived in S.onlineCache, which the reload emptied. The query is kept either
      way, so the search is one Enter from being back. */
@@ -9058,7 +9065,7 @@ function setChipOn(chips, c) {
   chips.forEach(x => { const on = x === c; x.classList.toggle('on', on); x.setAttribute('aria-pressed', String(on)); });
 }
 
-function openAdd(meal = 0, q0 = '') {
+function openAdd(meal = 0, q0 = '', draftId = null) {
   const wrap = openSheet(`
     <div class="sheet-head">
       <div class="hd"><h2>Add food</h2></div>
@@ -9081,7 +9088,7 @@ function openAdd(meal = 0, q0 = '') {
       <div id="resultsCount" class="sr-only" aria-live="polite"></div>
       <div id="results" role="region" aria-label="Results"></div>
     </div>`, { cls: 'full t1', onClose: () => { clearAddDraft(); window.removeEventListener('online', onOnline); } });
-  addDraft = { sheet: 'add', q: '', meal };   // M16: the flow is live; stamps write from here
+  addDraft = { sheet: 'add', q: '', meal, id: draftId ?? crypto.randomUUID() };   // M16: the flow is live; stamps write from here
 
   // the number you are deciding against. Async so the sheet opens instantly.
   dayBudget().then(b => {
@@ -15250,7 +15257,7 @@ async function renderSettings(el) {
   });
   $('#cbOff', el)?.addEventListener('click', async () => {
     await social.setCloudBackup(false);
-    toast('Cloud backup off. Your progress will only live on this phone.', 3600);
+    toast('Cloud backup off. Your progress will only live on this phone. Your Crew row and leaderboard entry stop updating.', 6500);
     renderSettings(el);
   });
   $('#copyCode', el)?.addEventListener('click', async () => {
@@ -15956,7 +15963,7 @@ async function commitLogEntry(e, btn, via = null) {
     // its own intent; a backdated edit cannot acquire a new reward entitlement.
     const previous = await db.get('log', e.id);
     e.foodXp = previous?.foodXp?.date === e.date ? previous.foodXp
-      : e.date >= dateKey() ? { id: e.id, date: e.date, via, targets: S.settings.targets } : null;
+      : e.date === dateKey() ? { id: e.id, date: e.date, via, targets: S.settings.targets } : null;
     await db.put('log', e);
   } catch (err) {
     /* A FAILED WRITE MUST NOT LOOK LIKE A SAVED MEAL.
@@ -22970,7 +22977,14 @@ async function renderBoneyard(el) {
     // when the device reports it, else derived from raw position deltas. ~8 m/s
     // = ~29 km/h: comfortably above running/cycling, clearly a vehicle.
     const MAX_LOOT_SPEED = 8;
-    let youSpeed = 0, lastFix = null;
+    // Accepted fixes are throttled at 1200 ms, cached for at most 3000 ms,
+    // and time out at 20000 ms. Allow that full timeout before expiring speed.
+    const SPEED_STALE_MS = 20000;
+    let youSpeed = 0, lastFix = null, lastSpeedFixAt = 0;
+    const currentLootSpeed = () => {
+      if (Date.now() - lastSpeedFixAt > SPEED_STALE_MS) { youSpeed = 0; lastFix = null; }
+      return youSpeed;
+    };
     // the open den Fight/Flee prompt, if any, so a live GPS fix can withdraw it
     // once the player has walked out of range (see the watchPosition handler)
     let denPrompt = null;
@@ -23507,7 +23521,7 @@ async function renderBoneyard(el) {
         // the anti-cheat gate the tap handlers get, silently: being DRIVEN past
         // him must not start a fight, and a toast every 5 seconds from a moving
         // car is not a message, it is a fault.
-        if (youSpeed > MAX_LOOT_SPEED) continue;
+        if (currentLootSpeed() > MAX_LOOT_SPEED) continue;
         if (document.getElementById('arena')) continue;   // a fight is already on screen
         wandererEngaged.add(w.id);
         startWandererEncounter(w, rec.el);
@@ -23890,7 +23904,7 @@ async function renderBoneyard(el) {
       // readout + collect button (drive off the near field, not distant beacons)
       const reachable = live.filter(s => !s.far);
       const nearest = reachable.length ? reachable.reduce((a, b) => (a.dist < b.dist ? a : b)) : null;
-      const tooFast = youSpeed > MAX_LOOT_SPEED;
+      const tooFast = currentLootSpeed() > MAX_LOOT_SPEED;
       const inRange = !!(nearest && nearest.dist <= COLLECT_RADIUS_M);
       /* THE BAR IS FOR THINGS AT YOUR FEET. Tom, 2026-08-08: "clicking the bottom
          thing that says herb patch 105m away doesnt tell me what the herb patch
@@ -23949,7 +23963,7 @@ async function renderBoneyard(el) {
 
     // Anti-cheat gate shared by every map interaction: no looting/fighting from
     // a moving vehicle. Returns true (and nags) when you're going too fast.
-    const tooFastToAct = () => { if (youSpeed > MAX_LOOT_SPEED) { toast('Slow down. You can\'t loot or fight from a moving vehicle.', 2800); return true; } return false; };
+    const tooFastToAct = () => { if (currentLootSpeed() > MAX_LOOT_SPEED) { toast('Slow down. You can\'t loot or fight from a moving vehicle.', 2800); return true; } return false; };
 
     $('#mapDen', body)?.addEventListener('click', async () => {
       if (tooFastToAct()) return;
@@ -24246,6 +24260,8 @@ async function renderBoneyard(el) {
       if (!body.isConnected) { cleanup(); return; }
       // travel speed for the anti-cheat gate: prefer the device's own GPS speed,
       // fall back to raw position delta / dt, then smooth it.
+      currentLootSpeed(); // clear the old smoothing sample before the first returning fix
+      lastSpeedFixAt = now;
       const raw = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       let sp = (pos.coords.speed != null && pos.coords.speed >= 0) ? pos.coords.speed
         : (lastFix && dt > 0 ? distanceM(lastFix.lat, lastFix.lng, raw.lat, raw.lng) / dt : 0);
@@ -24502,7 +24518,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v534'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v535'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

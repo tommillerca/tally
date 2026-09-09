@@ -71,7 +71,9 @@ const identity = {
 await kvSet('apiBase', API);
 await kvSet('identity', identity);
 await kvSet('social', { playerId: id });
-await kvSet('cloudOff', true);
+// R4: authentication controls must opt in now that profile uploads honor Off.
+await kvSet('cloudOff', false);
+await kvSet('backupAt', Date.now()); // Keep this profile/auth audit off the backup route.
 const oldSeen = Date.now() - 3 * 86400000;
 sql.prepare('INSERT INTO players (id,pubkey,handle,friend_code,created_at,last_seen) VALUES (?,?,?,?,?,?)')
   .run(id, JSON.stringify(identity.pubJwk), 'Local Player', 'BONE-TEST-AUTH', oldSeen - 60 * 86400000, oldSeen);

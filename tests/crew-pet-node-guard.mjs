@@ -40,7 +40,7 @@ const ctx = vm.createContext({ ...art, ...pets, ...anim, ...syncHealth,
   petInstances: async () => [{ sp: input.pet.id, shiny: input.pet.shiny, morph: input.pet.morph }],
   petWear: async () => input.wear, championTitle: async () => '',
   platformTag: () => 'web', RACE_RULES: 1,
-  kvGet: async () => ({}), kvSet: async () => {},
+  kvGet: async (_key, fallback) => fallback, kvSet: async () => {},
   // Transport is replaced at signedFetch, before any network can be used.
   signedFetch: async (method, path, body) => {
     if (method === 'PUT') {

@@ -1,5 +1,54 @@
 # What each patch note claims, and what backs it
 
+## v535 (2026-09-09)
+
+Pending entries in `js/changelog.js` (`NEXT_CHANGES`), in matching order. These
+are unversioned train notes. Existing shipped entries and version stamps remain
+unchanged. Source fixes were already present on arrival; the four named audit
+files were missing and have been reconstructed. See `R4-FINISH-REPORT.md` for
+starting evidence, final proof and limitations.
+
+Changelog item: Shop cosmetics no longer charge Bone Dust a second time to wear. Football garments include all 32 team colourways.
+
+1. PROOF: r4-app-p1-audit.mjs | REACH: R4-1: Real drop, football and bundle purchases persist slot:artId credits, preserve existing credits and debit the quoted price. Helmet, jersey and cleats each credit all 32 colourways. Unfunded purchases grant nothing.
+
+Changelog item: Foraging in the Kitchen saves the coin payment and ingredient together. A failed save keeps your coins.
+
+2. PROOF: r4-app-p1-audit.mjs | REACH: R4-2: The real forage confirmation callback uses payAtomic. Aborting the ingredient write retains wallet and pantry, emits no success receipt, and allows retry. Concurrent taps cannot spend one 45-coin balance twice.
+
+Changelog item: The Boneyard clears an old driving-speed reading after GPS has been silent for 20 seconds.
+
+3. PROOF: r4-app-p1-audit.mjs | REACH: R4-19: Production speed gates retain fresh driving restrictions and expire after the 20-second watch timeout. The first returning stationary fix clears stale smoothing history. The watch throttles at 1.2 seconds and permits a 3-second cached fix. Physical GPS behavior remains device proof.
+
+Changelog item: The next-day arrow stops at today. Future food entries cannot earn XP, crates or level-up rewards.
+
+4. PROOF: r4-app-p1-audit.mjs | REACH: R4-22: Execute the disabled expression and click handler at today, after today and yesterday. Five future logs grant zero XP, inventory rewards or level-up events; future reward recovery is refused. The production entitlement expression refuses new future intents. Today still earns XP.
+
+Changelog item: Turning Cloud backup off also stops profile uploads. Your Crew row and leaderboard entry stop updating until you turn it back on.
+
+5. PROOF: cloud-off-audit.mjs | REACH: R4-13/R4-16: Real pet-garment callback, debounce, local wardrobe and profile transport send zero requests when off. Direct/shared calls and opt-out during snapshot preparation are guarded. Settings and the off toast name the stale Crew row and leaderboard. Re-enabling reaches a rejecting server boundary and discloses HTTP 500.
+
+Changelog item: A failed-save warning survives closing the tab or restarting the app when device storage survives.
+
+6. PROOF: r4-silence-audit.mjs | REACH: R4-11: Discard the complete journal VM and its session storage. A fresh context sharing only localStorage reads the failed-save notice. Confirmed saves stay quiet and a second successful writer cannot clear the failed writer. OS-kill simulation, not physical iOS evidence.
+
+Changelog item: If erasing fails in another tab, that tab says saving is paused and tells you to reload to continue.
+
+7. PROOF: r4-silence-audit.mjs | REACH: R4-6: Abort the production erase transaction over mem-idb. The peer receives the production error-toast callback before another write, retains 125 coins and gives truthful failure/reload wording. A fresh module writes 126 coins. Successful erase still clears the save and requests peer reloads.
+
+Changelog item: Restoring the same unfinished food entry no longer repeats its error notice on every launch.
+
+8. PROOF: r4-silence-audit.mjs | REACH: R4-12: N=4 fresh launch contexts run production disclosure, restore, identity initialization and stamping. Timestamps change but action identity survives. Exactly one error notice appears. Routine error furniture taxes the credibility of failure disclosures.
+
+Changelog item: A device without a Crew account no longer gets a warning claiming its Crew profile is behind.
+
+9. PROOF: r4-silence-audit.mjs | REACH: R4-14: Four failed outcomes in each account state produce different exact notice strings. The missing-account branch reuses the existing Settings sentence; the existing-account branch retains profile-sync guidance.
+
+Changelog item: The Boneyard water classifier backs off failed tile requests and retries after an outage without another lookup.
+
+10. PROOF: water-retry-audit.mjs | REACH: R4-20, classifier only: A boot TileJSON outage and a tile-only outage recover queued classifier tiles without walking or another lookup. Retained URLs use a 15-second base doubling to a 120-second ceiling with 0 to 20% downward jitter. Healthy delivery stops retries. Visible MapLibre recovery is unresolved, see R4-FINISH-REPORT.md.
+
+
 ## v534 (2026-09-09)
 
 1. PROOF: c6-price-audit.mjs | REACH: C6 Bumbleseal cost 50,000 coins while being obtainable free from the ordinary egg pool. Repriced to 5,000, and anyone who paid the old price is credited the 45,000 difference exactly once, keeping their pet and all progress. Measured from production analytics before the change: `buy_pet` with `{"id":"C6","cost":50000}` fired 5 times across 5 distinct devices, so the refund population is small and the entitlement, not a server count, decides who is owed. A replayed refund grants nothing, an aborted credit burns no entitlement and can retry, and a player who hatched C6 free is owed nothing.

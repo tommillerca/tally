@@ -678,12 +678,12 @@ async function streakAwards(streak, { deliverCrates = false } = {}) {
 // A level crossed by this log is announced by awardOnce's `bh-levelup` event, not here.
 export async function onFoodLogged(entry, { via = null, targets = null, entriesForDate = [] } = {}) {
   /* REWARDS PAY FOR TODAY ONLY (Tom, 2026-09-05). Past days stay editable (people
-     forget to log), but a log dated before dateKey() -- the device's own local
-     calendar day, never a UTC ordinal -- earns none of this function's rewards:
+     forget to log), but a log dated outside dateKey() (the device's own local
+     calendar day, never a UTC ordinal) earns none of this function's rewards:
      no log/firstlog/scan/label/protein/meals3 XP, no streak award, no badge
      evaluation. Editing an existing TODAY entry already pays nothing beyond its
      first log (the ref-keyed dedupe in awardCapped/award), unaffected by this. */
-  if (entry.date < dateKey()) {
+  if (entry.date !== dateKey()) {
     return { xp: 0, total: await totalXp(), newBadges: [], streakMilestone: null, streak: 0, boosted: false, crates: 0 };
   }
   return finishFoodLogged(entry, { via, targets, entriesForDate });
@@ -765,7 +765,7 @@ async function recoverFoodLogs() {
   const done = new Set((await db.all('kv')).filter(r => r.k.startsWith('foodXpDone:') && r.v === true).map(r => r.k));
   for (const entry of log) {
     const intent = entry.foodXp;
-    if (!intent || intent.id !== entry.id || intent.date !== entry.date || done.has(`foodXpDone:${entry.id}`)) continue;
+    if (!intent || intent.id !== entry.id || intent.date !== entry.date || entry.date > dateKey() || done.has(`foodXpDone:${entry.id}`)) continue;
     await finishFoodLogged(entry, { via: intent.via, targets: intent.targets,
       entriesForDate: log.filter(e => e.date === intent.date) });
   }
