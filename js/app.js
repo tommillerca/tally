@@ -11732,7 +11732,15 @@ async function openMetricDetail(metricKey) {
     const statPts = (cumulative && rangeKey !== 'year' && pts.length > 1) ? pts.slice(0, -1) : pts;
     const svals = statPts.map(p => p.value).filter(v => v != null);
     const useVals = svals.length ? svals : vals;
-    const avg = useVals.reduce((a, b) => a + b, 0) / useVals.length, mn = Math.min(...useVals), mx = Math.max(...useVals);
+    // Year bars and Average remain monthly means. Range and extremes use
+    // the recorded daily readings inside those months, never their means.
+    // Other ranges retain the completed-day sample and today-only fallback.
+    const extremeVals = rangeKey === 'year' ? shownDates.map(d => byDate[d]) : useVals;
+    const avg = useVals.reduce((a, b) => a + b, 0) / useVals.length;
+    const mn = Math.min(...extremeVals), mx = Math.max(...extremeVals);
+    const quantities = rangeKey === 'year'
+      ? `<p class="note">Average is the mean of the monthly averages. Range and extremes use recorded daily readings.${metric.goodLow == null ? ' Latest is the latest reading in this window.' : ''}</p>`
+      : '';
     const u = metricUnit(metricKey);
     const stat = (l, v) => `<div class="st"><div class="l">${l}</div><div class="v">${v}</div></div>`;
     let stats;
@@ -11745,7 +11753,7 @@ async function openMetricDetail(metricKey) {
     // The dashed baseline and insight use the same completed-day sample as
     // the summary. Today's running total stays visible and tappable.
     return `${historyCount}<div class="trend-panel">${metricDetailChart(pts, metricKey, svals.length ? statPts : pts)}
-      <p class="bc-readout note">Tap any bar for that day.</p></div><div class="trend-stats">${stats}</div>${metricInsight(metricKey, statPts)}`;
+      <p class="bc-readout note">Tap any bar for that ${rangeKey === 'year' ? 'monthly average' : 'day'}.</p></div><div class="trend-stats">${stats}</div>${quantities}${metricInsight(metricKey, statPts)}`;
   };
 
   const range0 = 'month';
@@ -24518,7 +24526,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v537'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v538'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

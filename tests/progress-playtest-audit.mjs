@@ -203,6 +203,37 @@ await test('P2 Year weight Latest is the latest weigh-in, not its monthly mean',
   assert.equal(stat(html, 'Latest')?.trim(), '90.0', `Latest ${stat(html, 'Latest')}; latest saved weight 90.0`);
   return 'monthly bar 80.0 kg; Latest 90.0 kg';
 });
+await test('R4-23 Year extremes use readings and disclose monthly-mean averages', async () => {
+  for (const [key, values, label, expected] of [
+    ['steps', [3784, 14570], 'Highest', '14,570'],
+    ['restingHr', [48, 60], 'Lowest', '48'],
+    ['hrv', [20, 80], 'Highest', '80'],
+  ]) {
+    const e = await detail(key, values.map((value, i) => ({ date: `2026-09-0${i + 1}`, [key]: value })));
+    const html = e.switch('year');
+    assert.equal(stat(html, label)?.trim(), expected, `${key}: extremes must use recorded days`);
+    assert.equal(stat(html, 'Range'), values.map(v => v.toLocaleString()).join('-'));
+    assert(html.includes('Average is the mean of the monthly averages'));
+    assert(html.includes('Range and extremes use recorded daily readings'));
+  }
+  const e = await detail('weight', [], [
+    { date: '2025-08-01', kg: 1 }, // outside the 12-month window
+    { date: '2026-08-01', kg: 100 },
+    { date: '2026-09-01', kg: 70 }, { date: '2026-09-08', kg: 90 },
+  ]);
+  for (const units of ['kg', 'lb']) {
+    e.ctx.S.settings.units = units;
+    const fmt = v => (units === 'kg' ? v : N.kgToLb(v)).toFixed(1);
+    const html = e.switch('year');
+    assert.equal(stat(html, 'Range'), `${fmt(70)}-${fmt(100)}`);
+    assert.equal(stat(html, 'Average')?.trim(), fmt(90), 'mean of monthly means 100 and 80');
+    assert.equal(stat(html, 'Latest')?.trim(), fmt(90));
+    assert(html.includes('Latest is the latest reading in this window'));
+  }
+  const today = await detail('steps', [{ date: '2026-09-08', steps: 123 }]);
+  assert.equal(stat(today.switch('year'), 'Highest')?.trim(), '123');
+  return 'steps 14,570; heart 48; HRV 80; weight 70-100 kg, both units; window and today-only controls';
+});
 await test('P3 short sleep does not present a null score as a number', async () => {
   await reset();
   await D.db.put('health', { date: '2026-09-08', sleepMin: 35, sleepHours: 35 / 60, sleepAuto: true });

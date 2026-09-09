@@ -376,6 +376,8 @@ PURE.push('boneyard-zoom-audit.mjs'); // Real view boot/teardown and scoped came
 PURE.push('lab-conflict-audit.mjs'); // Offline pet/slot collisions, encrypted reconnect, retained receipts and honest recovery copy; Node only.
 PURE.push('lab-lock-recovery-audit.mjs'); // Lab fence recovers after a mid-transaction crash, incl. nickname-first and auto-equip.
 PURE.push('r3-rest-audit.mjs'); // R3-8 backup body, R3-4 refusal copy, R3-5 destroy gate, R3-6 dead guard.
+PURE.push('verify-tail-audit.mjs'); // Frozen tail: honest anchor comments and missing-acorn exit 97.
+PURE.push('cloud-optout-transport-audit.mjs'); // All-request counter and direct opt-out paths; browser autoSync conflict remains disclosed.
 PURE.push('r4-restore-audit.mjs'); // R4-7/R4-9: quota-bounded history, exact undo and isolated malformed entries. R4-10 separately remains blocked by the frozen app.js boundary.
 PURE.push('reachable-density-audit.mjs'); // R4-21: guards the shared reachability METER with dense/sparse controls; shipped spacing is a deferred MODEL finding.
 PURE.push('native-shell-comment-audit.mjs'); // R4-21: remote iOS shell cannot claim a wrapped web build; mutation controls.

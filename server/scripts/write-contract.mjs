@@ -1,5 +1,6 @@
 // Source-derived SQL write contract. No migration or schema.sql column list.
-import { parse } from 'acorn';
+import { importAuditPackage } from '../../tests/lib/audit-dependencies.mjs';
+const { parse } = await importAuditPackage('acorn');
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
