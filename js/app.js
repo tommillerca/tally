@@ -1,5 +1,6 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
 import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, storageStatus, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG, dayIsUnwitnessed } from './db.js';
+import { validateImport, fileReplacementPreview, readFileSave, sameSaveRows, saveFileRestorePoint, fileRestorePoints, restoreFileSave } from './db.js';
 import { takeSaveInterruption, interruptionCopy, writeFailureCopy, ERASED_COPY, stepSyncStatus, healthSyncInfo, healthSyncCopy } from './save-disclosure.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
@@ -15015,7 +15016,8 @@ async function renderSettings(el) {
   <div class="card">
     <div class="card-title">YOUR DATA</div>
     <div class="settings-row"><div class="lab"><b>Export backup</b><span>${exportAgo == null ? 'Never backed up yet' : exportAgo === 0 ? 'Last backup: today' : `Last backup: ${exportAgo} day${exportAgo === 1 ? '' : 's'} ago`}</span></div><button class="btn small ghost" id="exportBtn">Export</button></div>
-    <div class="settings-row"><div class="lab"><b>Import backup</b><span>Restore from a Boneheadz Gym export</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
+    <div class="settings-row"><div class="lab"><b>Import backup</b><span>Review what will be replaced. A restore point is required before importing.</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
+    <div class="settings-row"><div class="lab"><b>Restore points</b><span>Return to a save kept before a file import, on this device. Erase all data also removes these.</span></div><button class="btn small ghost" id="filePointsBtn">Review</button></div>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
     <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights, gear</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
     ${me ? `<div class="settings-row"><div class="lab"><b>Delete account &amp; cloud data</b><span>Removes your cloud account, friends + backup</span></div><button class="btn small danger" id="delAcctBtn">Delete</button></div>` : ''}
@@ -15348,6 +15350,7 @@ async function renderSettings(el) {
     }
   });
   $('#importBtn').addEventListener('click', () => $('#importFile').click());
+  $('#filePointsBtn').addEventListener('click', openFileRestorePoints);
   $('#importFile').addEventListener('change', async e => {
     const file = e.target.files[0];
     e.target.value = ''; // so re-picking the same file fires change again
@@ -22110,33 +22113,110 @@ function importSummary(counts) {
   return 'Restored ' + andJoin(parts);
 }
 
-/* THE one file-import path, shared by Settings > Import and the restore sheet
-   (which onboarding opens). Routing and copy only: importAll owns the actual
-   restore and is untouched. Lands the player on Today afterwards; a restore
-   mid-onboarding also ends onboarding, exactly like a successful cloud restore. */
+/* File imports and local undo share the pet review's explicit acknowledgement.
+   Each accepted replacement gets a new, independently stored restore point. */
 async function importBackupFromFile(file) {
-  const wasOnb = saveRecoveryActive || !S.settings;   // recovery also needs the shell rebound
-  let counts;
   try {
-    counts = await importAll(JSON.parse(await file.text()));
+    const data = JSON.parse(await file.text());
+    validateImport(data);
+    const current = await readFileSave();
+    const next = fileReplacementPreview(current, data);
+    openFileReplacementReview(data, current, next);
   } catch (err) {
-    /* A wrong pick is a SyntaxError out of JSON.parse or importAll's own
-       'Not a Tally backup file' shape check; both mean "not our file", and the
-       raw parser message ("Unexpected token...") is useless to a player.
-       Every other importAll failure carries player-facing copy: pass it on. */
     const wrongFile = err instanceof SyntaxError || /Not a Tally backup/i.test(err.message || '');
     toast(wrongFile
       ? "That doesn't look like a Boneheadz Gym backup. Pick the .json file you exported."
-      : 'Import failed: ' + err.message, 4200);
-    return;
+      : 'Import failed: ' + err.message, 6200);
   }
+}
+
+function fileReplacementHtml(current, next) {
+  const words = { coins: 'Coins', bonedust: 'Bone Dust', petInst: 'Pets', petNick: 'Pet nicknames', petBonds: 'Pet bonds', petLvlSteps: 'Pet level steps', pettalents: 'Pet talents' };
+  const label = k => words[k] || k.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]/g, ' ');
+  const value = v => v === undefined ? 'absent' : v === null ? 'none' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+  const change = (name, before, after) => {
+    const loss = typeof before === 'number' && (typeof after === 'number' || after === undefined) && before > (after || 0)
+      ? ` (${before - (after || 0)} lost)` : '';
+    return `<li><b>${esc(name)}</b>: ${esc(value(before))} → ${esc(value(after))}${esc(loss)}</li>`;
+  };
+  const fields = (before, after, path) => {
+    if (sameSaveRows([{v:before}], [{v:after}])) return '';
+    if (before && typeof before === 'object' && !Array.isArray(before)) {
+      return Object.keys(before).map(k => fields(before[k], after?.[k], `${path} / ${label(k)}`)).join('');
+    }
+    return change(path, before, after);
+  };
+  const sections = [];
+  for (const store of STORES) {
+    const before = current[store], after = next[store];
+    if (sameSaveRows(before, after)) continue;
+    const key = store === 'kv' ? 'k' : store === 'xp' ? 'key' : ['weights', 'health'].includes(store) ? 'date' : 'id';
+    const byKey = new Map(after.map(r => [r[key], r]));
+    const details = before.map(row => {
+      const other = byKey.get(row[key]);
+      if (sameSaveRows([row], other ? [other] : [])) return '';
+      if (store === 'kv') {
+        // Credentials and signed receipts must never be printed in a dialog.
+        if (/identity|social|history|merge|receipt|token|secret|apiBase/i.test(row.k)) return `<li>${esc(label(row.k))}: saved record ${other ? 'changes' : 'removed'}.</li>`;
+        return fields(row.v, other?.v, label(row.k));
+      }
+      const name = row.name || row.petId || row.kind || row[key];
+      return fields(row, other, String(name));
+    }).join('');
+    sections.push(`<h3>${esc(STORE_WORDS[store])}: ${before.length} → ${after.length} records</h3><ul>${details || '<li>New records from the backup.</li>'}</ul>`);
+  }
+  return `<p>This replaces the save on this device. Current values → values after replacement:</p>${sections.join('') || '<p>No current records change.</p>'}<p>A restore point of your current save must be saved first. If storage is full or unavailable, replacement is blocked. Afterwards, use Settings → Restore points to return. Points stay on this device until Erase all data or Delete account removes them.</p>`;
+}
+
+function openFileReplacementReview(data, current, next, undo = false) {
+  return openPetDestructionReview({
+    title: undo ? 'Return to this restore point?' : 'Replace your save with this file?',
+    html: fileReplacementHtml(current, next), typed: true,
+    accepts: text => text.trim().toUpperCase() === 'REPLACE',
+    prompt: 'Type REPLACE to confirm these changes', action: 'Replace save',
+    commit: async () => {
+      try {
+        // Synchronous verified storage write completes before any import opens.
+        saveFileRestorePoint(current);
+        if (undo) {
+          await restoreFileSave(data, current);
+          location.reload(); // Also refresh if the review was dismissed while storage was committing.
+          return { message: 'Restore point recovered. The save you just left is also kept in Restore points.' };
+        }
+        const counts = await importAll(data, { replace: true, expectedFileState: current });
+        await finishFileImport(counts);
+        return { message: 'Backup restored. Return through Settings → Restore points.' };
+      } catch (err) {
+        const message = 'Import failed: ' + err.message + ' Existing restore points remain available in Settings → Restore points.';
+        toast(message, 7200);
+        return { message };
+      }
+    },
+  });
+}
+
+async function openFileRestorePoints() {
+  try {
+    const points = fileRestorePoints();
+    const wrap = openSheet(`<div class="sheet-head"><h2>Restore points</h2><button class="sheet-close">Done</button></div><div class="sheet-body"><p>Each point is the save before a replacement on this device. Returning also keeps your current save.</p>${points.length ? points.map((p, i) => `<button class="btn ghost" data-file-point="${i}">Review save from ${esc(new Date(p.createdAt).toLocaleString())}</button>`).join('') : '<p>No file restore points saved yet.</p>'}</div>`, { name: 'FileRestorePoints' });
+    for (let i = 0; i < points.length; i++) {
+      $(`[data-file-point="${i}"]`, wrap).addEventListener('click', async () => {
+        try { const current = await readFileSave(); openFileReplacementReview(points[i].data, current, points[i].data, true); }
+        catch (err) { toast('Could not read the save: ' + err.message, 6200); }
+      });
+    }
+  } catch (err) { toast('Could not read restore points: ' + err.message, 6200); }
+}
+
+async function finishFileImport(counts) {
+  const wasOnb = saveRecoveryActive || !S.settings;
   S.settings = await kvGet('settings') || (wasOnb ? null : S.settings);
   saveWitness = { settings: !!S.settings, loot: !!(await kvGet('loot-init', false)) };
   snapSettings();
   S.userFoods = await db.all('foods');
   await hydrateGenericUse(); // L3: generic use + stars back onto GENERIC_FOODS
   closeAllSheetsViaHistory();   // no-op when no sheet is open (Settings > Import)
-  toast(importSummary(counts), 4200);
+  toast(importSummary(counts) + '. Your previous save is kept in Settings → Restore points.', 7200);
   if (wasOnb) {
     /* A real export always carries settings; if this one somehow did not,
        onboarding stays on screen and finishes normally over the imported data.
@@ -22164,10 +22244,12 @@ async function openRestoreSheet() {
       <p class="rc-err" id="rsErr" hidden></p>
       <button class="btn" id="rsGo" style="margin-top:14px">Restore my Bonehead</button>
       <p class="note" style="margin:16px 2px 0;text-align:center">Got a backup file instead? Use the .json you exported from Settings.</p>
+      <button class="btn ghost" id="rsPointsBtn" style="margin-top:8px">Review local restore points</button>
       <button class="btn ghost" id="rsFileBtn" style="margin-top:8px">Restore from a backup file</button>
       <input type="file" id="rsFile" accept="application/json,.json" hidden>
     </div>`, { cls: '', name: 'Restore' });
   const err = m => { const e = $('#rsErr', wrap); e.hidden = !m; e.textContent = m || ''; };
+  $('#rsPointsBtn', wrap).addEventListener('click', () => openFileRestorePoints());
   $('#rsFileBtn', wrap).addEventListener('click', () => $('#rsFile', wrap).click());
   $('#rsFile', wrap).addEventListener('change', async e => {
     const file = e.target.files[0];
