@@ -46,7 +46,7 @@ export const PET_ASSIGN = {
      includes a stinger and a sting is a bite that leaves poison, which is the
      hound passive in one sentence. Tom owns this call; it is here so she can
      fight at all, not because the family was designed for her. */
-  C6: 'hound',    // Bumbleseal (Gwart's Emporium, 50,000 coins)
+  C6: 'hound',    // Bumbleseal (ordinary eggs or Gwart's Emporium, 5,000 coins)
 };
 export function familyOf(petId) {
   const family = Object.hasOwn(PET_ASSIGN, petId) ? PET_ASSIGN[petId] : 'hound';
@@ -190,7 +190,7 @@ export const PET_STATS = {
      documented above as deliberately below the epic C1 (1.27) and the legendary
      C2 (1.36). Nothing new to balance, because nothing new was introduced. She is
      sold for coins and the house rule is that money never buys power. */
-  C6: { rarity: 'legendary', mult: 1.15, tilt: { power: 1.04, marrow: 1.06, reflex: 1.0 } }, // Bumbleseal: prestige, not power
+  C6: { rarity: 'legendary', mult: 1.15, tilt: { power: 1.04, marrow: 1.06, reflex: 1.0 } }, // Combat power: the C6 sale remains a cosmetic-only rule violation.
 };
 // Shiny (the ultra-rare recolour) is no longer purely cosmetic: it grants a small
 // flat bump to every stat so a shiny pull is a genuine power upgrade, not a skin.

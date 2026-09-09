@@ -272,9 +272,8 @@ export const RACK_REROLL_LADDER = [0, 1000, 2000, 4000, 8000, 16000];
  *
  * WHAT IS DELIBERATELY NOT IN THE POOL, each for its own reason rather than by
  * taste, because a silent allow-list is how the wrong thing ends up for sale:
- *   slot C            pets are hatched, not bought. C6 (Bumbleseal) is the one
- *                     Tom named as shop-only and she has her own 1% hatch, so
- *                     putting her on a coin shelf would undercut both.
+ *   slot C            pets hatch from eggs. C6 also has her own direct-buy
+ *                     shelf, repriced to 5,000 in the one-off beta correction.
  *   CE / CB / CG / CM Bumbleseal's own pieces, sold on her own shelf.
  *   exclusive         SK15 and the Day One Lizard. js/loot.js already records
  *                     the rule for this flag: "never appears at all (awarded by
@@ -657,6 +656,32 @@ export async function buyPetItem(id) {
     return { ok: false, reason: 'write', label: art.name };
   }
   return result;
+}
+
+/* One-off beta correction, 2026-09-09. NOT a future price-drop policy.
+   Eligibility is the player's durable petbuy:C6 receipt with price === 50000.
+   That receipt proves a paid entitlement, including a legacy delivery still
+   owed or a pet later consumed by the player. Ownership alone cannot distinguish
+   a free hatch. Missing/unpriced receipts are not guessed from analytics.
+
+   Only 45,000 coins return. No pet, inventory, equipment or progress is written.
+   The named credit in coinsHistory is also the settlement receipt: both commit
+   in payAtomic, so an abort leaves the entitlement payable and concurrent calls
+   cannot both win. The same operation ID on offline copies unions once through
+   importAll's existing currency-history merge. A full save rollback also rolls
+   back the credit; rerunning then restores it, without accumulating a payout. */
+export async function refundC6BetaPrice() {
+  const receipt = 'beta-c6-50000-to-5000';
+  return payAtomic({ snapshot: { keys: ['petbuy:C6', 'coinsHistory', 'coins'] }, decide: state => {
+    if (state['petbuy:C6']?.price !== 50000 ||
+        Object.hasOwn(state.coinsHistory?.ops || {}, receipt)) return { result: 0 };
+    return {
+      kv: { coins: cur => (Number(cur) || 0) + 45000,
+        coinsRev: cur => (Number(cur) || 0) + 45000 },
+      currencyReceipts: { coins: receipt },
+      result: 45000,
+    };
+  } });
 }
 
 /* One Mystery Egg for 60 Bone Dust per ISO week, by the 2026-08-31 ruling.

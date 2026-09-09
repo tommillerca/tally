@@ -268,7 +268,7 @@ export function lockedCardHtml(sp) {
    and only the Lizard's is a closed door. */
 function lockedFlavor(sp) {
   if (sp === 'CX') return "A founder's companion, from the very first days of Boneheadz. Wears it proudly on someone else's shoulder.";
-  if (sp === 'C6') return 'Not yours yet. Gwart sells her in the Emporium, for those with deep pockets.';
+  if (sp === 'C6') return 'Not yours yet. Hatch her from ordinary eggs, or buy her in Gwart’s Emporium for 5,000 coins.';
   return 'Not yours yet. Eggs know the way.';
 }
 

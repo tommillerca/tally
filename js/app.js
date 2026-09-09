@@ -29,7 +29,7 @@ import {
   RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_RARITY_PRICE,
   setWornAura, ownsAura,
   rack, rerollRack, rackRerollCost, buyRackItem, wornAura,
-  buyPetItem,
+  buyPetItem, refundC6BetaPrice,
   DUST_EGG, buyDustEgg, dustEggBought, dustEggPending,
 } from './loot.js';
 import * as labLoot from './loot.js';
@@ -1811,6 +1811,10 @@ async function boot() {
      they are told about. 6.4s because it is a long line carrying two numbers. */
   const merch = await retireMerchantIfNeeded();
   if (merch) setTimeout(() => toast(`The Bone Merchant has closed. Your ${merch.weapons.length} weapon${merch.weapons.length === 1 ? ' has' : 's have'} been refunded in full: +${merch.coins.toLocaleString()} coins${merch.dust ? ` and +${merch.dust} Bone Dust` : ''}. Strength comes from your stats, talents and the gear you can see now.`, 6400), init && init.xp > 0 ? 5600 : 3000);
+  // C6 BETA CORRECTION BEGIN
+  const c6Refund = await refundC6BetaPrice();
+  if (c6Refund) setTimeout(() => toast(`Bumbleseal now costs 5,000 coins. Your 45,000-coin difference is back. Your pet and progress stay yours. This is a one-off correction; future price drops will not be refunded.`, 7500), 6500);
+  // C6 BETA CORRECTION END
   /* Give back the Gauntlet ceiling the cell-scoped gate marker swallowed. See
      backfillDenCeilingIfNeeded: a player who beat the same cell's boss week
      after week banked one marker and is owed the rest. */
@@ -24498,7 +24502,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v533'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v534'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

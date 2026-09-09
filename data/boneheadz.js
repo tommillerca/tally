@@ -2274,7 +2274,9 @@ export const PET_HERO_REL = { C6: 169 / PET_HERO_REF };
    are additive and no inventory row is ever rewritten. */
 
 export const PET_SHOP = {
-  pet: { id: 'C6', coin: 50000, blurb: 'A diva that would rather shop than fly. Let her buzz the boutique below for more accessories.' },
+  // Beta correction only. C6 still has combat stats: this sale continues the
+  // existing cosmetic-only rule violation at a lower price. See the lane review.
+  pet: { id: 'C6', coin: 5000, blurb: 'A diva that would rather shop than fly. Also hatches from ordinary eggs. Browse her accessories below.' },
   items: [
     { id: 'CE1', coin: 8000,  shot: [0.1394, 0.3327, 0.3933, 0.5866] },
     { id: 'CB1', coin: 6000,  shot: [0.4262, 0.4482, 0.7973, 0.8193] },
