@@ -1,10 +1,10 @@
 # What each patch note claims, and what backs it
 
-## vNEXT
+## v540 (2026-09-09)
 
 Changelog item: The Boneyard intro and location error screens now allow scrolling as text grows.
 
-1. PROOF: boneyard-scroll-audit.mjs, dock-line-audit.mjs | REACH: PENDING-DEPLOY, PARTIAL: Boneyard retains #screen scrolling and its wrapper's content height. The source guard rejects the old clipping rules and passes the change. The rendered guard is registered but BLOCKED before boot by serveTree listen EPERM; rendered reachability, main-button coordinates, refresh/route behavior, dock hit tests and before/after screenshots remain unverified. See [advisory evidence and deviations](boneyard-scroll/REPORT.md), [before attempt](boneyard-scroll/before-attempt.txt) and [after attempt](boneyard-scroll/after-attempt.txt). No screenshot files or measured fractions exist, and the reported 55% is not adopted as a measurement.
+1. PROOF: boneyard-scroll-audit.mjs | REACH: Tom, 2026-09-09, on the live build via OPEN-ITEMS R5-S1: the Boneyard screen does not scroll. MEASURED BY THE OPERATOR in a real browser (the builder's sandbox cannot bind a listener, so the rendered half was blocked for it), Chromium headless=shell, 393x852 at DPR 2, demo save, Boneyard tab: BEFORE, `.sheet-body.map-sheet` computed `overflow-y: hidden` with scrollHeight 920 against clientHeight 741, so 179 px of content (19.5%) was unreachable and no ancestor scrolled; the screenshot shows the spawn list cut mid-item behind the dock. AFTER, that element no longer clips and `MAIN.screen--map` is the scroll owner at `overflow-y: auto`, scrollHeight 920 against clientHeight 741, so the same content is reachable. The source guard rejects the old clipping rules. NOT MEASURED and not claimed: behaviour at 150% text, main-button coordinates, refresh/route scroll retention and dock hit tests. The reported 55% is NOT adopted; 19.5% is what this checkout measures on a demo save, and a fuller account may differ.
 
 v538 did not change app.css or renderBoneyard, as confirmed by matching hashes
 in [source evidence](boneyard-scroll/v538-source-evidence.txt). It removed the

@@ -5,10 +5,13 @@
 // Pending train notes. The operator assigns a build number and moves these
 // into CHANGES when assembling the release. No version stamp is advanced here.
 export const NEXT_CHANGES = [
-  'The Boneyard intro and location error screens now allow scrolling as text grows.',
 ];
 
 export const CHANGES = [
+
+  { n: 540, date: '2026-09-09', title: 'The Boneyard scrolls again', items: [
+    'The Boneyard intro and location error screens now allow scrolling as text grows.',
+  ] },
 
   { n: 539, date: '2026-09-09', title: 'Every pet on the same footing', items: [
     'All pets now share the same base combat stats, raised without reducing existing stats. Shiny and breeding bonuses stay earned.',
