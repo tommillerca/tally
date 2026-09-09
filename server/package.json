@@ -14,9 +14,13 @@
     "test:retention": "node retention.test.mjs",
     "test:grants": "node grants-retention.test.mjs",
     "test:stale": "node stale-retention.test.mjs",
-    "deploy": "./deploy.sh"
+    "deploy": "./deploy.sh",
+    "schema:generate": "node scripts/schema-guard.mjs --generate",
+    "schema:check": "node scripts/schema-guard.mjs --local",
+    "test:migration": "node test/migration-guard-local.mjs"
   },
   "devDependencies": {
+    "acorn": "8.14.0",
     "wrangler": "^3.99.0"
   }
 }

@@ -18,6 +18,9 @@ cd "$(dirname "$0")"
 
 API="${API:-https://bonez-api.boneheadz.workers.dev}"
 
+echo "== schema contract matches the candidate source"
+node scripts/schema-guard.mjs --check
+
 echo "== 0. are the secrets provisioned? (names only; values never leave Cloudflare)"
 # QA round 29 S2/S6: ADD_TOKEN_SECRET and RL_SECRET were never set in production.
 # The worker fell back to the admin token for add-token HMACs and to a random
@@ -87,7 +90,12 @@ BASE=http://127.0.0.1:8791 node grants-retention.test.mjs
 kill $DEV_PID 2>/dev/null || true
 trap - EXIT
 
-echo "== 3. deploy"
+echo "== 3. target D1 has every column this candidate writes"
+# Read-only PRAGMA queries against the SAME config/database used by deploy.
+# Any drift, stale generated contract, auth error or query failure stops here.
+node scripts/schema-guard.mjs --remote
+
+echo "== 3b. deploy"
 npx wrangler deploy
 
 echo "== 4. ASK THE LIVE WORKER, because a green deploy is not a reachable route"
@@ -104,7 +112,11 @@ check() {   # check <path> <expected> <what it means>
     fail=1
   fi
 }
-check "/health" 200 "the worker is up at all"
+check "/health" 200 "D1 can execute zero-row writes against every required write column"
+if ! curl -fsS "$API/health/deep"; then
+  echo "  FAIL deep D1 write health"
+  fail=1
+fi
 check "/steps/week?week=2026-08-14" 401 "the live race board is routed"
 check "/steps/settled?week=2026-08-07" 401 "the settled-result route is routed; 404 means this deploy did not include it"
 

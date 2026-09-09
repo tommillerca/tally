@@ -3,6 +3,8 @@
 // (headers x-bh-player / x-bh-ts / x-bh-sig over "METHOD\nPATH\nTS\nBODY").
 // No emails, no passwords, no PII: a pubkey IS the account.
 
+import { schemaHealth } from './schema-health.js';
+
 const CORS = {
   'Access-Control-Allow-Origin': '*', // signature auth, no cookies: * is safe (and native WKWebView needs it)
   'Access-Control-Allow-Methods': 'GET,POST,PUT,OPTIONS',
@@ -2088,7 +2090,10 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
 
     try {
-      if (path === '/health') return json({ ok: true, ts: Date.now() });
+      if (path === '/health' || path === '/health/deep') {
+        const health = await schemaHealth(env.DB);
+        return json({ ...health, ts: Date.now() }, health.ok ? 200 : 503, { 'Cache-Control': 'no-store' });
+      }
 
       // Register a device pubkey -> player. Idempotent: re-registering the same
       // key (reinstall from backup) returns the existing account.
