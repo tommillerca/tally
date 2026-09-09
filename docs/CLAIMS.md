@@ -1,5 +1,9 @@
 # What each patch note claims, and what backs it
 
+## v536 (2026-09-09)
+
+1. PROOF: hand-registration-audit.mjs | REACH: "The off-hand toothbrushes and spades sit in the raised fist." IL10-1/2 translated +30,+104 and IL17-1/2 +44,+68 within their 640x640 masters. Brushes lose 0 pixels; spades discard exactly the authorized 7 and 10 dust pixels, all alpha <=30. Surviving RGBA multisets and translated bounding boxes match exactly. The full census passes 38/38 IL and 24/24 IR; the pre-fix brushes fail, while the ring floor already passed the old spades and cannot alone certify their grip. See the [before/after B0-1 contact sheet](offhand-registration/before-after.png), [printed pixel assertions](offhand-registration/translation-output.txt), [full hand census](offhand-registration/after-audit.txt), and [advisory report](offhand-registration/REPORT.md). Derived thumbnails rebuilt with the project generator. Visual limitation: the frozen offsets bring the shafts onto the fist but leave their existing transparent cutouts below it; no grip redesign was authorized or applied. One implemented vNEXT changelog item remains in a comment pending release integration.
+
 ## v535 (2026-09-09)
 
 Pending entries in `js/changelog.js` (`NEXT_CHANGES`), in matching order. These

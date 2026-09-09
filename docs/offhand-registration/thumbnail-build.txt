@@ -1,0 +1,5 @@
+1300 thumbnails across tiers [192, 384] + trim + 10 cut product shots at 384px in assets/bh/thumb
+0 skipped (source already <= the tier)
+source 15.7 MB -> thumbnails 19.3 MB on disk
+  192px: 0.1406 MB decoded per layer (11.1x off 640px 1.5625 MB)
+  384px: 0.5625 MB decoded per layer (2.8x off 640px 1.5625 MB)

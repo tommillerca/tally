@@ -376,6 +376,7 @@ PURE.push('boneyard-zoom-audit.mjs'); // Real view boot/teardown and scoped came
 PURE.push('lab-conflict-audit.mjs'); // Offline pet/slot collisions, encrypted reconnect, retained receipts and honest recovery copy; Node only.
 PURE.push('lab-lock-recovery-audit.mjs'); // Lab fence recovers after a mid-transaction crash, incl. nickname-first and auto-equip.
 PURE.push('r3-rest-audit.mjs'); // R3-8 backup body, R3-4 refusal copy, R3-5 destroy gate, R3-6 dead guard.
+PURE.push('hand-registration-audit.mjs'); // R4: off-hand and right-hand registration census against the raised fist.
 const BROWSER = [
   'today-dock-pixels-audit.mjs', // Dock exclusion: all-tab captures, row tap and lost-exclusion control, plus native bounce evidence. Pixel continuity remains manual/UNPROVEN; the former opaque-RGB predicate certified the black-line bug.
 
@@ -709,6 +710,7 @@ const onDisk = (await readdir(here))
  * 1, in the gate itself. The complement cannot be computed AND have teeth. One line
  * per file is the price, and it puts each omission on the record as a decision. */
 const DECLARED = {
+  'hand-registration-audit.mjs': ['fast', 'every off-hand (IL) and right-hand (IR) sprite is scored against the raised fist on B0-1: item ink inside the fist core and in a 14px ring around it. Catches a garment drawn out of registration with the hand. Red before: IL10-1/2 scored ring=0 (the toothbrush touched the hand nowhere) and IL17-1/2 ring=267 (the spade grazed a knuckle). Node-only pixel census with dilation controls.'],
   'serve-tree-identity-audit.mjs': ['full', 'R3: binds real Python/Node loopback sockets to prove wrong-tree refusal, read-only serving and child exit. Includes the server exit proof moved out of unit.test.js; cannot run in socket-denied PURE environments.'],
   'pet-talent-ui-audit.mjs': ['full', 'Lane A: operates Stable talent controls, rejects stale levels, reopens saved choices and checks the duplicate in a real fight.'],
   'boot-backfill-audit.mjs': ['full', "the first-v385-boot backfill is checkpointed, resumable and behind the paint: PAINT (#screen has content while the retroactive replay is still unfinished), RESUME (twice interrupted by a real page reload, the save still reaches the exact ledger and XP total of an uninterrupted run) and WORK (a resumed boot re-reads at most 75% of the xp store a cold one does). Seeds a 365-day diary and drives four throttled boots with reloads, several minutes, far too slow for the fast tier."],
