@@ -81,7 +81,11 @@ try {
     run(name, 'first-run-node.mjs', 1, message);
     writeFileSync(auditOutputPath(appPath), original);
   }
-  writeFileSync(auditOutputPath(appPath), replaceOnce(original, 'instsAll.filter(x => x && isKnownPet(x.sp))', 'instsAll.filter(x => x && x.sp)'));
+  // R3-6 removed the redundant Stable filter. Inject the old truth-only
+  // boundary at the same consumer to retain the scanner's negative control.
+  let badSpecies = replaceOnce(original, 'const [insts, bank, st, eqOwn, nicks, ownedCos, bonds, talentPicks]', 'const [instsAll, bank, st, eqOwn, nicks, ownedCos, bonds, talentPicks]');
+  badSpecies = replaceOnce(badSpecies, '// petInstances() already excludes unsupported rows and preserves them in storage.', 'const insts = instsAll.filter(x => x && x.sp);');
+  writeFileSync(auditOutputPath(appPath), badSpecies);
   run('red-pet-species', 'lookup-guard-lint.mjs', 1, 'FAIL NEW unresolved lookup guard');
   let oldArt = replaceOnce(original,
     'const ownArt = BH_BY_ID[wornGear ? wornGear.artId : rawEq[slot]];\n    const baseArtId = ownArt?.id || null;',

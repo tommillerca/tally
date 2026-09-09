@@ -107,10 +107,12 @@ await test('R44-16 true duplicate reveal keeps Frost Drizzle', async () => {
 });
 
 const destroyCode = cut("    $$('[data-destroy]', body).forEach", "    $$('[data-offsp]'");
+// Each case isolates its stated investment. Equipped pets now require typing
+// independently, covered by r3-rest-audit. Plain duplicates here are unequipped.
 async function destroyHarness(instances, steps = {}, iid = instances[0].iid) {
   useDbName(`kennel-copy-${++sequence}`);
   for (const [key, value] of Object.entries({ petInst: instances, petLvlV: 2, petLvlSteps: steps,
-    petStepCredit: 0, petEquipped: iid, equipped: { C: instances[0].sp } })) await kvSet(key, value);
+    petStepCredit: 0, petEquipped: null, equipped: {} })) await kvSet(key, value);
   for (const sp of new Set(instances.map(x => x.sp))) await db.put('inv', { id: `cos-${sp}`, kind: 'cos', itemId: sp });
   const events = {}, inputEvents = {}, goEvents = {}, toasts = [], sheets = [], timers = [];
   const btn = { dataset: { destroy: iid, dust: '60' }, innerHTML: 'DESTROY 60', isConnected: true,

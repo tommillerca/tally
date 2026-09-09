@@ -69,7 +69,7 @@ import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, petColourName, petInstanceName, salvageInstance, quotePetDestruction, petLastColourLoss, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear, bestInstance } from './loot.js';
-import { buildBattlePet, legalPicks, isKnownPet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, petStatBonusText, petBreedGainText, PET_STAT_MULT_CAP, PET_LINEAGE_STEP, SHINY_STAT_MULT, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs, ownedCellCount } from './pets.js';
+import { buildBattlePet, legalPicks, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, petStatBonusText, petBreedGainText, PET_STAT_MULT_CAP, PET_LINEAGE_STEP, SHINY_STAT_MULT, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs, ownedCellCount } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
@@ -15392,7 +15392,7 @@ async function renderSettings(el) {
         ? 'A cloud backup <b>does</b> exist for this account and can be restored later with your recovery code.'
         : why === 'no-backup' ? 'There is <b>no</b> cloud backup for this account, so this is the only copy.'
           : why === 'no-recovery' ? 'A cloud backup exists, but with <b>no recovery code set</b> there is no way to prove this account is yours on a new device: this is the only copy that will ever come back.'
-            : 'The cloud could not be reached, so no vault copy can be confirmed. Treat this as the only copy.';
+            : 'The cloud backup could not be verified, so no vault copy can be confirmed. Treat this as the only copy.';
     }).catch(() => {});
     const input = $('#erIn', wrap), go = $('#erGo', wrap);
     input.addEventListener('input', () => { go.disabled = input.value.trim().toUpperCase() !== 'ERASE'; });
@@ -20116,7 +20116,6 @@ async function openFriendPaddock(f) {
     </div>`, { cls: 'sheet-paddock pet-a11y' });
 }
 
-let stableGhostWarned = false;   // R39-31: one warning per session, not one per render
 // Re-read the instance and its earned level at the click, since an open tree
 // can outlive a restore or a removed pet. Never trust a button's cached level.
 async function choosePetTalent(iid, node) {
@@ -20184,11 +20183,9 @@ async function openStable(opts = {}) {
        records disagree (R39-1), and equipped() below has to read the repaired
        slot rather than race it inside the same Promise.all. */
     const eqIid0 = await equippedPetIid();
-    const [instsAll, bank, st, eqOwn, nicks, ownedCos, bonds, talentPicks] = await Promise.all([petInstances(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds(), kvGet('petBonds', {}), kvGet('pettalents', {})]);
-    /* R44-1: use the same known-species boundary as every state reader. */
-    const insts = instsAll.filter(x => x && isKnownPet(x.sp));
+    const [insts, bank, st, eqOwn, nicks, ownedCos, bonds, talentPicks] = await Promise.all([petInstances(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds(), kvGet('petBonds', {}), kvGet('pettalents', {})]);
+    // petInstances() already excludes unsupported rows and preserves them in storage.
     const labStock = laboratoryEngine() ? await laboratoryEngine().snapshot({ presentationOnly: true }).catch(() => null) : null;
-    if (insts.length !== instsAll.length && !stableGhostWarned) { stableGhostWarned = true; console.warn('Stable: skipped unsupported pet row(s)', instsAll.filter(x => !x || !isKnownPet(x.sp))); }
     /* OUT WITH YOU means the C slot holds her. A petEquipped that the worn outfit
        does not agree with is a pet the Stable must still offer EQUIP for, or the
        player has no control anywhere that can put her on Today (R39-1). */
@@ -21174,7 +21171,7 @@ async function openStable(opts = {}) {
       }
       const q = fresh.quote, nm = petDestructionName(q);
       // Preserve the stronger review for a last appearance or invested pet.
-      if (q.lastColour || q.lastCell || q.bankedSteps > 0 || q.inst.shiny || (q.inst.lineage || 0) > 0) {
+      if (q.lastColour || q.lastCell || q.bankedSteps > 0 || q.inst.shiny || (q.inst.lineage || 0) > 0 || q.nickname || q.bond > 0 || q.talents.length > 0 || q.equipped) {
         openPetDestructionReview(reviewFor(q));
         return;
       }
@@ -22161,8 +22158,15 @@ async function importBackupFromFile(file) {
     const wrongFile = err instanceof SyntaxError || /Not a Tally backup/i.test(err.message || '');
     toast(wrongFile
       ? "That doesn't look like a Boneheadz Gym backup. Pick the .json file you exported."
-      : 'Import failed: ' + err.message, 6200);
+      : fileImportFailure(err), 6200);
   }
+}
+
+function fileImportFailure(err) {
+  if (err.message === 'laboratory-restore-conflict') {
+    return 'Restore blocked: this backup is missing or conflicts with Laboratory experiments or incubator purchases on this device. This protects pets and purchases from being undone or duplicated. Your current save is unchanged. Choose a newer backup that includes those records.';
+  }
+  return 'Import failed: ' + err.message;
 }
 
 function fileReplacementHtml(current, next) {
@@ -22222,7 +22226,7 @@ function openFileReplacementReview(data, current, next, undo = false) {
         await finishFileImport(counts);
         return { message: 'Backup restored. Return through Settings → Restore points.' };
       } catch (err) {
-        const message = 'Import failed: ' + err.message + ' Existing restore points remain available in Settings → Restore points.';
+        const message = fileImportFailure(err) + ' Existing restore points remain available in Settings → Restore points.';
         toast(message, 7200);
         return { message };
       }
