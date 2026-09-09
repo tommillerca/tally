@@ -1,0 +1,15 @@
+PASS CONTROL finding 5: pre-fix observation rejected; production scenario passes
+PASS CONTROL finding 7: pre-fix observation rejected; production scenario passes
+PASS CONTROL finding 8: pre-fix observation rejected; production scenario passes
+PASS CONTROL finding 9: pre-fix observation rejected; production scenario passes
+PASS CONTROL finding 10: pre-fix observation rejected; production scenario passes
+PASS CONTROL finding 11: pre-fix observation rejected; production scenario passes
+PASS CONTROL finding 12: pre-fix observation rejected; production scenario passes
+PASS CONTROL finding 13: pre-fix observation rejected; production scenario passes
+PASS CONTROL finding 14: pre-fix observation rejected; production scenario passes
+PASS CONTROL finding 16: pre-fix observation rejected; production scenario passes
+PASS CONTROL finding 17: pre-fix observation rejected; production scenario passes
+PASS CONTROL finding 18: pre-fix observation rejected; production scenario passes
+PASS CONTROL finding 19: pre-fix observation rejected; production scenario passes
+PASS CONTROL finding 20: pre-fix observation rejected; production scenario passes
+14/14 room 2 guards passed

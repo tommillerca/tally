@@ -44,7 +44,8 @@ const selection = { bySp: { C1: [frost, ember] }, byBest: () => 0,
 await test('CONTROL naming follows rendered morph, base, shiny and CX identity', () => {
   assert.equal(loot.petInstanceName(frost, 105000), 'Frost Drizzle · Lv 10');
   assert.equal(loot.petColourName({ ...frost, morph: undefined }), 'Base');
-  assert.equal(loot.petColourName({ ...frost, morph: 'future' }), 'Base');
+  // 2026-09-08 finding 9: unknown saved colours must not impersonate Base.
+  assert.equal(loot.petColourName({ ...frost, morph: 'future' }), 'Unsupported colour (future)');
   assert.equal(loot.petColourName({ ...frost, shiny: true }), 'Shiny');
   assert.equal(loot.petColourName({ ...frost, sp: 'CX' }), 'Base');
 });

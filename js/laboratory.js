@@ -49,7 +49,7 @@ export function labPreview(roster, iids, state = {}) {
     const lost=beforeCells.filter(k=>!after.includes(k)),gained=after.filter(k=>!beforeCells.includes(k));
     const affected=[...new Set([...match.inputs.map(x=>`${x.sp}|${x.morph}`),`${match.species}|${morph}`])];
     return {morph,lost,gained,afterCount:after.length,duplicate:gained.length===0,
-      counts:Object.fromEntries(affected.map(k=>[k,survivors.filter(x=>`${x?.sp}|${labMorph(x?.morph)}`===k).length+(k===`${match.species}|${morph}`?1:0)]))};
+      counts:Object.fromEntries(affected.map(k=>[k,survivors.filter(x=>`${x?.sp}|${x?.shiny ? 'base' : labMorph(x?.morph)}`===k).length+(k===`${match.species}|${morph}`?1:0)]))};
   });
   const risk=match.inputs.some(x=>x.bankedSteps>0||x.lineage>0||x.bond>0||x.nickname||x.talents.length||x.equipped)||branches.some(b=>b.lost.length);
   return {ok:true,...match,...odds,beforeCells,branches,risk};

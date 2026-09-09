@@ -20113,7 +20113,7 @@ async function openStable(opts = {}) {
        records disagree (R39-1), and equipped() below has to read the repaired
        slot rather than race it inside the same Promise.all. */
     const eqIid0 = await equippedPetIid();
-    const [instsAll, bank, st, eqOwn, nicks, ownedCos] = await Promise.all([petInstances(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds()]);
+    const [instsAll, bank, st, eqOwn, nicks, ownedCos, bonds, talentPicks] = await Promise.all([petInstances(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds(), kvGet('petBonds', {}), kvGet('pettalents', {})]);
     /* R44-1: use the same known-species boundary as every state reader. */
     const insts = instsAll.filter(x => x && isKnownPet(x.sp));
     const labStock = laboratoryEngine() ? await laboratoryEngine().snapshot({ presentationOnly: true }).catch(() => null) : null;
@@ -20182,7 +20182,8 @@ async function openStable(opts = {}) {
     const spareLvl = spare ? petLevel(bank[spare.iid] || 0) : 0;
     // "maybe you shouldn't": a shiny, a bred bloodline or a levelled pet is a
     // real loss, and the player has to be told BEFORE they commit.
-    const spareIsPrecious = !!spare && (spare.shiny || (spare.lineage || 0) > 0 || spareLvl >= 5);
+    const spareLoss = spare ? breedInvestmentCopy(spare, bank, nicks, bonds, talentPicks) : '';
+    const spareIsPrecious = !!spare && (spare.shiny || !!spareLoss);
     /* No dust check: breeding is gated by the 6,000-step cooldown alone since
        2026-08-27, so the pair and the cooldown are the whole of it. */
     const canBreedNow = pair && st.ready;
@@ -20553,6 +20554,7 @@ async function openStable(opts = {}) {
           ${spareIsPrecious ? `<div class="breed-warn">
             ${ICONS.warn(17)}
             <div><b>You are about to destroy ${spare.shiny ? 'a SHINY' : (spare.lineage || 0) > 0 ? `a lineage ${spare.lineage} pet` : `a level ${spareLvl} pet`}.</b>
+            ${esc(spareLoss)}
             ${spare.shiny ? 'Shinies are about a 1 in 30 hatch and its colour will NOT carry over.' : (spare.lineage || 0) > 0 ? 'Its bloodline is lost; lineage does not transfer.' : 'Its levels are lost.'}
             Feed a plain spare in instead unless you are sure.</div>
           </div>` : ''}
@@ -21067,14 +21069,16 @@ async function openStable(opts = {}) {
     $('#petsHelp', body)?.addEventListener('click', openPetsHelp);
     $('#stableToPaddock', body)?.addEventListener('click', () => openPaddock());
     wireLabLinks(body);
-    if (labStock) {
-      const needed = labStock.pets.filter(p => p.neededFor && (p.iid === focused?.iid || sel.includes(p.iid)));
+    function repaintLabIngredients(iid) {
+      $$('.lab-ingredient', body).forEach(note => note.remove());
+      const needed = (labStock?.pets || []).filter(p => p.neededFor && (p.iid === iid || sel.includes(p.iid)));
       for (const p of needed) {
         const note = document.createElement('p'); note.className = 'note lab-ingredient';
         note.textContent = `${labName(p)}: Needed for ${p.neededFor}. Melting or breeding this pet spends that ingredient.`;
         ($('.cf-acts', body) || body).appendChild(note);
       }
     }
+    repaintLabIngredients(focused?.iid);
     $('#kennelBtn', body)?.addEventListener('click', () => openKennel());
     /* THE BAR GETS A CONTAINING BLOCK, NOT SCROLL ROOM. See the long note above
        .breed-bar.sticky in app.css for the two fixes that came before this.
@@ -21235,6 +21239,16 @@ function labPair(a, b) {
   if (!a || !b || a.iid === b.iid || a.sp !== b.sp || a.eligible !== true || b.eligible !== true) return null;
   return labRecipes.find(r => [...r.inputs].sort().join('|') === [a.morph, b.morph].sort().join('|')) || null;
 }
+function breedInvestmentCopy(p, bank, nicks, bonds, talents) {
+  const losses = [];
+  if (bank[p.iid] > 0) losses.push(`${bank[p.iid].toLocaleString()} banked training steps`);
+  if (nicks[p.iid]) losses.push(`nickname ${nicks[p.iid]}`);
+  if (p.lineage > 0) losses.push(`lineage ${p.lineage}`);
+  if (bonds[p.iid] > 0) losses.push(`bond ${bonds[p.iid]}/5`);
+  const picks = talents[p.iid] || [];
+  if (picks.length) losses.push(`talent choices: ${picks.map(id => Object.values(PET_TREES).flatMap(t => t.flatMap(r => r.opts)).find(t => t.id === id)?.name || id).join(', ')}`);
+  return losses.length ? `Lost permanently: ${losses.join('; ')}. None transfers to your keeper.` : '';
+}
 function labInvested(p) {
   return p.bankedSteps > 0 || p.level > 1 || !!p.nickname || p.lineage > 0 || p.bond > 0 || p.talents.length > 0 || p.equipped;
 }
@@ -21254,10 +21268,10 @@ function labStateCopy(s, sp = '') {
   if (!s.pets.length) return 'Hatch eggs to discover species. The recipe path is here when you have a pair.';
   if (!s.hasEligiblePair) return 'Your pets do not match a recipe yet. Hatch eggs to discover species and build matching pairs.';
   if (s.remaining === 0) return `You've used ${s.used}/${s.capacity} experiments today. Experiments reset at ${s.resetTime}, ${s.zone}.`;
+  if (!s.hasSafePair) return `${s.collectionCount === labTotal() ? `All ${labTotal()} colours owned. ` : ''}No matching pair preserves both your collection and pet investment. You may review a risky pair and its exact losses, or hatch more copies first.`;
   if (s.collectionCount === labTotal()) return `All ${labTotal()} colours owned. Animate copies, melt spares for Bone Dust, or breed to raise lineage.`;
   if (sp && s.species[sp]?.complete) return `${labSpecies(sp)} has all ${MORPHS.length} colours. Choose another species to build the collection, or make an optional extra copy.`;
   if (sp && s.species[sp]?.hasEligiblePair === false) return `No matching pair for ${labSpecies(sp)} yet. Hatch eggs or choose another species. The recipes stay here.`;
-  if (!s.hasSafePair) return 'Keep one of each colour. You need two spare pets of the same species that match a recipe.';
   return `${s.remaining} experiment${s.remaining === 1 ? '' : 's'} available today.`;
 }
 function labSinksHtml(next = '') {
@@ -21337,7 +21351,7 @@ function labConfirmationHtml(q) {
 function labRevealHtml(r) {
   const b = r.branches.find(x => x.morph === r.result.morph);
   const certain = r.distribution.length === 1;
-  return `<div class="lab-reveal ${certain ? 'lab-direct' : 'lab-surprise'}" data-outcomes="${r.distribution.length}"><div data-lab-result-art>${petSpriteHtml(r.species, 144, false, { morph: r.result.morph, shiny: false, wear: null, thumb: true })}</div><h3>${esc(labColour(r.result.morph))} ${esc(labSpecies(r.species))}</h3><p role="status">${b.gained.length ? `Added to your collection. ${b.afterCount}/${labTotal()}.` : `Another copy. ${b.neededFor ? `Needed for ${esc(b.neededFor)}.` : 'Optional extra copy.'}`}</p><p>${certain ? r.recipe === 'toxic-rose' ? 'Midnight was guaranteed by this recipe.' : 'This saved experiment had a guaranteed result.' : 'Your experiment is saved.'}</p><p>Level 1. 0 banked steps. Lineage 0. Non-shiny. No inherited name, bond or talents.</p><p>${Number.isInteger(r.remaining) ? `${r.remaining} experiment${r.remaining === 1 ? '' : 's'} available today.` : 'Back to Laboratory to check remaining experiments.'}</p>${r.resultPresent === false ? '<p>This saved pet has since left your Stable. Reviewing this receipt does not recreate it.</p>' : ''}</div>`;
+  return `<div class="lab-reveal ${certain ? 'lab-direct' : 'lab-surprise'}" data-outcomes="${r.distribution.length}"><div data-lab-result-art>${petSpriteHtml(r.species, 144, false, { morph: r.result.morph, shiny: false, wear: null, thumb: true })}</div><h3>${esc(labColour(r.result.morph))} ${esc(labSpecies(r.species))}</h3><p role="status">${b.gained.length ? `Added to your collection. ${b.afterCount}/${labTotal()}.` : `Another copy. ${b.neededFor ? `Needed for ${esc(b.neededFor)}.` : 'Optional extra copy.'}`}</p><p>${certain ? r.recipe === 'toxic-rose' ? 'Midnight was guaranteed by this recipe.' : 'This saved experiment had a guaranteed result.' : 'Your experiment is saved.'}</p><p>At creation: Level 1. 0 banked steps. Lineage 0. Non-shiny. No inherited name, bond or talents. This receipt records the experiment, not later training or naming.</p><p>${Number.isInteger(r.remaining) ? `${r.remaining} experiment${r.remaining === 1 ? '' : 's'} available today.` : 'Back to Laboratory to check remaining experiments.'}</p>${r.resultPresent === false ? '<p>This saved pet has since left your Stable. Reviewing this receipt does not recreate it.</p>' : ''}</div>`;
 }
 function labTodayVisible(s, { current, priorDay, hidden }) {
   return current && priorDay && !hidden && s.status === 'ready' && s.remaining > 0 && s.hasSafeUsefulPair === true && s.collectionCount < labTotal();
@@ -21356,7 +21370,7 @@ function labPickerHtml(s, selected, slot, sp = '', colour = '') {
   const other = s.pets.find(p => p.iid === selected[1 - slot]);
   const rows = s.pets.filter(p => p.iid !== other?.iid && (!sp || p.sp === sp) && (!colour || p.morph === colour)).sort((a, b) => Number(!a.safeSurplus || labInvested(a)) - Number(!b.safeSurplus || labInvested(b)));
   return rows.length ? rows.map(p => {
-    const reason = p.reason || (other && !labPair(p, other) ? 'Does not match this same-species recipe.' : '');
+    const reason = p.reason || (p.morph === 'midnight' ? 'Midnight completes the recipe path. No recipe consumes it.' : '') || (other && !labPair(p, other) ? 'Does not match this same-species recipe.' : '');
     const tags = [p.safeSurplus && !labInvested(p) ? 'Untrained spare' : '', p.lastCopy ? 'Last collection copy' : '', p.bankedSteps > 0 || p.level > 1 ? 'Trained' : '', p.nickname ? 'Named' : '', p.bond > 0 ? 'Bonded' : '', p.lineage > 0 ? `Lineage ${p.lineage}` : '', p.equipped ? 'Equipped' : '', p.neededFor ? `Needed as an ingredient for ${p.neededFor}` : ''].filter(Boolean);
     return `<section class="lab-pick-row"><button class="lab-pet" aria-describedby="lab-pick-info-${esc(p.iid)}" data-lab-pick="${esc(p.iid)}" ${p.eligible !== true || reason ? 'disabled' : ''}>${labPetDetails(p, true)}</button><div class="lab-pick-info" id="lab-pick-info-${esc(p.iid)}"><small>${esc(p.bankedSteps.toLocaleString())} banked training steps · Bond ${esc(p.bond)}/5${p.talents.length ? ` · ${esc(p.talents.join(', '))}` : ''}</small><small>${esc(tags.join(' · '))}</small>${reason ? `<small>${esc(reason)}</small>` : ''}</div></section>`;
   }).join('') : '<p>No pets match these filters. Try another species or colour, or hatch eggs.</p>';
@@ -21370,15 +21384,15 @@ function labBenchHtml(s, selected, sp, q = null, choosingSpecies = false) {
   const nextSlot = empty < 0 ? 0 : empty;
   const activeId = pair?.id || labRecipes.find(r => pets.some(p => p && r.inputs.includes(p.morph)))?.id || 'base-base';
   const active = labRecipes.find(r => r.id === activeId);
-  const prompt = !sp ? 'Choose a species, then choose two pets.' : empty >= 0 ? `Choose ${empty === 0 ? 'first' : 'second'} pet to review a pair.` : !pair ? 'These pets do not match a recipe. Choose a different first or second pet.' : !canWork ? labStateCopy(s, sp) : 'Review shows the exact collection colours lost and gained before you confirm.';
-  const working = `<section class="lab-working"><h3>${pets.some(Boolean) ? `${active.inputs.map(labColour).join(' + ')}: choose your pair` : 'Choose your pair'}</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class="lab-slots" aria-label="Two pets to combine">${[0, 1].map(i => { const p = pets[i]; return `<section><button class="lab-pet${sp && canWork && !canReview && nextSlot === i ? ' lab-next' : ''}" data-lab-slot="${i}">${p ? labPetDetails(p, true) : `Choose ${i === 0 ? 'first' : 'second'} pet`}</button>${p ? `<button class="link" data-lab-clear="${i}">Clear ${i === 0 ? 'first' : 'second'} pet</button>` : ''}</section>`; }).join('<span class="lab-plus" aria-hidden="true">+</span>')}</div>${q ? labOutcomesHtml(q) : ''}${labIngredientCounts(s, sp, active)}${q ? labBranchesHtml(q) : ''}<p id="labPairHint">${esc(prompt)}</p><button class="btn ${canReview ? 'lab-next' : 'ghost'}" aria-describedby="labPairHint" data-lab-review ${canReview ? '' : 'disabled'}>Review pair</button></section>`;
+  const prompt = !canWork ? labStateCopy(s, sp) : !sp ? 'Choose a species, then choose two pets.' : empty >= 0 ? `Choose ${empty === 0 ? 'first' : 'second'} pet to review a pair.` : !pair ? 'These pets do not match a recipe. Choose a different first or second pet.' : 'Review shows the exact collection colours lost and gained before you confirm.';
+  const working = `<section class="lab-working"><h3>${pets.some(Boolean) ? `${active.inputs.map(labColour).join(' + ')}: choose your pair` : 'Choose your pair'}</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class="lab-slots" aria-label="Two pets to combine">${[0, 1].map(i => { const p = pets[i]; return `<section><button class="lab-pet${sp && canWork && !canReview && nextSlot === i ? ' lab-next' : ''}" data-lab-slot="${i}" ${canWork ? '' : 'disabled'}>${p ? labPetDetails(p, true) : `Choose ${i === 0 ? 'first' : 'second'} pet`}</button>${p ? `<button class="link" data-lab-clear="${i}">Clear ${i === 0 ? 'first' : 'second'} pet</button>` : ''}</section>`; }).join('<span class="lab-plus" aria-hidden="true">+</span>')}</div>${q ? labOutcomesHtml(q) : ''}${labIngredientCounts(s, sp, active)}${q ? labBranchesHtml(q) : ''}<p id="labPairHint">${esc(prompt)}</p><button class="btn ${canReview ? 'lab-next' : 'ghost'}" aria-describedby="labPairHint" data-lab-review ${canReview ? '' : 'disabled'}>Review pair</button></section>`;
   const status = labStateCopy(s, sp);
   const available = `${s.remaining} experiment${s.remaining === 1 ? '' : 's'} available today.`;
   const recovery = s.unseen?.length ? '<section class="lab-recovery"><p>Your last session ended before you saw your experiment. The result is saved. Open it to review.</p><button class="btn ghost" data-lab-recover>Review saved experiment</button></section>' : '';
   const noPair = !s.pets.length || !s.hasEligiblePair || (sp && s.species[sp]?.hasEligiblePair === false);
   return `${recovery}${sp ? '' : '<p>Make a new colour from two pets of the same species.</p>'}${labSpeciesHtml(s, sp, choosingSpecies)}<section class="lab-availability">${s.status === 'ready' ? `<details class="lab-clock"><summary>${s.remaining > 0 ? available : 'Experiment use details'}</summary><p>${s.used}/${s.capacity} experiments used</p><p>Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p></details>` : ''}${status !== available ? `<p role="status">${esc(status)}</p>` : ''}${s.status === 'ready' && s.remaining === 0 && !status.includes('Experiments reset at') ? `<p>You've used ${s.used}/${s.capacity} experiments today. Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p>` : ''}${noPair ? '<nav class="lab-links" aria-label="Find a pair"><button class="btn ghost" data-lab-nav="eggs">Eggs</button>' + (sp ? '<button class="btn ghost" data-lab-change-species>Change species</button>' : '') + '</nav>' : ''}</section>${working}<p>Every experiment removes two pets to make one.</p>${labRecipesHtml(s, sp)}
 <details id="labHelp" ${s.ui?.introRead ? '' : 'open'}><summary>How the recipes work</summary><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>
-<button class="${sp && !canWork ? 'btn lab-next' : 'link lab-collection'}" data-lab-nav="collection">Your collection: ${s.collectionCount} of ${labTotal()} colours</button><details class="lab-more"><summary>More pet actions</summary>${s.status !== 'ready' ? '<p>One experiment each day is free. Permanent incubators can add two more.</p>' : ''}<div class="lab-eggs">${s.eggs.length ? s.eggs.map(e => `<p>Egg: ${e.ready ? 'Ready to hatch' : `${e.steps.toLocaleString()}/${e.goal.toLocaleString()} steps`}. Open eggs to ${e.ready ? 'hatch it' : 'check progress'}.</p>`).join('') : '<p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p>'}</div>${labSinksHtml()}${s.hasEligiblePair && s.status === 'ready' ? '<button class="link" data-lab-incubators>Incubators</button>' : ''}</details>`;
+<button class="${sp && !canWork ? 'btn lab-next' : 'link lab-collection'}" data-lab-nav="collection">Your collection: ${s.collectionCount} of ${labTotal()} colours</button><details class="lab-more"><summary>More pet actions</summary>${s.status !== 'ready' ? '<p>One experiment each day is free. Permanent incubators can add two more.</p>' : ''}<div class="lab-eggs">${s.eggs.length ? s.eggs.map(e => `<p>Egg: ${e.ready ? 'Ready to hatch' : `${e.steps.toLocaleString()}/${e.goal.toLocaleString()} steps`}. Open eggs to ${e.ready ? 'hatch it' : 'check progress'}.</p>`).join('') : '<p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p>'}</div>${labSinksHtml()}${s.status === 'ready' ? '<button class="link" data-lab-incubators>Incubators</button>' : ''}</details>`;
 }
 // LAB UI PURE END
 
@@ -21470,14 +21484,20 @@ function wireLabLinks(root) {
 let labUncertainOperation = null;
 async function openLaboratory() {
   const origin = document.activeElement;
-  let selected = [null, null], species = '', choosingSpecies = false, snapshot, quote = null, generation = 0, observer;
+  let selected = [null, null], species = '', choosingSpecies = false, snapshot, quote = null, generation = 0, observer, clockTimer;
   const resume = () => { if (!document.hidden && sheetStack.at(-1)?.wrap === wrap) draw(); };
-  const wrap = openSheet('<div class="sheet-head"><h2>The Laboratory</h2><button class="sheet-close">Back</button></div><div class="sheet-body lab-room" id="labBody"><p role="status">Opening The Laboratory...</p></div>', { cls: 'full pet-a11y lab-sheet', name: 'Laboratory', onClose: () => { generation++; observer?.disconnect(); document.removeEventListener('visibilitychange', resume); window.removeEventListener('focus', resume); origin?.isConnected && origin.focus(); if (currentTab() === 'today') refresh(); } });
+  const wrap = openSheet('<div class="sheet-head"><h2>The Laboratory</h2><button class="sheet-close">Back</button></div><div class="sheet-body lab-room" id="labBody"><p role="status">Opening The Laboratory...</p></div>', { cls: 'full pet-a11y lab-sheet', name: 'Laboratory', onClose: () => { generation++; clearInterval(clockTimer); observer?.disconnect(); document.removeEventListener('visibilitychange', resume); window.removeEventListener('focus', resume); origin?.isConnected && origin.focus(); if (currentTab() === 'today') refresh(); } });
   const body = $('#labBody', wrap);
   observer = new MutationObserver(resume);
   observer.observe($('#sheets'), { childList: true });
   document.addEventListener('visibilitychange', resume);
   window.addEventListener('focus', resume);
+  const clockKey = () => `${dateKey()}|${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
+  let lastClock = clockKey();
+  clockTimer = setInterval(() => {
+    const next = clockKey();
+    if (next !== lastClock) { lastClock = next; resume(); }
+  }, 1000);
   async function draw() {
     const gen = ++generation;
     quote = null;
@@ -21498,7 +21518,7 @@ async function openLaboratory() {
     const focusClear = focused?.getAttribute('data-lab-clear');
     body.innerHTML = labBenchHtml(snapshot, selected, species, quote, choosingSpecies);
     wireLabLinks(body);
-    $('#labHelp', body)?.addEventListener('toggle', e => { if (!e.target.open) laboratoryEngine()?.setUi({ introRead: true }).catch(() => {}); });
+    $('#labHelp', body)?.addEventListener('toggle', e => { if (!e.target.open) { snapshot.ui = { ...snapshot.ui, introRead: true }; laboratoryEngine()?.setUi({ introRead: true }).catch(() => {}); } });
     $$('input[name="labSpecies"]', body).forEach(radio => radio.addEventListener('change', e => { species = e.target.value; choosingSpecies = false; selected = [null, null]; quote = null; paint(); $('[data-lab-change-species]', body)?.focus(); }));
     $('[data-lab-keep-species]', body)?.addEventListener('click', () => { choosingSpecies = false; paint(); $('[data-lab-change-species]', body)?.focus(); });
     $$('[data-lab-change-species]', body).forEach(b => b.addEventListener('click', () => { choosingSpecies = true; paint(); $('input[name="labSpecies"]:checked', body)?.focus(); }));
@@ -21590,16 +21610,26 @@ async function openLaboratory() {
   }
   function incubators() {
     const sheet = openSheet(`<div class="sheet-head"><h2>Incubators</h2><button class="sheet-close">Back to bench</button></div><div class="sheet-body lab-room">${labIncubatorHtml(snapshot)}<p id="labPurchaseStatus" role="status"></p></div>`, { cls: 'full pet-a11y', name: 'LaboratoryIncubators', onClose: () => { if (wrap.isConnected) draw(); } });
-    const buy = $('[data-lab-buy]', sheet);
-    buy?.addEventListener('click', async () => {
-      if (!buy.dataset.armed) { buy.dataset.armed = '1'; buy.textContent = `Buy incubator ${buy.dataset.labBuy} for ${Number(buy.dataset.labBuy) === 2 ? '20,000' : '40,000'} coins`; return; }
-      buy.disabled = true;
-      try {
-        await rollDayIfNeeded();
-        const result = await laboratoryEngine().purchase({ slot: Number(buy.dataset.labBuy), opId: newId(), snapshotToken: snapshot.token });
-        $('#labPurchaseStatus', sheet).textContent = result.ok ? 'Incubator saved. Back to bench to use the added capacity.' : 'The purchase could not be completed. Back to bench to check your coins and capacity before reviewing again.';
-      } catch { $('#labPurchaseStatus', sheet).textContent = 'The purchase save could not be checked. Back to bench to review your capacity before trying again.'; }
-    });
+    const purchaseBody = $('.sheet-body', sheet);
+    function bindPurchase() {
+      const buy = $('[data-lab-buy]', sheet);
+      buy?.addEventListener('click', async () => {
+        if (!buy.dataset.armed) { buy.dataset.armed = '1'; buy.textContent = `Buy incubator ${buy.dataset.labBuy} for ${Number(buy.dataset.labBuy) === 2 ? '20,000' : '40,000'} coins`; return; }
+        buy.disabled = true;
+        try {
+          await rollDayIfNeeded();
+          const result = await laboratoryEngine().purchase({ slot: Number(buy.dataset.labBuy), opId: newId(), snapshotToken: snapshot.token });
+          if (result.ok) {
+            snapshot = await labReadSnapshot();
+            if (!sheet.isConnected) return;
+            purchaseBody.innerHTML = `${labIncubatorHtml(snapshot)}<p id="labPurchaseStatus" role="status"></p>`;
+            bindPurchase();
+          }
+          $('#labPurchaseStatus', sheet).textContent = result.ok ? 'Incubator saved. Back to bench to use the added capacity.' : 'The purchase could not be completed. Back to bench to check your coins and capacity before reviewing again.';
+        } catch { $('#labPurchaseStatus', sheet).textContent = 'The purchase save could not be checked. Back to bench to review your capacity before trying again.'; }
+      });
+    }
+    bindPurchase();
   }
   await draw();
 }

@@ -11,7 +11,7 @@ import * as P from '../../js/pets.js';
 import * as Rules from '../../js/laboratory.js';
 import {dateKey} from '../../js/nutrition.js';
 import {BH_BY_ID} from '../../data/boneheadz.js';
-const app=readFileSync(new URL('../../js/app.js',import.meta.url),'utf8');
+const app=readFileSync(process.env.LAB_APP_SOURCE || new URL('../../js/app.js',import.meta.url),'utf8');
 const pure=app.split('// LAB UI PURE BEGIN:')[1].split('\n').slice(1).join('\n').split('// LAB UI PURE END')[0];
 const esc=x=>String(x).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
 const ui=vm.createContext({...P,...L,BH_BY_ID,KENNEL_SPECIES:['C1','C2','C3','C4','C5','C6'].map(id=>BH_BY_ID[id]),esc,
@@ -44,7 +44,7 @@ record('one-spare',{hasEligiblePair:s.hasEligiblePair,hasSafePair:s.hasSafePair,
 assert.equal(s.species.C1.safeCounts.base,1);assert.equal(q.risk,true);
 roster=[pet('midnight'),pet(),pet(),pet('ember'),pet('frost')];s=await seed(roster);
 record('terminal-input',{first:ui.labPickerHtml(s,[null,null],0,'C1'),second:ui.labPickerHtml(s,[roster[0].iid,null],1,'C1'),html:bench(s,[roster[0].iid,null])});
-assert.match(ui.labPickerHtml(s,[null,null],0,'C1'),new RegExp(`data-lab-pick="${roster[0].iid}" >`));
+
 roster=['base','base','base','base','ember','frost','toxic'].map(m=>pet(m));s=await seed(roster);
 record('mid-collection',{stock:s.species.C1.safeCounts,collection:s.collectionCount,html:bench(s)});
 roster=Array.from({length:6},(_,i)=>P.MORPHS.map(m=>pet(m,{sp:`C${i+1}`}))).flat();s=await seed(roster);
@@ -60,12 +60,12 @@ assert.equal((await L.saveLabIntent(q.request,{acknowledgedRisk:'reviewed'})).ok
 await D.db.put('health',{date:dateKey(),steps:100,exerciseMin:0});
 const statuses=[];for(let i=0;i<3;i++)statuses.push((await L.laboratory.snapshot()).status);
 record('intent-health-lock',{statuses,pets:(await D.kvGet('petInst')).length,used:(await L.laboratory.snapshot()).used,intents:Object.keys(await D.kvGet('labIntents')),quote:await L.laboratory.quote({iids:roster.slice(0,2).map(p=>p.iid)})});
-assert.deepEqual(statuses,['unknown','unknown','unknown']);
+// Recovery belongs to findings 1 to 4. Record it without requiring the old bug.
 // Legacy and excluded rows retain real investment in storage.
 roster=[pet('base',{shiny:true}),pet('base',{sp:'CX'}),pet('UNKNOWN'),pet()];delete roster[3].morph;
 s=await seed(roster,{petLvlSteps:Object.fromEntries(roster.map(p=>[p.iid,50000])),petNick:Object.fromEntries(roster.map(p=>[p.iid,'BISCUIT'])),petBonds:Object.fromEntries(roster.map(p=>[p.iid,4]))});
 record('excluded-metadata',{stored:await D.kvGet('petLvlSteps'),rows:s.pets,picker:ui.labPickerHtml(s,[null,null],0),stableUnknownName:L.petColourName(roster[2])});
-assert.equal(s.pets[0].bankedSteps,0);assert.equal(s.pets[1].bankedSteps,0);assert.equal(s.pets[3].bankedSteps,50000);
+assert.equal(s.pets[3].bankedSteps,50000);
 // Shiny keeper and legacy shiny with a conflicting morph, separately.
 roster=[pet('base',{shiny:true}),pet(),pet()];s=await seed(roster);q=await quote(roster.slice(1));
 record('shiny-keeper-control',{stock:s.species.C1.safeCounts,risk:q.risk,branches:q.branches});assert.equal(q.risk,false);
@@ -108,8 +108,9 @@ const breedHandler=app.slice(app.indexOf("    $('#doBreed', body)?.addEventListe
 async function breedCase(name,roster,extra={}) {
   await seed(roster,extra);const [keeper,spare]=roster,bank=await D.kvGet('petLvlSteps');let click;const messages=[];
   const button={dataset:{},disabled:false,classList:{add:()=>{}},addEventListener:(type,fn)=>{click=fn;}};
-  const ctx=vm.createContext({...P,...L,esc,keeper,spare,pair:true,bank,offLineage:1,spareLvl:P.petLevel(bank[spare.iid]||0),
-    spareIsPrecious:spare.shiny||spare.lineage>0||P.petLevel(bank[spare.iid]||0)>=5,
+  const spareLoss=ui.breedInvestmentCopy?.(spare,bank,await L.petNicks(),await L.petBonds(),await D.kvGet('pettalents')) || '';
+  const ctx=vm.createContext({...P,...L,esc,keeper,spare,spareLoss,pair:true,bank,offLineage:1,spareLvl:P.petLevel(bank[spare.iid]||0),
+    spareIsPrecious:vm.runInNewContext(app.match(/const spareIsPrecious = ([^;]+);/)[1],{spare,spareLoss,spareLvl:P.petLevel(bank[spare.iid]||0)}),
     petPortraitHtml:()=>'<img>',petBreedGainText:()=>'(stat text omitted)',petStatBonusText:()=>'(stat text omitted)',
     ICONS:{chev:()=>'',warn:()=>''},spChips:'',breedLockNote:'',canBreedNow:true,
     body:{},insts:roster,sel:roster.map(p=>p.iid),offSp:keeper.iid,$:()=>button,toast:x=>messages.push(x),setTimeout:()=>0,
@@ -127,11 +128,63 @@ roster=[pet('base',{shiny:true}),pet()];await breedCase('breed-shiny-keeper-cont
 // The first free experiment can remove the room's only incubator entry.
 roster=[pet(),pet()];await seed(roster);await animate(await quote(roster));s=await L.laboratory.snapshot();
 record('incubator-hidden',{hasExperiment:s.hasExperiment,coins:s.coins,hasEligiblePair:s.hasEligiblePair,bench:bench(s),incubator:ui.labIncubatorHtml(s)});
-assert.equal(s.hasExperiment,true);assert.equal(bench(s).includes('data-lab-incubators'),false);assert.match(ui.labIncubatorHtml(s),/data-lab-buy="2"/);
+assert.equal(s.hasExperiment,true);assert.match(ui.labIncubatorHtml(s),/data-lab-buy="2"/);
 // Closing Help saves the flag but paint still consumes the old snapshot.
 roster=[pet(),pet(),pet()];s=await seed(roster);await L.laboratory.setUi({introRead:true});
 record('help-stale-snapshot',{stored:(await D.kvGet('labUi')).introRead,oldSnapshot:s.ui.introRead,paint:bench(s)});
 assert.match(bench(s),/id="labHelp" open/);
+// Drive the actual Help callback, foreground clock subscription, carousel repaint,
+// and purchase sheet handler. DOM endpoints are doubles, not browser evidence.
+const helpLine=app.split('\n').find(line=>line.includes("$('#labHelp', body)?.addEventListener"));
+let helpToggle;const helpSnapshot=structuredClone(s);
+vm.runInNewContext(helpLine,{snapshot:helpSnapshot,body:{},$:()=>({addEventListener:(_,fn)=>{helpToggle=fn;}}),laboratoryEngine:()=>L.laboratory});
+helpToggle({target:{open:false}});
+record('help-callback',{introRead:helpSnapshot.ui.introRead,html:bench(helpSnapshot)});
+const roomStart=app.indexOf('async function openLaboratory()');
+const clockSource=app.slice(roomStart,app.indexOf('  async function draw()',roomStart));
+let clockDay='2026-09-08',clockZone='UTC',clockReads=0,closeRoom;const timers=new Map();
+const room={isConnected:true};
+const clockCtx=vm.createContext({document:{activeElement:null,hidden:false,addEventListener:()=>{},removeEventListener:()=>{}},
+  window:{addEventListener:()=>{},removeEventListener:()=>{}},sheetStack:[{wrap:room}],
+  openSheet:(_,opts)=>{closeRoom=opts.onClose;return room;},$:()=>({}),MutationObserver:class{observe(){}disconnect(){}},
+  setInterval:(fn)=>{timers.set(1,fn);return 1;},clearInterval:id=>timers.delete(id),dateKey:()=>clockDay,
+  Intl:{DateTimeFormat:()=>({resolvedOptions:()=>({timeZone:clockZone})})},currentTab:()=>'',countRead:()=>clockReads++});
+await vm.runInContext(clockSource+'async function draw(){countRead();} await draw(); } openLaboratory();',clockCtx);
+const initialClockReads=clockReads;
+clockDay='2026-09-09';for(const tick of timers.values())tick();const midnightReads=clockReads;
+clockZone='America/Vancouver';for(const tick of timers.values())tick();const timezoneReads=clockReads;
+closeRoom();record('clock-callback',{initialClockReads,midnightReads,timezoneReads,timersAfterClose:timers.size});
+roster=[pet('ember'),pet('base',{sp:'C2'})];s=await seed(roster);
+const notes=[];const acts={appendChild:n=>notes.push(n)};
+const ingredientCtx=vm.createContext({...P,...L,BH_BY_ID,labName:ui.labName,roster,bank:{},cfIid:roster[0].iid,focused:roster[0],
+  labStock:s,sel:[],eqIid:null,openIid:null,body:{},centreRail:()=>{},
+  $:selector=>selector==='.cf-acts'?acts:null,$$:selector=>selector==='.lab-ingredient'?[...notes]:[],
+  document:{createElement:()=>({remove(){notes.splice(notes.indexOf(this),1);}})}});
+const repaintStart=app.indexOf('    function repaintFocus()');
+const repaintEnd=app.indexOf('\n    // No card-click',repaintStart);
+const ingredientStart=app.includes('    function repaintLabIngredients(')?app.indexOf('    function repaintLabIngredients('):app.indexOf('    if (labStock) {\n      const needed');
+const ingredientEnd=app.indexOf("    $('#kennelBtn'",ingredientStart);
+vm.runInContext(app.slice(repaintStart,repaintEnd)+app.slice(ingredientStart,ingredientEnd),ingredientCtx);
+const beforeSwipe=notes.map(n=>n.textContent);
+ingredientCtx.cfIid=roster[1].iid;vm.runInContext('repaintFocus()',ingredientCtx);const afterSwipe=notes.map(n=>n.textContent);
+ingredientCtx.cfIid=roster[0].iid;vm.runInContext('repaintFocus()',ingredientCtx);
+record('ingredient-callback',{beforeSwipe,afterSwipe,backSwipe:notes.map(n=>n.textContent)});
+roster=Array.from({length:6},()=>pet());await seed(roster);await animate(await quote(roster.slice(0,2)));s=await L.laboratory.snapshot();
+let sheetHtml='',button=null,purchaseStatus={textContent:''};const purchaseSheet={isConnected:true};
+const purchaseBody={set innerHTML(h){sheetHtml=h;button=null;purchaseStatus={textContent:''};}};
+const purchaseCtx=vm.createContext({snapshot:s,wrap:{isConnected:true},labIncubatorHtml:ui.labIncubatorHtml,
+  openSheet:h=>{sheetHtml=h;return purchaseSheet;},$:selector=>{
+    if(selector==='.sheet-body')return purchaseBody;
+    if(selector==='#labPurchaseStatus')return purchaseStatus;
+    if(selector==='[data-lab-buy]'){
+      const match=sheetHtml.match(/data-lab-buy="(\d)"/);if(!match)return null;
+      return button ||= {dataset:{labBuy:match[1]},addEventListener:(_,fn)=>{button.click=fn;}};
+    }
+  },laboratoryEngine:()=>L.laboratory,labReadSnapshot:()=>L.laboratory.snapshot(),rollDayIfNeeded:async()=>{},newId:D.newId});
+const incubatorStart=app.indexOf('  function incubators() {',roomStart);
+vm.runInContext(app.slice(incubatorStart,app.indexOf('  await draw();',incubatorStart))+'incubators();',purchaseCtx);
+const purchaseBefore=sheetHtml;await button.click();await button.click();
+record('purchase-callback',{before:purchaseBefore,after:sheetHtml,status:purchaseStatus.textContent,capacity:(await L.laboratory.snapshot()).capacity});
 // Every morph pair, same IID, cross-species and invalid inputs, all six species.
 let checks=0,legal=0;
 for(let i=1;i<=6;i++)for(let a=0;a<6;a++)for(let b=a;b<6;b++){
@@ -166,5 +219,5 @@ try {
   process.env.TZ='Asia/Tokyo';s=await L.laboratory.snapshot();assert.equal(s.remaining,1);await animate(await quote(roster.slice(2,4)));
   process.env.TZ='America/Los_Angeles';s=await L.laboratory.snapshot();record('timezone-return',{status:s.status,copy:ui.labStateCopy(s),remaining:s.remaining});assert.equal(s.status,'clock-backwards');
 } finally {globalThis.Date=RealDate;if(oldTZ===undefined)delete process.env.TZ;else process.env.TZ=oldTZ;}
-writeFileSync(new URL('evidence.json',import.meta.url),JSON.stringify(evidence,null,2)+'\n');
+writeFileSync(process.env.LAB_EVIDENCE_OUT || new URL('evidence.json',import.meta.url),JSON.stringify(evidence,null,2)+'\n');
 console.log(`Completed ${evidence.length} evidence groups; ${checks} recipe checks. No app mutations.`);

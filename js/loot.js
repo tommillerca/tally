@@ -14,6 +14,7 @@ import { isMorph, MORPH_LABEL, morphAsset, isKnownPet, legalPicks, petLevel, MOR
 // Use the same colour identity as the art. Shinies and CX never wear morph art.
 export function petColourName(inst) {
   if (inst.shiny) return 'Shiny';
+  if (inst.sp !== 'CX' && !labMorph(inst.morph)) return `Unsupported colour (${String(inst.morph)})`;
   return morphAsset(inst.sp, inst.morph) ? MORPH_LABEL[inst.morph] : 'Base';
 }
 
@@ -1841,6 +1842,14 @@ function labNeededFor(sp, morph, roster, s) {
   if (['toxic','rose'].includes(morph) && v && count(morph)<2) return 'Toxic + Rose';
   return undefined;
 }
+function labDisplayMetadata(row, s) {
+  const id=row?.iid, steps=s.petLvlSteps?.[id]??0, lineage=row?.lineage??0, bond=s.petBonds?.[id]??0;
+  const number=n=>typeof n==='number'&&Number.isFinite(n)&&n>=0;
+  const nickname=s.petNick?.[id]??'', talents=s.pettalents?.[id]??[];
+  return {bankedSteps:number(steps)?steps:'unknown',level:number(steps)?petLevel(steps):'unknown',
+    lineage:number(lineage)&&Number.isInteger(lineage)?lineage:'unknown',bond:number(bond)&&bond<=5?bond:'unknown',
+    nickname:typeof nickname==='string'?nickname:'unknown',talents:Array.isArray(talents)&&talents.every(t=>typeof t==='string')?talents:['unknown']};
+}
 function labPetRows(roster, s) {
   const ids = roster.map(p=>p?.iid), unique = new Set(ids).size === ids.length;
   const counts = new Map();
@@ -1855,11 +1864,11 @@ function labPetRows(roster, s) {
     const input=labInput(row,s), key=labCellKey(row);
     const eligible=!!input && unique && !(s.petTaken||[]).includes(row?.iid);
     const reason=eligible ? '' : row?.shiny ? 'Shiny pets cannot be used here.' : row?.sp==='CX' ? 'The Day One Lizard cannot be used here.'
-      : !/^C[1-6]$/.test(row?.sp) ? 'This species is not supported.' : !labMorph(row?.morph) ? 'This saved colour is not supported.'
+      : !/^C[1-6]$/.test(row?.sp) ? 'This species is not supported.' : !labMorph(row?.morph) ? 'This saved colour is not supported. Keep this pet and your backup for recovery; it cannot supply a recipe.'
       : !unique ? 'Duplicate pet identities require repair and a fresh review.' : 'This saved pet has invalid or unavailable metadata.';
     // Invalid rows stay visible but never receive eligible status or permissive values.
     const p=input || {iid:row?.iid,sp:row?.sp,morph:labMorph(row?.morph)||String(row?.morph),shiny:!!row?.shiny,
-      lineage:0,bankedSteps:0,level:1,nickname:'',bond:0,talents:[],equipped:s.petEquipped===row?.iid};
+      ...labDisplayMetadata(row,s),equipped:s.petEquipped===row?.iid};
     return {...p, talents:labTalentNames(p), eligible, reason,
       safeSurplus:eligible && labPlain(p) && !keepers.has(row), lastCopy:counts.get(key)===1,
       neededFor:eligible ? labNeededFor(p.sp,p.morph,roster,s) : undefined};

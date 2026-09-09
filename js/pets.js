@@ -362,7 +362,7 @@ const MORPH_SPECIES = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
 // The (species, morph) pairs a player already owns, as a Set of "sp|morph" keys.
 // Pure: takes the instance list (js/loot.js petInstances()), never reads it itself.
 export function ownedPairs(instances) {
-  return new Set((instances || []).map(x => `${x.sp}|${x.morph || 'base'}`));
+  return new Set((instances || []).map(x => `${x.sp}|${x.shiny ? 'base' : x.morph || 'base'}`));
 }
 // R39-10 (2026-09-06): how many of those pairs have a CELL in the Kennel grid.
 // owned.size counts CX (exempt, no cell) too: "37 / 36" with a full set.

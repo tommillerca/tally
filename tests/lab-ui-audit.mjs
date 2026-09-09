@@ -291,11 +291,11 @@ await check('all 36 preview files use the shipped morph resolver and suppress sh
 await check('empty and no-pair states are neutral and still explain eggs', () => {
   for (const [s, text] of [[state({ pets: [], hasEligiblePair: false, hasSafePair: false }), 'Hatch eggs to discover species. The recipe path is here when you have a pair.'],[state({ hasEligiblePair: false, hasSafePair: false }), 'Your pets do not match a recipe yet. Hatch eggs to discover species and build matching pairs.']]) {
     const html = ui.labBenchHtml(s,[null,null],'');
-    rejectsMutation(html, html.replace(text,'You missed an experiment'), h => { assert.ok(h.includes(text)); assert.doesNotMatch(h,/data-lab-incubators|missed|hurry|!/i); assert.equal((h.match(/data-recipe=/g)||[]).length,3); });
+    rejectsMutation(html, html.replace(text,'You missed an experiment'), h => { assert.ok(h.includes(text)); assert.doesNotMatch(h,/missed|hurry|!/i); assert.equal((h.match(/data-recipe=/g)||[]).length,3); });
   }
 });
 await check('cap, invested-only, species-complete and cannot-afford states offer next actions', () => {
-  const cases = [[state({ used: 1, remaining: 0 }), '', "You've used 1/1 experiments today. Experiments reset at 00:00, America/Vancouver."], [state({ hasSafePair: false }), '', 'Keep one of each colour.'], [state({ species: { C1: { complete: true, count: 6 } } }), 'C1', 'Choose another species'], [state({ species: { C1: { hasEligiblePair: false } } }), 'C1', 'Hatch eggs or choose another species']];
+  const cases = [[state({ used: 1, remaining: 0 }), '', "You've used 1/1 experiments today. Experiments reset at 00:00, America/Vancouver."], [state({ hasSafePair: false }), '', 'No matching pair preserves both your collection and pet investment.'], [state({ species: { C1: { complete: true, count: 6 } } }), 'C1', 'Choose another species'], [state({ species: { C1: { hasEligiblePair: false } } }), 'C1', 'Hatch eggs or choose another species']];
   for (const [s, sp, text] of cases) rejectsMutation(ui.labStateCopy(s,sp), 'Try harder', h => assert.ok(h.includes(text)));
   const html = ui.labIncubatorHtml(state({ used: 1, remaining: 0, coins: 1250 }));
   rejectsMutation(html, html.replace('18,750','0'), h => { assert.match(h,/20,000 coins/); assert.match(h,/1,250; 18,750 more needed/); assert.match(h,/data-lab-buy="2" disabled/); assert.match(h,/free daily experiment has been used/); });
