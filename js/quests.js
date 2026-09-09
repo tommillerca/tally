@@ -507,39 +507,12 @@ export async function claimQuest(periodKey, q, period = 'day') {
   const cap = QUEST_N[period] || QUEST_N.day;
   const rows = await db.all('xp');
   const already = claimsThisPeriod(rows, periodKey, period);
-  const mine = rows.some(r => r.key === `quest-${periodKey}-${q.id}`);
-  /* RESERVE A SLOT, DO NOT MERELY COUNT ONE. The per-quest key below is atomic,
-     so the SAME quest can never pay twice, but the period TOTAL was a read, an
-     await and a write: two claims of DIFFERENT quests both saw themselves under
-     the ceiling and both paid. Measured 2026-09-01 on origin/main 3d4b208c, a
-     weekly cap of 3 with one prior claim paid FOUR when three distinct ids were
-     claimed at once (+450 coins, +210 XP, 2 golden crates and a Vigor Draught),
-     and a monthly cap of 2 paid 3. Reachable in one tab with no devtools: the
-     Claim handler is async and the button is neither disabled nor debounced, so
-     a second tap before the first await settles runs both.
-     WHY A LEDGER ROW AND NOT A COUNTER IN kv. The ledger is already this file's
-     authority, it is what claimsThisPeriod counts, and it survives a backup and
-     restore. A kv counter would be new state that a restored save or a mid-period
-     rollout starts from zero, handing every player a fresh capful. The slots are
-     numbered from `already` so the rows that exist today are honoured without a
-     backfill, and the walk up to `cap` is what settles a tie: two callers racing
-     for slot n cannot both get it, and the loser takes n+1 or is refused.
-     The id `slot-<n>` is deliberately not in any quest pool, so these rows are
-     invisible to claimsThisPeriod, and they carry 0 XP, the same shape
-     backfillDenCeilingIfNeeded's markers use. */
-  let slotKey = null;
-  if (!mine) {
-    for (let n = already; n < cap; n++) {
-      const key = `quest-${periodKey}-slot-${n}`;
-      if (await db.addIfAbsent('xp', { key, type: 'questslot', xp: 0, label: 'Quest slot', date: dateKey(), ts: Date.now() })) { slotKey = key; break; }
-    }
-    if (!slotKey) {
-      /* Say so rather than returning null. A null here reaches a click handler that
-         does nothing at all, and a button that silently does nothing is the exact
-         failure the write-failure work went after. */
-      return { capped: true, cap, period };
-    }
-  }
+  /* The budget and reward must commit together. Separate questslot rows could
+     collide on Monday or survive a failed payout forever. Seed from paid ledger
+     rows for existing saves, ignoring old reservation-only rows. The updater
+     runs under the claim's transaction, so concurrent claims share one ceiling.
+     Include the period: Monday is both a day key and a week key. */
+  const budgetKey = `questbudget:${period}:${periodKey}`;
   // Keeper's Boon: holding any Dark Spire pays a little extra on every quest.
   // This is the always-on perk that makes losing your last tower sting even when
   // nobody else is competing for it.
@@ -549,8 +522,7 @@ export async function claimQuest(periodKey, q, period = 'day') {
      land in five writes AFTER award() had already minted the quest's ledger
      row, so a throw anywhere in that chain (quota, the wipe-protocol freeze
      flag, an IndexedDB abort) left the quest permanently claimed and paid
-     nothing: award() cannot be re-run once the row exists, and the
-     slot-release branch above only covers the reservation, not this. Same
+     nothing: award() cannot be re-run once the row exists. Same
      shape js/hunt.js:collectSpawn already uses for the Boneyard collect (QA
      round 28 Y5): every payout rides inside the claim's own transaction via
      awardOnce's `pay`, so a losing write takes the whole reward with it and a
@@ -559,6 +531,11 @@ export async function claimQuest(periodKey, q, period = 'day') {
   const item = q.item ? { id: newId(), kind: q.item, source: 'quests', ts: Date.now() } : null;   // e.g. 'vigor'
   const pay = {
     kv: {
+      [budgetKey]: cur => {
+        const used = Math.max(Number(cur) || 0, already);
+        if (used >= cap) throw Object.assign(new Error('Quest period budget reached'), { questCapped: true, refused: true });
+        return used + 1;
+      },
       coins: cur => Math.max(0, (Number(cur) || 0) + coins),
       // R38-13 (2026-09-06): bumped by the coin MAGNITUDE, matching js/loot.js
       // coinsAdd's own fix -- a flat +1 here would undermine the sum-based
@@ -577,11 +554,14 @@ export async function claimQuest(periodKey, q, period = 'day') {
     },
     puts: [...(crate ? [{ store: 'inv', val: crate }] : []), ...(item ? [{ store: 'inv', val: item }] : [])],
   };
-  const claim = await awardOnce(`quest-${periodKey}-${q.id}`, 'quest', REWARD_XP[period] || 25, `Quest: ${q.name}`, undefined, null, pay);
-  /* Nothing was minted, so give the slot back rather than burning it. Only the
-     caller that created this row is here to delete it, and it deletes only on
-     the path where it paid for nothing. */
-  if (!claim.claimed) { if (slotKey) await db.del('xp', slotKey); return null; }
+  let claim;
+  try {
+    claim = await awardOnce(`quest-${periodKey}-${q.id}`, 'quest', REWARD_XP[period] || 25, `Quest: ${q.name}`, undefined, null, pay);
+  } catch (error) {
+    if (error?.questCapped) return { capped: true, cap, period };
+    throw error;
+  }
+  if (!claim.claimed) return null;
   return { xp: claim.xp, coins, boon: boon ? Math.round(coins - q.coins) : 0, crate: q.crate || null, dust: q.dust || 0, item: q.item || null, ingredient: q.ingredient || null };
 }
 

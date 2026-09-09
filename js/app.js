@@ -5322,7 +5322,7 @@ async function renderToday(el) {
        itself instead of leaving a dead button. */
     if (res?.capped) {
       const when = period === 'day' ? 'today' : period === 'week' ? 'this week' : 'this month';
-      toast(`All ${res.cap} quests for ${when} are already claimed. Fresh ones ${period === 'day' ? 'tomorrow' : 'next ' + period}.`, 3600);
+      toast(`The ${res.cap} quest rewards for ${when} have been paid. Fresh ones ${period === 'day' ? 'tomorrow' : 'next ' + period}.`, 3600);
       refresh();
       return;
     }

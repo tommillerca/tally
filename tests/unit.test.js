@@ -5823,10 +5823,10 @@ test('R26-O11 two overlapping spin claims on one day grant exactly once', async 
   }
   assert.equal(await claimSpin('2026-09-04'), false, 'a later claim on the same day is refused');
   assert.equal(await claimSpin('2026-09-05'), true, 'the next day is a fresh claim');
-  // the shape pin: the commit asks claimSpin BEFORE it grants, and returns `already` to the loser
+  // The commit supplies the payout to its atomic claim and discloses a loser.
   const wheel = readFileSync(join(here, '..', 'js', 'wheel.js'), 'utf8');
-  const c = wheel.slice(wheel.indexOf('const commit = async () => {'), wheel.indexOf('prize.grant(rng)'));
-  assert.ok(c.length > 0 && /await claimSpin\(today\)/.test(c), 'the wheel commit does not claim the spin with claimSpin before granting');
+  const c = wheel.slice(wheel.indexOf('const commit = async () => {'), wheel.indexOf('  const result =', wheel.indexOf('const commit = async () => {')));
+  assert.ok(c.length > 0 && /await claimSpin\(today, pay\)/.test(c), 'the wheel commit must pass its payout into the spin transaction');
   assert.match(c, /already: true/, 'the loser must be told (already: true), not handed a silent coinDelta 0');
   assert.match(wheel, /result\.already \? 'Already spun today'/, "the reveal must say 'Already spun today' to the loser, not 'You won'");
 });
@@ -8254,6 +8254,14 @@ test('P1 backup merge preserves Kitchen earnings, diary maintenance and offline 
   const output = execFile_.execFileSync(process.execPath, [join(here, 'p1-merge-audit.mjs')], { encoding: 'utf8' });
   assert.match(output, /P1 MERGE: \d+ passed, 0 failed/);
   assert.match(output, /PASS CONTROL replacement/);
+});
+
+test('P1 quest budgets and wheel payouts survive aborted writes', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'quest-wheel-budget-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /0 failed/);
+  assert.match(output, /PASS F04/);
+  assert.match(output, /PASS F05/);
+  assert.match(output, /PASS F21/);
 });
 
 await runAll();

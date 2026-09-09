@@ -337,6 +337,7 @@ PURE.push('breed-lock-audit.mjs'); // B1: rendered cooldown disclosure and READY
 PURE.push('device-loss-audit.mjs'); // L3: encrypted wipe/restore, initialization rewards, recovery choice and real IOError messages in Node doubles; no browser or network.
 PURE.push('multidevice-earnings-audit.mjs'); // L2: both offline currency histories, replay/spends, atomic import, encrypted push and simulated lifecycle; Node-only.
 PURE.push('response-bodies-audit.mjs'); // Parsed wrong-body refusal, unchanged state and production disclosure with valid controls; no sockets.
+PURE.push('quest-wheel-budget-audit.mjs'); // P1: real quest claims and wheel commit over mem-idb, abort/retry and concurrency; no sockets.
 const BROWSER = [
   'today-dock-pixels-audit.mjs', // v522: the Today dock band must not paint --hero-edge. Browser tier: it screenshots and samples real pixels, which is the only instrument that catches this class (the geometry measures correct either way). Its CONTROL-PIXELS row is deliberately UNPROVEN, see docs/CLAIMS.md v522.
 
