@@ -15727,7 +15727,7 @@ function renderOnboarding(step = 0, ctx = {}) {
         <button class="onb-reroll" id="onbReroll" aria-label="New name">${t1Stroke(18, '<path d="M20 11a8 8 0 1 0-2.3 6.3"/><path d="M20 5v6h-6"/>')}</button>
       </div>
       <div class="onb-earns">
-        <div class="onb-earn"><span class="ic">${ICONS.star(18)}</span><b>LOG FOOD</b><small>XP, every meal</small></div>
+        <div class="onb-earn"><span class="ic">${ICONS.star(18)}</span><b>LOG FOOD</b><small>XP: first ${XP_DAILY_CAP.log} logs today</small></div>
         ${/* pixCur first, like its two siblings: ICONS.star and ICONS.pit both ask
              18 and both serve the 16 step, so a vector egg here left one of three
              icons in a three-icon row drawn in a different medium. */''}
