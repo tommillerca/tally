@@ -4,8 +4,8 @@
 // cell + ISO week). Everything is deterministic and idempotent: the ledger key
 // `boss-<week>-<denId>` makes each den claimable once per week, server-verifiable
 // later, exactly like hunt spawns.
-import { award, levelFor, totalXp } from './game.js';
-import { coinsAdd, grantCrate, grantGear, ownedGearIds, boneDustAdd } from './loot.js';
+import { award, awardOnce, levelFor, totalXp } from './game.js';
+import { coinsAdd, grantCrate, crateRow, eggRow, grantGear, ownedGearIds, boneDustAdd } from './loot.js';
 import { kvGet, kvSet, kvUpdate, db, claimDay } from './db.js';
 import { GEAR_ITEMS } from './gear.js';
 import { TALENT_TREES } from './pit.js';
@@ -396,92 +396,33 @@ export function rollDenLoot(den, week, ownedSet, maxLevel = 999, preferArch = nu
 // never fast-forwards the endless-Pit gate — only the FIRST-ever clear of each
 // den identity advances the gate (a permanent 'boss' marker, counted once).
 export async function claimDenWin(den, day = dateKey(), week = isoWeekKey()) {
-  const r = den.reward;
-  if (den.roaming) {
-    const xp = await award(denKey(day, den), 'roamboss', r.xp || 50, `Roaming boss: ${den.name}`);
-    if (xp === 0) return null;
-    /* ROAMING BOSSES NOW RAISE THE CEILING TOO. Tom, 2026-08-13, and not for
-       the first time: "fighting some of the new boss dens in the open world do
-       not increase the ceiling on pit fights. some do some dont".
-       He was exactly right, and this was the some-dont. denWinsCount() counts
-       'bossfirst' rows. The landmark branch mints one, the remote branch mints
-       one and says in its comment that it must, and this branch minted only
-       'roamboss', so every roaming boss a player beat did nothing for the
-       Gauntlet. Same claimDenWin, same kind of fight, silently different
-       progression.
-       Minted AFTER the xp===0 check, per the rewarded-actions SOP: the state
-       transition is "a roaming boss goes from never-beaten to beaten", and a
-       re-clear must not mint a second marker. The id is
-       roam-<date>-<cell>, so award()'s own dedupe keys this to one per distinct
-       boss, which is what "distinct dens ever beaten" already means. */
-    await award(`bossfirst-${den.id}`, 'bossfirst', 0, `Roaming clear: ${den.name}`);
-    if (r.crate) await grantCrate(r.crate, 'roam-boss');
-    return { xp, ...r, gearChoices: null };
-  }
-  // remote: one a day, no gear chooser, but it DOES count as a den win so the
-  // Gauntlet ceiling can rise for someone who cannot walk to a real den
-  if (den.remote) {
-    const xp = await award(denKey(day, den), 'bossday', r.xp || 50, `Remote den: ${den.name}`);
-    if (xp === 0) return null;
-    await award(`bossfirst-${den.id}`, 'bossfirst', 0, `Remote clear: ${den.name}`);
-    if (r.crate) await grantCrate(r.crate, 'remote-den');
-    /* COINS ARE PAID BY THE FIGHT SETTLE, NOT HERE. This branch used to pay
-       coinsAdd(r.coins) itself, and the settle read r.coins out of the return
-       and paid it AGAIN: every remote den win banked double its banner (the
-       playtest measured +48 announced, +96 banked, on every win). The landmark
-       branch below never paid internally, which is why only remote dens
-       doubled. The settle is the right single payer because the Battle Charm
-       and Feast multipliers live there and apply to what the banner shows.
-       den-ceiling-audit's REMOTE-PAYS-NOTHING row pins this function to a zero
-       wallet delta. */
-    return { xp, ...r, gearChoices: null };
-  }
-  // landmark: once per day for loot/coins/xp, logged non-gating
-  const xp = await award(denKey(day, den), 'bossday', r.xp || 50, `Boss den: ${den.name}`);
-  if (xp === 0) return null; // already cleared today
-  /* GATE MARKER, SCOPED TO THE WEEK. Tom, 2026-08-16, after saying this had
-     been "fixed" five times: "I've killed a boss den and it still didn't raise
-     my pit cap."
-     He was right again, and this was the last one. A landmark den's `id` is its
-     GRID CELL (`${cx}_${cy}`, poi.js denForCell), but denForCell seeds its tier
-     and boss from `den:${week}:${cx}:${cy}`, so the cell holds a DIFFERENT boss
-     every week. The marker was `bossfirst-<cell>`, so the first clear of a cell
-     banked it forever and every later week's boss in that cell minted nothing.
-     A player who fights the dens near home hits this permanently: real kills,
-     no ceiling movement, no explanation on screen.
-     Reproduced before changing anything: three real kills at the Gastown anchor
-     across W30/W31/W32 wrote only TWO markers and left the ceiling at 13 where
-     it should have been 16.
-     This is also the other half of his 2026-08-13 "some do some dont". That fix
-     gave the ROAMING branch a marker; roaming ids are `roam-<date>-<cell>` and
-     remote is `remote-<day>`, both already time-scoped, so only this landmark
-     branch still carried the coarse identity.
-     Week, not day, on purpose: the boss rotates weekly, so a new week is a new
-     boss and counts once, while re-clearing it daily inside that week hits
-     award()'s own dedupe and pays no ceiling. Old `bossfirst-<cell>` rows keep
-     counting as their own distinct id, so nobody's existing total is clawed
-     back and no migration is needed. */
-  await award(`bossfirst-${week}-${den.id}`, 'bossfirst', 0, `First clear: ${den.name}`);
-  if (r.crate) await grantCrate(r.crate, 'boss-den');
-  // every boss drops two pieces: keep ONE (chooser persists in kv until picked)
-  const owned = await ownedGearIds();
-  const lvl = levelFor(await totalXp()).level;
-  const choices = rollDenLoot(den, day, owned, lvl + 3, await dominantArch(), await lootSalt());
-  if (choices) {
-    /* ONE TRANSACTION, because claimDenLoot TAKES from this row. Reading the
-       list and writing it whole put a drop the player had ALREADY picked back
-       into the pending list, and a boss's other piece could then be taken too,
-       which is exactly the claim claimDenLoot was made atomic to close. */
-    await kvUpdate('denloot', (list) => {
-      const pending = list || [];
-      if (pending.some(p => p.key === denKey(day, den))) return undefined;
-      return [...pending,
-        { key: denKey(day, den), den: den.name, choices: choices.map(g => g.id), ts: Date.now() }].slice(-6);
-    }, []);
-  } else {
-    await coinsAdd(60); // full collection consolation
-  }
-  return { xp, ...r, gearChoices: choices };
+  const r = den.reward, key = denKey(day, den);
+  if (await db.get('xp', key)) return null;
+  const landmark = !den.roaming && !den.remote;
+  const source = den.roaming ? 'roam-boss' : den.remote ? 'remote-den' : 'boss-den';
+  const label = den.roaming ? 'Roaming boss' : den.remote ? 'Remote den' : 'Boss den';
+  const xp = r.xp || 50;
+  const choices = landmark ? rollDenLoot(den, day, await ownedGearIds(),
+    levelFor((await totalXp()) + xp).level + 3, await dominantArch(), await lootSalt()) : null;
+  const marker = `bossfirst-${landmark ? week + '-' : ''}${den.id}`;
+  const puts = await db.get('xp', marker) ? [] : [{ store: 'xp', val: { key: marker, type: 'bossfirst', xp: 0,
+    label: `First clear: ${den.name}`, date: day, ts: Date.now() } }];
+  if (r.crate) puts.push({ store: 'inv', val: r.crate === 'egg'
+    ? await eggRow(source) : crateRow(r.crate, source) });
+  // The daily receipt, ceiling marker, crate and gear entitlement commit
+  // together. An aborted inventory write leaves the den claimable on retry.
+  // Pending choices have no eviction limit: each is an earned boss drop.
+  const kv = choices ? {
+    denloot: list => (list || []).some(p => p.key === key) ? undefined : [...(list || []),
+      { key, den: den.name, choices: choices.map(g => g.id), ts: Date.now() }],
+  } : landmark ? {
+    coins: cur => (Number(cur) || 0) + 60,
+    coinsRev: cur => (Number(cur) || 0) + 60,
+  } : {};
+  const claim = await awardOnce(key, den.roaming ? 'roamboss' : 'bossday', xp,
+    `${label}: ${den.name}`, day, null, { kv, puts });
+  // Encounter coins remain owned by settle, where food and charm apply.
+  return claim.claimed ? { ...r, xp: claim.xp, gearChoices: choices } : null;
 }
 
 // Player picked a piece from a pending boss drop. Grants + clears the entry.

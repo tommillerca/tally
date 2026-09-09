@@ -3309,15 +3309,46 @@ export async function equipGear(slot, gearId) {
    becomes "charm running". If one is already running, there is no transition, so
    there is nothing to spend an item on. */
 export async function activateBattleCharm() {
-  const buffs = await kvGet('buffs', {});
-  if ((buffs.xp2 || 0) > 0) return { ok: false, reason: 'active', charges: buffs.xp2 };
-  const inv = await inventory();
-  const row = inv.find(r => r.kind === 'xp2');
-  if (!row) return { ok: false, reason: 'none' };
-  if (!(await db.takeInv(row.id))) return { ok: false, reason: 'none' };   // R38-13, one transaction since 2026-09-06
-  buffs.xp2 = 5;
-  await kvSet('buffs', buffs);
-  return { ok: true, charges: 5 };
+  // Read eligibility, remove one item, write its take receipt and activate
+  // charges inside one transaction. Concurrent activations cannot stack.
+  return payAtomic({
+    snapshot: { keys: ['buffs'], stores: ['inv'] },
+    decide: ({ buffs = {} }, { inv }) => {
+      if ((buffs.xp2 || 0) > 0) return { result: { ok: false, reason: 'active', charges: buffs.xp2 } };
+      const row = inv.find(r => r.kind === 'xp2');
+      if (!row) return { result: { ok: false, reason: 'none' } };
+      return { result: { ok: true, charges: 5 },
+        kv: { buffs: () => ({ ...buffs, xp2: 5 }) },
+        dels: [{ store: 'inv', key: row.id }] };
+    },
+  });
+}
+
+// A Wanderer's encounter receipt owns the whole reward, including its charm
+// charge. No egg or wallet write can fail after the encounter is consumed.
+export async function claimWandererWin(cfg, coinMult = 1) {
+  const { awardOnce } = await import('./game.js');
+  let coins = cfg.coins || 0;
+  const extras = [];
+  const pay = { kv: {
+    buffs: cur => {
+      if (coins <= 0 || !(cur?.xp2 > 0)) return undefined;
+      const bonus = Math.round(coins * BATTLE_CHARM_BONUS);
+      coins += bonus; extras.push(`Battle Charm +${bonus} coins`);
+      return { ...cur, xp2: cur.xp2 - 1 };
+    },
+    coins: cur => {
+      if (coins > 0 && coinMult > 1) {
+        const bonus = Math.round(coins * (coinMult - 1));
+        coins += bonus; extras.push(`Feast +${bonus} coins`);
+      }
+      return Math.max(0, (Number(cur) || 0) + coins);
+    },
+    coinsRev: cur => (Number(cur) || 0) + Math.max(1, Math.abs(coins)),
+  }, puts: [{ store: 'inv', val: await eggRow('boneyard') }] };
+  const r = await awardOnce(cfg.claimKey, 'wanderer', cfg.xp,
+    'Boneyard: the Wanderer', cfg.date, null, pay);
+  return r.claimed ? { xp: r.xp, coins, extras } : null;
 }
 
 export async function battleCharmCharges() {

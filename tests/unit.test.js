@@ -1016,7 +1016,7 @@ test('battle charm: cannot stack a second charm over a running one', () => {
     .replace(/\/\/[^\n]*/g, ' ')
     .replace(/'[^']*'|"[^"]*"|`[^`]*`/g, "''");
   const guard = bare.search(/if\s*\(\s*\(?\s*buffs\.xp2[^)]*\)?[^)]*\)\s*return/);
-  const spend = bare.search(/db\.(?:del|takeInv)\(/);   // 2026-09-06: the consume is db.takeInv (delete + receipt, one transaction)
+  const spend = bare.search(/dels:\s*\[/); // P1: atomic snapshot plan removes the item with the buffs write
   assert.ok(guard >= 0, 'activateBattleCharm must refuse while charges remain (guard missing)');
   assert.ok(spend >= 0, 'activateBattleCharm should still consume the item when it DOES activate');
   assert.ok(guard < spend, 'the refusal must come BEFORE the item is consumed, or the charm is eaten anyway');
@@ -8268,6 +8268,11 @@ test('p1-kitchen paid cooks and dishes survive aborted delivery with CONTROLs', 
   const output = execFile_.execFileSync(process.execPath, [join(here, 'kitchen-delivery-audit.mjs')], { encoding: 'utf8' });
   assert.match(output, /KITCHEN DELIVERY: \d+ passed, 0 failed/);
   assert.match(output, /PASS CONTROL concurrent Serve/);
+});
+
+test('P1 den rewards, Wanderer, Battle Charm and Pit failure boundaries', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'p1-dens-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /P1 DENS: 7 passed, 0 failed/);
 });
 
 await runAll();

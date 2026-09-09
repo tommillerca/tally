@@ -24998,8 +24998,8 @@ async function renderPit(wrap) {
       }
       return;   // no charge spent, no fight opened
     }
-    const spent = await spendPitFight();
-    if (!spent.ok) { toast('Rest up! Log a meal or take a walk to earn Vigor. Free fights refill tomorrow.', 3400); renderPit(wrap); return; }
+    const spent = await reservePitFight(foeCfg);
+    if (!spent.ok) { toast('Rest up! Take a walk to earn Vigor. Free fights refill tomorrow.', 3400); renderPit(wrap); return; }
     await openFight(wrap, fighter, foeCfg);   // awaited so the guard above holds until the arena is up
   };
   $$('[data-spar]', body).forEach(b => b.addEventListener('click', () =>
@@ -25176,6 +25176,26 @@ const FIGHT_ROW_LABEL = {
   glutton: 'Glutton win', spire: 'Spire fight', mimic: 'Boneyard win', wanderer: 'Boneyard win',
 };
 
+// Commit the charge and its recoverable arena record together, before setup
+// can reject. A second tab also checks the live record inside this transaction.
+async function reservePitFight(foeCfg) {
+  await refreshPitEnergy();
+  const { payAtomic } = await import('./db.js');
+  const { VIGOR_CAP } = await import('./energy.js');
+  return payAtomic({ snapshot: { keys: ['pitEnergy', 'pitFight'] },
+    decide: ({ pitEnergy: energy = {}, pitFight }) => {
+      if (pitFight) return { result: { ok: false } };
+      const free = (energy.freeUsed || 0) < FREE_FIGHTS;
+      if (!free && !(energy.vigor > 0)) return { result: { ok: false } };
+      return { result: { ok: true }, kv: {
+        pitEnergy: () => free ? { ...energy, freeUsed: (energy.freeUsed || 0) + 1 }
+          : { ...energy, vigor: Math.max(0, Math.min(VIGOR_CAP, energy.vigor - 1)) },
+        pitFight: () => ({ phase: 'open', mode: foeCfg.mode, foe: foeCfg.name, at: Date.now() }),
+      } };
+    },
+  });
+}
+
 async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
   const food = await foodCombatBuff(); // active dish buffs (damage / hype / regen / pet-free)
@@ -25209,15 +25229,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
     outfit: foeOutfitFor(foeCfg.add.name),
   }) : null;
   trackEvent('fight_start', { mode: foeCfg.mode || 'pit', pet: !!fighter.petMeta });
-  /* The staked-fight record, written at the one moment a charge is genuinely
-     spent (startPit debited it just before calling us). From here the fight is
-     OPEN until settle() or onClose resolves it; see the lifecycle comment
-     above openFight. Awaited so the record exists before the player can act. */
+  // reservePitFight already committed the staked record with the charge.
+  // Setup failures from here retain the existing interrupted-fight recovery.
   const staked = PIT_STAKED_MODES.includes(foeCfg.mode);
   // QA round 28 P4: the spar ledger's `ref`. One id per arena, so settle() can
   // only ever take one spar-<date>-<n> slot for this fight (see claimSpar).
   const fightId = newId();
-  if (staked) await kvSet('pitFight', { phase: 'open', mode: foeCfg.mode, foe: foeCfg.name, at: Date.now() });
   /* THE FIRST FIGHT IS UNLOSABLE, and it is derived HERE because openFight is the
      one door every fight in the app walks through: the Pit ladder, the Champion,
      the Gauntlet, spars, spires, world-boss dens and minis are twelve call sites
@@ -26564,9 +26581,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
         confettiRain(90); levelSound(S.sounds);
         if (r?.badges.length) queueCelebration({ newBadges: r.badges });
       } else {
-      await awardCapped('fight', 'fight', 10, FIGHT_ROW_LABEL[foeCfg.mode] || 'Pit win', XP_DAILY_CAP.fight);
+      xp += await awardCapped('fight', 'fight', 10, FIGHT_ROW_LABEL[foeCfg.mode] || 'Pit win', XP_DAILY_CAP.fight);
       trackEvent(foeCfg.mode === 'boss' ? 'boss_win' : foeCfg.mode === 'mini' ? 'mini_win' : 'pit_win', { mode: foeCfg.mode });
-      xp += 10;
       /* QA round 28 P4: 15 coins per spar win used to be assigned here with no
          ledger key and no cap (start() skips spendPitFight on purpose). The
          coins now come off claimSpar's daily slot; past SPAR_DAILY_CAP, or on a
@@ -26776,8 +26792,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
            His path is a derived loop, so a player who knows where he is can walk
            back into the light every thirty seconds, and without a key that is
            150 XP, 200 coins and a Step Egg every time. One payout per cell per
-           45-minute instance, resolved by db.addIfAbsent, which is a single
-           IndexedDB request rather than a read-then-write pair (a kvGet/kvSet
+           45-minute instance, resolved by db.claimAndPay, which is a single
+           IndexedDB transaction rather than a read-then-write pair (a kvGet/kvSet
            version of this exact claim was once measured paying 16,500 coins to
            three concurrent callers).
            A LOSS OR A FLEE CLAIMS NOTHING, on purpose, and the map's
@@ -26799,15 +26815,16 @@ async function openFight(pitWrap, fighter, foeCfg) {
            a marker later is easy; taking one back is not. Tom confirmed this on
            2026-08-21. Asserted by name in tests/wanderer-boneyard-audit.mjs
            (CEILING). */
-        const g = await award(foeCfg.claimKey, 'wanderer', foeCfg.xp, 'Boneyard: the Wanderer', foeCfg.date);
-        if (g) {
-          xp += g;
-          coins = foeCfg.coins;
-          await grantCrate('egg', 'boneyard');
+        const { claimWandererWin } = await import('./loot.js');
+        const reward = await claimWandererWin(foeCfg, await foodCoinMult());
+        if (reward) {
+          xp += reward.xp; coins = reward.coins; extras.push(...reward.extras);
           extraCards.push(crateCard('egg'));
         }
         dispatchEvent(new CustomEvent('bh-wanderer-beaten', { detail: { key: foeCfg.claimKey } }));
       }
+      // The Wanderer already paid coins and consumed its charm atomically.
+      if (foeCfg.mode !== 'wanderer') {
       // Battle Charm: spend a charge on the win for +25% coins.
       if (coins > 0) {
         const bonusPct = await consumeBattleCharmCharge();
@@ -26825,6 +26842,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         extras.push(`Feast +${bonus} coins`);
       }
       if (coins) await coinsAdd(coins);
+      }
       window.__refreshWalletPill?.();   // the hub behind this sheet shows the balance this just changed
       const badges = await evaluateBadges();
       /* THE CARD REPORTS WHAT WAS MINTED, BADGES INCLUDED (QA round 20, R20-P6).
