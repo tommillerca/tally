@@ -11,6 +11,10 @@ import worker from '../server/src/index.js';
 import { deriveWrites, generatedSource } from '../server/scripts/write-contract.mjs';
 import { checkGenerated, currentContract, assertColumns, serverRoot } from '../server/scripts/schema-guard.mjs';
 import { beforeWeekFreeze, weekFreeze, sentinelSQL } from '../server/test/migration-fixture.mjs';
+import { missingDependency } from './lib/audit-dependencies.mjs';
+// v531: this guard parses source with acorn. The project reserves exit 97 for a
+// missing prerequisite so an absent package can never look like a real finding.
+try { await import('acorn'); } catch { missingDependency('acorn', 'npm i -D acorn'); }
 
 const contract = checkGenerated();
 assert.ok(contract.players.includes('last_week_key'));

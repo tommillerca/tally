@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 531, date: '2026-09-09', title: 'A missed database change cannot hide again', items: [
+    'Sync was dead for four days because a database change was written but never applied to the server. The app kept sending, the server kept throwing it away, and nothing anywhere said so. The release process now checks that the live database has every column the code needs, and refuses quietly shipping without it.',
+  ] },
+
   { n: 530, date: '2026-09-09', title: 'The crew stops guessing about your friends', items: [
     'The app no longer tells you a friend has been away for days. It only ever knew when their app last reached the server, which is not the same thing, and it was stating it as fact.',
     'Anything older than a day now reads "Awaiting a recent sync" with no day count, and when nothing in a view is fresh the app says syncing may be delayed instead of blaming the people in it.',

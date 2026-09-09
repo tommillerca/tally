@@ -1,5 +1,20 @@
 # What each patch note claims, and what backs it
 
+## v531 (2026-09-09)
+
+1. PROOF: migration-guard-audit.mjs | REACH: The 2026-09-05 migration adding `last_week_key` and `last_week_steps` was written, the Worker was deployed, and the migration was never applied to production D1. Every `PUT /profile` threw `no such column: last_week_key` from 2026-09-05 to 2026-09-09 while returning a success-shaped response, so 80 players stopped syncing and nothing surfaced it. This lands a schema/write-contract check that derives the required columns FROM THE SOURCE rather than a hand list, a health check that exercises the write path instead of returning 200 without touching the affected columns, and a deploy-order check. Prove-red is that exact scenario: a local D1 missing the 2026-09-05 migration makes the checks go red naming the missing column, and applying it makes them green.
+
+The audit parses source with acorn, which was declared in `server/package.json`
+but not where the audit runs. It is now a root devDependency beside the esprima
+precedent, AND the audit degrades to exit 97 UNPROVEN when the package is absent,
+following the convention established when six store audits were found exiting
+green on a missing dependency. A guard that cannot run must never look like a
+guard that passed.
+
+378 unit assertions, 0 failures, all 137 PURE entries exit 0. No browser, device
+or socket proof was run. The sync latency work is NOT in this release: its audit
+was written against the pre-v530 podium and needs reconciling first.
+
 ## v530 (2026-09-09)
 
 1. PROOF: leaderboard-honesty-audit.mjs | REACH: Every surface that turned `last_seen` into a claim about a person now describes a server contact instead. Under 6 minutes reads "Synced recently"; under a day keeps minute or hour precision; 24 hours or older drops the day count entirely and reads "Awaiting a recent sync"; a missing, zero, negative or future timestamp reads "Sync time unavailable". Driven with fresh, day-old, week-old and fleet-stale snapshots across the Crew fan, leaderboard, podium and step race; the week-old and fleet-stale rows go red against the previous code, which printed a confident day count.
