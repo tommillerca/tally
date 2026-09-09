@@ -1,5 +1,90 @@
 # What each patch note claims, and what backs it
 
+## v537 (2026-09-09)
+
+1. PROOF: r4-restore-audit.mjs | REACH: Settings file replacements retain the two newest readable restore points, including migration from an eight-point quota-full history. Nine imports succeed under a simulated 5,242,880-byte quota. Undo through the production Settings callback preserves all 35,491 fields in both retained synthetic year-sized snapshots (589,788 bytes each before import). The original measured fixture was not supplied, so this is equivalent-size synthetic proof, not a replay of that original save.
+2. PROOF: r4-restore-audit.mjs | REACH: A truncated or malformed local restore-point entry no longer hides good points in Settings. The console identifies each skipped key, and its raw bytes remain stored for recovery. No new UI.
+
+R4-10 remains blocked: `node tests/r4-restore-audit.mjs --refused-import`
+still exits 1 because the unchanged Settings caller writes before `importAll`
+can refuse a stale review. Fixing this without redefining the public snapshot
+function requires moving snapshot coordination into the replacement operation
+and changing the caller. The frozen work order forbids editing `js/app.js`.
+That file also still says points last until Erase all data or Delete account;
+its retention copy needs to say only the two newest are kept. Neither blocked
+change is claimed as delivered. These two rows are the pending changelog items;
+the released changelog is untouched.
+
+Validation: `node tests/unit.test.js` reports 379 passed, 0 failed. All 145
+registered PURE entries exit 0. The default R4 audit reports 8 passed, 0 failed;
+the separately invoked R4-10 guard reports 0 passed, 1 failed and is not counted
+as green. No browser or device measurement was performed.
+
+3. PROOF: reachable-density-audit.mjs | REACH: PURE guards the shared reachability meter with dense and sparse controls. The separate model reports the shipped route at 0.568 spawns/fix against a floor of 1, N=400. This is a finding rather than a failure. Product owner Tom has deferred the spacing decision; spacing and the 75 m collect radius are unchanged.
+4. PROOF: native-shell-comment-audit.mjs | REACH: Both iOS build-19 comments now describe a remote shell loading published main, with no wrapped web version. A server.url plus a WRAPPED_WEB_BUILD comment fails the new guard and the existing version lint. This corrects source provenance, not native runtime behavior.
+
+R4-21 density tier correction (2026-09-09): the deterministic measurement is
+shared by the guard and model. The guard requires dense and sparse controls to
+grade GREEN and RED respectively, pins their 722 and 18 sightings and 7.220
+and 0.180 scores, and retains empty, outside-radius and far-only controls.
+The model asserts nothing and exits 0 for the below-floor shipped finding.
+The floor remains 1 in every sampled window. Sightings are not collections;
+this is producer geometry before snapping/rendering, not on-device proof.
+
+The original native-shell claim and its PROOF row above are retained unchanged.
+There are two existing vNEXT changelog items and exactly two PROOF rows.
+Only density work and its registration are changed, plus this explicitly
+required vNEXT CLAIMS block. No changelog or native-shell edits are needed.
+
+Command proof:
+
+- `node tests/unit.test.js`: `379 passed, 0 failed`, exit 0.
+- `node tests/reachable-density-audit.mjs`: GREEN, exit 0. Both spatial
+  controls plus empty, outside-radius and far-only controls pass.
+- `node tests/reachable-density-model.mjs`: exit 0; verbatim output below.
+- `node tests/release-gate.mjs --coverage-only`: exit 0. The model is in both
+  HELPERS and DECLARED skip, exactly like garden-sim.mjs.
+- Complete PURE census: **146/146 exit 0**, including the density meter guard.
+  The runner evaluates the `const PURE = [` through pre-`const BROWSER = [`
+  source from tests/release-gate.mjs, including every push/unshift, prints
+  all 146 names, refuses fewer than 145 or duplicate entries, and executes
+  every resulting filename with Node. Full enumeration and per-audit output
+  are retained in the advisory proof artifacts, outside the checkout.
+- Broken-meter proof uses disposable copies of the same guard and shared
+  meter, with production imports resolved to this checkout. Each mutation
+  must match exactly once and be confirmed applied before running. Healthy
+  copy: exit 0. Replacing `counts.push(reachable.length)` with
+  `counts.push(0)` causes the dense-control assertion to fail, exit 1.
+  Replacing `green: score >= FLOOR` with `green: true` causes the sparse-control
+  assertion to fail, exit 1. Neither mutation changes spacing or radius.
+- vNEXT correspondence: two changelog items, two numbered PROOF rows, with
+  each named file present and registered. The native-shell row is unchanged.
+
+Verbatim model output:
+
+```text
+ROUTE: date=2026-09-09, start={"lat":49.249,"lng":-123.1}, end={"lat":49.25619457284735,"lng":-123.1}, northbound 800 m over 10 min; N=100 fixes/window, step=8.081 m, start minutes=540,585,630,675, collect radius=75 m
+FLOOR: mean >= 1 reachable spawn/fix; one nearby target at an ordinary sampled point. Sightings are not collections. Producer geometry only, before snap/render.
+GREEN CONTROL synthetic dense field (20 m spacing): N=100, median nearest non-far=4.95 m, reachable spawn sightings=722, score=7.220 spawns/fix against floor=1, fixes with reach=100/100, distinct reachable=41
+RED CONTROL synthetic sparse field (one fixed spawn): N=100, median nearest non-far=202.02 m, reachable spawn sightings=18, score=0.180 spawns/fix against floor=1, fixes with reach=18/100, distinct reachable=1
+RED SHIPPED window start=540 min: N=100, median nearest non-far=109.09 m, reachable spawn sightings=34, score=0.340 spawns/fix against floor=1, fixes with reach=24/100, distinct reachable=3
+RED SHIPPED window start=585 min: N=100, median nearest non-far=68.39 m, reachable spawn sightings=99, score=0.990 spawns/fix against floor=1, fixes with reach=58/100, distinct reachable=7
+RED SHIPPED window start=630 min: N=100, median nearest non-far=90.31 m, reachable spawn sightings=43, score=0.430 spawns/fix against floor=1, fixes with reach=36/100, distinct reachable=4
+RED SHIPPED window start=675 min: N=100, median nearest non-far=88.41 m, reachable spawn sightings=51, score=0.510 spawns/fix against floor=1, fixes with reach=37/100, distinct reachable=4
+RED SHIPPED density: N=400, aggregate score=0.568 against floor=1 spawns/fix in EACH window; 0/4 windows meet floor
+FINDING, not a failure: shipped score=0.568 spawns/fix; floor=1; N=400; gap=0.432 spawns/fix below floor. Spacing decision DEFERRED by product owner Tom. MODEL asserts nothing about the app.
+```
+
+Advisory scope report: changed tests/reachable-density-audit.mjs,
+tests/release-gate.mjs and this vNEXT block in docs/CLAIMS.md; added
+tests/lib/reachable-density.mjs and tests/reachable-density-model.mjs.
+Denied or blocked actions: none. Deviations: none; the expressly required
+CLAIMS update is the sole documentation edit. No commits, pushes or publishing.
+Production spacing, collect radius, native-shell guard, pbxproj, version lint
+and changelog remain unchanged. Independent review is still required.
+
+Changelog item: Every pet now fights with identical stats. What a pet does in a fight comes from its talent tree, not its species.
+
 ## v536 (2026-09-09)
 
 1. PROOF: hand-registration-audit.mjs | REACH: "The off-hand toothbrushes and spades sit in the raised fist." IL10-1/2 translated +30,+104 and IL17-1/2 +44,+68 within their 640x640 masters. Brushes lose 0 pixels; spades discard exactly the authorized 7 and 10 dust pixels, all alpha <=30. Surviving RGBA multisets and translated bounding boxes match exactly. The full census passes 38/38 IL and 24/24 IR; the pre-fix brushes fail, while the ring floor already passed the old spades and cannot alone certify their grip. See the [before/after B0-1 contact sheet](offhand-registration/before-after.png), [printed pixel assertions](offhand-registration/translation-output.txt), [full hand census](offhand-registration/after-audit.txt), and [advisory report](offhand-registration/REPORT.md). Derived thumbnails rebuilt with the project generator. Visual limitation: the frozen offsets bring the shafts onto the fist but leave their existing transparent cutouts below it; no grip redesign was authorized or applied. One implemented vNEXT changelog item remains in a comment pending release integration.

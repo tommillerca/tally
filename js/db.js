@@ -151,12 +151,10 @@ export async function storageStatus() {
    below, in the tabs that are NOT doing the wiping, so that "erase everything"
    can be true rather than nearly true. A frozen tab is on its way to a reload. */
 let frozen = false;
-const FROZEN_MSG = 'Saving is paused because another tab started erasing this save. Reload this tab to continue.';
-let frozenMessage = FROZEN_MSG;
-function frozenError() { return Object.assign(new Error(frozenMessage), { wipeBlocked: true }); }
+const FROZEN_MSG = 'this save was erased in another tab';
 
 function tx(store, mode, fn) {
-  if (frozen && mode === 'readwrite') return Promise.reject(frozenError());
+  if (frozen && mode === 'readwrite') return Promise.reject(new Error(FROZEN_MSG));
   return open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction(store, mode);
     const s = t.objectStore(store);
@@ -203,8 +201,8 @@ function tx(store, mode, fn) {
  *
  * A FROZEN TAB IS NOT A FAILING TAB. During "Erase all data" every other tab sets
  * `frozen` synchronously and rejects every write on purpose while it waits to
- * reload. A refused write still explains the pause; a failed erase broadcasts
- * its failure and reload guidance even before another write is attempted.
+ * reload. Those rejections are the design working, so they are filtered out here
+ * rather than becoming a storm of toasts on the way out.
  *
  * The rejection is still RE-THROWN, unchanged: callers keep their control flow,
  * the reward code after a failed write still does not run, and the app still does
@@ -278,6 +276,7 @@ function keyOf(store, val) {
 }
 
 function reportWriteFailure(store, val, op, err) {
+  if (err && String((err && err.message) || err) === FROZEN_MSG) return;   // erasing on purpose
   /* A CLAIM-AND-SPEND that aborted because the wallet was short is an ordinary
      "can't afford it" refusal (js/loot.js:buyRackItem, 2026-09-05 offline crash
      fix), the same outcome spendCoins/spendDust already return silently as
@@ -313,7 +312,7 @@ function guard(store, val, op, run) {
     if (token) finishSave(token);
     return value;
   }, err => {
-    const refusal = err?.refused || err?.insufficientFunds || err?.wipeBlocked;
+    const refusal = err?.refused || err?.insufficientFunds || String(err?.message || err) === FROZEN_MSG;
     if (token) finishSave(token, !refusal);
     reportWriteFailure(store, val, op, err);
     throw err;
@@ -432,7 +431,7 @@ function diaryWrite(t, key, next, die) {
   };
 }
 function diaryMutation(key, next, clear = false) {
-  if (frozen) return Promise.reject(frozenError());
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
   return open().then(idb => new Promise((resolve, reject) => {
     const t = idb.transaction(['log', 'kv'], 'readwrite');
     let error;
@@ -576,7 +575,7 @@ function mergeCurrencyHistory(k, local, file) {
  * would turn "somebody else already has this key" into a rejected promise and
  * a lost write for whatever else shared the transaction. */
 export function addIfAbsent(store, val) {
-  if (frozen) return Promise.reject(frozenError());
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
   /* Same stamp discipline as db.put, and it has to be here: a LOSING caller's
      add never lands, but the winner's did, and this process cannot tell which
      it is until the transaction completes. Stamping before dispatch means the
@@ -623,7 +622,7 @@ export function addIfAbsent(store, val) {
  * returning `undefined` writes nothing. `pay.puts` is [{store, val}] for rows
  * whose key this caller minted, which need no read first. */
 export function claimAndPay(store, row, { kv = {}, puts = [] } = {}) {
-  if (frozen) return Promise.reject(frozenError());
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
   const kvKeys = Object.keys(kv);
   const stores = [...new Set([store, ...(kvKeys.length || store === 'log' || puts.some(p => p.store === 'log') ? ['kv'] : []), ...puts.map(p => p.store)])];
   for (const s of stores) bumpStore(s);   // same stamp discipline as addIfAbsent
@@ -680,7 +679,7 @@ export function claimAndPay(store, row, { kv = {}, puts = [] } = {}) {
  * that only wants the yes/no reads the same answer off truthiness. */
 export function take(store, key) {
   if (store === 'log') return atomic({ take: { store, key } }, 'take');
-  if (frozen) return Promise.reject(frozenError());
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
   bumpStore(store);
   return guard(store, key, 'take', () => open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction(store, 'readwrite');
@@ -724,7 +723,7 @@ export function take(store, key) {
  * paying take cannot forget it and a receipt can never land without its
  * delete, or the other way round. */
 function atomic({ take = null, kv = {}, puts = [], dels = [], snapshot = null, decide = null, currencyReceipts = {} }, op) {
-  if (frozen) return Promise.reject(frozenError());
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
   const kvKeys = Object.keys(kv);
   const receipts = [...(take && take.store === 'inv' ? [take.key] : []), ...dels.filter(d => d.store === 'inv').map(d => d.key)];
   const stores = [...new Set([...(take ? [take.store] : []), ...(kvKeys.length || receipts.length || snapshot || take?.store === 'log' || puts.some(p => p.store === 'log') || dels.some(d => d.store === 'log') ? ['kv'] : []), ...(snapshot?.stores || []),
@@ -827,7 +826,7 @@ export function payAtomic(pay = {}) { return atomic(pay, 'payAtomic'); }
    resolves undefined, so `if (!out.ok)` and `if (next === undefined)` are both
    honest readings of "I did not take the state". */
 export function kvUpdate(k, fn, fallback = null) {
-  if (frozen) return Promise.reject(frozenError());
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
   bumpStore('kv');
   return guard('kv', k, 'kvUpdate', () => open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction('kv', 'readwrite');
@@ -867,7 +866,7 @@ export function kvUpdate(k, fn, fallback = null) {
  * because 'cooking' and 'ingredients' do not share a shape. Resolves
  * {key: result}. */
 export function kvUpdateMulti(updaters, fallbacks = {}) {
-  if (frozen) return Promise.reject(frozenError());
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
   bumpStore('kv');
   const keys = Object.keys(updaters);
   return guard('kv', keys, 'kvUpdateMulti', () => open().then(db => new Promise((resolve, reject) => {
@@ -918,7 +917,7 @@ export function kvBump(k, n, { min = 0 } = {}) {
    cannot cover the debit; that is spendCoins/spendDust's "could not afford
    it". Without it the balance clamps at 0, kvBump's contract. */
 export function kvBumpRevisioned(k, revKey, n, { requireFunds = false } = {}) {
-  if (frozen) return Promise.reject(frozenError());
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
   bumpStore('kv');
   return guard('kv', k, 'kvBumpRevisioned', () => open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction('kv', 'readwrite');
@@ -1260,7 +1259,7 @@ export function sameSaveRows(a, b) {
 }
 
 export async function readFileSave() {
-  if (frozen) throw frozenError();
+  if (frozen) throw new Error(FROZEN_MSG);
   const idb = await open();
   return new Promise((resolve, reject) => {
     const t = idb.transaction(STORES, 'readonly');
@@ -1274,30 +1273,52 @@ export async function readFileSave() {
   });
 }
 
-// Separate from the imported stores, scoped to this database, and append-only.
-// No retention eviction: a full/disabled localStorage refuses the import.
+// Separate from the imported stores and scoped to this database. Keep the two
+// newest readable points. Unreadable entries are reported and left recoverable.
 const filePointPrefix = () => `tally-file-restore:${encodeURIComponent(dbName)}:`;
 export function fileRestorePoints() {
   const points = [];
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
     if (key?.startsWith(filePointPrefix())) {
-      const point = JSON.parse(localStorage.getItem(key));
-      if (!point?.data || STORES.some(s => !Array.isArray(point.data[s]))) throw new Error('A restore point could not be read.');
-      points.push({ ...point, key });
+      try {
+        const point = JSON.parse(localStorage.getItem(key));
+        if (typeof point?.createdAt !== 'string' || !Number.isFinite(Date.parse(point.createdAt)) ||
+            !point?.data || STORES.some(s => !Array.isArray(point.data[s]))) {
+          throw new Error('A restore point could not be read.');
+        }
+        points.push({ ...point, key });
+      } catch {
+        console.warn(`Skipping unreadable restore point ${key}. Its stored data has been kept for recovery.`);
+      }
     }
   }
-  return points.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return points.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 export function saveFileRestorePoint(data) {
-  if (frozen) throw frozenError();
-  const point = { createdAt: new Date().toISOString(), data };
-  const key = filePointPrefix() + newId();
+  if (frozen) throw new Error(FROZEN_MSG);
+  let point, key, previous, wrote = false;
   try {
+    const points = fileRestorePoints();
+    // Strict ordering also covers rapid clicks and a clock moved backwards.
+    point = { createdAt: new Date(Math.max(Date.now(), points.length ? Date.parse(points[0].createdAt) + 1 : 0)).toISOString(), data };
     const bytes = JSON.stringify(point);
+    // Upgrade append-only histories before writing, including quota-full ones.
+    for (const old of points.slice(2)) localStorage.removeItem(old.key);
+    // Reuse the older slot: setItem replaces atomically on quota failure and
+    // never needs space for a third full snapshot. The newest point stays safe.
+    key = points[1]?.key || filePointPrefix() + newId();
+    previous = localStorage.getItem(key);
     localStorage.setItem(key, bytes);
+    wrote = true;
     if (localStorage.getItem(key) !== bytes) throw new Error('Restore point verification failed');
   } catch {
+    if (wrote) {
+      try {
+        if (previous == null) localStorage.removeItem(key);
+        else localStorage.setItem(key, previous);
+      } catch { console.warn(`Could not recover restore point slot ${key} after a storage failure.`); }
+    }
     throw new Error('Could not save a restore point (storage is full or unavailable). Nothing was replaced. Free device storage and try again.');
   }
   return { ...point, key };
@@ -1317,7 +1338,7 @@ function eraseFileRestorePoints() {
 // A local restore point is an exact rollback, including internal bookkeeping.
 // Cloud and ordinary file imports continue to use importAll's existing rules.
 export async function restoreFileSave(data, expected) {
-  if (frozen) throw frozenError();
+  if (frozen) throw new Error(FROZEN_MSG);
   if (STORES.some(s => !Array.isArray(data?.[s]))) throw new Error('That restore point is damaged.');
   const idb = await open();
   return new Promise((resolve, reject) => {
@@ -1341,7 +1362,7 @@ export async function restoreFileSave(data, expected) {
 }
 
 export async function exportAll() {
-  if (frozen) throw frozenError();
+  if (frozen) throw new Error(FROZEN_MSG);
   const idb = await open();
   return new Promise((resolve, reject) => {
     const t = idb.transaction(STORES, 'readwrite');
@@ -1590,7 +1611,7 @@ export function fileReplacementPreview(current, data) {
 }
 
 export async function importAll(data, { replace = true, expectedFileState = null } = {}) {
-  if (frozen) throw frozenError();
+  if (frozen) throw new Error('this save was erased in another tab. Reload and try again.');
   validateImport(data);
   // Diagnostics describe this device and must never travel with a save.
   if (data.kv) data = { ...data, kv: data.kv.filter(r => r?.k !== 'syncHealth') };
@@ -1875,12 +1896,7 @@ function chan() {
       if (!m || typeof m !== 'object') return;
       if (m.t === 'freeze') {
         frozen = true;                       // synchronous: no write can slip past this
-        frozenMessage = FROZEN_MSG;
         try { wipeChannel.postMessage({ t: 'frozen', id: m.id }); } catch { /* channel gone */ }
-      } else if (m.t === 'erase-failed') {
-        frozen = true;
-        frozenMessage = 'An erase attempt in another tab failed. Saving is paused. Reload this tab to continue.';
-        reportWriteFailure(null, null, 'wipe', frozenError());
       } else if (m.t === 'erased') {
         frozen = true;
         markErased();
@@ -1922,28 +1938,23 @@ export async function eraseAll() {
       setTimeout(finish, WIPE_ACK_MS);
     });
   }
-  try {
-    const idb = await open();
-    /* Stamp every store before the clear opens: an erase invalidates every cache
-       derived from a store's contents (js/game.js's XP total is one), and the
-       stamp has to be in place before any of them can be rebuilt. */
-    for (const st of STORES) bumpStore(st);
-    await new Promise((resolve, reject) => {
-      /* ONE transaction over every store db.js defines. Same guarantee importAll
-         gives a restore: it all goes, or none of it does and the player is left
-         exactly where they were. STORES, never a literal: the literal is what
-         lost 'inv' and left the whole wardrobe standing. */
-      const t = idb.transaction(STORES, 'readwrite');
-      for (const st of STORES) t.objectStore(st).clear();
-      t.oncomplete = resolve;
-      t.onerror = () => reject(t.error);
-      t.onabort = () => reject(t.error || new Error('erase aborted'));
-    });
-    eraseFileRestorePoints();
-  } catch (error) {
-    if (ch) try { ch.postMessage({ t: 'erase-failed' }); } catch { /* channel gone */ }
-    throw error;
-  }
+  const idb = await open();
+  /* Stamp every store before the clear opens: an erase invalidates every cache
+     derived from a store's contents (js/game.js's XP total is one), and the
+     stamp has to be in place before any of them can be rebuilt. */
+  for (const st of STORES) bumpStore(st);
+  await new Promise((resolve, reject) => {
+    /* ONE transaction over every store db.js defines. Same guarantee importAll
+       gives a restore: it all goes, or none of it does and the player is left
+       exactly where they were. STORES, never a literal: the literal is what
+       lost 'inv' and left the whole wardrobe standing. */
+    const t = idb.transaction(STORES, 'readwrite');
+    for (const st of STORES) t.objectStore(st).clear();
+    t.oncomplete = resolve;
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error || new Error('erase aborted'));
+  });
+  eraseFileRestorePoints();
   if (ch) try { ch.postMessage({ t: 'erased' }); } catch { /* channel gone */ }
   markErased();
 }

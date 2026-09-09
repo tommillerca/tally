@@ -9,6 +9,13 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 537, date: '2026-09-09', title: 'Your restore points, and a meter for the walk', items: [
+    'Importing a backup keeps only the two newest restore points, so a big save can be imported as many times as you like.',
+    'One damaged restore-point entry no longer hides the rest of them in Settings.',
+    'The Boneyard can now measure how many spawns you can actually reach on a walk, not just how many are drawn.',
+    'The iOS build notes describe what the app really loads, instead of naming a bundled version it never serves.',
+  ] },
+
   { n: 536, date: '2026-09-09', title: 'The toothbrush and the spade sit in your hand', items: [
     'The off-hand toothbrushes and spades now sit in the raised fist instead of floating beside it.',
   ] },
