@@ -26,6 +26,7 @@ if (mutation) {
   assert.equal(source.split(needle).length, 2, 'canonical mutation must hit exactly once');
   worker = (await import('data:text/javascript;base64,' + Buffer.from(
     source.replace(needle, '${url.pathname}${url.search}/wrong-canonical-path')
+      .replace("'./schema-health.js'", JSON.stringify(new URL('../server/src/schema-health.js', import.meta.url).href))
   ).toString('base64'))).default;
 }
 

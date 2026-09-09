@@ -23,10 +23,14 @@
 # Production deploy (once Tom's Cloudflare account exists):
 #   npx wrangler d1 create bonez   -> paste database_id below
 #   npx wrangler d1 execute bonez --remote --file=schema.sql
-#   npx wrangler deploy
+#   npm run deploy  # includes the mandatory target-schema preflight
 name = "bonez-api"
 main = "src/index.js"
 compatibility_date = "2026-06-01"
+
+[build]
+# Also reject a stale generated contract during local dev or direct Wrangler use.
+command = "node scripts/schema-guard.mjs --check"
 
 [[d1_databases]]
 binding = "DB"

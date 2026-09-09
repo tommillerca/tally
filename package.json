@@ -11,6 +11,7 @@
     "gate:all": "node tests/release-gate.mjs --all"
   },
   "devDependencies": {
+    "acorn": "8.14.0",
     "esprima": "4.0.1",
     "puppeteer": "24.43.1"
   }

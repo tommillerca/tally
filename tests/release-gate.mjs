@@ -252,6 +252,7 @@ const coverageOnly = process.argv.includes('--coverage-only');
    the evidence in the failure line. */
 // Frozen loss-prevention work order, 2026-09-08: real UI and service controls, Node only.
 const PURE = [
+  'migration-guard-audit.mjs', // Source contract and real Worker health over SQLite; D1 socket proof: server/test/migration-guard-local.mjs.
   'sync-observability-audit.mjs', // Local sync outcomes, Settings and sustained-failure notice, over mem-idb.
   'sync-identity-audit.mjs', // Missing registration recovery with the existing signing key, over mem-idb.
   'sync-native-audit.mjs', // Native source and worker diagnostics, no device claims or sockets.
