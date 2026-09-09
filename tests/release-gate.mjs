@@ -252,6 +252,9 @@ const coverageOnly = process.argv.includes('--coverage-only');
    the evidence in the failure line. */
 // Frozen loss-prevention work order, 2026-09-08: real UI and service controls, Node only.
 const PURE = [
+  'sync-observability-audit.mjs', // Local sync outcomes, Settings and sustained-failure notice, over mem-idb.
+  'sync-identity-audit.mjs', // Missing registration recovery with the existing signing key, over mem-idb.
+  'sync-native-audit.mjs', // Native source and worker diagnostics, no device claims or sockets.
   'lab-density-audit.mjs', // Frozen density work order: production copy and destruction controls, no sockets.
   'crew-outfit-audit.mjs', // Real wardrobe handlers, snapshot round trip and Crew figure contracts, no sockets.
   'dock-line-audit.mjs', // Dock band source regression and FAB flex geometry controls; rendered pixels/taps remain browser/manual proof.

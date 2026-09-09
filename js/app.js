@@ -1480,6 +1480,11 @@ async function boot() {
   if (!(await storageStatus()).ok) { renderStorageUnavailable(); return; }
   // Register before boot can write, including migrations and demo seeding.
   social.onResponseFailure(message => toast(message, 8000, { error: true }));
+  social.onSyncTrouble(message => setTimeout(async () => {
+    const state = await social.syncHealthState();
+    if (!state?.streak) return;
+    if (await social.cloudBackupOn().catch(() => false)) toast(message, 6500);
+  }, 8500));
   const interruptedSave = takeSaveInterruption();
   onWriteFailure(({ store, key, op, quiet, quota, error }) => {
     quota ||= storageIsFull(error);
@@ -14839,6 +14844,10 @@ async function openWhatsNew() {
   await kvSet('changelogSeen', changelogLatest());
 }
 
+async function profileSyncRowHtml() {
+  return `<div class="settings-row" id="profileSyncStatus"><div class="lab"><b>Profile sync</b><span>${esc(await social.syncHealthLine())}</span></div></div>`;
+}
+
 /* ONE LINE TOM CAN SCREENSHOT, and it has to be honest about what it cannot know.
  *
  * Two things this exists for. First, @capacitor/haptics was missing for weeks and
@@ -14933,6 +14942,7 @@ async function renderSettings(el) {
   const crewReached = !!(crewData && crewData.reached !== false);
   const incomingCount = crewReached ? crewData.incoming.length : 0;
   const friendCount = crewReached ? crewData.friends.length : 0;
+  const profileSyncRow = await profileSyncRowHtml();
   const backupOn = apiConfigured ? await social.cloudBackupOn() : false;
   const backupAt = apiConfigured ? await kvGet('backupAt', 0) : 0;
   const backupFail = apiConfigured ? await kvGet('backupFail', null) : null;
@@ -15011,6 +15021,7 @@ async function renderSettings(el) {
       <button class="btn small ${recoverySet ? 'ghost' : ''}" id="recoveryBtn">${recoverySet ? 'Change' : 'Set it'}</button>
     </div>` : ''}
     ${vaultRowHtml(vault)}
+    ${profileSyncRow}
   </div>` : ''}
 
   <div class="card">
@@ -24465,7 +24476,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v528'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v529'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
@@ -24838,7 +24849,7 @@ function pushProfileSoon() {
   if (_profilePushT) clearTimeout(_profilePushT);
   _profilePushT = setTimeout(async () => {
     _profilePushT = null;
-    try { if (await social.isOnline()) await social.syncProfile(await socialSnapshot(), APP_SOCIAL_V); } catch { /* best-effort */ }
+    await social.pushProfileUpdate(socialSnapshot, APP_SOCIAL_V);
   }, 1200);
 }
 

@@ -72,6 +72,12 @@ let passed = 0, failed = 0;
 const QUEUE = [];
 function test(name, fn) { QUEUE.push([name, fn]); }
 
+test('missing social identity recovers on resume with the existing signing key', () => {
+  const output = execFile_.execFileSync(process.execPath,
+    [join(here, 'sync-identity-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /9 passed, 0 failed/);
+});
+
 test('r56 B1 all species palettes separate and pre-fix frost fails CONTROL', async () => {
   const { checkPetPalette } = await import('./pet-palette-audit.mjs');
   checkPetPalette();

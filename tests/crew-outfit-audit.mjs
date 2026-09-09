@@ -15,6 +15,7 @@ const loot = await imp('js/loot.js');
 const art = await imp('data/boneheadz.js');
 const football = await imp('data/football-teams.js');
 const pets = await imp('js/pets.js');
+const syncHealth = await imp('js/sync-health.js');
 const app = read('js/app.js'), social = read('js/social.js'), server = read('server/src/index.js');
 function cut(src, start, end) {
   const a = src.indexOf(start), b = src.indexOf(end, a + start.length);
@@ -33,7 +34,8 @@ const buttons = {
   '[data-petwear]': { dataset: {}, addEventListener: (event, fn) => { assert.equal(event, 'click'); handlers.wear = fn; } },
   '[data-pwteam]': { dataset: {}, closest: () => ({ dataset: { pwsp: 'C4' } }), addEventListener: (event, fn) => { assert.equal(event, 'click'); handlers.team = fn; } },
 };
-const ctx = vm.createContext({ ...art, ...football, ...pets, ...loot,
+const ctx = vm.createContext({ ...art, ...football, ...pets, ...loot, ...syncHealth,
+  isOnline: async () => online,
   S: { settings: {}, petWear: {}, shinyPets: new Set(['C4']) },
   kvGet, kvSet, gameInitSettled: async () => {},
   buildFighter: async () => ({ stats: {}, talents: [], gearLo: {}, petMeta }),
@@ -53,10 +55,10 @@ const ctx = vm.createContext({ ...art, ...football, ...pets, ...loot,
       assert.deepEqual(clean(stored.yard.wear), uploaded.yard.wear, 'sanitizer preserves real pet kit');
       srv.me = 'viewer'; srv.row = { a: 'viewer', b: 'friend', status: 'accepted', b_handle: 'Friend', b_profile: JSON.stringify(stored) };
       response = { friends: [vm.runInContext('shape(row)', srv)], incoming: [], outgoing: [] };
-      return { ok: true, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => ({}) };
     }
     assert.equal(method, 'GET'); assert.equal(path, '/friends');
-    return { ok: true, json: async () => clean(response) };
+    return { ok: true, status: 200, json: async () => clean(response) };
   },
   $$: selector => { assert(buttons[selector], selector); return [buttons[selector]]; },
   body: {}, popSound: () => {}, render: () => {}, toast: () => {}, saveSettings: () => {},
@@ -72,7 +74,7 @@ const ctx = vm.createContext({ ...art, ...football, ...pets, ...loot,
 vm.runInContext([
   cut(social, '// Validate parsed responses', '/* ---------------- account').replaceAll('export ', ''),
   cut(app, 'async function socialSnapshot()', '// Push the public profile snapshot'),
-  cut(social, 'export async function syncProfile(', '/* ---------------- full encrypted backup').replace('export ', ''),
+  cut(social, 'export async function syncProfile(', '/* ---------------- full encrypted backup').replaceAll('export ', ''),
   cut(social, 'export async function listFriends()', '// Incoming friend requests').replace('export ', ''),
   cut(app, 'let _profilePushT =', 'function pitBeatKeys'),
   cut(app, 'const footballTintHtml =', '// A leaderboard/podium row'),
@@ -81,7 +83,7 @@ vm.runInContext([
 ].join('\n'), ctx);
 // Execute the real profile template, stopping before its DOM wiring.
 vm.runInContext(cut(app, 'function openFriendProfile(', '\nfunction '), ctx);
-ctx.social = { isOnline: async () => online, syncProfile: ctx.syncProfile };
+ctx.social = { isOnline: ctx.isOnline, syncProfile: ctx.syncProfile, pushProfileUpdate: ctx.pushProfileUpdate };
 vm.runInContext('let petRailTeam = null; let ownedCos = new Set();', ctx);
 vm.runInContext(cut(app, "    $$('[data-petwear]', body)", '    /* ONE LISTENER ON THE ROW'), ctx);
 const realAvatar = ctx.avatarLayersHtml;

@@ -28,6 +28,8 @@ import { crateRow, consumableRow, eggRow, gearRow, cosRow, petInstances, petLeve
 import { GEAR_BY_ID } from './gear.js';
 import { isKnownPet } from './pets.js';
 import { onAppHide } from './native.js';
+import { syncAttempt, syncFailure, recordSyncOutcome } from './sync-health.js';
+export { onSyncTrouble, syncHealthLine, syncHealthState } from './sync-health.js';
 
 // Production API. Empty until the worker is deployed; the Go Online UI stays
 // hidden while unset. Overridable for tests/dev via ?api= or kv 'apiBase'.
@@ -370,7 +372,7 @@ export function apiFetch(url, opts = {}) {
 
 // fetchOpts overlays apiFetch's own options (only pushBackup's pagehide path
 // uses it, for `{ keepalive: true }`; everyone else gets the old behaviour).
-async function signedFetch(method, path, bodyObj = null, fetchOpts = {}) {
+async function signedFetch(method, path, bodyObj = null, fetchOpts = {}, attempt = null) {
   const base = await apiBase();
   const me = await kvGet('social', null);
   if (!base || !me) throw new Error('offline');
@@ -378,6 +380,10 @@ async function signedFetch(method, path, bodyObj = null, fetchOpts = {}) {
   const ts = Date.now();
   const key = await signingKey();
   const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, new TextEncoder().encode(`${method}\n${path}\n${ts}\n${body}`));
+  if (attempt) {
+    if (path === '/profile') attempt.network = true;
+    else attempt.grantsNetwork = true;
+  }
   return apiFetch(base + path, {
     method,
     headers: { 'content-type': 'application/json', 'x-bh-player': me.playerId, 'x-bh-ts': String(ts), 'x-bh-sig': b64(sig) },
@@ -980,13 +986,46 @@ export async function leaderboard() {
    a clean one is still exactly the event worth knowing about, and clearing it
    would hide it. Rides out on the Settings diagnostics line, which is a note for
    us and not a message for the player. 2026-09-02. */
-export async function syncProfile(snapshot, appV = '') {
-  const r = await signedFetch('PUT', '/profile', { snapshot, appV });
-  if (r.ok) {
-    const d = await r.json().catch(() => ({}));
-    if (d && Array.isArray(d.bounded) && d.bounded.length) await kvSet('profileBounded', { at: Date.now(), fields: d.bounded });
+export async function syncProfile(snapshot, appV = '', attempt = null) {
+  const own = !attempt;
+  attempt ||= syncAttempt('syncProfile');
+  try {
+    if (own) attempt.optedOut = await kvGet('cloudOff', false);
+    const r = await signedFetch('PUT', '/profile', { snapshot, appV }, {}, attempt);
+    attempt.profileStatus = r.status;
+    attempt.profileAt = Date.now();
+    attempt.status = r.status;
+    if (!r.ok) syncFailure(attempt, 'non-2xx');
+    if (r.ok) {
+      const d = await r.json().catch(() => ({}));
+      if (d && Array.isArray(d.bounded) && d.bounded.length) await kvSet('profileBounded', { at: Date.now(), fields: d.bounded });
+    }
+    return r.ok;
+  } catch (error) {
+    syncFailure(attempt, 'request-failed', error);
+    throw error;
+  } finally {
+    if (own) recordSyncOutcome(attempt);
   }
-  return r.ok;
+}
+
+// The debounced wardrobe path and its snapshot builder share one outcome.
+export async function pushProfileUpdate(buildSnapshot, appV = '') {
+  const attempt = syncAttempt('pushProfileSoon');
+  let hop = 'offline-gate';
+  try {
+    attempt.optedOut = await kvGet('cloudOff', false);
+    if (!(await isOnline())) { syncFailure(attempt, hop); return; }
+    hop = 'snapshot-failed';
+    const snapshot = await buildSnapshot();
+    if (!snapshot) syncFailure(attempt, 'null-snapshot');
+    hop = 'request-failed';
+    await syncProfile(snapshot, appV, attempt);
+  } catch (error) {
+    syncFailure(attempt, hop, error);
+  } finally {
+    recordSyncOutcome(attempt);
+  }
 }
 
 /* ---------------- full encrypted backup ---------------- */
@@ -1358,13 +1397,21 @@ export async function acknowledgeGrantDelivery(keys) {
   }, {});
 }
 
-export async function pullGrants() {
+export async function pullGrants(attempt = null) {
   const since = (await kvGet('grantCursor', 0)) || 0;
-  const r = await signedFetch('GET', `/grants?since=${since}`);
+  const r = await signedFetch('GET', `/grants?since=${since}`, null, {}, attempt);
+  if (attempt) {
+    attempt.grantsStatus = r.status;
+    if (!r.ok) {
+      if (attempt.hop === 'success') attempt.status = r.status;
+      syncFailure(attempt, 'grants-failed');
+    }
+  }
   if (!r.ok) return { applied: 0 };
   let data;
   try { data = await readResponseBody(r, 'grants', 'check your Crew deliveries'); }
   catch (error) {
+    if (attempt) syncFailure(attempt, 'grants-failed', error);
     if (error.message === 'bad-body') return { applied: 0, reason: 'bad-body' };
     throw error;
   }
@@ -1809,7 +1856,11 @@ export async function bootSync({ saveMissing = false } = {}) {
 }
 
 // Opt out / back in to cloud backup.
-export async function setCloudBackup(on) { await kvSet('cloudOff', !on); }
+export async function setCloudBackup(on) {
+  await kvSet('cloudOff', !on);
+  if (!on) kvUpdate('syncHealth', state => state ? { ...state, streak: null } : null, null)
+    .catch(() => console.warn('Profile sync notice state could not be saved.'));
+}
 export async function cloudBackupOn() { return !(await kvGet('cloudOff', false)); }
 
 /* ---------------- auto sync ---------------- */
@@ -1871,9 +1922,31 @@ if (typeof document !== 'undefined' && typeof window !== 'undefined') {
   });
 }
 
+// Registration can reach the server while its reply (or the local social write)
+// fails. The signing key survives, but isOnline alone would then skip every
+// resume forever. bootSync retries only on a full boot with cloud backup enabled.
+// Repair this device's existing identity here too. Never mint a key for a new
+// install, and keep isOnline a read-only query. Public profile sync, like the
+// existing online path, is independent of the encrypted backup opt-out.
+let socialRecovery = null;
+async function recoverSocialForSync() {
+  if (await isOnline()) return true;
+  if (!(await apiBase())) return false;
+  const id = await kvGet('identity', null);
+  if (!id?.privJwk || !id?.pubJwk) return false;
+  if (!socialRecovery) {
+    socialRecovery = goOnline().finally(() => { socialRecovery = null; });
+  }
+  return (await socialRecovery).ok === true;
+}
+
 export async function autoSync(buildSnapshot, appV = '') {
+  const attempt = syncAttempt('autoSync');
+  let hop = 'offline-gate';
   try {
-    if (!(await isOnline())) return null;
+    attempt.optedOut = await kvGet('cloudOff', false);
+    if (!(await recoverSocialForSync())) { syncFailure(attempt, hop); return null; }
+    hop = 'backup-failed';
     const now = Date.now();
     if (await dueBackupPush()) {
       const pushed = await pushBackup(appV);
@@ -1891,16 +1964,25 @@ export async function autoSync(buildSnapshot, appV = '') {
       }
     }
     const last = (await kvGet('socialSyncAt', 0)) || 0;
-    if (now - last < SYNC_THROTTLE_MS) return null;
+    if (now - last < SYNC_THROTTLE_MS) { attempt.hop = 'throttled'; return null; }
     /* Only an accepted profile starts the throttle window. Moving this stamp
        after the awaits (2026-09-05) protected thrown errors, but syncProfile
        returns false for HTTP rejection and a missing snapshot sends nothing.
        Both must remain retryable on the next boot/resume. Still pull grants
        when the profile is rejected so an independent delivery can land. */
+    hop = 'snapshot-failed';
     const snapshot = await buildSnapshot();
-    const synced = snapshot ? await syncProfile(snapshot, appV) : false;
-    const grants = await pullGrants();
+    hop = 'request-failed';
+    const synced = snapshot ? await syncProfile(snapshot, appV, attempt) : false;
+    if (!snapshot) syncFailure(attempt, 'null-snapshot');
+    hop = 'grants-failed';
+    const grants = await pullGrants(attempt);
     if (synced) await kvSet('socialSyncAt', now);
     return grants;
-  } catch { return null; }
+  } catch (error) {
+    syncFailure(attempt, hop, error);
+    return null;
+  } finally {
+    recordSyncOutcome(attempt);
+  }
 }

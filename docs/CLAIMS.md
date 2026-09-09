@@ -1,5 +1,24 @@
 # What each patch note claims, and what backs it
 
+## v529 (2026-09-09)
+
+1. PROOF: sync-observability-audit.mjs | REACH: Every sync attempt now records its outcome and the hop it stopped at, and a Settings row reports it in plain language. Driven with an injected failure of each kind: today's code leaves no trace anywhere for any of them. A guard fails if a bare catch returns to the sync path. Nothing new is uploaded and the cloud opt-out is never reported as a failure.
+2. PROOF: sync-identity-audit.mjs | REACH: A registration whose reply is lost used to leave a valid signing key with no `social` record, and because `isOnline()` reads that record the player failed the gate silently and forever. Recovery now runs in place of that gate, on resume as well as boot, and signs as the same player rather than minting a new identity. This is a reproduced individual failure; it is NOT claimed to explain the fleet-wide outage.
+3. PROOF: sync-clientpath-audit.mjs | REACH: An HTTP-rejected profile or a null snapshot no longer advances the throttle stamp, so one failure no longer suppresses every retry inside the following five minutes. Grants are still pulled when the profile is rejected.
+
+**The production sync outage is NOT fixed and is NOT claimed to be.** No player
+has synced since 2026-09-06. Five lanes investigated: 300 observations across 60
+release trees all reached `PUT /profile`, no signing or canonicalisation
+regression exists, and the tracked native config loads the live site rather than
+pinning players to a bundled build. The cause remains unknown. This release makes
+the NEXT failure visible instead of silent, which is the precondition for finding
+it.
+
+Three lanes edited `js/social.js` and did not combine: a hand-assembly produced
+six red audits and was abandoned rather than patched blind. The integration was
+redone as its own lane. 378 unit assertions, 0 failures, all 135 PURE entries
+exit 0. No browser, device or socket proof was run.
+
 ## v528 (2026-09-09)
 
 1. PROOF: stable-rooms-top-audit.mjs, wheel-look-audit.mjs | REACH: The three rooms render above the album with live counts and their own pixel icons from assets/icons-pix. The wheel is restyled to the brand deck with labels upright rather than rotated to the wedge; the prize table is byte-identical and the weights still sum to 95, so no odds changed. Visual review of both is owed: neither lane could render.
