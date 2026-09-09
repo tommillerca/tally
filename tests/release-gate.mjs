@@ -254,6 +254,7 @@ const coverageOnly = process.argv.includes('--coverage-only');
 const PURE = [
   'lab-density-audit.mjs', // Frozen density work order: production copy and destruction controls, no sockets.
   'crew-outfit-audit.mjs', // Real wardrobe handlers, snapshot round trip and Crew figure contracts, no sockets.
+  'dock-line-audit.mjs', // Dock band source regression and FAB flex geometry controls; rendered pixels/taps remain browser/manual proof.
   'wardrobe-playtest-audit.mjs', 'lab-room2-audit.mjs', 'stable-stale-disclosure-audit.mjs', 'breed-last-colour-audit.mjs', 'stable-loss-disclosure-audit.mjs', 'lab-health-recovery-audit.mjs',
   'lab-integration-audit.mjs', 'lab-ui-audit.mjs', 'laboratory-audit.mjs', 'lab-foundation-audit.mjs', 'pet-stress-guard.mjs', 'crew-pet-node-guard.mjs',
   'transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-atomic-audit.mjs', 'backup-encoder-audit.mjs', 'backup-key-audit.mjs', 'backup-version-audit.mjs',
@@ -354,7 +355,7 @@ PURE.push('firstrun-audit.mjs'); // Frozen first-run: interrupted kit, onboardin
 PURE.push('settings-safety-audit.mjs'); // Settings templates, export and destructive handlers with transaction abort/retry controls; Node only.
 PURE.push('progress-playtest-audit.mjs'); // Frozen Progress lane: badge abort/retry, real charts, sleep and detail handlers; no sockets.
 const BROWSER = [
-  'today-dock-pixels-audit.mjs', // v522: the Today dock band must not paint --hero-edge. Browser tier: it screenshots and samples real pixels, which is the only instrument that catches this class (the geometry measures correct either way). Its CONTROL-PIXELS row is deliberately UNPROVEN, see docs/CLAIMS.md v522.
+  'today-dock-pixels-audit.mjs', // Dock exclusion: all-tab captures, row tap and lost-exclusion control, plus native bounce evidence. Pixel continuity remains manual/UNPROVEN; the former opaque-RGB predicate certified the black-line bug.
 
   'device-loss-browser-audit.mjs', // L3 recovery choice, known-save retry, file replacement and Settings restore reachability; local disposable origin only.
   'multidevice-earnings-browser-audit.mjs', // L2: real IndexedDB and visibilitychange listener, encrypted two-device merge both directions; pending reviewer browser proof.

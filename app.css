@@ -150,22 +150,10 @@ svg { display: block; }
 .screen {
   flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
   padding: calc(var(--sat) + 14px) var(--pad) 24px;
-  /* THE FAB'S OVERHANG, TAKEN OUT OF THE SCROLLPORT (R40-22, 2026-09-07).
-     #fab has margin-top:-26px, so it hangs above the tab bar and INTO this
-     scroller: measured at 393x852 and 375x667, its box starts 8.1px above the
-     scroller's bottom edge and its 4px --bg ring another 4px above that. Any
-     row that happens to be passing through that band is covered by it, and
-     document.elementFromPoint at the row's own visible centre answers #fab --
-     measured on the News rows announcing the Locker Room, 58 x 7.9px, at both
-     widths: a tap there opens the food sheet rather than the row.
-     A BORDER, NOT PADDING OR A MARGIN. A scroller clips its content to the
-     PADDING box, so a bottom border is a band content can never enter.
-     Today paints this band with the dock's opaque base colour below: leaving
-     it transparent exposed --hero-edge as a full-width stripe on v521.
-     The scroller's background colour still fills the TOP rubber band.
-     13px covers the 12.1px the
-     FAB and its ring reach; re-measure if .fab's size or margin move. */
-  border-bottom: 13px solid transparent;
+  /* R40-22's 13px FAB exclusion now belongs to .tabbar's top padding.
+     Moving it out of this border preserves the content clip edge without a
+     separate paint band: transparent leaked Today's bounce colour, opaque
+     painted a black line. Padding HERE would let rows scroll under the FAB. */
 }
 
 /* AND THE SCROLLER CARRIES THE ART'S OWN TOP EDGE, so a bounce does not uncover
@@ -234,13 +222,6 @@ svg { display: block; }
    same change; the strip itself is the whole feature now. */
 .screen--today {
   position: relative; isolation: isolate; background-color: var(--hero-edge, var(--bg));
-  /* v521 dock sliver: retain R40-22's content exclusion, but cover the hero-edge
-     paint under the border with the dock's base colour. Opaque on purpose:
-     the dock's .84 alpha here would still blend with the equipped backdrop.
-     No clipping or background image changes: the solid scroller colour remains
-     available to WebKit's top bounce (Tom, 2026-08-24). Native pixel proof is
-     required separately; see tests/manual/today-dock-pixels.md. */
-  border-bottom-color: rgb(var(--dock-rgb));
 }
 .today-plate {
   /* ZERO HEIGHT, AND THE PAINT IS IN THE PSEUDOS. The first version was 100vh
@@ -426,7 +407,13 @@ svg { display: block; }
 .tabbar {
   flex: none; width: 100%; position: relative;
   display: flex; align-items: center; justify-content: space-around;
-  padding: 8px 10px calc(var(--sab) + 8px);
+  /* 8px spacing + the former 13px screen border. The dock starts 13px higher,
+     but its buttons and the screen's content clip stay at the same positions.
+     The FAB and its 4px ring sit inside this sibling, outside every route's
+     scrollport. One translucent dock surface paints the whole reserved area,
+     independent of hero art, equipped backdrops or room colours. Pixel and
+     native tap review remain required; see tests/manual/today-dock-pixels.md. */
+  padding: 21px 10px calc(var(--sab) + 8px);
   background: rgba(var(--dock-rgb), 0.84);
   -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px);
   border-top: 1px solid var(--line);

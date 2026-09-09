@@ -1,23 +1,24 @@
-/* 2026-09-08 frozen fix-sliver work order, Tom on v521:
- * "my background colour ... in a line between the dock ... and the rest".
- * Grade screenshot pixels, not the already-correct zero-gap geometry.
- * A transparent-border CONTROL must reproduce the stripe in those same pixels.
+/* 2026-09-09 frozen fix-dock-line supersedes the opaque-band acceptance.
+ * Capture every tab and test real scroller clipping with a clickable probe row.
+ * Pixel continuity is manual: the old fixed-RGB predicate certified the bug.
  * Native rubber-band pixels require operator evidence: Chromium's headless
  * compositor cannot prove iOS bounce paint. Missing evidence exits 97, never 0.
  * See manual/today-dock-pixels.md for prerequisites and the evidence format.
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { boot, serveTree, sleep } from './godmode.js';
-import { bandPasses, controlPasses } from './lib/today-dock-pixels.mjs';
+import { auditOutputPath } from './lib/audit-output.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const hero = [108, 123, 61]; // Non-default equipped backdrop from the measured bug.
 const evidencePath = process.env.TODAY_BOUNCE_EVIDENCE;
-let own, browser, page, failures = 0, unproven = false;
+let own, browser, page, failures = 0, unproven = true;
+console.log('UNPRV ALL-TAB-PIXELS: manual pixel continuity review is owed; geometry and hit-tests cannot certify appearance');
 if (!evidencePath) {
   console.log('UNPRV NATIVE-BOUNCE DID NOT RUN: needs a held iOS WebKit pull on a simulator/device, PNG and hash-bound JSON in TODAY_BOUNCE_EVIDENCE; see tests/manual/today-dock-pixels.md');
   unproven = true;
@@ -64,93 +65,99 @@ try {
     unproven = true;
   }
   if (!browser) {
-    for (const width of [393, 375])
-      for (const row of ['R40-22', 'BOUNCE-PREREQUISITES', 'BAND-PIXELS', 'CONTROL-RESTORE', 'RESTORED-BAND-PIXELS'])
-        console.log(`UNPRV ${row} ${width} DID NOT RUN: browser unavailable`);
+    console.log('UNPRV ALL-TAB GEOMETRY, ROW-TAP and SCREENSHOTS DID NOT RUN: browser unavailable');
     if (evidencePath) console.log('UNPRV NATIVE-BOUNCE-PIXELS DID NOT RUN: browser PNG decoder unavailable');
   }
   if (browser) {
+    const output = auditOutputPath(process.env.DOCK_LINE_EVIDENCE_DIR || path.join(tmpdir(), `tally-dock-line-${process.pid}`));
+    mkdirSync(auditOutputPath(output), { recursive: true });
+    const tabs = await page.$$eval('#tabbar [data-tab]', els => els.map(el => el.dataset.tab));
+    assert.deepEqual(tabs, ['today', 'boneyard', 'friends', 'bonehead'], 'every tab must be covered');
     for (const [width, height] of [[393, 852], [375, 667]]) {
       await page.setViewport({ width, height, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
-      await page.evaluate(() => { location.hash = '#/today'; });
-      await page.waitForSelector('#screen.screen--today .today-plate');
-      await sleep(1200);
-      await page.evaluate(rgb => {
-        const s = document.getElementById('screen');
-        s.style.setProperty('--hero-edge', `rgb(${rgb.join(',')})`);
-        s.scrollTop = s.scrollHeight;
-      }, hero);
-      await sleep(300);
-      const measure = await page.evaluate(() => {
-        const s = document.getElementById('screen'), dock = document.getElementById('tabbar');
-        const fab = document.getElementById('fab').getBoundingClientRect();
-        const r = s.getBoundingClientRect(), d = dock.getBoundingClientRect();
-        const cs = getComputedStyle(s), border = parseFloat(cs.borderBottomWidth);
-        const top = r.bottom - border;
-        // Exclude the FAB's ring and the fractional boundary pixels, but sample
-        // every interior row across both exposed sides of the full-width band.
-        const y = Math.ceil(top) + 1, bottom = Math.floor(r.bottom) - 1;
-        const left = Math.ceil(r.left) + 2, right = Math.floor(r.right) - 2;
-        const endLeft = Math.floor(fab.left) - 8, startRight = Math.ceil(fab.right) + 8;
-        return {
-          border, gap: d.top - r.bottom, top, fabTop: fab.top,
-          rect: { x: r.x, y: r.y, width: r.width, height: r.height }, scrollTop: s.scrollTop,
-          atBottom: Math.abs(s.scrollHeight - s.clientHeight - s.scrollTop) < 2,
-          scrollable: s.scrollHeight > s.clientHeight,
-          colour: cs.backgroundColor, image: cs.backgroundImage,
-          dock: getComputedStyle(dock).backgroundColor.match(/[\d.]+/g).slice(0, 3).map(Number),
-          regions: [
-            { x: left, y, width: endLeft - left, height: bottom - y },
-            { x: startRight, y, width: right - startRight, height: bottom - y },
-          ],
-        };
-      });
-      assert(measure.scrollable && measure.atBottom, 'Today must be scrolled to its bottom');
-      check(`R40-22 ${width}`, measure.border === 13 && Math.abs(measure.gap) < 0.5
-        && measure.top <= measure.fabTop - 4, JSON.stringify(measure));
-      check(`BOUNCE-PREREQUISITES ${width}`, measure.colour === `rgb(${hero.join(', ')})`
-        && measure.image === 'none', `${measure.colour}, image=${measure.image}; native pixels graded separately`);
-      const shot = await page.screenshot({ encoding: 'base64' });
-      const band = await pixels(page, shot, measure.regions, [hero, measure.dock]);
-      check(`BAND-PIXELS ${width}`, band.every(bandPasses), JSON.stringify(band));
-
-      // Positive control restores the original transparent border in the DOM.
-      // Restore the inline state even if screenshotting or decoding throws.
-      const oldStyle = await page.$eval('#screen', s => s.getAttribute('style'));
-      try {
-        await page.$eval('#screen', s => s.style.setProperty('border-bottom-color', 'transparent', 'important'));
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        const restored = await page.$eval('#screen', s => {
-          const cs = getComputedStyle(s), r = s.getBoundingClientRect();
-          return { colour: cs.borderBottomColor, border: cs.borderBottomWidth, style: cs.borderBottomStyle,
-            background: cs.backgroundColor, clip: cs.backgroundClip,
-            rect: { x: r.x, y: r.y, width: r.width, height: r.height }, scrollTop: s.scrollTop };
+      for (const tab of tabs) {
+        await page.evaluate(tab => { location.hash = '#/' + tab; }, tab);
+        await page.waitForFunction(tab => document.querySelector('#tabbar .tab.active')?.dataset.tab === tab
+          && document.querySelector('#screen.screen-in')?.firstElementChild, {}, tab);
+        await sleep(1200);
+        // Capture the actual equipped art. Never recolour it for a fixture.
+        for (const position of ['top', 'bottom']) {
+          await page.$eval('#screen', (s, position) => { s.scrollTop = position === 'top' ? 0 : s.scrollHeight; }, position);
+          await sleep(300);
+          const measure = await page.evaluate(() => {
+            const s = document.getElementById('screen'), d = document.getElementById('tabbar');
+            const r = s.getBoundingClientRect(), dock = d.getBoundingClientRect();
+            const fab = document.getElementById('fab').getBoundingClientRect();
+            const cs = getComputedStyle(s);
+            return { border: parseFloat(cs.borderBottomWidth), gap: dock.top - r.bottom,
+              ringClearance: fab.top - 4 - r.bottom, background: cs.backgroundColor,
+              dockBackground: getComputedStyle(d).backgroundColor, scrollTop: s.scrollTop };
+          });
+          check(`R40-22 ${tab} ${width} ${position}`, measure.border === 0 && Math.abs(measure.gap) < 0.5
+            && measure.ringClearance >= 0, JSON.stringify(measure));
+          const capture = auditOutputPath(path.join(output, `${tab}-${width}-${position}.png`));
+          await page.screenshot({ path: auditOutputPath(capture) });
+          console.log(`CAPTURE ${capture}; RGB/continuity measurements remain manual`);
+        }
+        // A 44px probe crosses the real scroller's bottom, including the FAB's
+        // box below it. Click its visible part and separately hit-test the
+        // clipped part. This exercises browser clipping, not arithmetic.
+        const saved = await page.$eval('#screen', s => s.scrollTop);
+        await page.$eval('#screen', s => {
+          const spacer = document.createElement('div');
+          spacer.id = 'dock-test-spacer'; spacer.style.cssText = 'height:2000px;flex:none;';
+          const row = document.createElement('button');
+          row.id = 'dock-test-row'; row.textContent = 'Dock clipping probe';
+          row.style.cssText = 'display:block;height:44px;min-height:44px;flex:none;width:100%;margin:0;padding:0;';
+          row.dataset.taps = '0';
+          row.addEventListener('click', () => { row.dataset.taps = String(Number(row.dataset.taps) + 1); });
+          s.append(spacer, row);
+          s.scrollTop += row.getBoundingClientRect().top - (s.getBoundingClientRect().bottom - 22);
         });
-        check(`CONTROL-RESTORE ${width}`, restored.colour === 'rgba(0, 0, 0, 0)'
-          && restored.border === '13px' && restored.style === 'solid'
-          && restored.background === measure.colour
-          && JSON.stringify(restored.rect) === JSON.stringify(measure.rect)
-          && restored.scrollTop === measure.scrollTop, JSON.stringify(restored));
-        const control = await pixels(page, await page.screenshot({ encoding: 'base64' }), measure.regions, [hero, measure.dock]);
-        /* UNPROVEN, DELIBERATELY, 2026-09-08. This row's expectation has been
-           wrong three separate ways and it currently disagrees with a direct
-           operator measurement of the same band: sampling the full 393px width
-           row by row with the transparent border restored gave y+1 at 393/393
-           hero-edge and every row below it hero-edge except the FAB and its
-           ring, while this row reports ~27%. Until that disagreement is
-           resolved, reporting it as a PASS or a FAIL would both be lies, so it
-           declares itself unproven and the suite does not grade on it. The
-           fix itself was verified by hand: the band went from 540/540 px of
-           rgb(108,123,61) to 540/540 px of rgb(15,14,20). Do not quietly turn
-           this back into a check() without resolving the disagreement. */
-        console.log(`UNPRV CONTROL-PIXELS ${width}: expectation disputes the operator's direct measurement of the same band; ${JSON.stringify(control)}`);
-        unproven = true;
-      } finally {
-        await page.$eval('#screen', (s, style) => style === null ? s.removeAttribute('style') : s.setAttribute('style', style), oldStyle);
+        try {
+          const hit = await page.evaluate(() => {
+            const s = document.getElementById('screen').getBoundingClientRect();
+            const row = document.getElementById('dock-test-row').getBoundingClientRect();
+            const fab = document.getElementById('fab').getBoundingClientRect();
+            const x = (fab.left + fab.right) / 2, y = s.bottom - 3;
+            return { x, y, crossesFab: row.top < fab.top && row.bottom > fab.top,
+              visibleHit: document.elementFromPoint(x, y)?.id,
+              clippedHit: document.elementFromPoint(x, fab.top + 1)?.closest('button')?.id };
+          });
+          check(`ROW-CLIP ${tab} ${width}`, hit.crossesFab && hit.visibleHit === 'dock-test-row'
+            && hit.clippedHit === 'fab', JSON.stringify(hit));
+          await page.touchscreen.tap(hit.x, hit.y);
+          check(`ROW-TAP ${tab} ${width}`, await page.$eval('#dock-test-row', row => row.dataset.taps === '1'),
+            'visible row segment must receive exactly one tap');
+          const style = await page.$eval('#tabbar', d => d.getAttribute('style'));
+          try {
+            // CONTROL removes the exclusion entirely. The same bottom-of-
+            // scrollport point must now hit the FAB, reproducing R40-22.
+            await page.$eval('#tabbar', d => d.style.setProperty('padding-top', '8px', 'important'));
+            const control = await page.evaluate(() => {
+              const s = document.getElementById('screen').getBoundingClientRect();
+              const f = document.getElementById('fab').getBoundingClientRect();
+              return document.elementFromPoint((f.left + f.right) / 2, s.bottom - 3)?.closest('button')?.id;
+            });
+            check(`CONTROL-LOST-EXCLUSION ${tab} ${width}`, control === 'fab', String(control));
+          } finally {
+            await page.$eval('#tabbar', (d, style) => style === null ? d.removeAttribute('style') : d.setAttribute('style', style), style);
+          }
+        } finally {
+          await page.$eval('#screen', (s, saved) => {
+            s.querySelector('#dock-test-row')?.remove(); s.querySelector('#dock-test-spacer')?.remove(); s.scrollTop = saved;
+          }, saved);
+        }
       }
-      const restoredBand = await pixels(page, await page.screenshot({ encoding: 'base64' }), measure.regions, [hero, measure.dock]);
-      check(`RESTORED-BAND-PIXELS ${width}`, restoredBand.every(bandPasses), JSON.stringify(restoredBand));
     }
+    await page.evaluate(() => { location.hash = '#/today'; });
+    await page.waitForSelector('#screen.screen--today .today-plate');
+    const bounce = await page.$eval('#screen', (s, hero) => {
+      s.style.setProperty('--hero-edge', `rgb(${hero.join(',')})`);
+      const cs = getComputedStyle(s);
+      return { colour: cs.backgroundColor, image: cs.backgroundImage };
+    }, hero);
+    check('BOUNCE-PREREQUISITES', bounce.colour === `rgb(${hero.join(', ')})` && bounce.image === 'none', JSON.stringify(bounce));
 
     if (evidencePath) {
       const evidence = JSON.parse(readFileSync(evidencePath, 'utf8'));
