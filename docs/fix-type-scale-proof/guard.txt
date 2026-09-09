@@ -1,0 +1,7 @@
+SOURCE CENSUS 974/974 (100.00%); fixed glyphs 10
+PASS 34 type-token definitions resolve through rem and double at 16px to 32px; px TYPE tokens: 0
+PASS body base, default sizes, token consumers and px border/sprite controls
+PASS 9 regression mutations rejected; viewport zoom policy preserved
+PASS CONTROL 6 full-census regressions, 2 lowered floors and missing Dynamic Type opt-in rejected
+PASS text-container wrapping/scroll contracts; fixed Paddock scene and room art controls
+PASS CONTROL measured-element input validator and 95% ratchet (synthetic fixtures only; actual element census NOT RUN)

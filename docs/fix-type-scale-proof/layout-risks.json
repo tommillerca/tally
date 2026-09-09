@@ -1,0 +1,1844 @@
+{
+  "scope": "Source candidates only: selectors with both type and fixed sizing, clipping, no-wrap or absolute/fixed positioning. Ancestor and cross-selector interactions require full visual review. Mitigations are listed in docs/fix-type-scale.md; all candidates remain subject to that gate.",
+  "count": 147,
+  "candidates": [
+    {
+      "context": ".entry .n .name",
+      "line": 392,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".entry .n .sub",
+      "line": 393,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".tab",
+      "line": 422,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "62px"
+        }
+      ]
+    },
+    {
+      "context": ".tab-badge",
+      "line": 424,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "height",
+          "value": "16px"
+        }
+      ]
+    },
+    {
+      "context": ".sheet-head h2",
+      "line": 471,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".scan-hint",
+      "line": 549,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".scan-status",
+      "line": 550,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".chip",
+      "line": 583,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".stepper button",
+      "line": 612,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "44px"
+        },
+        {
+          "property": "height",
+          "value": "42px"
+        }
+      ]
+    },
+    {
+      "context": ".food-row .n .name",
+      "line": 623,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".food-row .n .sub",
+      "line": 624,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".toast",
+      "line": 650,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "fixed"
+        }
+      ]
+    },
+    {
+      "context": ".q-name",
+      "line": 877,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".q-desc",
+      "line": 896,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".ward-cell",
+      "line": 907,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".well-check",
+      "line": 950,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "30px"
+        }
+      ]
+    },
+    {
+      "context": ".map-spawn .spawn-ing",
+      "line": 1024,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".ward-cell.equipped::after",
+      "line": 1044,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "width",
+          "value": "20px"
+        },
+        {
+          "property": "height",
+          "value": "20px"
+        }
+      ]
+    },
+    {
+      "context": ".reveal-card img, .reveal-ico",
+      "line": 1077,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "54px"
+        },
+        {
+          "property": "height",
+          "value": "54px"
+        }
+      ]
+    },
+    {
+      "context": ".hero-lv",
+      "line": 1733,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".hero-act",
+      "line": 1783,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".hero-emoji",
+      "line": 1802,
+      "constraints": [
+        {
+          "property": "line-height",
+          "value": "23px"
+        }
+      ]
+    },
+    {
+      "context": ".road-stop",
+      "line": 2179,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "width",
+          "value": "40px"
+        },
+        {
+          "property": "height",
+          "value": "40px"
+        }
+      ]
+    },
+    {
+      "context": ".fight-act small.cost",
+      "line": 2283,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "max-width",
+          "value": "calc(100% - 8px)"
+        }
+      ]
+    },
+    {
+      "context": ".hud-side .fname",
+      "line": 2622,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".hud-pet .petname",
+      "line": 2637,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".tal-node .tal-pip",
+      "line": 2752,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "30px"
+        },
+        {
+          "property": "height",
+          "value": "30px"
+        }
+      ]
+    },
+    {
+      "context": ".ch-badge",
+      "line": 3008,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".radar-ring i",
+      "line": 3056,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".vs-bone",
+      "line": 3078,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".nb-numinput",
+      "line": 3317,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "92px"
+        }
+      ]
+    },
+    {
+      "context": ".lb-open .ul-chev",
+      "line": 3350,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".pod-name",
+      "line": 3366,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".pod-plinth",
+      "line": 3372,
+      "constraints": [
+        {
+          "property": "height",
+          "value": "30px"
+        }
+      ]
+    },
+    {
+      "context": ".lb-pod.p1 .pod-plinth",
+      "line": 3377,
+      "constraints": [
+        {
+          "property": "height",
+          "value": "46px"
+        }
+      ]
+    },
+    {
+      "context": ".race-clock",
+      "line": 3413,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".race-lane .rk",
+      "line": 3438,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "26px"
+        },
+        {
+          "property": "height",
+          "value": "26px"
+        }
+      ]
+    },
+    {
+      "context": ".race-lane .nm b",
+      "line": 3468,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".rr-prize .pz",
+      "line": 3518,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".rr-banner .race-h b",
+      "line": 3556,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".rr-banner .race-h .pill",
+      "line": 3559,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".race-purse .row .pl",
+      "line": 3590,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "30px"
+        }
+      ]
+    },
+    {
+      "context": ".lb-pod b",
+      "line": 3601,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".lb-medal",
+      "line": 3608,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".fl-main b",
+      "line": 3662,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".cfan-plate b",
+      "line": 3790,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".cfan-star",
+      "line": 3844,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "40px"
+        },
+        {
+          "property": "height",
+          "value": "40px"
+        }
+      ]
+    },
+    {
+      "context": ".cfan-sel-nm em",
+      "line": 3851,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".fp-pet-lvl",
+      "line": 3893,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".fp-lvlbadge",
+      "line": 3895,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".fps-lab",
+      "line": 3907,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "74px"
+        }
+      ]
+    },
+    {
+      "context": ".fps-val",
+      "line": 3910,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "30px"
+        }
+      ]
+    },
+    {
+      "context": ".q-sum-ico",
+      "line": 3954,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "24px"
+        },
+        {
+          "property": "height",
+          "value": "24px"
+        }
+      ]
+    },
+    {
+      "context": ".q-badge",
+      "line": 3960,
+      "constraints": [
+        {
+          "property": "height",
+          "value": "18px"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".lu-quip",
+      "line": 4205,
+      "constraints": [
+        {
+          "property": "max-width",
+          "value": "280px"
+        }
+      ]
+    },
+    {
+      "context": ".tp-btn",
+      "line": 4337,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "30px"
+        },
+        {
+          "property": "height",
+          "value": "30px"
+        }
+      ]
+    },
+    {
+      "context": ".map-attrib",
+      "line": 4367,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".map-recenter",
+      "line": 4372,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "width",
+          "value": "44px"
+        },
+        {
+          "property": "height",
+          "value": "44px"
+        }
+      ]
+    },
+    {
+      "context": ".map-readout",
+      "line": 4379,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".map-den-mark .den-skulls",
+      "line": 4440,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".map-den-mark.claimed::after",
+      "line": 4486,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "width",
+          "value": "18px"
+        },
+        {
+          "property": "height",
+          "value": "18px"
+        }
+      ]
+    },
+    {
+      "context": ".map-key-btn",
+      "line": 4504,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "width",
+          "value": "36px"
+        },
+        {
+          "property": "height",
+          "value": "36px"
+        }
+      ]
+    },
+    {
+      "context": ".ward-cell .gear-stat",
+      "line": 4553,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".gi-actions .btn",
+      "line": 4587,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".ward-cell .gear-lock",
+      "line": 4590,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".gear-chip b",
+      "line": 4600,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        },
+        {
+          "property": "-webkit-line-clamp",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "context": ".pd-slot .pd-tag",
+      "line": 4649,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".pd-slot .pd-gear",
+      "line": 4655,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".pet-count",
+      "line": 4724,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".fighterG.foe-side.targeted::before, .pet-fighter.add.targeted::before",
+      "line": 4881,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".pack-card.selectable.kept::after",
+      "line": 5536,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".mix-row .mix-lab",
+      "line": 5592,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "74px"
+        }
+      ]
+    },
+    {
+      "context": ".mix-row .mix-n",
+      "line": 5595,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "20px"
+        }
+      ]
+    },
+    {
+      "context": ".stable-card .stable-chev",
+      "line": 5752,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".ward-cell.slimed::before",
+      "line": 5945,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".ward-cell.look .look-tag",
+      "line": 5954,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".ward-cell.look .look-cost, .pw-item.famr .look-cost",
+      "line": 5960,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".look-bar .lb-txt",
+      "line": 5973,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".ward-cell.look .look-cost.dust, .pw-item.famr .look-cost.dust",
+      "line": 6014,
+      "constraints": [
+        {
+          "property": "line-height",
+          "value": "16px"
+        }
+      ]
+    },
+    {
+      "context": ".mog-lines i",
+      "line": 6029,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "56px"
+        }
+      ]
+    },
+    {
+      "context": ".pd-slot .pd-mog",
+      "line": 6072,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".wn-hero .rip",
+      "line": 6087,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".fit-chip",
+      "line": 6100,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".fit-chip .fc-x",
+      "line": 6113,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "18px"
+        },
+        {
+          "property": "height",
+          "value": "18px"
+        }
+      ]
+    },
+    {
+      "context": ".col-cell.worn::after",
+      "line": 6151,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "width",
+          "value": "17px"
+        },
+        {
+          "property": "height",
+          "value": "17px"
+        }
+      ]
+    },
+    {
+      "context": ".col-inspect .ci-body b",
+      "line": 6163,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".drop-count",
+      "line": 6201,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".drop-item::before",
+      "line": 6256,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".spire-flag",
+      "line": 6305,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".spire-tribute",
+      "line": 6321,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".plot-flag",
+      "line": 6431,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".faq-ico",
+      "line": 6502,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "30px"
+        },
+        {
+          "property": "height",
+          "value": "30px"
+        }
+      ]
+    },
+    {
+      "context": ".map-spire .spire-lv",
+      "line": 6555,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".sp-n",
+      "line": 6868,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "22px"
+        },
+        {
+          "property": "height",
+          "value": "22px"
+        }
+      ]
+    },
+    {
+      "context": ".t1-frow .nm b",
+      "line": 7211,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".t1-frow .nm small",
+      "line": 7212,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".t1-rules span",
+      "line": 7324,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "24px"
+        },
+        {
+          "property": "height",
+          "value": "24px"
+        }
+      ]
+    },
+    {
+      "context": ".sheet.scanner .scan-status span.plate",
+      "line": 7378,
+      "constraints": [
+        {
+          "property": "max-width",
+          "value": "320px"
+        }
+      ]
+    },
+    {
+      "context": ".spp .ribbon",
+      "line": 7671,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".spp .lvchip",
+      "line": 7678,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".spp-plate b",
+      "line": 7690,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".hero-meta .hero-title",
+      "line": 7837,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".map-radius b",
+      "line": 7867,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".onb-sub",
+      "line": 8048,
+      "constraints": [
+        {
+          "property": "max-width",
+          "value": "300px"
+        }
+      ]
+    },
+    {
+      "context": ".t3-med",
+      "line": 8390,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "40px"
+        },
+        {
+          "property": "height",
+          "value": "40px"
+        }
+      ]
+    },
+    {
+      "context": ".t3-drop .new",
+      "line": 8440,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".t3-qty",
+      "line": 8464,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "height",
+          "value": "24px"
+        }
+      ]
+    },
+    {
+      "context": ".t3-rung",
+      "line": 8536,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "34px"
+        },
+        {
+          "property": "height",
+          "value": "34px"
+        }
+      ]
+    },
+    {
+      "context": ".cheer-face",
+      "line": 8671,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "40px"
+        },
+        {
+          "property": "height",
+          "value": "40px"
+        }
+      ]
+    },
+    {
+      "context": ".gift-sealed .tx b",
+      "line": 8752,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".hud-add .aname",
+      "line": 8859,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".alias-tag",
+      "line": 8871,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".wallet-pill",
+      "line": 8932,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".hero-xpn",
+      "line": 8950,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".cf-chip",
+      "line": 9032,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".cf-lv",
+      "line": 9038,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".cf-eq",
+      "line": 9043,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".cf-n",
+      "line": 9052,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".tz-spot-name",
+      "line": 9371,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".pdk-state",
+      "line": 9745,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".pdk-lure-spark",
+      "line": 9829,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".pdk-coach",
+      "line": 9858,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".pdk-x-btn",
+      "line": 9928,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "width",
+          "value": "30px"
+        },
+        {
+          "property": "height",
+          "value": "30px"
+        }
+      ]
+    },
+    {
+      "context": ".pdk-q",
+      "line": 9963,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".pdk-x",
+      "line": 9964,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".k-id b",
+      "line": 10002,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".k-cap",
+      "line": 10018,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".k-grid-label",
+      "line": 10039,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".hlw-bed.arming",
+      "line": 10186,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "104px"
+        }
+      ]
+    },
+    {
+      "context": ".hlw-chip",
+      "line": 10187,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".hlw-freelabel",
+      "line": 10205,
+      "constraints": [
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".hlw-toast",
+      "line": 10224,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".hlw-say",
+      "line": 10232,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "max-width",
+          "value": "210px"
+        }
+      ]
+    },
+    {
+      "context": ".tm-meter",
+      "line": 10381,
+      "constraints": [
+        {
+          "property": "width",
+          "value": "140px"
+        }
+      ]
+    },
+    {
+      "context": ".rk > b",
+      "line": 10422,
+      "constraints": [
+        {
+          "property": "-webkit-line-clamp",
+          "value": "2"
+        },
+        {
+          "property": "overflow",
+          "value": "hidden"
+        },
+        {
+          "property": "height",
+          "value": "28px"
+        }
+      ]
+    },
+    {
+      "context": ".rk-stage",
+      "line": 10441,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        }
+      ]
+    },
+    {
+      "context": ".rk-or",
+      "line": 10465,
+      "constraints": [
+        {
+          "property": "line-height",
+          "value": "14px"
+        },
+        {
+          "property": "height",
+          "value": "14px"
+        }
+      ]
+    },
+    {
+      "context": ".rk-tag",
+      "line": 10609,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".ton-reach",
+      "line": 10861,
+      "constraints": [
+        {
+          "property": "max-width",
+          "value": "380px"
+        }
+      ]
+    },
+    {
+      "context": ".pet-new",
+      "line": 10898,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".gw-wm",
+      "line": 11066,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".gw-art",
+      "line": 11052,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".nb-dot",
+      "line": 11514,
+      "constraints": [
+        {
+          "property": "height",
+          "value": "17px"
+        }
+      ]
+    },
+    {
+      "context": ".nb-sub",
+      "line": 11516,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".nb-txt i",
+      "line": 11530,
+      "constraints": [
+        {
+          "property": "overflow",
+          "value": "hidden"
+        },
+        {
+          "property": "white-space",
+          "value": "nowrap"
+        }
+      ]
+    },
+    {
+      "context": ".ward-rar",
+      "line": 11675,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    },
+    {
+      "context": ".ward-cell.fam .ward-fam-n, .col-cell.fam .ward-fam-n, .pw-item.fam .ward-fam-n",
+      "line": 11726,
+      "constraints": [
+        {
+          "property": "position",
+          "value": "absolute"
+        }
+      ]
+    }
+  ],
+  "svgCoordinateText": [
+    {
+      "file": "js/app.js",
+      "line": 11509,
+      "value": "9.5",
+      "source": "<text x=\"${(bx + bw / 2).toFixed(1)}\" y=\"${H - 4}\" text-anchor=\"middle\" font-size=\"9.5\" fill=\"var(--text-3)\">${dow}</text>`;"
+    },
+    {
+      "file": "js/app.js",
+      "line": 11524,
+      "value": "9.5",
+      "source": "<text x=\"${(bx + bw / 2).toFixed(1)}\" y=\"${H - 2}\" text-anchor=\"middle\" font-size=\"9.5\" fill=\"var(--text-3)\">${dow}</text>`;"
+    },
+    {
+      "file": "js/app.js",
+      "line": 11655,
+      "value": "8.5",
+      "source": "const bestLbl = best >= 0 ? `<text x=\"${(P + best * (bw + gap) + bw / 2).toFixed(1)}\" y=\"${(y(points[best].value) - 4).toFixed(1)}\" fill=\"var(--accent)\" font-size=\"8.5\" text-anchor=\"middle\">${metric.goodLow ? 'lowest' : 'best'}</text>` : '';"
+    },
+    {
+      "file": "js/app.js",
+      "line": 11657,
+      "value": "9",
+      "source": "const bl = `<line x1=\"${P}\" y1=\"${by.toFixed(1)}\" x2=\"${W - P}\" y2=\"${by.toFixed(1)}\" stroke=\"var(--text-3)\" stroke-width=\"1\" stroke-dasharray=\"3 3\" opacity=\"0.5\"/><text x=\"${W - P}\" y=\"${(by - 3).toFixed(1)}\" fill=\"var(--text-3)\" font-size=\"9\" text-anchor=\"end\">avg ${metricNum(metricKey, base)}</text>`;"
+    },
+    {
+      "file": "js/app.js",
+      "line": 11659,
+      "value": "9",
+      "source": "const axis = `<text x=\"${P}\" y=\"${H - 2}\" fill=\"var(--text-3)\" font-size=\"9\">${leftLbl[points.length === 12 ? 'year' : (n === 7 ? 'week' : n === 14 ? 'day' : 'month')] || ''}</text><text x=\"${W - P}\" y=\"${H - 2}\" fill=\"var(--text-3)\" font-size=\"9\" text-anchor=\"end\">now</text>`;"
+    },
+    {
+      "file": "js/app.js",
+      "line": 11659,
+      "value": "9",
+      "source": "const axis = `<text x=\"${P}\" y=\"${H - 2}\" fill=\"var(--text-3)\" font-size=\"9\">${leftLbl[points.length === 12 ? 'year' : (n === 7 ? 'week' : n === 14 ? 'day' : 'month')] || ''}</text><text x=\"${W - P}\" y=\"${H - 2}\" fill=\"var(--text-3)\" font-size=\"9\" text-anchor=\"end\">now</text>`;"
+    },
+    {
+      "file": "js/app.js",
+      "line": 19922,
+      "value": "24",
+      "source": "<text x=\"98\" y=\"42\" text-anchor=\"middle\" font-family=\"Bangers, 'Arial Black', sans-serif\" font-size=\"24\" letter-spacing=\"2.5\" fill=\"#f2e9d7\">THE PADDOCK</text>"
+    },
+    {
+      "file": "js/hollow-beds.js",
+      "line": 189,
+      "value": "14",
+      "source": "`<g transform=\"rotate(-3 31 19)\"><text x=\"41\" y=\"24\" text-anchor=\"middle\" font-family=\"Bangers, sans-serif\" font-size=\"14\" letter-spacing=\".5\" fill=\"#17151d\">${label}</text>` +"
+    },
+    {
+      "file": "js/hollow-scene.js",
+      "line": 113,
+      "value": "23",
+      "source": "<g transform=\"rotate(-2 205 102)\"><text x=\"205\" y=\"110\" text-anchor=\"middle\" font-family=\"Bangers, sans-serif\" font-size=\"23\" letter-spacing=\"2\" fill=\"#f2e9d7\">THE HOLLOW</text></g>"
+    }
+  ]
+}

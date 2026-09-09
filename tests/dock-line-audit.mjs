@@ -15,7 +15,7 @@ const tabs = [...html.matchAll(/<button class="tab" data-tab="([^"]+)"/g)].map(m
 assert.deepEqual(tabs, ['today', 'boneyard', 'friends', 'bonehead'], 'enumerate every dock tab');
 assert.match(html, /<main id="screen" class="screen"><\/main>\s*<nav id="tabbar" class="tabbar"/, 'dock must follow the scroller in flow');
 
-function grade(css) {
+function grade(css, rootSize = 16) {
   const rows = cssDeclarations(css);
   const value = (context, property) => {
     const found = rows.filter(r => r.context === context && r.property === property);
@@ -46,7 +46,13 @@ function grade(css) {
     return parseFloat(v);
   };
   const fabHeight = px('.fab', 'height'), margin = px('.fab', 'margin-top');
-  const font = px('.tab', 'font-size'), gap = px('.tab', 'gap'), icon = px('.tab svg', 'height');
+  const typeSize = (v, seen = new Set()) => {
+    if (/^[\d.]+rem$/.test(v)) return parseFloat(v) * rootSize;
+    const token = /^var\((--fs-[\w-]+)\)$/.exec(v);
+    assert.ok(token && !seen.has(token[1]), `unresolved dock type: ${v}`);
+    return typeSize(value(':root', token[1]), new Set([...seen, token[1]]));
+  };
+  const font = typeSize(value('.tab', 'font-size')), gap = px('.tab', 'gap'), icon = px('.tab svg', 'height');
   assert.equal(value('.tab', 'padding'), '4px 0');
   assert.equal(value('body', 'line-height'), '1.35');
   const content = Math.max(fabHeight + margin, icon + gap + font * 1.35 + 8);
@@ -66,6 +72,7 @@ function grade(css) {
 
 try {
   const ringTop = grade(source);
+  assert.ok(grade(source, 32) >= ringTop, 'CONTROL doubled text must not reduce modeled FAB clearance');
   for (const tab of tabs) console.log(`PASS SOURCE ${tab}: border band 0px; dock top padding 21px; modeled FAB ring clearance ${ringTop.toFixed(3)}px`);
   const controls = [
     ['real opaque-band regression', source + '\n.screen { border-bottom: 13px solid transparent; } .screen--today { border-bottom-color: rgb(var(--dock-rgb)); }'],

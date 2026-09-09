@@ -1,0 +1,5182 @@
+{
+  "source": "app.css",
+  "sha256": "f0b26690785b51e12f69157490540d43e3b20d2b080f994c5db5fd60b284358c",
+  "scaling": {
+    "kind": "static source declarations, including overridden rules; inherited values assume a scalable ancestor",
+    "total": 974,
+    "scalable": 253,
+    "proportion": 0.2597535934291581,
+    "fixedGlyphs": [
+      {
+        "file": "app.css",
+        "line": 1061,
+        "context": ".crate-shake",
+        "property": "font-size",
+        "value": "74px"
+      },
+      {
+        "file": "app.css",
+        "line": 1802,
+        "context": ".hero-emoji",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 3078,
+        "context": ".vs-bone",
+        "property": "font-size",
+        "value": "44px"
+      },
+      {
+        "file": "app.css",
+        "line": 3341,
+        "context": "@media (orientation: landscape) and (pointer: coarse) and (max-height: 540px) > .rl-skull",
+        "property": "font-size",
+        "value": "54px"
+      },
+      {
+        "file": "app.css",
+        "line": 5455,
+        "context": ".pc-icon",
+        "property": "font-size",
+        "value": "96px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 16154,
+        "context": "        <div style=\"font-size:44px;line-height:1\">${streakMilestone ? sparkIco(48) : ICONS.star(48)}</div>",
+        "property": "font-size",
+        "value": "44px"
+      },
+      {
+        "file": "js/hollow-scene.js",
+        "line": 140,
+        "context": "    <span style=\"position:absolute;left:34px;top:-26px;color:#9fc27a;font-size:16px;animation:hlwSteam 2.6s ease-out ${stagger(0)}s infinite\">〜</span>",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "js/hollow-scene.js",
+        "line": 141,
+        "context": "    <span style=\"position:absolute;left:66px;top:-22px;color:#9fc27a;font-size:14px;animation:hlwSteam 2.6s ease-out ${stagger(1.2)}s infinite\">〜</span>",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "js/wheel.js",
+        "line": 212,
+        "context": "  font-size:min(7vw,26px);box-shadow:3px 3px 0 #2A2D28}",
+        "property": "font-size",
+        "value": "min(7vw,26px)"
+      },
+      {
+        "file": "js/wheel.js",
+        "line": 224,
+        "context": ".dw-result .ri{font-size:46px}",
+        "property": "font-size",
+        "value": "46px"
+      }
+    ],
+    "failed": [
+      {
+        "file": "app.css",
+        "line": 272,
+        "context": ".day-title h1",
+        "property": "font-size",
+        "value": "21px"
+      },
+      {
+        "file": "app.css",
+        "line": 273,
+        "context": ".day-title .sub",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 295,
+        "context": ".page-h1",
+        "property": "font-size",
+        "value": "26px"
+      },
+      {
+        "file": "app.css",
+        "line": 296,
+        "context": ".page-h1 .sub",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 306,
+        "context": ".card-title",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 307,
+        "context": ".card-title .link",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 336,
+        "context": ".ring-center .big",
+        "property": "font-size",
+        "value": "34px"
+      },
+      {
+        "file": "app.css",
+        "line": 337,
+        "context": ".ring-center .lbl",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 340,
+        "context": ".ring-center .ring-sub",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 342,
+        "context": ".kv",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 348,
+        "context": ".macro .row",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 378,
+        "context": ".meal-head h2",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "app.css",
+        "line": 379,
+        "context": ".meal-head .kcal",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 392,
+        "context": ".entry .n .name",
+        "property": "font-size",
+        "value": "14.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 393,
+        "context": ".entry .n .sub",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 394,
+        "context": ".entry .kc",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 397,
+        "context": ".chip-btn",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 401,
+        "context": ".micro-line",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 403,
+        "context": ".streak",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 422,
+        "context": ".tab",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 432,
+        "context": ".tab-badge",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 471,
+        "context": ".sheet-head h2",
+        "property": "font-size",
+        "value": "18px"
+      },
+      {
+        "file": "app.css",
+        "line": 475,
+        "context": ".sheet-close",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 493,
+        "context": ".survey-title",
+        "property": "font-size",
+        "value": "24px"
+      },
+      {
+        "file": "app.css",
+        "line": 494,
+        "context": ".survey-sub",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 496,
+        "context": ".survey-label",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 500,
+        "context": ".survey-in",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "app.css",
+        "line": 504,
+        "context": ".survey-check",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 507,
+        "context": ".survey-feat",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 511,
+        "context": ".survey-priv",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 549,
+        "context": ".scan-hint",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 550,
+        "context": ".scan-status",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 557,
+        "context": ".field label",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 560,
+        "context": ".input, .field input, .field select, .field textarea",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "app.css",
+        "line": 576,
+        "context": ".seg button",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 584,
+        "context": ".chip",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 593,
+        "context": ".btn",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "app.css",
+        "line": 599,
+        "context": ".btn.small",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 605,
+        "context": ".action-tile",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 612,
+        "context": ".stepper button",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 613,
+        "context": ".stepper .val",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 614,
+        "context": ".stepper input",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 623,
+        "context": ".food-row .n .name",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 624,
+        "context": ".food-row .n .sub",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 625,
+        "context": ".food-row .kc",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 626,
+        "context": ".food-row .kc small",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 627,
+        "context": ".sect-h",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 630,
+        "context": ".src-badge",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 634,
+        "context": ".preview .kcal",
+        "property": "font-size",
+        "value": "42px"
+      },
+      {
+        "file": "app.css",
+        "line": 635,
+        "context": ".preview .kcal small",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 636,
+        "context": ".preview .pcf",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 643,
+        "context": ".big-stat .v",
+        "property": "font-size",
+        "value": "32px"
+      },
+      {
+        "file": "app.css",
+        "line": 644,
+        "context": ".big-stat .d",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 645,
+        "context": ".trend-chip",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 652,
+        "context": ".toast",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 721,
+        "context": ".onb h1",
+        "property": "font-size",
+        "value": "34px"
+      },
+      {
+        "file": "app.css",
+        "line": 722,
+        "context": ".onb .tag",
+        "property": "font-size",
+        "value": "16.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 725,
+        "context": ".onb .feature b",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 726,
+        "context": ".onb .feature span",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 740,
+        "context": ".note",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 741,
+        "context": ".warn",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 747,
+        "context": ".settings-row .lab b",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 748,
+        "context": ".settings-row .lab span",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 759,
+        "context": ".streak-chip, .level-chip",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 762,
+        "context": ".streak-chip .flame",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 778,
+        "context": ".badge",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 780,
+        "context": ".badge .bicon",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 785,
+        "context": ".cele-big",
+        "property": "font-size",
+        "value": "34px"
+      },
+      {
+        "file": "app.css",
+        "line": 786,
+        "context": ".cele-sub",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 791,
+        "context": ".cele-line",
+        "property": "font-size",
+        "value": "14.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 799,
+        "context": ".cele-badge > span",
+        "property": "font-size",
+        "value": "28px"
+      },
+      {
+        "file": "app.css",
+        "line": 800,
+        "context": ".cele-badge b",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 801,
+        "context": ".cele-badge small",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 803,
+        "context": ".xp-row",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 807,
+        "context": ".macro .hit-dot",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 814,
+        "context": ".macro .over-by",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 820,
+        "context": ".hk-ico",
+        "property": "font-size",
+        "value": "19px"
+      },
+      {
+        "file": "app.css",
+        "line": 822,
+        "context": ".guide",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 825,
+        "context": ".code-line",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 867,
+        "context": ".bh-coin, .bh-crates",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 877,
+        "context": ".q-name",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 878,
+        "context": ".q-coins",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 883,
+        "context": ".q-claim",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 887,
+        "context": ".q-done",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 888,
+        "context": ".q-frac",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 894,
+        "context": ".q-tier-h",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 896,
+        "context": ".q-desc",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 903,
+        "context": ".bh-hero-meta",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 909,
+        "context": ".ward-cell",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 926,
+        "context": ".kitchen-card .kc-line",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 935,
+        "context": ".ing-cell .ing-ico",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 936,
+        "context": ".ing-cell .ing-n",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 937,
+        "context": ".ing-cell .ing-name",
+        "property": "font-size",
+        "value": "9.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 945,
+        "context": ".well-body b",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 946,
+        "context": ".well-body small",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 950,
+        "context": ".well-check",
+        "property": "font-size",
+        "value": "18px"
+      },
+      {
+        "file": "app.css",
+        "line": 959,
+        "context": ".kitchen-hero-title",
+        "property": "font-size",
+        "value": "27px"
+      },
+      {
+        "file": "app.css",
+        "line": 960,
+        "context": ".kitchen-quote",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 988,
+        "context": ".cauldron-status b",
+        "property": "font-size",
+        "value": "14.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 989,
+        "context": ".cauldron-status small",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 990,
+        "context": ".cauldron-ready",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 999,
+        "context": ".pot-card .pot-ico",
+        "property": "font-size",
+        "value": "24px"
+      },
+      {
+        "file": "app.css",
+        "line": 1000,
+        "context": ".pot-card b",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 1001,
+        "context": ".pot-card small",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 1003,
+        "context": ".pot-serve",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 1024,
+        "context": ".map-spawn .spawn-ing",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 1046,
+        "context": ".ward-cell.equipped::after",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 1050,
+        "context": ".crate-row b",
+        "property": "font-size",
+        "value": "14.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 1051,
+        "context": ".crate-row small",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 1052,
+        "context": ".crate-ico",
+        "property": "font-size",
+        "value": "24px"
+      },
+      {
+        "file": "app.css",
+        "line": 1056,
+        "context": ".shop-cell",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 1077,
+        "context": ".reveal-card img, .reveal-ico",
+        "property": "font-size",
+        "value": "30px"
+      },
+      {
+        "file": "app.css",
+        "line": 1078,
+        "context": ".reveal-card b",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 1079,
+        "context": ".reveal-card small",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 1080,
+        "context": ".rar-chip",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 1129,
+        "context": ".page-h1",
+        "property": "font-size",
+        "value": "31px"
+      },
+      {
+        "file": "app.css",
+        "line": 1130,
+        "context": ".day-title h1",
+        "property": "font-size",
+        "value": "25px"
+      },
+      {
+        "file": "app.css",
+        "line": 1131,
+        "context": ".sheet-head h2",
+        "property": "font-size",
+        "value": "21px"
+      },
+      {
+        "file": "app.css",
+        "line": 1132,
+        "context": ".onb h1",
+        "property": "font-size",
+        "value": "40px"
+      },
+      {
+        "file": "app.css",
+        "line": 1133,
+        "context": ".cele-big",
+        "property": "font-size",
+        "value": "40px"
+      },
+      {
+        "file": "app.css",
+        "line": 1134,
+        "context": ".ring-center .big",
+        "property": "font-size",
+        "value": "40px"
+      },
+      {
+        "file": "app.css",
+        "line": 1135,
+        "context": ".preview .kcal",
+        "property": "font-size",
+        "value": "46px"
+      },
+      {
+        "file": "app.css",
+        "line": 1136,
+        "context": ".btn",
+        "property": "font-size",
+        "value": "18px"
+      },
+      {
+        "file": "app.css",
+        "line": 1137,
+        "context": ".btn.small",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 1163,
+        "context": ".bh-bubble",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 1181,
+        "context": ".splash-word",
+        "property": "font-size",
+        "value": "60px"
+      },
+      {
+        "file": "app.css",
+        "line": 1184,
+        "context": ".splash-title",
+        "property": "font-size",
+        "value": "44px"
+      },
+      {
+        "file": "app.css",
+        "line": 1185,
+        "context": ".splash-sub",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 1190,
+        "context": ".bh-hunt",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 1223,
+        "context": ".rare-banner",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 1733,
+        "context": ".hero-lv",
+        "property": "font-size",
+        "value": "26px"
+      },
+      {
+        "file": "app.css",
+        "line": 1739,
+        "context": ".hero-title",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 1794,
+        "context": ".hero-actions.five .hero-act",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 1800,
+        "context": ".hero-actions.six .hero-act",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 1836,
+        "context": ".wn-update-note b:first-child",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 1837,
+        "context": ".wn-update-note span",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 1846,
+        "context": ".wn-tab",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 1863,
+        "context": ".nw-txt b",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "app.css",
+        "line": 1864,
+        "context": ".nw-txt small",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 1865,
+        "context": ".nw-date",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 1866,
+        "context": ".nw-chev",
+        "property": "font-size",
+        "value": "20px"
+      },
+      {
+        "file": "app.css",
+        "line": 1870,
+        "context": ".wn-head b",
+        "property": "font-size",
+        "value": "15.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 1871,
+        "context": ".wn-date",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 1873,
+        "context": ".wn-list li",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 1881,
+        "context": ".set-row b",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 1882,
+        "context": ".set-row small",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 2173,
+        "context": ".road-strip b",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 2174,
+        "context": ".road-strip small",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 2175,
+        "context": ".road-cycle",
+        "property": "font-size",
+        "value": "19px"
+      },
+      {
+        "file": "app.css",
+        "line": 2182,
+        "context": ".road-stop",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 2203,
+        "context": ".fname",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "app.css",
+        "line": 2204,
+        "context": ".fstate",
+        "property": "font-size",
+        "value": "9.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 2206,
+        "context": ".frow",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 2220,
+        "context": ".fight-log",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 2258,
+        "context": ".fight-act b",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 2259,
+        "context": ".fight-act small",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 2284,
+        "context": ".fight-act small.cost",
+        "property": "font-size",
+        "value": "8px"
+      },
+      {
+        "file": "app.css",
+        "line": 2622,
+        "context": ".hud-side .fname",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 2714,
+        "context": ".float.dmg",
+        "property": "font-size",
+        "value": "30px"
+      },
+      {
+        "file": "app.css",
+        "line": 2715,
+        "context": ".float.dmg.crit",
+        "property": "font-size",
+        "value": "40px"
+      },
+      {
+        "file": "app.css",
+        "line": 2716,
+        "context": ".float.dmg.sig",
+        "property": "font-size",
+        "value": "46px"
+      },
+      {
+        "file": "app.css",
+        "line": 2717,
+        "context": ".float.stamp",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 2724,
+        "context": ".fight-meta .fight-log",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 2741,
+        "context": ".tal-tree > summary.tal-tree-head::after",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 2744,
+        "context": ".tal-tree-head b",
+        "property": "font-size",
+        "value": "19px"
+      },
+      {
+        "file": "app.css",
+        "line": 2745,
+        "context": ".tal-tag",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 2753,
+        "context": ".tal-node .tal-pip",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 2758,
+        "context": ".tal-node .tal-body b",
+        "property": "font-size",
+        "value": "14.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 2759,
+        "context": ".tal-node .tal-body small",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 2764,
+        "context": ".tal-node .tal-pip",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 2765,
+        "context": ".tal-move",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 2770,
+        "context": ".float.dmg.heal",
+        "property": "font-size",
+        "value": "26px"
+      },
+      {
+        "file": "app.css",
+        "line": 2776,
+        "context": ".tal-tier.pair .tal-node .tal-body b",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 2777,
+        "context": ".tal-tier.pair .tal-node .tal-body small",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 2778,
+        "context": ".tal-gate",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 2791,
+        "context": ".float.dmg.bleed",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 2921,
+        "context": ".legend-row",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 2980,
+        "context": ".chip.ch-tab",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 3010,
+        "context": ".ch-badge",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 3013,
+        "context": ".bh-title",
+        "property": "font-size",
+        "value": "19px"
+      },
+      {
+        "file": "app.css",
+        "line": 3018,
+        "context": ".bh-pill",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 3056,
+        "context": ".radar-ring i",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 3058,
+        "context": ".radar-target",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 3068,
+        "context": ".vs-name",
+        "property": "font-size",
+        "value": "30px"
+      },
+      {
+        "file": "app.css",
+        "line": 3073,
+        "context": ".vs-vs",
+        "property": "font-size",
+        "value": "54px"
+      },
+      {
+        "file": "app.css",
+        "line": 3076,
+        "context": ".vs-venue",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 3152,
+        "context": ".fight-venue",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 3162,
+        "context": ".pit-sect > summary",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 3202,
+        "context": ".pit-hero-title",
+        "property": "font-size",
+        "value": "40px"
+      },
+      {
+        "file": "app.css",
+        "line": 3209,
+        "context": ".pit-quote",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 3213,
+        "context": ".pit-hero-sub",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 3226,
+        "context": ".pit-energy b",
+        "property": "font-size",
+        "value": "14.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 3227,
+        "context": ".pit-energy small",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 3245,
+        "context": ".weap-top b",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 3246,
+        "context": ".weap-spec",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 3247,
+        "context": ".weap-desc",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 3251,
+        "context": ".weap-tier",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 3255,
+        "context": ".wallet-dust",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 3259,
+        "context": ".wallet-line b",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 3262,
+        "context": ".bsect-link b",
+        "property": "font-size",
+        "value": "14.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 3264,
+        "context": ".vault-soon",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 3268,
+        "context": ".merch-head b",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "app.css",
+        "line": 3269,
+        "context": ".merch-head small",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 3270,
+        "context": ".merch-ico",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 3271,
+        "context": ".merch-rec",
+        "property": "font-size",
+        "value": "9.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 3275,
+        "context": ".crew-handle",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 3277,
+        "context": ".crew-code",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 3282,
+        "context": ".crew-editname",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 3287,
+        "context": ".crew-friends",
+        "property": "font-size",
+        "value": "14.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 3291,
+        "context": ".crew-chev",
+        "property": "font-size",
+        "value": "20px"
+      },
+      {
+        "file": "app.css",
+        "line": 3293,
+        "context": ".req-badge",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 3299,
+        "context": ".nb-preview",
+        "property": "font-size",
+        "value": "30px"
+      },
+      {
+        "file": "app.css",
+        "line": 3306,
+        "context": ".nb-lab",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 3314,
+        "context": ".nb-numtog",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 3318,
+        "context": ".nb-numinput",
+        "property": "font-size",
+        "value": "18px"
+      },
+      {
+        "file": "app.css",
+        "line": 3321,
+        "context": ".nb-numinput::placeholder",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 3326,
+        "context": ".crew-code-big",
+        "property": "font-size",
+        "value": "34px"
+      },
+      {
+        "file": "app.css",
+        "line": 3342,
+        "context": "@media (orientation: landscape) and (pointer: coarse) and (max-height: 540px) > .rl-title",
+        "property": "font-size",
+        "value": "30px"
+      },
+      {
+        "file": "app.css",
+        "line": 3343,
+        "context": "@media (orientation: landscape) and (pointer: coarse) and (max-height: 540px) > #rotateLock p",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 3350,
+        "context": ".lb-open .ul-chev",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 3366,
+        "context": ".pod-name",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 3369,
+        "context": ".lb-pod.p1 .pod-name",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 3370,
+        "context": ".pod-lvl",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 3375,
+        "context": ".pod-plinth",
+        "property": "font-size",
+        "value": "20px"
+      },
+      {
+        "file": "app.css",
+        "line": 3377,
+        "context": ".lb-pod.p1 .pod-plinth",
+        "property": "font-size",
+        "value": "26px"
+      },
+      {
+        "file": "app.css",
+        "line": 3431,
+        "context": ".race-fresh",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 3565,
+        "context": ".rr-banner .gbn-chev",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 3601,
+        "context": ".lb-pod b",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 3602,
+        "context": ".lb-pod small",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 3608,
+        "context": ".lb-medal",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 3623,
+        "context": ".lb-rank",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 3624,
+        "context": ".lb-rank.r1",
+        "property": "font-size",
+        "value": "20px"
+      },
+      {
+        "file": "app.css",
+        "line": 3625,
+        "context": ".lb-rank.r2",
+        "property": "font-size",
+        "value": "19px"
+      },
+      {
+        "file": "app.css",
+        "line": 3626,
+        "context": ".lb-rank.r3",
+        "property": "font-size",
+        "value": "18px"
+      },
+      {
+        "file": "app.css",
+        "line": 3629,
+        "context": ".lb-who small",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 3630,
+        "context": ".lb-tag",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 3642,
+        "context": ".friends-add input",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 3648,
+        "context": ".fe-title",
+        "property": "font-size",
+        "value": "20px"
+      },
+      {
+        "file": "app.css",
+        "line": 3650,
+        "context": ".fl-h",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 3662,
+        "context": ".fl-main b",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 3663,
+        "context": ".fl-main span",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 3669,
+        "context": ".fp-lvl",
+        "property": "font-size",
+        "value": "24px"
+      },
+      {
+        "file": "app.css",
+        "line": 3670,
+        "context": ".fp-class",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 3676,
+        "context": ".fp-fact b",
+        "property": "font-size",
+        "value": "18px"
+      },
+      {
+        "file": "app.css",
+        "line": 3677,
+        "context": ".fp-fact span",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 3682,
+        "context": ".fp-yard-h",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 3685,
+        "context": ".fp-yard-h b",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 3690,
+        "context": ".fpdk-note b",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 3693,
+        "context": ".fp-real",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 3700,
+        "context": ".fp-alias-row input",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 3716,
+        "context": ".cfan-head small",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 3726,
+        "context": ".cfan-faves small",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 3790,
+        "context": ".cfan-plate b",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "app.css",
+        "line": 3793,
+        "context": ".cfan-plate small",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 3799,
+        "context": ".cfan-plate .lv",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 3845,
+        "context": ".cfan-star",
+        "property": "font-size",
+        "value": "19px"
+      },
+      {
+        "file": "app.css",
+        "line": 3850,
+        "context": ".cfan-sel-nm",
+        "property": "font-size",
+        "value": "19px"
+      },
+      {
+        "file": "app.css",
+        "line": 3851,
+        "context": ".cfan-sel-nm em",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 3856,
+        "context": ".cfan-chip",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 3893,
+        "context": ".fp-pet-lvl",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 3895,
+        "context": ".fp-lvlbadge",
+        "property": "font-size",
+        "value": "18px"
+      },
+      {
+        "file": "app.css",
+        "line": 3904,
+        "context": ".fp-stats-h",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 3907,
+        "context": ".fps-lab",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 3910,
+        "context": ".fps-val",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 3933,
+        "context": ".cheer-emo",
+        "property": "font-size",
+        "value": "24px"
+      },
+      {
+        "file": "app.css",
+        "line": 3934,
+        "context": ".cheer-txt",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 3947,
+        "context": ".q-collapse > summary",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 3954,
+        "context": ".q-sum-ico",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "app.css",
+        "line": 3960,
+        "context": ".q-badge",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 3968,
+        "context": ".reward-pill",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 4099,
+        "context": ".hatch-prize b",
+        "property": "font-size",
+        "value": "20px"
+      },
+      {
+        "file": "app.css",
+        "line": 4100,
+        "context": ".hatch-prize small",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4107,
+        "context": ".def-chip small",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4108,
+        "context": ".def-chip b",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 4109,
+        "context": ".def-chip i",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 4115,
+        "context": ".statx-name",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 4117,
+        "context": ".stat-gear",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 4118,
+        "context": ".statx-do",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4119,
+        "context": ".statx-spec",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4142,
+        "context": ".lvl-stamp",
+        "property": "font-size",
+        "value": "46px"
+      },
+      {
+        "file": "app.css",
+        "line": 4150,
+        "context": ".cele-bubble",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 4173,
+        "context": ".lvl-rewards .bh-pill",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4202,
+        "context": ".lu-title",
+        "property": "font-size",
+        "value": "56px"
+      },
+      {
+        "file": "app.css",
+        "line": 4205,
+        "context": ".lu-quip",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 4230,
+        "context": "@media (max-height: 760px) > .lu-title",
+        "property": "font-size",
+        "value": "44px"
+      },
+      {
+        "file": "app.css",
+        "line": 4231,
+        "context": "@media (max-height: 760px) > .lu-quip",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 4232,
+        "context": "@media (max-height: 760px) > .lu-name",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 4236,
+        "context": "@media (max-height: 760px) > .lu-rewards .bh-pill",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 4237,
+        "context": "@media (max-height: 760px) > .lu-cta",
+        "property": "font-size",
+        "value": "20px"
+      },
+      {
+        "file": "app.css",
+        "line": 4251,
+        "context": ".lu-chip.was",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 4254,
+        "context": ".lu-chip.now",
+        "property": "font-size",
+        "value": "20px"
+      },
+      {
+        "file": "app.css",
+        "line": 4255,
+        "context": ".lu-arrow",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 4256,
+        "context": ".lu-name",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 4262,
+        "context": ".lu-xp-lab",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 4280,
+        "context": ".lu-rewards .bh-pill",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4283,
+        "context": ".lu-cta",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 4324,
+        "context": ".pet-gain",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 4325,
+        "context": ".pet-gain b",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 4335,
+        "context": ".stat-bonus",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 4339,
+        "context": ".tp-btn",
+        "property": "font-size",
+        "value": "19px"
+      },
+      {
+        "file": "app.css",
+        "line": 4346,
+        "context": ".tp-bar",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 4368,
+        "context": ".map-attrib",
+        "property": "font-size",
+        "value": "9.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4375,
+        "context": ".map-recenter",
+        "property": "font-size",
+        "value": "24px"
+      },
+      {
+        "file": "app.css",
+        "line": 4385,
+        "context": ".map-readout",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4441,
+        "context": ".map-den-mark .den-skulls",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 4453,
+        "context": ".map-den-mark.secret .den-skulls",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 4481,
+        "context": ".map-mini-mark .mini-glyph",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 4488,
+        "context": ".map-den-mark.claimed::after",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 4507,
+        "context": ".map-key-btn",
+        "property": "font-size",
+        "value": "19px"
+      },
+      {
+        "file": "app.css",
+        "line": 4517,
+        "context": ".map-legend .leg-h",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 4536,
+        "context": ".leg-txt b",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 4537,
+        "context": ".leg-txt small",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 4545,
+        "context": ".map-poi-tip b",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4546,
+        "context": ".map-poi-tip .pt-b",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 4547,
+        "context": ".map-poi-tip .pt-f",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 4554,
+        "context": ".ward-cell .gear-stat",
+        "property": "font-size",
+        "value": "8.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4582,
+        "context": ".gear-inspect .gi-body b",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 4583,
+        "context": ".gi-stats",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 4584,
+        "context": ".gi-talent",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 4585,
+        "context": ".gi-desc",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4587,
+        "context": ".gi-actions .btn",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 4591,
+        "context": ".ward-cell .gear-lock",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 4599,
+        "context": ".gear-chip small",
+        "property": "font-size",
+        "value": "9.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4600,
+        "context": ".gear-chip b",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4601,
+        "context": ".gear-chip span",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 4647,
+        "context": ".pd-slot .pd-empty",
+        "property": "font-size",
+        "value": "20px"
+      },
+      {
+        "file": "app.css",
+        "line": 4649,
+        "context": ".pd-slot .pd-tag",
+        "property": "font-size",
+        "value": "8px"
+      },
+      {
+        "file": "app.css",
+        "line": 4655,
+        "context": ".pd-slot .pd-gear",
+        "property": "font-size",
+        "value": "6.8px"
+      },
+      {
+        "file": "app.css",
+        "line": 4679,
+        "context": ".pd-stat small",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 4680,
+        "context": ".pd-stat b",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4681,
+        "context": ".pd-stat i",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4692,
+        "context": ".loot-card b",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 4693,
+        "context": ".loot-card .loot-stats",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4694,
+        "context": ".loot-card .loot-talent",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 4695,
+        "context": ".loot-card .loot-talent-desc",
+        "property": "font-size",
+        "value": "9.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4696,
+        "context": ".loot-card .rar-chip",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 4722,
+        "context": ".pet-card-meta b",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 4723,
+        "context": ".pet-role",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 4724,
+        "context": ".pet-count",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 4728,
+        "context": ".hk-stale b",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 4729,
+        "context": ".hk-stale span",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4733,
+        "context": ".wb-back b",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 4734,
+        "context": ".wb-back span",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4744,
+        "context": ".tree-next",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4750,
+        "context": ".pet-sig-h",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 4751,
+        "context": ".pet-sig b",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 4752,
+        "context": ".pet-sig small",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4753,
+        "context": ".pet-sig-tag",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4756,
+        "context": ".lin-tag",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 4778,
+        "context": ".stable-info b",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4779,
+        "context": ".stable-info small",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 4780,
+        "context": ".stable-eqbadge",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 4781,
+        "context": ".stable-active-lbl",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 4783,
+        "context": ".btn.tiny",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4788,
+        "context": ".pet-stats",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4789,
+        "context": ".pet-stats b",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4793,
+        "context": ".pet-tier-lbl",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 4797,
+        "context": ".pet-opt b",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 4798,
+        "context": ".pet-opt small",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4850,
+        "context": ".petname",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 4856,
+        "context": ".pet-turn-h",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 4885,
+        "context": ".fighterG.foe-side.targeted::before, .pet-fighter.add.targeted::before",
+        "property": "font-size",
+        "value": "8.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 4994,
+        "context": ".shiny-tag",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 5018,
+        "context": ".recap-pill .rp-v",
+        "property": "font-size",
+        "value": "25px"
+      },
+      {
+        "file": "app.css",
+        "line": 5019,
+        "context": ".recap-pill .rp-v small",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 5020,
+        "context": ".recap-pill .rp-s",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5022,
+        "context": ".recap-lvl .rl-top",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 5023,
+        "context": "@media (max-width: 380px) > .recap-pill .rp-v",
+        "property": "font-size",
+        "value": "19px"
+      },
+      {
+        "file": "app.css",
+        "line": 5035,
+        "context": ".hm-legend .note",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5194,
+        "context": ".pack-count",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 5407,
+        "context": ".pc-spark.k2",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 5408,
+        "context": ".pc-spark.k3",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 5459,
+        "context": ".pack-reveal .pc-name",
+        "property": "font-size",
+        "value": "19px"
+      },
+      {
+        "file": "app.css",
+        "line": 5476,
+        "context": ".pcs",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5485,
+        "context": ".pc-talent",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 5487,
+        "context": ".pc-plain",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5489,
+        "context": ".pc-perk",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5490,
+        "context": ".pc-perk-desc",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 5497,
+        "context": ".pack-hint",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 5527,
+        "context": ".loot-cards .pc-name",
+        "property": "font-size",
+        "value": "14.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5528,
+        "context": ".loot-cards .pc-rar",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 5529,
+        "context": ".loot-cards .pc-stats",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5536,
+        "context": ".pack-card.selectable.kept::after",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 5543,
+        "context": ".bsect-head b",
+        "property": "font-size",
+        "value": "16.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5544,
+        "context": ".bsect-head .note",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5559,
+        "context": ".hchip",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5570,
+        "context": ".recovery-cue .rc-txt b",
+        "property": "font-size",
+        "value": "14.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5571,
+        "context": ".recovery-cue .rc-txt span",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 5585,
+        "context": ".trend-card .tc-lab",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 5586,
+        "context": ".trend-card .tc-chev",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 5587,
+        "context": ".trend-card .tc-val",
+        "property": "font-size",
+        "value": "21px"
+      },
+      {
+        "file": "app.css",
+        "line": 5588,
+        "context": ".trend-card .tc-val small",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 5592,
+        "context": ".mix-row .mix-lab",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5595,
+        "context": ".mix-row .mix-n",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 5600,
+        "context": ".trend-now .n",
+        "property": "font-size",
+        "value": "38px"
+      },
+      {
+        "file": "app.css",
+        "line": 5601,
+        "context": ".trend-now .u",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 5602,
+        "context": ".trend-now .now-d",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 5605,
+        "context": ".rtab",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5610,
+        "context": ".trend-stats .st .l",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 5611,
+        "context": ".trend-stats .st .v",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 5612,
+        "context": ".trend-stats .st .v small",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 5613,
+        "context": ".trend-insight",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5628,
+        "context": ".upd-banner .ub-txt b",
+        "property": "font-size",
+        "value": "14.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5629,
+        "context": ".upd-banner .ub-txt span",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 5630,
+        "context": ".upd-banner .ub-cta",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 5638,
+        "context": ".heart-cta .hc-txt b",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 5639,
+        "context": ".heart-cta .hc-txt span",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 5697,
+        "context": ".melt-fold > summary",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 5724,
+        "context": ".fchip .fi",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 5725,
+        "context": ".fchip i",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 5752,
+        "context": ".stable-card .stable-chev",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 5760,
+        "context": ".rd-eyebrow",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 5766,
+        "context": ".rd-center .rd-score",
+        "property": "font-size",
+        "value": "64px"
+      },
+      {
+        "file": "app.css",
+        "line": 5767,
+        "context": ".rd-center .rd-of",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 5768,
+        "context": ".rd-status",
+        "property": "font-size",
+        "value": "21px"
+      },
+      {
+        "file": "app.css",
+        "line": 5769,
+        "context": ".rd-sub",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5774,
+        "context": ".rd-tile .rl",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 5775,
+        "context": ".rd-tile .rv",
+        "property": "font-size",
+        "value": "19px"
+      },
+      {
+        "file": "app.css",
+        "line": 5776,
+        "context": ".rd-tile .rv small",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 5777,
+        "context": ".rd-tile i",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 5786,
+        "context": ".sleep-score",
+        "property": "font-size",
+        "value": "52px"
+      },
+      {
+        "file": "app.css",
+        "line": 5787,
+        "context": ".sleep-score small",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 5789,
+        "context": ".sleep-meta b",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 5790,
+        "context": ".sleep-meta span",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5794,
+        "context": ".sl-row",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5809,
+        "context": ".fchip-tip b",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5810,
+        "context": ".fchip-tip span",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 5823,
+        "context": ".fmove-tip .mt-now",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 5834,
+        "context": ".glutton-tag",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5836,
+        "context": ".glutton-h1 .sm",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 5837,
+        "context": ".glutton-h1 .big",
+        "property": "font-size",
+        "value": "40px"
+      },
+      {
+        "file": "app.css",
+        "line": 5838,
+        "context": ".glutton-card .glutton-h1 .big",
+        "property": "font-size",
+        "value": "30px"
+      },
+      {
+        "file": "app.css",
+        "line": 5850,
+        "context": ".glutton-lore p",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 5855,
+        "context": ".glutton-quote",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5857,
+        "context": ".glutton-mech",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 5861,
+        "context": ".glutton-cta",
+        "property": "font-size",
+        "value": "19px"
+      },
+      {
+        "file": "app.css",
+        "line": 5866,
+        "context": ".glutton-beaten",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5915,
+        "context": ".gbn-txt i",
+        "property": "font-size",
+        "value": "9.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5916,
+        "context": ".gbn-txt b",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "app.css",
+        "line": 5946,
+        "context": ".ward-cell.slimed::before",
+        "property": "font-size",
+        "value": "7.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5955,
+        "context": ".ward-cell.look .look-tag",
+        "property": "font-size",
+        "value": "8px"
+      },
+      {
+        "file": "app.css",
+        "line": 5961,
+        "context": ".ward-cell.look .look-cost, .pw-item.famr .look-cost",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 5966,
+        "context": ".ward-cell.look .look-hide",
+        "property": "font-size",
+        "value": "20px"
+      },
+      {
+        "file": "app.css",
+        "line": 5973,
+        "context": ".look-bar .lb-txt",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5975,
+        "context": ".look-bar .btn",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5987,
+        "context": ".mog-lead",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 5995,
+        "context": ".mog-figs .mog-cap",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 6014,
+        "context": ".ward-cell.look .look-cost.dust, .pw-item.famr .look-cost.dust",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 6027,
+        "context": ".mog-lines span",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 6029,
+        "context": ".mog-lines i",
+        "property": "font-size",
+        "value": "9.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6042,
+        "context": ".mog-lines em",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6051,
+        "context": ".look-bar.mog-bar .btn.mog-go",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6072,
+        "context": ".pd-slot .pd-mog",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 6087,
+        "context": ".wn-hero .rip",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 6091,
+        "context": ".wn-hero .m-name",
+        "property": "font-size",
+        "value": "17.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6092,
+        "context": ".wn-hero .m-rank",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 6093,
+        "context": ".wn-hero .m-tally",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 6103,
+        "context": ".fit-chip",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6111,
+        "context": ".fit-chip .fc-cost",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6114,
+        "context": ".fit-chip .fc-x",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 6128,
+        "context": ".col-head",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 6132,
+        "context": ".col-head em",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6149,
+        "context": ".col-cell.locked .lock-q",
+        "property": "font-size",
+        "value": "26px"
+      },
+      {
+        "file": "app.css",
+        "line": 6153,
+        "context": ".col-cell.worn::after",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 6163,
+        "context": ".col-inspect .ci-body b",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6164,
+        "context": ".col-inspect .ci-note",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6171,
+        "context": ".rc-note",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6174,
+        "context": ".rc-err",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 6182,
+        "context": ".hk-diag > div",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6202,
+        "context": ".drop-count",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 6204,
+        "context": ".drop-eyebrow",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 6210,
+        "context": ".drop-title",
+        "property": "font-size",
+        "value": "44px"
+      },
+      {
+        "file": "app.css",
+        "line": 6213,
+        "context": ".drop-sub",
+        "property": "font-size",
+        "value": "14.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6214,
+        "context": ".drop-how",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6224,
+        "context": ".drop-cta",
+        "property": "font-size",
+        "value": "20px"
+      },
+      {
+        "file": "app.css",
+        "line": 6227,
+        "context": ".drop-later",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 6245,
+        "context": ".drop-sect-sum i",
+        "property": "font-size",
+        "value": "9.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6247,
+        "context": ".drop-sect-sum b",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "app.css",
+        "line": 6249,
+        "context": ".drop-sect .new",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 6252,
+        "context": ".drop-sub2",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 6257,
+        "context": ".drop-item::before",
+        "property": "font-size",
+        "value": "8.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6260,
+        "context": ".drop-item b",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6262,
+        "context": ".drop-buy",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 6306,
+        "context": ".spire-flag",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 6314,
+        "context": ".map-spire.free .spire-flag, .map-spire.dormant .spire-flag",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 6322,
+        "context": ".spire-tribute",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 6334,
+        "context": ".spire-terms li",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 6355,
+        "context": ".spire-row b",
+        "property": "font-size",
+        "value": "14.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6356,
+        "context": ".spire-row-r",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 6357,
+        "context": ".spire-row small",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 6378,
+        "context": ".melt-tools .link",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 6382,
+        "context": ".melt-val",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 6389,
+        "context": ".melt-lede",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 6422,
+        "context": ".plot-card .plot-ico",
+        "property": "font-size",
+        "value": "24px"
+      },
+      {
+        "file": "app.css",
+        "line": 6424,
+        "context": ".plot-card b",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6425,
+        "context": ".plot-card small",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6431,
+        "context": ".plot-flag",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 6435,
+        "context": ".plot-btn",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6441,
+        "context": ".compost-top b",
+        "property": "font-size",
+        "value": "14.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6442,
+        "context": ".compost-top small",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6445,
+        "context": ".odds span",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 6448,
+        "context": ".odds span b",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 6457,
+        "context": ".hv-kick",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 6461,
+        "context": ".hv-name",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 6462,
+        "context": ".hv-sub",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6466,
+        "context": ".garden-row .gr-ttl",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 6467,
+        "context": ".garden-row b",
+        "property": "font-size",
+        "value": "14.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6468,
+        "context": ".garden-row small",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 6475,
+        "context": ".gd-stage i",
+        "property": "font-size",
+        "value": "8.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6476,
+        "context": ".gd-arrow",
+        "property": "font-size",
+        "value": "18px"
+      },
+      {
+        "file": "app.css",
+        "line": 6502,
+        "context": ".faq-ico",
+        "property": "font-size",
+        "value": "19px"
+      },
+      {
+        "file": "app.css",
+        "line": 6504,
+        "context": ".faq-style b",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 6505,
+        "context": ".faq-style small, .faq-stat small, .faq-qa small",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 6509,
+        "context": ".faq-deep > summary",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 6515,
+        "context": ".faq-stat b, .faq-qa b",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 6539,
+        "context": ".pit-gate .pg-head b",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 6541,
+        "context": ".pit-gate .pg-why",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6545,
+        "context": ".pit-gate .pg-meter",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 6547,
+        "context": ".pit-gate .pg-meter b",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 6548,
+        "context": ".pit-gate .pg-foot",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6556,
+        "context": ".map-spire .spire-lv",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 6680,
+        "context": ".fb-pick",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 6697,
+        "context": ".fb-more",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 6723,
+        "context": ".fb-drop .t3-price",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 6740,
+        "context": ".fb-kitline",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 6741,
+        "context": ".fb-save",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 6823,
+        "context": ".siege-clock .sc-name",
+        "property": "font-size",
+        "value": "18px"
+      },
+      {
+        "file": "app.css",
+        "line": 6824,
+        "context": ".siege-clock .sc-left",
+        "property": "font-size",
+        "value": "26px"
+      },
+      {
+        "file": "app.css",
+        "line": 6825,
+        "context": ".siege-clock .sc-lab",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 6829,
+        "context": ".spire-lvtag",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 6859,
+        "context": ".sp-how-h",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 6872,
+        "context": ".sp-n",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6878,
+        "context": ".sp-txt > b",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 6879,
+        "context": ".sp-txt small",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 6886,
+        "context": ".sp-rule",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 6888,
+        "context": ".sp-rule b",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 6979,
+        "context": ".out-there .gbn-txt b",
+        "property": "font-size",
+        "value": "14.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 7000,
+        "context": ".out-there .glutton-banner > summary .gbn-txt i",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 7021,
+        "context": ".meal-head h2",
+        "property": "font-size",
+        "value": "20px"
+      },
+      {
+        "file": "app.css",
+        "line": 7027,
+        "context": ".ring-center .lbl",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 7036,
+        "context": ".meal-empty",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 7046,
+        "context": ".day-signoff",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 7056,
+        "context": ".log-only",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 7170,
+        "context": ".t1-route .xp",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 7209,
+        "context": ".t1-med small",
+        "property": "font-size",
+        "value": "8px"
+      },
+      {
+        "file": "app.css",
+        "line": 7215,
+        "context": ".t1-frow .pg small",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 7235,
+        "context": ".t1-macros small",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 7303,
+        "context": ".t1-field .lbl .t1-tag",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 7327,
+        "context": ".t1-rules span",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 7480,
+        "context": ".map-act .btn.map-collect",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 7708,
+        "context": ".den-pays .p small",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 7811,
+        "context": ".got-rar",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 7868,
+        "context": ".map-radius b",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 7899,
+        "context": ".pd-slot .pd-tag",
+        "property": "font-size",
+        "value": "8.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 7903,
+        "context": ".pd-slot[data-pd=\"BG\"] .pd-tag",
+        "property": "font-size",
+        "value": "7.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 7908,
+        "context": ".hub-title",
+        "property": "font-size",
+        "value": "26px"
+      },
+      {
+        "file": "app.css",
+        "line": 7936,
+        "context": ".marquee h2",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 7939,
+        "context": ".marquee p",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 8044,
+        "context": ".onb h1",
+        "property": "font-size",
+        "value": "40px"
+      },
+      {
+        "file": "app.css",
+        "line": 8048,
+        "context": ".onb-sub",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 8085,
+        "context": ".onb-quiet",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 8092,
+        "context": ".onb-nameplate .nm",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 8105,
+        "context": ".onb-earn b",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 8106,
+        "context": ".onb-earn small",
+        "property": "font-size",
+        "value": "9.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 8108,
+        "context": ".onb-plan h1",
+        "property": "font-size",
+        "value": "30px"
+      },
+      {
+        "file": "app.css",
+        "line": 8118,
+        "context": "@media (max-height: 600px) > .onb-quiet",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 8131,
+        "context": "@media (max-height: 600px) > .onb h1",
+        "property": "font-size",
+        "value": "34px"
+      },
+      {
+        "file": "app.css",
+        "line": 8364,
+        "context": ".t3-price",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 8382,
+        "context": ".t3-cell b",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "app.css",
+        "line": 8392,
+        "context": ".t3-med",
+        "property": "font-size",
+        "value": "18px"
+      },
+      {
+        "file": "app.css",
+        "line": 8397,
+        "context": ".t3-row .btn",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "app.css",
+        "line": 8408,
+        "context": ".t3-stat .top b",
+        "property": "font-size",
+        "value": "18px"
+      },
+      {
+        "file": "app.css",
+        "line": 8409,
+        "context": ".t3-stat .top .v",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 8445,
+        "context": ".t3-drop h2",
+        "property": "font-size",
+        "value": "24px"
+      },
+      {
+        "file": "app.css",
+        "line": 8468,
+        "context": ".t3-cell .btn",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "app.css",
+        "line": 8480,
+        "context": ".t3-egg .tx b",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 8491,
+        "context": ".t3-fighter .n b",
+        "property": "font-size",
+        "value": "19px"
+      },
+      {
+        "file": "app.css",
+        "line": 8497,
+        "context": ".t3-fighter .tp b",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 8498,
+        "context": ".t3-fighter .tp small",
+        "property": "font-size",
+        "value": "8.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 8500,
+        "context": ".t3-armor .t3-cell b",
+        "property": "font-size",
+        "value": "24px"
+      },
+      {
+        "file": "app.css",
+        "line": 8501,
+        "context": ".t3-armor .t3-cell .lab",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 8518,
+        "context": ".t3-hero h2",
+        "property": "font-size",
+        "value": "30px"
+      },
+      {
+        "file": "app.css",
+        "line": 8519,
+        "context": ".t3-hero p",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 8538,
+        "context": ".t3-rung",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 8554,
+        "context": ".t3-bed b",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 8555,
+        "context": ".t3-bed small",
+        "property": "font-size",
+        "value": "9.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 8575,
+        "context": ".t3-seed b",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 8576,
+        "context": ".t3-seed small",
+        "property": "font-size",
+        "value": "8.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 8593,
+        "context": ".t3-petcard .nm b",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 8596,
+        "context": ".t3-petcard .nm .lv",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 8600,
+        "context": ".t3-petcard .nm .on",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "app.css",
+        "line": 8604,
+        "context": ".t3-petcard .acts .btn",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 8608,
+        "context": ".t3-ghosty",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 8630,
+        "context": ".t3-cell.arming",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 8654,
+        "context": ".cheers-new",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 8672,
+        "context": ".cheer-face",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 8682,
+        "context": ".cheer-row .btn.cheer-back",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 8686,
+        "context": ".lvl-milestone",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 8692,
+        "context": ".lvl-milestone.t-marquee",
+        "property": "font-size",
+        "value": "18px"
+      },
+      {
+        "file": "app.css",
+        "line": 8694,
+        "context": ".routine-x",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 8876,
+        "context": ".fc-name .alias-tag, .fl-main b .alias-tag",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 8902,
+        "context": ".kd-eye",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 8904,
+        "context": ".kd-door b",
+        "property": "font-size",
+        "value": "26px"
+      },
+      {
+        "file": "app.css",
+        "line": 8914,
+        "context": ".kd-pill",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 8936,
+        "context": ".wallet-pill",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 8950,
+        "context": ".hero-xpn",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 8956,
+        "context": ".hero-meta .hero-lv",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 8957,
+        "context": ".hero-meta .hero-title",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "app.css",
+        "line": 8971,
+        "context": ".sheet-rename .rn-gift small",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 9248,
+        "context": ".cfan-search input",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 9259,
+        "context": ".cfan-online",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 9311,
+        "context": ".tz-tally span",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 9314,
+        "context": ".tz-tally b",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 9319,
+        "context": ".tz-kicker",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 9323,
+        "context": ".tz-h",
+        "property": "font-size",
+        "value": "34px"
+      },
+      {
+        "file": "app.css",
+        "line": 9332,
+        "context": ".tz-body",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 9372,
+        "context": ".tz-spot-name",
+        "property": "font-size",
+        "value": "17px"
+      },
+      {
+        "file": "app.css",
+        "line": 9403,
+        "context": ".lb-num",
+        "property": "font-size",
+        "value": "40px"
+      },
+      {
+        "file": "app.css",
+        "line": 9413,
+        "context": ".lb-medal",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 9495,
+        "context": ".bestiary-banner .gbn-txt b",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "app.css",
+        "line": 9496,
+        "context": ".bestiary-banner .gbn-txt em",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 9675,
+        "context": ".trend-stats .st .l .st-note",
+        "property": "font-size",
+        "value": "9.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 9747,
+        "context": ".pdk-state",
+        "property": "font",
+        "value": "700 9px/1.3 var(--font-body, sans-serif)"
+      },
+      {
+        "file": "app.css",
+        "line": 10152,
+        "context": ".hero-why",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 10163,
+        "context": ".cele-note",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 10186,
+        "context": ".hlw-bed.arming",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 10187,
+        "context": ".hlw-chip",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 10205,
+        "context": ".hlw-freelabel",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 10206,
+        "context": ".hlw-bar",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 10224,
+        "context": ".hlw-toast",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 10246,
+        "context": ".hlw-say",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 10344,
+        "context": ".rk-theme b",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 10346,
+        "context": ".rk-theme span",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 10382,
+        "context": ".tm-meter",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 10423,
+        "context": ".rk > b",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 10465,
+        "context": ".rk-or",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 10478,
+        "context": ".rk-buy > button, .rk-buy >  \n.rk-aura-toggle",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 10481,
+        "context": ".rk-owned",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 10508,
+        "context": ".rk-owned",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 10610,
+        "context": ".rk-tag",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 10614,
+        "context": ".rk-rar",
+        "property": "font-size",
+        "value": "9.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 10835,
+        "context": ".ton-state",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 10849,
+        "context": ".ton-buy > button",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "app.css",
+        "line": 10862,
+        "context": ".ton-reach",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 10875,
+        "context": ".rk-w",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 10876,
+        "context": ".rk-w b",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 10886,
+        "context": ".rk-rr small",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 10898,
+        "context": ".pet-new",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "app.css",
+        "line": 10902,
+        "context": ".pet-name",
+        "property": "font-size",
+        "value": "26px"
+      },
+      {
+        "file": "app.css",
+        "line": 10903,
+        "context": ".pet-hero-copy p",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 10904,
+        "context": ".pet-buy",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 10912,
+        "context": ".pet-lock",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 10913,
+        "context": ".rk-owned",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 11067,
+        "context": ".gw-wm",
+        "property": "font-size",
+        "value": "55px"
+      },
+      {
+        "file": "app.css",
+        "line": 11281,
+        "context": ".dayhdr .day-title h1",
+        "property": "font-size",
+        "value": "25px"
+      },
+      {
+        "file": "app.css",
+        "line": 11282,
+        "context": ".dayhdr .day-title .sub",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 11289,
+        "context": ".tsec-h",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "app.css",
+        "line": 11391,
+        "context": ".gd-what",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "app.css",
+        "line": 11409,
+        "context": ".gd-hero .t",
+        "property": "font-size",
+        "value": "20px"
+      },
+      {
+        "file": "app.css",
+        "line": 11412,
+        "context": ".gd-hero .s",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 11415,
+        "context": ".gd-grp > h4",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "app.css",
+        "line": 11418,
+        "context": ".gd-grp > .gs",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 11432,
+        "context": ".gd-e > summary",
+        "property": "font-size",
+        "value": "15.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 11442,
+        "context": ".gd-e > p",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "app.css",
+        "line": 11510,
+        "context": ".nb > summary",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "app.css",
+        "line": 11513,
+        "context": ".nb-t",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 11514,
+        "context": ".nb-dot",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 11516,
+        "context": ".nb-sub",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 11529,
+        "context": ".nb-txt b",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 11530,
+        "context": ".nb-txt i",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 11532,
+        "context": ".nb-date",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 11587,
+        "context": ".nb-hero-txt i",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 11596,
+        "context": ".dr-more",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 11605,
+        "context": ".nb-goes",
+        "property": "font-size",
+        "value": "10.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 11676,
+        "context": ".ward-rar",
+        "property": "font-size",
+        "value": "8.5px"
+      },
+      {
+        "file": "app.css",
+        "line": 11728,
+        "context": ".ward-cell.fam .ward-fam-n, .col-cell.fam .ward-fam-n, .pw-item.fam .ward-fam-n",
+        "property": "font-size",
+        "value": "9px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 1337,
+        "context": "  el.innerHTML = `<div class=\"splash-inner\"><div class=\"splash-stage\">${avatarLayersHtml(userEq || { B: 'B0-1', SK: 'SK0-1' }, { shinyPetId: splashShiny, petMorph: splashMorph })}</div><img class=\"splash-mark\" src=\"assets/brand/wordmark.png\" alt=\"BONEHEADZ\"><div class=\"splash-title\" style=\"font-size:30px\">GYM</div><div class=\"splash-sub\">Feed the bones</div></div>`;",
+        "property": "font-size",
+        "value": "30px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 6857,
+        "context": "            <div class=\"row\" style=\"display:flex;justify-content:space-between;font-size:13px;font-weight:600\"><span>${steps != null ? steps.toLocaleString() : '·'} steps</span><span style=\"color:var(--text-3)\">${steps >= goal ? 'goal hit!' : 'of ' + goal.toLocaleString()}</span></div>",
+        "property": "font-size",
+        "value": "13px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 6866,
+        "context": "          return `<div class=\"hk-row\"><span class=\"hk-ico\">${ICONS.boltIco(19)}</span><div style=\"font-size:13.5px;font-weight:600\">${active.toLocaleString()} kcal active burn ${note}</div></div>`;",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 6868,
+        "context": "        ${(hk.workouts || hk.exerciseMin) ? `<div class=\"hk-row\"><span class=\"hk-ico\">${pixCur('dumbbell', 24) || bhIcon('badge-muscle', 21)}</span><div style=\"font-size:13.5px;font-weight:600\">${[",
+        "property": "font-size",
+        "value": "13.5px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 7960,
+        "context": "      <div style=\"position:absolute;right:14px;top:14px;z-index:20;display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:999px;background:rgba(13,12,18,.42);backdrop-filter:blur(10px);font-family:var(--display),Bangers,sans-serif;font-size:15px;letter-spacing:.06em;color:#f2e9d7\">${ICONS.coin(14)} ${coin.toLocaleString()}</div>",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 8027,
+        "context": "        <span style=\"display:flex;align-items:center;justify-content:space-between\"><b style=\"font-family:var(--display),Bangers,sans-serif;font-size:16px;font-weight:400;letter-spacing:.06em;color:#f2e9d7\">SEED POUCH</b><i style=\"font-size:10px;font-weight:700;color:#8f8578;font-style:normal\">TAP TO CLOSE</i></span>",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 8027,
+        "context": "        <span style=\"display:flex;align-items:center;justify-content:space-between\"><b style=\"font-family:var(--display),Bangers,sans-serif;font-size:16px;font-weight:400;letter-spacing:.06em;color:#f2e9d7\">SEED POUCH</b><i style=\"font-size:10px;font-weight:700;color:#8f8578;font-style:normal\">TAP TO CLOSE</i></span>",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 8028,
+        "context": "        ${seedTotal ? SEED_IDS.filter(id => (garden.seeds[id] || 0) > 0).map(id => `<span style=\"display:flex;align-items:center;gap:9px\">${bhIcon('garden-seed', 20, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}<b style=\"flex:1;font-size:12.5px;font-weight:700;color:#f2e9d7\">${esc(seedName(id))}</b><b style=\"font-family:var(--display),Bangers,sans-serif;font-size:15px;color:#f2e9d7\">×${garden.seeds[id]}</b></span>`).join('') : '<i style=\"font-size:11px;font-weight:600;color:#8f8578;font-style:normal\">No seeds yet.</i>'}",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 8028,
+        "context": "        ${seedTotal ? SEED_IDS.filter(id => (garden.seeds[id] || 0) > 0).map(id => `<span style=\"display:flex;align-items:center;gap:9px\">${bhIcon('garden-seed', 20, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}<b style=\"flex:1;font-size:12.5px;font-weight:700;color:#f2e9d7\">${esc(seedName(id))}</b><b style=\"font-family:var(--display),Bangers,sans-serif;font-size:15px;color:#f2e9d7\">×${garden.seeds[id]}</b></span>`).join('') : '<i style=\"font-size:11px;font-weight:600;color:#8f8578;font-style:normal\">No seeds yet.</i>'}",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 8028,
+        "context": "        ${seedTotal ? SEED_IDS.filter(id => (garden.seeds[id] || 0) > 0).map(id => `<span style=\"display:flex;align-items:center;gap:9px\">${bhIcon('garden-seed', 20, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}<b style=\"flex:1;font-size:12.5px;font-weight:700;color:#f2e9d7\">${esc(seedName(id))}</b><b style=\"font-family:var(--display),Bangers,sans-serif;font-size:15px;color:#f2e9d7\">×${garden.seeds[id]}</b></span>`).join('') : '<i style=\"font-size:11px;font-weight:600;color:#8f8578;font-style:normal\">No seeds yet.</i>'}",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 8029,
+        "context": "        <i style=\"font-size:10px;font-weight:600;color:#8f8578;font-style:normal\">Seeds come from walks and compost · ${compost.left} composts left today</i>",
+        "property": "font-size",
+        "value": "10px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 8251,
+        "context": "      <div class=\"t3-sect\"><b>Seed pouch${seedTotal ? ` · ${seedTotal}` : ''}</b><i></i><button class=\"r chip\" id=\"compostBtn\" style=\"font-size:11px\">Compost · ${compost.left} left</button></div>",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 11741,
+        "context": "      <h2 style=\"margin:2px 40px 2px 0;font-size:19px\">${metric.label}</h2>",
+        "property": "font-size",
+        "value": "19px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 11954,
+        "context": "      <h2 style=\"margin:2px 40px 6px 0;font-size:19px\">Sleep</h2>",
+        "property": "font-size",
+        "value": "19px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 12492,
+        "context": "      <span class=\"crew-friends-r\"><span style=\"color:var(--text-3);font-size:12.5px\">See recent updates</span><span class=\"crew-chev\">›</span></span>",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 14069,
+        "context": "    <p class=\"muted\" id=\"fbStatus\" style=\"font-size:12px;margin:10px 0 0\"></p>",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 14129,
+        "context": "      <p class=\"muted\" id=\"svStatus\" style=\"font-size:12px;margin:10px 2px 0;text-align:center\"></p>",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 14332,
+        "context": "      <p class=\"muted\" id=\"sv2Status\" style=\"font-size:12px;margin:10px 2px 0;text-align:center\"></p>",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 15580,
+        "context": "    $('#pfPreview', wrap).innerHTML = `<div class=\"big-stat\" style=\"margin:0\"><span class=\"v\" style=\"font-size:26px\">${t.kcal.toLocaleString()} kcal</span><span class=\"d\">/ day</span></div>",
+        "property": "font-size",
+        "value": "26px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 16388,
+        "context": "    ? `<div class=\"lvl-stamp\" style=\"font-size:30px${res.shiny ? ';color:var(--gold)' : ''}\">${res.shiny ? `${sparkIco(24)} SHINY! ${sparkIco(24)}` : res.dupe ? 'ANOTHER ONE!' : esc(hatchName)}</div>",
+        "property": "font-size",
+        "value": "30px${res.shiny ?"
+      },
+      {
+        "file": "js/app.js",
+        "line": 16395,
+        "context": "    : `<div class=\"lvl-stamp\" style=\"font-size:26px\">A FAMILIAR FRIEND</div>",
+        "property": "font-size",
+        "value": "26px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 17924,
+        "context": "      <div class=\"t3-sect\"><b>Crates · tap to crack</b><i></i>${crates.length ? `<span class=\"r chip\" style=\"font-size:11px\">${crates.length} to open</span>` : ''}</div>",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 17974,
+        "context": "          ${p.ready ? `<button class=\"btn\" style=\"width:auto;padding:9px 16px;font-size:16px;box-shadow:var(--sh-sm)\" data-hatch=\"${e.id}\">HATCH</button>` : ''}",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 18401,
+        "context": "        <span class=\"note\" style=\"font-size:11.5px\">${esc(fam.blurb)} Passive: ${passives[fam.passive]}. ${esc(petStatBonusText(petId, shiny, lineage))}</span>",
+        "property": "font-size",
+        "value": "11.5px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 19741,
+        "context": "      <div class=\"lvl-stamp\" style=\"font-size:30px\">PET LEVEL ${level}!</div>",
+        "property": "font-size",
+        "value": "30px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 19742,
+        "context": "      <div class=\"cele-sub\" style=\"font-size:15px;margin-top:2px\">${esc(petName)}${lineage ? ` <span class=\"lin-tag\">${ICONS.star(11)}${lineage}</span>` : ''}${shiny ? ` <span class=\"shiny-tag\">${sparkIco(11)} SHINY</span>` : ''}</div>",
+        "property": "font-size",
+        "value": "15px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 23165,
+        "context": "        ${coords ? `<p class=\"muted\" style=\"font-size:12px;margin:0 0 10px\">📍 ${coords}</p>` : ''}",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 23171,
+        "context": "        <p class=\"muted\" id=\"rptStatus\" style=\"font-size:12px;margin:10px 0 0\"></p>",
+        "property": "font-size",
+        "value": "12px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 24907,
+        "context": "    <div class=\"t3-sect\"><b>Sparring · no stakes</b><i></i><span class=\"r chip\" style=\"font-size:11px\">Always free</span></div>",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 24914,
+        "context": "    <div class=\"t3-sect\"><b>The ladder</b><i></i><span class=\"r chip\" style=\"font-size:11px\">${champOpen ? 'Cleared' : `Rung ${Math.min(rungsBeaten + 1, LADDER.length)} of ${LADDER.length}`}</span></div>",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 24946,
+        "context": "    <div class=\"t3-sect\"><b>Remote den · one a day</b><i></i><span class=\"r chip\" style=\"font-size:11px\">No walking needed</span></div>",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 24965,
+        "context": "    <div class=\"t3-sect\"><b>Endless · The Gauntlet</b><i></i>${champBeaten ? `<span class=\"r chip\" style=\"font-size:11px\">${canNewRank ? `Rank ${fightRank}` : 'At the cap'}</span>` : ''}</div>",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 27448,
+        "context": "    <div class=\"t3-sect\"><b>Training points</b><i></i><span class=\"r chip\" style=\"font-size:11px\">${fighter.tpAvail} to spend${fighter.tpTotal ? ` · ${fighter.tpTotal - fighter.tpAvail}/${fighter.tpTotal} used` : ''}</span></div>",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 27482,
+        "context": "    <div class=\"t3-sect\"><b>Talents</b><i></i><span class=\"r chip\" style=\"font-size:11px\">${unspent} to pick · Lv ${lvl.level}</span></div>",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "js/gateintro.js",
+        "line": 139,
+        "context": "  font-size: 12.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;",
+        "property": "font-size",
+        "value": "12.5px"
+      },
+      {
+        "file": "js/gateintro.js",
+        "line": 146,
+        "context": "  font-size: clamp(34px, 11vw, 46px); letter-spacing: 0.05em; color: #ff7a45;",
+        "property": "font-size",
+        "value": "clamp(34px, 11vw, 46px)"
+      },
+      {
+        "file": "js/gateintro.js",
+        "line": 152,
+        "context": "  font-size: 11px; font-weight: 600; color: var(--text-3, #8f8a99); opacity: 0;",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "js/graverise.js",
+        "line": 175,
+        "context": "  font-family: var(--display, 'Bangers', 'Arial Black', sans-serif); font-size: clamp(30px, 9vw, 44px);",
+        "property": "font-size",
+        "value": "clamp(30px, 9vw, 44px)"
+      },
+      {
+        "file": "js/graverise.js",
+        "line": 179,
+        "context": "  font-size: 11px; font-weight: 600; color: #8f8a99; opacity: 0; animation: grIntroFade 0.5s ease 1.5s both; }",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "js/wanderer.js",
+        "line": 802,
+        "context": "  font-size: clamp(34px, 11.5vw, 56px); line-height: 0.98; letter-spacing: 0.045em;",
+        "property": "font-size",
+        "value": "clamp(34px, 11.5vw, 56px)"
+      },
+      {
+        "file": "js/wheel.js",
+        "line": 193,
+        "context": ".dw-quote{font-family:var(--display,'Bangers','Arial Black',sans-serif);font-size:clamp(20px,5.4vw,26px);",
+        "property": "font-size",
+        "value": "clamp(20px,5.4vw,26px)"
+      },
+      {
+        "file": "js/wheel.js",
+        "line": 195,
+        "context": ".dw-title{font-size:11px;font-weight:800;letter-spacing:.24em;text-transform:uppercase;",
+        "property": "font-size",
+        "value": "11px"
+      },
+      {
+        "file": "js/wheel.js",
+        "line": 218,
+        "context": ".dw-cta{font-family:var(--display,'Bangers',sans-serif);font-size:22px;letter-spacing:.06em;",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "js/wheel.js",
+        "line": 225,
+        "context": ".dw-result .rl{font-family:var(--display,'Bangers',sans-serif);font-size:24px;color:#2A2D28;text-transform:uppercase}",
+        "property": "font-size",
+        "value": "24px"
+      },
+      {
+        "file": "js/wheel.js",
+        "line": 228,
+        "context": ".dw-sub{font-size:12.5px;color:#64605A;font-weight:600}",
+        "property": "font-size",
+        "value": "12.5px"
+      }
+    ]
+  },
+  "counting": "One declaration per source occurrence, including overridden rules and fallbacks. One px-valued media condition per @media rule, not per numeric literal. Comments excluded.",
+  "counts": {
+    "borders and hairlines": {
+      "declarations": 886,
+      "customProperties": 3,
+      "conditions": 0
+    },
+    "spacing": {
+      "declarations": 1590,
+      "customProperties": 7,
+      "conditions": 0
+    },
+    "effects": {
+      "declarations": 344,
+      "customProperties": 2,
+      "conditions": 0
+    },
+    "fixed geometry": {
+      "declarations": 1236,
+      "customProperties": 23,
+      "conditions": 0
+    },
+    "type size": {
+      "declarations": 681,
+      "customProperties": 0,
+      "conditions": 0
+    },
+    "media-query breakpoints": {
+      "declarations": 0,
+      "customProperties": 0,
+      "conditions": 12
+    }
+  },
+  "fontSize": {
+    "total": 899,
+    "px": 680,
+    "fsToken": 147,
+    "talkboxToken": 2,
+    "rem": 64,
+    "other": 6
+  },
+  "fsUses": {
+    "--fs-0": 27,
+    "--fs-1": 39,
+    "--fs-2": 26,
+    "--fs-3": 27,
+    "--fs-4": 9,
+    "--fs-5": 13,
+    "--fs-6": 4,
+    "--fs-7": 2
+  }
+}

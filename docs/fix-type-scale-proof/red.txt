@@ -1,0 +1,28 @@
+SOURCE CENSUS 253/974 (25.98%); fixed glyphs 10
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: scaling floor: 253/974 (25.98%) < 100%
+app.css:272 21px
+app.css:273 12.5px
+app.css:295 26px
+app.css:296 13px
+app.css:306 12px
+app.css:307 13px
+app.css:336 34px
+app.css:337 12px
+    at assertScalingFloor (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/fix-type-scale/tests/lib/fontscale-census.mjs:78:10)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/fix-type-scale/tests/fontscale-audit.mjs:12:1
+    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v22.22.2

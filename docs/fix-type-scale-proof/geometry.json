@@ -1,0 +1,415 @@
+{
+  "originalNonTypeDeclarations": 14371,
+  "beforeSHA256": "e3b75f2e3c30800511766752dc2692656572a4d54ccfceebe384dab7420e3536",
+  "afterSHA256": "e3b75f2e3c30800511766752dc2692656572a4d54ccfceebe384dab7420e3536",
+  "newOverrides": [
+    {
+      "line": 3,
+      "context": ".btn, .gi-actions .btn, .pdk-btn",
+      "property": "white-space",
+      "value": "normal"
+    },
+    {
+      "line": 3,
+      "context": ".btn, .gi-actions .btn, .pdk-btn",
+      "property": "overflow-wrap",
+      "value": "anywhere"
+    },
+    {
+      "line": 3,
+      "context": ".btn, .gi-actions .btn, .pdk-btn",
+      "property": "flex-wrap",
+      "value": "wrap"
+    },
+    {
+      "line": 3,
+      "context": ".btn, .gi-actions .btn, .pdk-btn",
+      "property": "min-width",
+      "value": "0"
+    },
+    {
+      "line": 4,
+      "context": ".sheet-head h2",
+      "property": "white-space",
+      "value": "normal"
+    },
+    {
+      "line": 4,
+      "context": ".sheet-head h2",
+      "property": "overflow",
+      "value": "visible"
+    },
+    {
+      "line": 4,
+      "context": ".sheet-head h2",
+      "property": "overflow-wrap",
+      "value": "anywhere"
+    },
+    {
+      "line": 5,
+      "context": ".tab",
+      "property": "min-width",
+      "value": "0"
+    },
+    {
+      "line": 5,
+      "context": ".tab",
+      "property": "overflow-wrap",
+      "value": "anywhere"
+    },
+    {
+      "line": 5,
+      "context": ".tab",
+      "property": "text-align",
+      "value": "center"
+    },
+    {
+      "line": 6,
+      "context": ".tab-badge",
+      "property": "height",
+      "value": "auto"
+    },
+    {
+      "line": 6,
+      "context": ".tab-badge",
+      "property": "min-height",
+      "value": "16px"
+    },
+    {
+      "line": 7,
+      "context": ".q-badge",
+      "property": "height",
+      "value": "auto"
+    },
+    {
+      "line": 7,
+      "context": ".q-badge",
+      "property": "min-height",
+      "value": "18px"
+    },
+    {
+      "line": 8,
+      "context": ".stepper button",
+      "property": "width",
+      "value": "auto"
+    },
+    {
+      "line": 8,
+      "context": ".stepper button",
+      "property": "height",
+      "value": "auto"
+    },
+    {
+      "line": 8,
+      "context": ".stepper button",
+      "property": "min-width",
+      "value": "44px"
+    },
+    {
+      "line": 8,
+      "context": ".stepper button",
+      "property": "min-height",
+      "value": "42px"
+    },
+    {
+      "line": 8,
+      "context": ".stepper button",
+      "property": "padding",
+      "value": "4px"
+    },
+    {
+      "line": 9,
+      "context": ".rk-or",
+      "property": "height",
+      "value": "auto"
+    },
+    {
+      "line": 9,
+      "context": ".rk-or",
+      "property": "min-height",
+      "value": "14px"
+    },
+    {
+      "line": 9,
+      "context": ".rk-or",
+      "property": "line-height",
+      "value": "1.4"
+    },
+    {
+      "line": 10,
+      "context": ".rk > b",
+      "property": "display",
+      "value": "block"
+    },
+    {
+      "line": 10,
+      "context": ".rk > b",
+      "property": "height",
+      "value": "auto"
+    },
+    {
+      "line": 10,
+      "context": ".rk > b",
+      "property": "min-height",
+      "value": "2.5em"
+    },
+    {
+      "line": 10,
+      "context": ".rk > b",
+      "property": "-webkit-line-clamp",
+      "value": "unset"
+    },
+    {
+      "line": 10,
+      "context": ".rk > b",
+      "property": "overflow",
+      "value": "visible"
+    },
+    {
+      "line": 10,
+      "context": ".rk > b",
+      "property": "overflow-wrap",
+      "value": "anywhere"
+    },
+    {
+      "line": 12,
+      "context": ".ward-cell.look .look-cost.dust, .pw-item.famr .look-cost.dust,\n.pet-a11y .pw-item.famr .look-cost.dust",
+      "property": "line-height",
+      "value": "1.6"
+    },
+    {
+      "line": 16,
+      "context": ".cf-chip, .cf-lv",
+      "property": "max-width",
+      "value": "calc(50% - 16px)"
+    },
+    {
+      "line": 16,
+      "context": ".cf-chip, .cf-lv",
+      "property": "white-space",
+      "value": "normal"
+    },
+    {
+      "line": 16,
+      "context": ".cf-chip, .cf-lv",
+      "property": "overflow-wrap",
+      "value": "anywhere"
+    },
+    {
+      "line": 17,
+      "context": ".cf-chip",
+      "property": "flex-wrap",
+      "value": "wrap"
+    },
+    {
+      "line": 18,
+      "context": ".cf-eq",
+      "property": "white-space",
+      "value": "normal"
+    },
+    {
+      "line": 18,
+      "context": ".cf-eq",
+      "property": "overflow-wrap",
+      "value": "anywhere"
+    },
+    {
+      "line": 19,
+      "context": ".cf-n",
+      "property": "bottom",
+      "value": "calc(var(--fs-tiny) * 1.35 + 12px)"
+    },
+    {
+      "line": 19,
+      "context": ".cf-n",
+      "property": "max-width",
+      "value": "calc(100% - 16px)"
+    },
+    {
+      "line": 19,
+      "context": ".cf-n",
+      "property": "overflow-wrap",
+      "value": "anywhere"
+    },
+    {
+      "line": 20,
+      "context": "#stableBody .cf-cap .role, #stableBody .stable-wallet",
+      "property": "flex-wrap",
+      "value": "wrap"
+    },
+    {
+      "line": 21,
+      "context": "#stableBody .cf-meta .row",
+      "property": "min-width",
+      "value": "0"
+    },
+    {
+      "line": 21,
+      "context": "#stableBody .cf-meta .row",
+      "property": "overflow-wrap",
+      "value": "anywhere"
+    },
+    {
+      "line": 22,
+      "context": "#stableBody .cf-acts",
+      "property": "flex-wrap",
+      "value": "wrap"
+    },
+    {
+      "line": 23,
+      "context": "#stableBody .stable-rooms",
+      "property": "grid-template-columns",
+      "value": "repeat(auto-fit, minmax(min(100%, 5.5rem), 1fr))"
+    },
+    {
+      "line": 24,
+      "context": "#stableBody .stable-room b, #stableBody .stable-room small",
+      "property": "max-width",
+      "value": "100%"
+    },
+    {
+      "line": 24,
+      "context": "#stableBody .stable-room b, #stableBody .stable-room small",
+      "property": "overflow-wrap",
+      "value": "anywhere"
+    },
+    {
+      "line": 25,
+      "context": ".t3-cells",
+      "property": "grid-template-columns",
+      "value": "repeat(auto-fit, minmax(min(100%, 8rem), 1fr))"
+    },
+    {
+      "line": 26,
+      "context": ".t3-cell",
+      "property": "min-width",
+      "value": "0"
+    },
+    {
+      "line": 26,
+      "context": ".t3-cell",
+      "property": "overflow-wrap",
+      "value": "anywhere"
+    },
+    {
+      "line": 31,
+      "context": ".pdk-host",
+      "property": "max-width",
+      "value": "calc(100% - 28px)"
+    },
+    {
+      "line": 31,
+      "context": ".pdk-host",
+      "property": "max-height",
+      "value": "398px"
+    },
+    {
+      "line": 31,
+      "context": ".pdk-host",
+      "property": "overflow-y",
+      "value": "auto"
+    },
+    {
+      "line": 31,
+      "context": ".pdk-host",
+      "property": "padding",
+      "value": "12px"
+    },
+    {
+      "line": 32,
+      "context": ".pdk-state",
+      "property": "max-width",
+      "value": "100%"
+    },
+    {
+      "line": 32,
+      "context": ".pdk-state",
+      "property": "white-space",
+      "value": "normal"
+    },
+    {
+      "line": 32,
+      "context": ".pdk-state",
+      "property": "text-align",
+      "value": "center"
+    },
+    {
+      "line": 32,
+      "context": ".pdk-state",
+      "property": "overflow-wrap",
+      "value": "anywhere"
+    },
+    {
+      "line": 33,
+      "context": ".pdk-head > :not(.pdk-thumb)",
+      "property": "min-width",
+      "value": "0"
+    },
+    {
+      "line": 33,
+      "context": ".pdk-head > :not(.pdk-thumb)",
+      "property": "overflow-wrap",
+      "value": "anywhere"
+    },
+    {
+      "line": 34,
+      "context": ".pdk-acts",
+      "property": "flex-wrap",
+      "value": "wrap"
+    },
+    {
+      "line": 35,
+      "context": ".pdk-btn",
+      "property": "flex-basis",
+      "value": "5rem"
+    },
+    {
+      "line": 36,
+      "context": ".pdk-coach",
+      "property": "max-width",
+      "value": "calc(100% - 28px)"
+    },
+    {
+      "line": 36,
+      "context": ".pdk-coach",
+      "property": "text-align",
+      "value": "center"
+    },
+    {
+      "line": 36,
+      "context": ".pdk-coach",
+      "property": "overflow-wrap",
+      "value": "anywhere"
+    },
+    {
+      "line": 37,
+      "context": ".pdk-x-btn",
+      "property": "width",
+      "value": "auto"
+    },
+    {
+      "line": 37,
+      "context": ".pdk-x-btn",
+      "property": "height",
+      "value": "auto"
+    },
+    {
+      "line": 37,
+      "context": ".pdk-x-btn",
+      "property": "min-width",
+      "value": "30px"
+    },
+    {
+      "line": 37,
+      "context": ".pdk-x-btn",
+      "property": "min-height",
+      "value": "30px"
+    },
+    {
+      "line": 37,
+      "context": ".pdk-x-btn",
+      "property": "padding",
+      "value": "2px"
+    }
+  ]
+}

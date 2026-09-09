@@ -1,0 +1,18 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import {spawnSync} from 'node:child_process';
+const source=fs.readFileSync('tests/release-gate.mjs','utf8');
+const part=source.slice(source.indexOf('const PURE ='),source.indexOf('const BROWSER ='));
+const files=vm.runInNewContext(part+'; PURE;');
+fs.writeFileSync('docs/fix-type-scale-proof/pure.txt','');
+let failures=0;
+for (const file of files) {
+  const result=spawnSync(process.execPath,['tests/'+file],{encoding:'utf8',timeout:180000,maxBuffer:20*1024*1024});
+  fs.writeFileSync('/tmp/fix-type-scale-'+file+'.log',(result.stdout||'')+(result.stderr||''));
+  const row=`${result.status===0?'PASS':'FAIL'} ${file} exit=${result.status}${result.error?' '+result.error.message:''}\n`;
+  fs.appendFileSync('docs/fix-type-scale-proof/pure.txt',row);
+  console.log(row.trim());
+  if(result.status!==0){failures++;console.log(((result.stdout||'')+(result.stderr||'')).slice(-2200));}
+}
+const summary=`PURE ${files.length-failures}/${files.length} exited 0; ${failures} failed\n`;
+fs.appendFileSync('docs/fix-type-scale-proof/pure.txt',summary);console.log(summary);process.exitCode=failures?1:0;

@@ -8246,10 +8246,12 @@ test('L2 independent offline currency earnings survive both backup entry paths',
   assert.match(output, /17 passed, 0 failed/);
 });
 
-test('R60-2 type tokens follow the root while fixed geometry stays px', () => {
+test('type scale census holds its 100% floor while fixed geometry stays px', () => {
   const output = execFile_.execFileSync(process.execPath, [join(here, 'fontscale-audit.mjs')], { encoding: 'utf8' });
   assert.match(output, /px TYPE tokens: 0/);
   assert.match(output, /9 regression mutations rejected/);
+  assert.match(output, /SOURCE CENSUS \d+\/\d+ \(100.00%\)/);
+  assert.match(output, /6 full-census regressions, 2 lowered floors/);
 });
 
 test('L6 silence disclosure guard includes a normal-session CONTROL', () => {

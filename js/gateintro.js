@@ -136,20 +136,20 @@ const STYLE = `
 .gi-skulleyes i.r { left: 50.1%; top: 19.2%; }
 .gi-venue {
   position: absolute; top: max(7vh, 54px); left: 0; right: 0; text-align: center;
-  font-size: 12.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  font-size: var(--fs-2); font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--text-3, #8f8a99);
   animation: giFade 0.5s ease 0.2s both;
 }
 .gi-name {
   position: absolute; bottom: 10vh; left: 0; right: 0; text-align: center;
   font-family: var(--display, 'Bangers', 'Arial Black', sans-serif);
-  font-size: clamp(34px, 11vw, 46px); letter-spacing: 0.05em; color: #ff7a45;
+  font-size: var(--fs-hero); letter-spacing: 0.05em; color: #ff7a45;
   text-shadow: 3px 3px 0 rgba(0, 0, 0, 0.6);
   animation: giStamp 0.45s cubic-bezier(0.34, 1.8, 0.64, 1) 4.7s both;
 }
 .gi-hint {
   position: absolute; bottom: max(3.6vh, 24px); left: 0; right: 0; text-align: center;
-  font-size: 11px; font-weight: 600; color: var(--text-3, #8f8a99); opacity: 0;
+  font-size: var(--fs-0); font-weight: 600; color: var(--text-3, #8f8a99); opacity: 0;
   animation: giHint 0.6s ease 1.2s both;
 }
 .gi .bh-anim { position: absolute; inset: 0; }

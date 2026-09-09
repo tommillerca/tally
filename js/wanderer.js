@@ -799,7 +799,7 @@ function ensureEncounterStyle() {
 .wnd-enc.named .wnd-title { visibility: visible; }
 .wnd-title b {
   display: inline-block; font-family: var(--display); font-weight: 400;
-  font-size: clamp(34px, 11.5vw, 56px); line-height: 0.98; letter-spacing: 0.045em;
+  font-size: var(--fs-jumbo); line-height: 0.98; letter-spacing: 0.045em;
   color: #f2e9d7; -webkit-text-stroke: 3px #17151d; paint-order: stroke fill;
   text-shadow: 4px 5px 0 rgba(0, 0, 0, 0.55); transform: rotate(-2deg);
 }

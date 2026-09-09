@@ -1334,7 +1334,7 @@ async function showSplash(userEq) {
     await beat(430);
   }
   if (done) return;
-  el.innerHTML = `<div class="splash-inner"><div class="splash-stage">${avatarLayersHtml(userEq || { B: 'B0-1', SK: 'SK0-1' }, { shinyPetId: splashShiny, petMorph: splashMorph })}</div><img class="splash-mark" src="assets/brand/wordmark.png" alt="BONEHEADZ"><div class="splash-title" style="font-size:30px">GYM</div><div class="splash-sub">Feed the bones</div></div>`;
+  el.innerHTML = `<div class="splash-inner"><div class="splash-stage">${avatarLayersHtml(userEq || { B: 'B0-1', SK: 'SK0-1' }, { shinyPetId: splashShiny, petMorph: splashMorph })}</div><img class="splash-mark" src="assets/brand/wordmark.png" alt="BONEHEADZ"><div class="splash-title" style="font-size:var(--fs-display)">GYM</div><div class="splash-sub">Feed the bones</div></div>`;
   await beat(forced ? 2600 : 950);
   finish();
 }
@@ -6858,7 +6858,7 @@ function healthCardHtml(hk, isToday) {
       <div class="hk-rows">
         <div class="hk-row"><span class="hk-ico">${ICONS.sneaker(21)}</span>
           <div style="flex:1">
-            <div class="row" style="display:flex;justify-content:space-between;font-size:13px;font-weight:600"><span>${steps != null ? steps.toLocaleString() : '·'} steps</span><span style="color:var(--text-3)">${steps >= goal ? 'goal hit!' : 'of ' + goal.toLocaleString()}</span></div>
+            <div class="row" style="display:flex;justify-content:space-between;font-size:var(--fs-2);font-weight:600"><span>${steps != null ? steps.toLocaleString() : '·'} steps</span><span style="color:var(--text-3)">${steps >= goal ? 'goal hit!' : 'of ' + goal.toLocaleString()}</span></div>
             <div class="bar steps" style="margin-top:5px"><i style="width:${stepPct}%"></i></div>
           </div>
         </div>
@@ -6867,9 +6867,9 @@ function healthCardHtml(hk, isToday) {
           const note = bonus > 0
             ? `<span style="color:var(--accent);font-weight:700">· +${bonus} kcal earned back</span>`
             : `<span style="color:var(--text-3);font-weight:500">· within your activity baseline</span>`;
-          return `<div class="hk-row"><span class="hk-ico">${ICONS.boltIco(19)}</span><div style="font-size:13.5px;font-weight:600">${active.toLocaleString()} kcal active burn ${note}</div></div>`;
+          return `<div class="hk-row"><span class="hk-ico">${ICONS.boltIco(19)}</span><div style="font-size:var(--fs-2);font-weight:600">${active.toLocaleString()} kcal active burn ${note}</div></div>`;
         })() : ''}
-        ${(hk.workouts || hk.exerciseMin) ? `<div class="hk-row"><span class="hk-ico">${pixCur('dumbbell', 24) || bhIcon('badge-muscle', 21)}</span><div style="font-size:13.5px;font-weight:600">${[
+        ${(hk.workouts || hk.exerciseMin) ? `<div class="hk-row"><span class="hk-ico">${pixCur('dumbbell', 24) || bhIcon('badge-muscle', 21)}</span><div style="font-size:var(--fs-2);font-weight:600">${[
           hk.workouts ? `${hk.workouts} workout${hk.workouts === 1 ? '' : 's'}` : '',
           hk.exerciseMin ? `${hk.exerciseMin} min` : '',
         ].filter(Boolean).join(' · ')}${hk.wtypes && hk.wtypes.length ? ` <span style="color:var(--text-3);font-weight:500">${hk.wtypes.slice(0, 3).join(', ')}</span>` : ''}</div></div>` : ''}
@@ -7961,7 +7961,7 @@ function openHollow(after) {
     ${firstEver ? '<p class="hlw-bar">Tap the shed. Your starter seeds are inside.</p>' : `<p class="note" style="margin:0 2px 8px">Tap a bed. Your bonehead does the rest. Water once mid-grow for the top yield. Nothing ever dies, and everything you pull goes to the cauldrons.</p>`}
     <div class="hlw-vp"><div class="hlw-stage" id="hlwStage">
       ${hollowBackdropHtml({ band })}
-      <div style="position:absolute;right:14px;top:14px;z-index:20;display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:999px;background:rgba(13,12,18,.42);backdrop-filter:blur(10px);font-family:var(--display),Bangers,sans-serif;font-size:15px;letter-spacing:.06em;color:#f2e9d7">${ICONS.coin(14)} ${coin.toLocaleString()}</div>
+      <div style="position:absolute;right:14px;top:14px;z-index:20;display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:999px;background:rgba(13,12,18,.42);backdrop-filter:blur(10px);font-family:var(--display),Bangers,sans-serif;font-size:var(--fs-3);letter-spacing:.06em;color:#f2e9d7">${ICONS.coin(14)} ${coin.toLocaleString()}</div>
       ${/* MUSIC STARTS MUTED. Tom, twice: "it starts muted but there's an unmute
             icon that shows it wants to be clicked the first time they go in the
             hollow." Muted is the default state, not a paused track: nothing is
@@ -8028,9 +8028,9 @@ function openHollow(after) {
           </span></span>
       </div>
       ${pouchOpen ? `<button id="hlwPouch" style="position:absolute;left:96px;top:190px;width:210px;z-index:30;background:#1d1b22;border:2.5px solid #17151d;border-radius:16px;box-shadow:4px 5px 0 rgba(0,0,0,.45);padding:12px 14px;display:grid;gap:9px;cursor:pointer;text-align:left">
-        <span style="display:flex;align-items:center;justify-content:space-between"><b style="font-family:var(--display),Bangers,sans-serif;font-size:16px;font-weight:400;letter-spacing:.06em;color:#f2e9d7">SEED POUCH</b><i style="font-size:10px;font-weight:700;color:#8f8578;font-style:normal">TAP TO CLOSE</i></span>
-        ${seedTotal ? SEED_IDS.filter(id => (garden.seeds[id] || 0) > 0).map(id => `<span style="display:flex;align-items:center;gap:9px">${bhIcon('garden-seed', 20, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}<b style="flex:1;font-size:12.5px;font-weight:700;color:#f2e9d7">${esc(seedName(id))}</b><b style="font-family:var(--display),Bangers,sans-serif;font-size:15px;color:#f2e9d7">×${garden.seeds[id]}</b></span>`).join('') : '<i style="font-size:11px;font-weight:600;color:#8f8578;font-style:normal">No seeds yet.</i>'}
-        <i style="font-size:10px;font-weight:600;color:#8f8578;font-style:normal">Seeds come from walks and compost · ${compost.left} composts left today</i>
+        <span style="display:flex;align-items:center;justify-content:space-between"><b style="font-family:var(--display),Bangers,sans-serif;font-size:var(--fs-body);font-weight:400;letter-spacing:.06em;color:#f2e9d7">SEED POUCH</b><i style="font-size:var(--fs-tiny);font-weight:700;color:#8f8578;font-style:normal">TAP TO CLOSE</i></span>
+        ${seedTotal ? SEED_IDS.filter(id => (garden.seeds[id] || 0) > 0).map(id => `<span style="display:flex;align-items:center;gap:9px">${bhIcon('garden-seed', 20, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}<b style="flex:1;font-size:var(--fs-2);font-weight:700;color:#f2e9d7">${esc(seedName(id))}</b><b style="font-family:var(--display),Bangers,sans-serif;font-size:var(--fs-3);color:#f2e9d7">×${garden.seeds[id]}</b></span>`).join('') : '<i style="font-size:var(--fs-0);font-weight:600;color:#8f8578;font-style:normal">No seeds yet.</i>'}
+        <i style="font-size:var(--fs-tiny);font-weight:600;color:#8f8578;font-style:normal">Seeds come from walks and compost · ${compost.left} composts left today</i>
       </button>` : ''}
       ${/* THE FIRST VISIT LAYER. The designer's first-visit comp carried three
             things the build never had: an accent arrow at the shed, a FREE
@@ -8252,7 +8252,7 @@ function openGardenSheet(after) {
           <span class="art">${bhIcon('garden-bed', 36)}</span><b>DIG A BED</b>
           <span class="t3-price" style="margin-top:3px">${ICONS.coin(12)} ${bedPrice.toLocaleString()}</span></button>` : ''}
       </div>
-      <div class="t3-sect"><b>Seed pouch${seedTotal ? ` · ${seedTotal}` : ''}</b><i></i><button class="r chip" id="compostBtn" style="font-size:11px">Compost · ${compost.left} left</button></div>
+      <div class="t3-sect"><b>Seed pouch${seedTotal ? ` · ${seedTotal}` : ''}</b><i></i><button class="r chip" id="compostBtn" style="font-size:var(--fs-0)">Compost · ${compost.left} left</button></div>
       ${seedTotal ? `<div class="t3-pouch">
         ${SEED_IDS.filter(id => (garden.seeds[id] || 0) > 0).map(id => `<button class="t3-seed" data-plantseed="${id}">
           ${bhIcon('garden-seed', 22, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}
@@ -11742,7 +11742,7 @@ async function openMetricDetail(metricKey) {
   const html = `
     <button class="sheet-close" style="position:absolute;top:12px;right:14px;z-index:2">Close</button>
     <div class="trend-scroll">
-      <h2 style="margin:2px 40px 2px 0;font-size:19px">${metric.label}</h2>
+      <h2 style="margin:2px 40px 2px 0;font-size:var(--fs-5)">${metric.label}</h2>
       <div class="trend-now"><span class="n">${latest != null ? metricNum(metricKey, latest) : '·'}</span><span class="u">${metricUnit(metricKey)}</span>${deltaHtml}</div>
       <div class="rtabs">${tabs}</div>
       <div class="trend-body">${bodyHtml(range0)}</div>
@@ -11955,7 +11955,7 @@ async function openSleepDetail() {
   const when = r.date === dateKey() ? 'Last night' : `Night of ${r.date}`;
   const html = `<button class="sheet-close" style="position:absolute;top:12px;right:14px;z-index:2">Close</button>
     <div class="trend-scroll">
-      <h2 style="margin:2px 40px 6px 0;font-size:19px">Sleep</h2>
+      <h2 style="margin:2px 40px 6px 0;font-size:var(--fs-5)">Sleep</h2>
       <div class="sleep-top">
         <div class="sleep-score" style="color:${bandCol}">${sc == null ? '·' : `${sc}<small>/100</small>`}</div>
         <div class="sleep-meta"><b>${hm(asleep)} asleep</b><span>${when}${r.sleepAuto ? ' · auto from your watch' : ''}</span></div>
@@ -12493,7 +12493,7 @@ async function renderFriends(el) {
   const whatsNewCard = `
     <button class="card crew-friends" id="crewWhatsNew" style="margin-bottom:12px">
       <span>What's New${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</span>
-      <span class="crew-friends-r"><span style="color:var(--text-3);font-size:12.5px">See recent updates</span><span class="crew-chev">›</span></span>
+      <span class="crew-friends-r"><span style="color:var(--text-3);font-size:var(--fs-2)">See recent updates</span><span class="crew-chev">›</span></span>
     </button>`;
 
   if (!me) {
@@ -14070,7 +14070,7 @@ function openFeedbackSheet() {
       <button class="btn ghost sheet-close" style="flex:0 0 auto">Cancel</button>
       <button class="btn" id="fbSend" style="flex:1">Send</button>
     </div>
-    <p class="muted" id="fbStatus" style="font-size:12px;margin:10px 0 0"></p>
+    <p class="muted" id="fbStatus" style="font-size:var(--fs-1);margin:10px 0 0"></p>
   `, { cls: 'sheet-report', name: 'feedback' });
   const btn = $('#fbSend'), st = $('#fbStatus');
   btn?.addEventListener('click', async () => {
@@ -14130,7 +14130,7 @@ function openSurveySheet(source = 'auto') {
         <button class="btn ghost" id="svLater" style="flex:0 0 auto">Maybe later</button>
         <button class="btn" id="svSend" style="flex:1">Claim my lizard 💜</button>
       </div>
-      <p class="muted" id="svStatus" style="font-size:12px;margin:10px 2px 0;text-align:center"></p>
+      <p class="muted" id="svStatus" style="font-size:var(--fs-1);margin:10px 2px 0;text-align:center"></p>
     </div>
   `, { cls: 'sheet-survey', name: 'survey' });
 
@@ -14333,7 +14333,7 @@ function openSurvey2Sheet(source = 'auto') {
         <button class="btn ghost" id="sv2Later" style="flex:0 0 auto">Not now</button>
         <button class="btn" id="sv2Send" style="flex:1">Send</button>
       </div>
-      <p class="muted" id="sv2Status" style="font-size:12px;margin:10px 2px 0;text-align:center"></p>
+      <p class="muted" id="sv2Status" style="font-size:var(--fs-1);margin:10px 2px 0;text-align:center"></p>
     </div>
   `, { cls: 'sheet-survey', name: 'survey2' });
   const form = $('#survey2Form');
@@ -15581,7 +15581,7 @@ function bindProfileForm(wrap, initial, onChange) {
     const problem = profileProblem(p);
     if (problem) { $('#pfPreview', wrap).textContent = problem; return; }
     const t = computeTargets(p);
-    $('#pfPreview', wrap).innerHTML = `<div class="big-stat" style="margin:0"><span class="v" style="font-size:26px">${t.kcal.toLocaleString()} kcal</span><span class="d">/ day</span></div>
+    $('#pfPreview', wrap).innerHTML = `<div class="big-stat" style="margin:0"><span class="v" style="font-size:var(--fs-6)">${t.kcal.toLocaleString()} kcal</span><span class="d">/ day</span></div>
       <div style="margin-top:6px;font-weight:600;color:var(--text)">Protein ${t.p} g · Carbs ${t.c} g · Fat ${t.f} g</div>
       <div style="margin-top:4px">Maintenance ~${t.tdee.toLocaleString()} kcal</div>
       <div style="margin-top:6px">${TARGET_DISCLOSURE}</div>`;
@@ -16389,14 +16389,14 @@ function openHatchReveal(res, charWrap) {
      species repeat. */
   const hatchName = `A ${MORPH_LABEL[res.morph] || ''} ${item ? item.name : ''}`.replace(/\s+/g, ' ').trim() + '!';
   const revealHtml = item
-    ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? `${sparkIco(24)} SHINY! ${sparkIco(24)}` : res.dupe ? 'ANOTHER ONE!' : esc(hatchName)}</div>
+    ? `<div class="lvl-stamp" style="font-size:var(--fs-display)${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? `${sparkIco(24)} SHINY! ${sparkIco(24)}` : res.dupe ? 'ANOTHER ONE!' : esc(hatchName)}</div>
        <div class="hatch-prize${res.shiny ? ' is-shiny' : ''}">
          <canvas class="hatch-art" width="512" height="512"></canvas>
          <b>${esc(petInstanceName({ sp: item.id, morph: res.morph, shiny: res.shiny }))}${res.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</b>
          <small>${res.shiny ? 'Ultra-rare variant · follows your bonehead' : res.dupe ? 'A spare pet · keep it for recipes, melt it or breed' : 'Pet · follows your bonehead'}</small>
          ${res.shiny ? '<span class="rar-chip" style="color:var(--gold)">SHINY</span>' : ''}
        </div>`
-    : `<div class="lvl-stamp" style="font-size:26px">A FAMILIAR FRIEND</div>
+    : `<div class="lvl-stamp" style="font-size:var(--fs-6)">A FAMILIAR FRIEND</div>
        <p class="note">This egg hatched a pet you already know. It scampered back into your crew and left you +${res.coins} coins. Keep hatching for shinies.</p>`;
   const wrap2 = openSheet(`
     <div class="reveal-take cool">
@@ -17925,7 +17925,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             quantity badge, the egg as a card with its own bar, consumables as
             rows. Crates group BY TYPE now: eight identical rows each saying
             "Golden Crate / Open" was a list to grind, not a stash to raid. */''}
-      <div class="t3-sect"><b>Crates · tap to crack</b><i></i>${crates.length ? `<span class="r chip" style="font-size:11px">${crates.length} to open</span>` : ''}</div>
+      <div class="t3-sect"><b>Crates · tap to crack</b><i></i>${crates.length ? `<span class="r chip" style="font-size:var(--fs-0)">${crates.length} to open</span>` : ''}</div>
       ${crates.length ? `<div class="t3-cells">${(() => {
         const byType = new Map();
         for (const c of crates) { if (!byType.has(c.crate)) byType.set(c.crate, []); byType.get(c.crate).push(c); }
@@ -17975,7 +17975,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             <div class="bar"><i style="width:${pct}%"></i></div>
             <small>${eggStale ? 'Your steps are not reaching the app, so this is not moving. Tap the banner on Today to reconnect.' : `${p.walked.toLocaleString()} / ${p.goal.toLocaleString()} steps${p.ready ? ' · a pet is inside' : ` · ${(p.goal - p.walked).toLocaleString()} to go`}`}</small>
           </div>
-          ${p.ready ? `<button class="btn" style="width:auto;padding:9px 16px;font-size:16px;box-shadow:var(--sh-sm)" data-hatch="${e.id}">HATCH</button>` : ''}
+          ${p.ready ? `<button class="btn" style="width:auto;padding:9px 16px;font-size:var(--fs-body);box-shadow:var(--sh-sm)" data-hatch="${e.id}">HATCH</button>` : ''}
         </div>`;
       }).join('')}` : ''}
       <div class="t3-sect"><b>Consumables</b><i></i></div>
@@ -18402,7 +18402,7 @@ function petPanelHtml(petId, fighter) {
         <b>${esc(fam.name)}${lineage ? ` <span class="lin-tag">${ICONS.star(11)}${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(10)} SHINY</span>` : ''} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
         <small>Pet level ${lvl}${lvl < PET_MAX_LEVEL ? ` · ${toNext.toLocaleString()} steps to Lv ${lvl + 1}` : ' · maxed'}</small>
         ${statLine}
-        <span class="note" style="font-size:11.5px">${esc(fam.blurb)} Passive: ${passives[fam.passive]}. ${esc(petStatBonusText(petId, shiny, lineage))}</span>
+        <span class="note" style="font-size:var(--fs-1)">${esc(fam.blurb)} Passive: ${passives[fam.passive]}. ${esc(petStatBonusText(petId, shiny, lineage))}</span>
       </div>
     </div>
     <div class="pet-tree">
@@ -19742,8 +19742,8 @@ function openPetLevelUp(petId, level, prevLevel, newTalent, inst = null) {
   const wrap = openSheet(`
     <div class="sheet-body" style="text-align:center;padding-top:12px">
       <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">${petPortraitHtml(petId, 104, shiny, { thumb: true, morph })}</div></div>
-      <div class="lvl-stamp" style="font-size:30px">PET LEVEL ${level}!</div>
-      <div class="cele-sub" style="font-size:15px;margin-top:2px">${esc(petName)}${lineage ? ` <span class="lin-tag">${ICONS.star(11)}${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
+      <div class="lvl-stamp" style="font-size:var(--fs-display)">PET LEVEL ${level}!</div>
+      <div class="cele-sub" style="font-size:var(--fs-3);margin-top:2px">${esc(petName)}${lineage ? ` <span class="lin-tag">${ICONS.star(11)}${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
       <div class="pet-gains">${gains}</div>
       ${newTalent ? `<div class="cele-bubble">New talent unlocked. Choose it in the Stable.</div>
         <button class="btn" id="petTalentBtn">Pick my talent</button>
@@ -23190,13 +23190,13 @@ async function renderBoneyard(el) {
       openSheet(`
         <h2>${title}</h2>
         <p class="muted" style="margin:0 0 12px">${lead}</p>
-        ${coords ? `<p class="muted" style="font-size:12px;margin:0 0 10px">📍 ${coords}</p>` : ''}
+        ${coords ? `<p class="muted" style="font-size:var(--fs-1);margin:0 0 10px">📍 ${coords}</p>` : ''}
         <textarea id="rptNote" rows="3" maxlength="280" placeholder="${esc(ph)}" style="width:100%;box-sizing:border-box;resize:vertical"></textarea>
         <div class="row" style="gap:8px;margin-top:12px">
           <button class="btn ghost sheet-close" style="flex:0 0 auto">Cancel</button>
           <button class="btn" id="rptSend" style="flex:1">Send to devs</button>
         </div>
-        <p class="muted" id="rptStatus" style="font-size:12px;margin:10px 0 0"></p>
+        <p class="muted" id="rptStatus" style="font-size:var(--fs-1);margin:10px 0 0"></p>
       `, { cls: 'sheet-report', name: 'map_report', onClose: () => { reportOpen = false; } });
       const btn = $('#rptSend'); const statusEl = $('#rptStatus');
       btn?.addEventListener('click', async () => {
@@ -24932,14 +24932,14 @@ async function renderPit(wrap) {
   // a locked rung says WHY ("BEAT RUNG 1") instead of just "locked", and the
   // live fight is never hidden behind a summary you have to open.
   const sparringSect = `
-    <div class="t3-sect"><b>Sparring · no stakes</b><i></i><span class="r chip" style="font-size:11px">Always free</span></div>
+    <div class="t3-sect"><b>Sparring · no stakes</b><i></i><span class="r chip" style="font-size:var(--fs-0)">Always free</span></div>
     ${[['easy', 'Loose Bones', 0.8], ['even', 'Your Shadow', 1.0], ['hard', 'Mean Mirror', 1.15]].map(([id, name, m]) => `
       <div class="t3-row"><span class="t3-med">${ICONS.pit(24)}</span>
         <div class="t3-tx"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · ${sparBoard.line}</small></div>
         <button class="btn ghost" data-spar="${m}" data-name="${name}" aria-label="Fight ${esc(name)}">FIGHT</button>
       </div>`).join('')}`;
   const ladderSect = `
-    <div class="t3-sect"><b>The ladder</b><i></i><span class="r chip" style="font-size:11px">${champOpen ? 'Cleared' : `Rung ${Math.min(rungsBeaten + 1, LADDER.length)} of ${LADDER.length}`}</span></div>
+    <div class="t3-sect"><b>The ladder</b><i></i><span class="r chip" style="font-size:var(--fs-0)">${champOpen ? 'Cleared' : `Rung ${Math.min(rungsBeaten + 1, LADDER.length)} of ${LADDER.length}`}</span></div>
     ${LADDER.map(r => {
       const done = beaten.has(`pitrung-${r.rung}`);
       const locked = r.rung > rungsBeaten + 1;
@@ -24971,7 +24971,7 @@ async function renderPit(wrap) {
      nothing on screen ever said so. */
   const rDone = xpRows.some(r => r.key === denKey(date, rDen));
   const remoteSect = `
-    <div class="t3-sect"><b>Remote den · one a day</b><i></i><span class="r chip" style="font-size:11px">No walking needed</span></div>
+    <div class="t3-sect"><b>Remote den · one a day</b><i></i><span class="r chip" style="font-size:var(--fs-0)">No walking needed</span></div>
     <div class="t3-row${rDone ? ' done' : ''}">
       <span class="t3-med">${badgePixHtml('badge-skull', 20)}</span>
       <div class="t3-tx"><b>${esc(rDen.boss)}</b><small>${esc(rDen.name)} · ${rDone
@@ -24990,7 +24990,7 @@ async function renderPit(wrap) {
       ${champOpen ? `<button class="btn ${champBeaten ? 'ghost' : ''}" id="champBtn" ${gate} aria-label="${champBeaten ? 'Rematch' : 'Fight'} ${esc(CHAMPION.name)}, the Champion">${champBeaten ? 'REMATCH' : 'FIGHT'}</button>` : `<span class="t3-lock">BEAT RUNG ${LADDER.length}</span>`}
     </div>`;
   const endlessSect = `
-    <div class="t3-sect"><b>Endless · The Gauntlet</b><i></i>${champBeaten ? `<span class="r chip" style="font-size:11px">${canNewRank ? `Rank ${fightRank}` : 'At the cap'}</span>` : ''}</div>
+    <div class="t3-sect"><b>Endless · The Gauntlet</b><i></i>${champBeaten ? `<span class="r chip" style="font-size:var(--fs-0)">${canNewRank ? `Rank ${fightRank}` : 'At the cap'}</span>` : ''}</div>
     ${champBeaten ? `
     ${canNewRank
       ? `<p class="note" style="margin:2px 2px 8px">Foes scale as you climb ranks. World bosses raise the ceiling by 3 each. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'} of a possible ${ceiling}.</p>`
@@ -27473,7 +27473,7 @@ async function renderTalents(wrap) {
       <div class="t3-cell"><b>${Math.round(d.spellArmor * 100)}%</b><span class="lab">SPELL ARMOR</span><small>cuts magic damage · grows from Reflex</small></div>
     </div>
 
-    <div class="t3-sect"><b>Training points</b><i></i><span class="r chip" style="font-size:11px">${fighter.tpAvail} to spend${fighter.tpTotal ? ` · ${fighter.tpTotal - fighter.tpAvail}/${fighter.tpTotal} used` : ''}</span></div>
+    <div class="t3-sect"><b>Training points</b><i></i><span class="r chip" style="font-size:var(--fs-0)">${fighter.tpAvail} to spend${fighter.tpTotal ? ` · ${fighter.tpTotal - fighter.tpAvail}/${fighter.tpTotal} used` : ''}</span></div>
     ${STAT_META.map(m => {
       const bonus = (fighter.alloc[m.key] || 0) * TRAIN_STEP;
       const gb = fighter.gearBonus?.[m.key] || 0;
@@ -27507,7 +27507,7 @@ async function renderTalents(wrap) {
     ${/* The mockup put a row here linking to "the talent tree". The trees are
           already inline on this screen, so a button pointing 100px down would be
           furniture: the section rule + its count carries the same job. */''}
-    <div class="t3-sect"><b>Talents</b><i></i><span class="r chip" style="font-size:11px">${unspent} to pick · Lv ${lvl.level}</span></div>
+    <div class="t3-sect"><b>Talents</b><i></i><span class="r chip" style="font-size:var(--fs-0)">${unspent} to pick · Lv ${lvl.level}</span></div>
     <p class="note" style="margin:2px 2px 14px">Specs change how you fight: new moves, new rhythms. Mix trees or go deep. Respec any time, free.</p>
     ${TALENT_TREES.map(tree => {
       const treeMax = tree.nodes.reduce((a, n) => a + nodeRanks(n), 0);
