@@ -29,7 +29,9 @@ function grade(css, rootSize = 16) {
   assert.equal(value('.screen', 'overflow-y'), 'auto');
   assert.equal(value('.screen', 'min-height'), '0');
   assert.equal(value('.screen', 'padding'), 'calc(var(--sat) + 14px) var(--pad) 24px');
-  assert.equal(value('.screen.screen--map', 'overflow'), 'hidden');
+  assert.equal(value('.screen.screen--map', 'overflow-y'), 'auto');
+  assert.equal(value('.sheet-body.map-sheet', 'flex'), '1 0 auto');
+  assert.equal(value('.sheet-body.map-sheet', 'overflow'), 'visible');
   assert.equal(value('.screen--today', 'background-color'), 'var(--hero-edge, var(--bg))');
   assert.ok(!screenRows.some(r => /^(background|background-image)$/.test(r.property)), 'Today must keep a solid colour for native bounce, with no new background image');
   assert.equal(value('.tabbar', 'position'), 'relative');
@@ -75,6 +77,8 @@ try {
   assert.ok(grade(source, 32) >= ringTop, 'CONTROL doubled text must not reduce modeled FAB clearance');
   for (const tab of tabs) console.log(`PASS SOURCE ${tab}: border band 0px; dock top padding 21px; modeled FAB ring clearance ${ringTop.toFixed(3)}px`);
   const controls = [
+    ['Boneyard clipping', source.replace('padding: 0; overflow-y: auto;', 'padding: 0; overflow-y: hidden;')],
+    ['Boneyard nested clip', source.replace('flex: 1 0 auto; padding: 0; overflow: visible;', 'flex: 1; padding: 0; overflow: hidden;')],
     ['real opaque-band regression', source + '\n.screen { border-bottom: 13px solid transparent; } .screen--today { border-bottom-color: rgb(var(--dock-rgb)); }'],
     ['original hero sliver', source + '\n.screen { border-bottom: 13px solid transparent; }'],
     ['lost exclusion', source.replace('padding: 21px 10px calc(var(--sab) + 8px)', 'padding: 8px 10px calc(var(--sab) + 8px)')],

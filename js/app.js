@@ -3664,7 +3664,7 @@ function route({ keepScroll = false } = {}) {
   else if (tab === 'settings') done = renderSettings(el);
   else if (tab === 'boneyard') done = renderBoneyard(el);
   else { isToday = true; done = renderToday(el); }
-  // the map fills the screen, so this route drops the usual padding and scroll
+  // The map fills the screen; its intro and error copy retain screen scrolling.
   el.classList.toggle('screen--map', tab === 'boneyard');
   /* Today carries the overscroll wordmark above the top of its scroller (app.css).
      Flagged by the branch that actually renders Today rather than by a second list

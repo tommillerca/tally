@@ -5,6 +5,7 @@
 // Pending train notes. The operator assigns a build number and moves these
 // into CHANGES when assembling the release. No version stamp is advanced here.
 export const NEXT_CHANGES = [
+  'The Boneyard intro and location error screens now allow scrolling as text grows.',
 ];
 
 export const CHANGES = [

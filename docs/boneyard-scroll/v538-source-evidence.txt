@@ -1,0 +1,7 @@
+770e027b^ app.css SHA256 1a6aaa5138db91872875d1a6ad27e02aec5b622c97dc2079657065fc386498a0
+770e027b^ renderBoneyard SHA256 a3a8924e1bf211d296427048eecaf0d7e675a53db1e6c2cc0d719d5af591f050
+770e027b^ viewport <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+770e027b app.css SHA256 1a6aaa5138db91872875d1a6ad27e02aec5b622c97dc2079657065fc386498a0
+770e027b renderBoneyard SHA256 a3a8924e1bf211d296427048eecaf0d7e675a53db1e6c2cc0d719d5af591f050
+770e027b viewport <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+Identical CSS and Boneyard renderer across v538. Metadata removal permits zoom; physical zoom and rendered geometry not measured.

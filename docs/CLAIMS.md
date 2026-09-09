@@ -1,5 +1,21 @@
 # What each patch note claims, and what backs it
 
+## vNEXT
+
+Changelog item: The Boneyard intro and location error screens now allow scrolling as text grows.
+
+1. PROOF: boneyard-scroll-audit.mjs, dock-line-audit.mjs | REACH: PENDING-DEPLOY, PARTIAL: Boneyard retains #screen scrolling and its wrapper's content height. The source guard rejects the old clipping rules and passes the change. The rendered guard is registered but BLOCKED before boot by serveTree listen EPERM; rendered reachability, main-button coordinates, refresh/route behavior, dock hit tests and before/after screenshots remain unverified. See [advisory evidence and deviations](boneyard-scroll/REPORT.md), [before attempt](boneyard-scroll/before-attempt.txt) and [after attempt](boneyard-scroll/after-attempt.txt). No screenshot files or measured fractions exist, and the reported 55% is not adopted as a measurement.
+
+v538 did not change app.css or renderBoneyard, as confirmed by matching hashes
+in [source evidence](boneyard-scroll/v538-source-evidence.txt). It removed the
+viewport zoom lock. Whether that worsened physical zoom behavior is unverified;
+no rendered before/after conclusion is claimed. Version stamps are unchanged.
+
+Validation: `node tests/unit.test.js` reports 382 passed, 0 failed. All 154 PURE
+entries have exit-0 results across the complete enumeration and a targeted
+guard-hygiene rerun. The initial failure and final results are retained in
+[the census](boneyard-scroll/pure-results.txt). Browser acceptance is blocked.
+
 ## v539 (2026-09-09)
 
 Changelog item: All pets now share the same base combat stats, raised without reducing existing stats. Shiny and breeding bonuses stay earned.
