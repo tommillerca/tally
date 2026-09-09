@@ -252,12 +252,7 @@ const coverageOnly = process.argv.includes('--coverage-only');
    the evidence in the failure line. */
 // Frozen loss-prevention work order, 2026-09-08: real UI and service controls, Node only.
 const PURE = [
-<<<<<<< HEAD
   'migration-guard-audit.mjs', // Source contract and real Worker health over SQLite; D1 socket proof: server/test/migration-guard-local.mjs.
-=======
-  'breed-two-tap-audit.mjs', // Real click dispatch lifetime, quote and breed writes over mem-idb.
-  'after-await-event-lint.mjs', // Parser guard against currentTarget reads after suspension.
->>>>>>> b1133456 (lane: fix-breed-p0)
   'sync-observability-audit.mjs', // Local sync outcomes, Settings and sustained-failure notice, over mem-idb.
   'sync-identity-audit.mjs', // Missing registration recovery with the existing signing key, over mem-idb.
   'sync-native-audit.mjs', // Native source and worker diagnostics, no device claims or sockets.
@@ -370,6 +365,8 @@ PURE.push('firstrun-audit.mjs'); // Frozen first-run: interrupted kit, onboardin
 PURE.push('settings-safety-audit.mjs'); // Settings/file-import loss review, durable undo, quota refusal, stale review and transaction abort/retry; Node only.
 PURE.push('progress-playtest-audit.mjs'); // Frozen Progress lane: badge abort/retry, real charts, sleep and detail handlers; no sockets.
 PURE.push('leaderboard-honesty-audit.mjs'); // Staleness copy across crew, leaderboard, podium and race; Node only.
+PURE.push('breed-two-tap-audit.mjs'); // Real #doBreed handler driven through a full two-tap breed; roster 4->3.
+PURE.push('after-await-event-lint.mjs'); // No async listener may read currentTarget after an await.
 const BROWSER = [
   'today-dock-pixels-audit.mjs', // Dock exclusion: all-tab captures, row tap and lost-exclusion control, plus native bounce evidence. Pixel continuity remains manual/UNPROVEN; the former opaque-RGB predicate certified the black-line bug.
 
