@@ -4,6 +4,15 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 533, date: '2026-09-09', title: 'Text that grows, a room that unlocks itself', items: [
+    'Text now follows your phone\'s text-size setting. Almost none of it did before: five elements out of 427. If you use larger text, the whole app should finally read properly.',
+    'You can pinch to zoom on the Boneyard.',
+    'The Laboratory could lock itself forever if your phone crashed mid-experiment, and then tell you to do the one thing that could not work. It recovers on its own now.',
+    'Two phones used offline could each spend the same daily experiment, and one of them was then cut off from cloud backup permanently while being told it was safe. Both halves fixed.',
+    'The screen before you erase your data no longer says a cloud backup exists unless it has actually confirmed one.',
+    'A refused restore explains itself instead of showing you an error code, and destroying a named, bonded pet now asks properly.',
+  ] },
+
   { n: 532, date: '2026-09-09', title: 'Breeding works again', items: [
     'Breeding was completely broken: tapping the button did nothing at all, with no error and no message. It has been fixed, and a test now drives a real two-pet breed from tap to result so it cannot break silently again.',
   ] },

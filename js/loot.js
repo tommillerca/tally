@@ -8,7 +8,7 @@ import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOT
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { COMMON_INGREDIENT_IDS } from './cooking.js';
 import { dateKey } from './nutrition.js';
-import { LAB_RULES, LAB_PRICES, LAB_DEFAULTS, labInput, labMorph, labDistribution, labPreview, labCapacity, labDayProjection, labEqual, labRefuse, resolveLabOutcome, validateLabSave } from './laboratory.js';
+import { LAB_RULES, LAB_PRICES, LAB_DEFAULTS, labInput, labMorph, labDistribution, labPreview, labCapacity, labDayProjection, labReconciliation, labEqual, labRefuse, resolveLabOutcome, validateLabSave } from './laboratory.js';
 import { isMorph, MORPH_LABEL, morphAsset, isKnownPet, legalPicks, petLevel, MORPHS, PET_TREES } from './pets.js';
 
 // Use the same colour identity as the art. Shinies and CX never wear morph art.
@@ -1734,41 +1734,24 @@ function labReceipt(r, s) {
   const annotations=labPresentQuote(r.request);
   const clock=dayDecision(dateKey(),s.dayHighWater,s.dayWitnessOrd,true);
   return {...r, inputs:annotations.inputs, branches:annotations.branches,
+    reconciliation:labReconciliation(s.labExperiments).recovered.find(x=>x.opId===r.opId)||null,
     resultPresent:(s.petInst||[]).some(p=>p?.iid===r.result.iid),
     remaining:clock.fresh ? Math.max(0,labCapacity(s.labIncubators)-(s.labDaily[dateKey()]?.used||0)) : 0};
 }
 // Recovery shares the KV transaction lock with dispatch. Removing an adapter
 // intent fences a delayed dispatch (requireIntent), so readback cannot race a
 // subsequent spend of the same request. No recovery path draws or retries.
-function labRecover(s, rows) {
-  const intents={...s.labIntents}, recoveredOpIds=Object.keys(s.labExperiments);
-  for(const [id,intent] of Object.entries(intents)) {
-    const q=intent.quote;
-    const receipt=q.kind==='purchase' ? Object.values(s.labIncubators).find(r=>r.opId===id) : s.labExperiments[id];
-    let unchanged=false;
-    if(!receipt) {
-      if(q.kind==='purchase') {
-        const token=labPurchaseToken(s);
-        unchanged=labEqual(q.snapshotToken,{...token,day:q.snapshotToken?.day,zone:q.snapshotToken?.zone});
-      }
-      else {
-        try {
-          validLabRequest(q);
-          // Health sync can change the meter, bank and credit without dispatch.
-          // Receipts, roster and tombstones still prove whether inputs survived.
-          // Clearing under this lock fences a delayed requireIntent dispatch.
-          const withoutTraining = ({petLvlSteps, petStepCredit, ...context}) => context;
-          unchanged=labEqual(withoutTraining(q.context),withoutTraining(labQuoteContext(s,rows,q.species)))
-            && q.capacity===labCapacity(s.labIncubators) && labEqual(q.occupancy,s.labDaily[q.day]||{slots:{},used:0});
-        }
-        catch(e) { if(!e?.refused) throw e; }
-      }
-    }
-    if(receipt && (q.kind==='purchase' ? receipt.slot!==q.slot||receipt.price!==q.price : !labEqual(receipt.request,q)))labRefuse('laboratory-restore-conflict');
-    if(receipt || unchanged) { delete intents[id]; recoveredOpIds.push(id); }
-  }
-  recoveredOpIds.push(...Object.values(s.labIncubators).map(r=>r.opId));
-  return {intents,recoveredOpIds:[...new Set(recoveredOpIds)]};
+function labRecover(s) {
+  // Intent creation never spends. Dispatch commits the inputs, tombstones,
+  // result, receipt and daily debit together, or none of them. The receipt is
+  // the authority even if an old intent disagrees with it. With no receipt,
+  // cancelling under this lock prevents a delayed adapter dispatch from spending.
+  // Pet context may change at boot or in another room; it is not commit evidence.
+  // Never replay a draw, restore inputs, or recreate a subsequently spent result.
+  const pending=s.labIntents&&typeof s.labIntents==='object'&&!Array.isArray(s.labIntents)
+    ? Object.keys(s.labIntents) : [];
+  return {intents:{},recoveredOpIds:[...new Set([...pending,...Object.keys(s.labExperiments),
+    ...Object.values(s.labIncubators).map(r=>r.opId)])]};
 }
 function labPresentation(s, rows, recoveredOpIds=[]) {
   const daily=labState(s), day=dateKey(), clock=dayDecision(day,s.dayHighWater,s.dayWitnessOrd,true);
@@ -1797,7 +1780,8 @@ function labPresentation(s, rows, recoveredOpIds=[]) {
   const meter=effectivePetSteps(rows.health);
   const prepared=s.petLvlV===2&&s.pettalents?.__iidV===2&&s.petStepCredit===meter;
   const status=Object.keys(s.labIntents).length ? 'unknown' : !clock.fresh ? labUiReason(clock.reason) : !prepared ? 'unavailable' : 'ready';
-  return {status,token:labPurchaseToken(s),used,capacity,remaining:status==='ready'?capacity-used:0,
+  return {status,token:labPurchaseToken(s),used,capacity,remaining:status==='ready'?Math.max(0,capacity-used):0,
+    reconciliation:labReconciliation(s.labExperiments),
     resetTime:'00:00',zone:labZone(),coins:s.coins??0,incubators:s.labIncubators,ownedCells,
     collectionCount:ownedCells.length,hasExperiment:Object.keys(s.labExperiments).length>0,
     priorDay:rows.xp.some(r=>/^(dayclose|dayeffort)-\d{4}-\d{2}-\d{2}$/.test(r.key)&&r.key.slice(-10)<day),
@@ -1813,13 +1797,16 @@ async function labRead(pre={}, recover=false) {
     const s={...raw},rows={...readRows};
     for(const k of ['health','inv','log','xp'])if(Array.isArray(pre[k]))rows[k]=pre[k];
     if(Object.keys(LAB_DEFAULTS).every(k=>s[k]===undefined))Object.assign(s,structuredClone(LAB_DEFAULTS));
-    labState(s);
+    // A malformed orphan intent must not prevent recovery. Validate every
+    // durable receipt and pet invariant normally; only the disposable fence is
+    // excluded. Import validation remains strict for incoming backups.
+    labState(recover ? {...s,labIntents:{}} : s);
     if(pre.presentationOnly&&s.petLvlV===2) {
       const meter=effectivePetSteps(rows.health),delta=Math.max(0,meter-(s.petStepCredit??meter));
       if(delta>0&&s.petEquipped)s.petLvlSteps=creditSteps(s.petLvlSteps,s.petEquipped,delta);
       s.petStepCredit=meter;
     }
-    const recovery=recover ? labRecover(s,rows) : {intents:s.labIntents,recoveredOpIds:Object.keys(s.labExperiments)};
+    const recovery=recover ? labRecover(s) : {intents:s.labIntents,recoveredOpIds:Object.keys(s.labExperiments)};
     const changed=!labEqual(s.labIntents,recovery.intents);s.labIntents=recovery.intents;
     return {kv:changed?valuesPay({labIntents:s.labIntents}):{},result:labPresentation(s,rows,recovery.recoveredOpIds)};
   }});
@@ -1839,8 +1826,9 @@ export const laboratory = Object.freeze({
   version:1,
   async snapshot(pre={}) {
     if(pre.presentationOnly) return labRead(pre);
-    // Establish intent outcomes before preparation can change the quoted bank.
-    const recovered=Object.keys(await kvGet('labIntents',{})).length ? (await labRead({},true)).recoveredOpIds : [];
+    // Cancel abandoned fences before preparation, including malformed ones.
+    const pending=await kvGet('labIntents',{});
+    const recovered=!labEqual(pending,{}) ? (await labRead({},true)).recoveredOpIds : [];
     await initLaboratory(); await creditEquippedPetSteps();
     const snapshot=await labRead(pre,true);
     snapshot.recoveredOpIds=[...new Set([...recovered,...snapshot.recoveredOpIds])];

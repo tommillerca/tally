@@ -18,11 +18,13 @@ for (const credit of [false,true]) {
   assert.equal((await D.kvGet('petInst')).length,2);assert.equal((await L.laboratory.snapshot()).used,1);
 }
 console.log('PASS CONTROL: pending and credited health changes recover, fence late dispatch, and allow exactly one fresh experiment');
-// A missing input without a matching receipt is still unsafe, not health drift.
+// Missing inputs cannot be spent, but an abandoned fence must not lock the room.
 await seed(roster);const q=(await L.laboratory.quote({iids:['a','b']})).quote;
 await L.saveLabIntent(q.request,{acknowledgedRisk:'reviewed'});
 await D.kvSet('petInst',roster.slice(1));await D.db.put('health',{date:dateKey(),steps:100});
-assert.equal((await L.laboratory.snapshot()).status,'unknown');
-assert.equal(Object.keys(await D.kvGet('labIntents')).length,1);
+assert.equal((await L.laboratory.snapshot()).status,'ready');
+assert.equal(Object.keys(await D.kvGet('labIntents')).length,0);
 assert.equal((await L.animateLaboratory(q.request,{acknowledgedRisk:'reviewed',requireIntent:true})).ok,false);
-console.log('PASS CONTROL: unexplained missing input remains blocked and is never destroyed again');
+assert.deepEqual(await D.kvGet('petInst'),roster.slice(1));
+assert.equal((await L.laboratory.quote({iids:['b','c']})).ok,true);
+console.log('PASS CONTROL: missing input is never restored or destroyed again; remaining pairs are usable');

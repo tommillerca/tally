@@ -21,7 +21,7 @@
 // rewards, friend badges). Each has a unique key; we ingest through the same
 // idempotent award() as local play, so replays and re-pulls are harmless.
 
-import { db, kvGet, kvSet, kvUpdate, exportAll, importAll, witnessServerDay, dayIsUnwitnessed, newId } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, exportAll, importAll, validateImport, witnessServerDay, dayIsUnwitnessed, newId } from './db.js';
 import { awardOnce } from './game.js';
 import { setSpireClock, forgetSpireAuthority } from './spires.js';
 import { crateRow, consumableRow, eggRow, gearRow, cosRow, petInstances, petLevelBank, petPicks, lifetimeStepsSum } from './loot.js';
@@ -1185,18 +1185,26 @@ export async function pullBackup({ slot = null, replace = false } = {}) {
    yesterday's copy is that today's is wrong. */
 export async function restoreDailyBackup() { return pullBackup({ slot: 'daily', replace: true }); }
 
-/* Is there a backup on the server for this identity? (cheap existence probe)
+/* Can this device read a valid backup on the server for this identity?
    THREE ANSWERS, NOT TWO, BECAUSE THE CALLER IS A DESTRUCTIVE CONFIRMATION.
    The erase sheet asks this to decide whether to promise the player a vault
    copy survives, and "the server says there is none" and "we could not ask" are
    different facts: collapsing them into false would have the sheet state, flatly
    and wrongly, that a save it never checked on is not there. Returns true (the
-   server has a blob), false (a 404, which is the server's definitive no) or
-   null (offline, no identity, or any other status: unknown). 2026-09-02. */
+   server has a readable, validated save), false (a 404, the server's definitive
+   no) or null (offline, unreadable/invalid body or save, or another status).
+   Validation never imports the save or changes the cloud copy. */
 export async function hasCloudBackup() {
   try {
     const r = await signedFetch('GET', '/backup', null);
-    return r.ok ? true : r.status === 404 ? false : null;
+    if (r.status === 404) return false;
+    if (!r.ok) return null;
+    const data = await r.json();
+    if (!data || Array.isArray(data) || typeof data !== 'object' ||
+        typeof data.blob !== 'string' || !data.blob.trim()) return null;
+    const snapshot = await decryptBackup(data.blob);
+    validateImport(snapshot);
+    return true;
   } catch { return null; }
 }
 

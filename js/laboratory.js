@@ -68,8 +68,12 @@ export function labCapacity(incubators = {}) {
   return 1+Number(!!incubators['2'])+Number(!!incubators['3']);
 }
 export function labDayProjection(experiments = {}, incubators = {}) {
-  const capacity=labCapacity(incubators),days={},consumed=new Set(),results=new Set();
-  for(const [id,r] of Object.entries(experiments)){
+  const capacity=labCapacity(incubators),days={},results=new Set();
+  // Receipts describe already committed offline work. Preserve every receipt
+  // and result, with deterministic slot ownership, rather than rejecting their
+  // union. Every recorded experiment counts toward the daily cap, including
+  // collisions: a merge must never open another use that day.
+  for(const [id,r] of Object.entries(experiments).sort(([a],[b])=>a<b?-1:a>b?1:0)){
     if(!r||r.format!==1||r.rules!==LAB_RULES||r.opId!==id||!id||!/^\d{4}-\d{2}-\d{2}$/.test(r.day)||!Number.isInteger(r.slot)||r.slot<1||r.slot>capacity||!finite(r.committedAt)||typeof r.zone!=='string')labRefuse('invalid-experiment');
     if(!species(r.species)||!Array.isArray(r.inputs)||r.inputs.length!==2||!labRecipe(r.inputs,r.inputs.map(x=>x.iid))||labRecipe(r.inputs,r.inputs.map(x=>x.iid)).recipe!==r.recipe||r.inputs.some(x=>x.sp!==r.species||!finite(x.bankedSteps)||!finite(x.bond)||x.bond>5||!finite(x.level)||x.level!==petLevel(x.bankedSteps)||typeof x.nickname!=='string'||typeof x.equipped!=='boolean'||!Array.isArray(x.talents)||!x.talents.every(t=>typeof t==='string')))labRefuse('invalid-experiment');
     const allowed={'base-base':{ember:22,frost:22},'ember-frost':{toxic:10,rose:10},'toxic-rose':{midnight:4}}[r.recipe];
@@ -78,10 +82,25 @@ export function labDayProjection(experiments = {}, incubators = {}) {
     if(!Array.isArray(r.branches)||!labEqual(r.branches.map(x=>x.morph),r.distribution.map(x=>x.morph))||!Array.isArray(r.beforeCells)||r.branches.some(x=>!Array.isArray(x.lost)||!Array.isArray(x.gained)||!finite(x.afterCount)))labRefuse('invalid-experiment');
     const out=r.result;if(!out||typeof out.iid!=='string'||!out.iid||out.sp!==r.species||out.shiny!==false||out.lineage!==0||!finite(out.hatchedAtSteps)||!allowed[out.morph]||!r.distribution.some(x=>x.morph===out.morph)||results.has(out.iid)||r.inputs.some(x=>x.iid===out.iid))labRefuse('invalid-experiment');
     results.add(out.iid);
-    for(const input of r.inputs){if(consumed.has(input.iid))labRefuse('conflicting-experiments');consumed.add(input.iid);}
-    const d=days[r.day]??={slots:{},used:0};if(d.slots[r.slot])labRefuse('conflicting-experiments');d.slots[r.slot]=id;d.used++;
+    const d=days[r.day]??={slots:{},used:0};d.slots[r.slot]??=id;d.used++;
   }
   return days;
+}
+
+// Reconciliation is a projection, never a new destructive operation. Each iid
+// has one canonical consumption owner; additional outcomes are retained as
+// recovery results. Original requests remain immutable for replay and export.
+// This cannot prevent disconnected devices from making conflicting attempts.
+export function labReconciliation(experiments = {}) {
+  const consumed=new Map(),slots=new Map(),recovered=[];
+  for(const [id,r] of Object.entries(experiments).sort(([a],[b])=>a<b?-1:a>b?1:0)){
+    const sharedInputs=r.inputs.filter(p=>consumed.has(p.iid)).map(p=>p.iid);
+    const slotKey=`${r.day}:${r.slot}`,slotOwner=slots.get(slotKey);
+    if(sharedInputs.length||slotOwner)recovered.push({opId:id,sharedInputs,slotOwner:slotOwner||null});
+    for(const p of r.inputs)if(!consumed.has(p.iid))consumed.set(p.iid,id);
+    if(!slotOwner)slots.set(slotKey,id);
+  }
+  return {consumed:Object.fromEntries(consumed),recovered};
 }
 
 // Restore helpers fail before the importer dispatches a single write. They do

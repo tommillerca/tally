@@ -237,7 +237,10 @@ assert.equal((await lab.snapshot({presentationOnly:true})).status,'unknown');
 await D.kvBumpRevisioned('coins','coinsRev',-1);
 assert.equal((await L.buyLabIncubator(request)).reason,'stale-quote','the consuming transaction must independently validate the token');
 assert.equal(await D.kvGet('coins'),99999);assert.deepEqual(await D.kvGet('labIncubators'),{});
-// Restore the reviewed balance using its revisioned writer. A changed revision
-// still makes this pending purchase unknown, never a falsely confirmed abort.
-assert.equal((await lab.snapshot()).status,'unknown');
-console.log('PASS CONTROL: persisted purchase blocks new submissions and transaction-side token checks reject a balance race');
+// A changed revision does not strand an uncommitted purchase. Recovery cancels
+// its fence, leaves the wallet alone and still refuses a delayed dispatch.
+assert.equal((await lab.snapshot()).status,'ready');
+assert.deepEqual(await D.kvGet('labIntents'),{});
+assert.equal((await L.buyLabIncubator(request)).reason,'stale-quote');
+assert.equal(await D.kvGet('coins'),99999);
+console.log('PASS CONTROL: purchase context drift heals without a charge; delayed dispatch remains refused');

@@ -1,0 +1,134 @@
+{
+  "source": "app.css",
+  "sha256": "fc0369da04fe59b2e305c8b32cc0f6df810923b8dbcade84b57eed9a2ecb11c9",
+  "scaling": {
+    "kind": "static source declarations, including overridden rules; inherited values assume a scalable ancestor",
+    "total": 974,
+    "scalable": 974,
+    "proportion": 1,
+    "fixedGlyphs": [
+      {
+        "file": "app.css",
+        "line": 1065,
+        "context": ".crate-shake",
+        "property": "font-size",
+        "value": "74px"
+      },
+      {
+        "file": "app.css",
+        "line": 1806,
+        "context": ".hero-emoji",
+        "property": "font-size",
+        "value": "22px"
+      },
+      {
+        "file": "app.css",
+        "line": 3082,
+        "context": ".vs-bone",
+        "property": "font-size",
+        "value": "44px"
+      },
+      {
+        "file": "app.css",
+        "line": 3345,
+        "context": "@media (orientation: landscape) and (pointer: coarse) and (max-height: 540px) > .rl-skull",
+        "property": "font-size",
+        "value": "54px"
+      },
+      {
+        "file": "app.css",
+        "line": 5459,
+        "context": ".pc-icon",
+        "property": "font-size",
+        "value": "96px"
+      },
+      {
+        "file": "js/app.js",
+        "line": 16154,
+        "context": "        <div style=\"font-size:44px;line-height:1\">${streakMilestone ? sparkIco(48) : ICONS.star(48)}</div>",
+        "property": "font-size",
+        "value": "44px"
+      },
+      {
+        "file": "js/hollow-scene.js",
+        "line": 140,
+        "context": "    <span style=\"position:absolute;left:34px;top:-26px;color:#9fc27a;font-size:16px;animation:hlwSteam 2.6s ease-out ${stagger(0)}s infinite\">〜</span>",
+        "property": "font-size",
+        "value": "16px"
+      },
+      {
+        "file": "js/hollow-scene.js",
+        "line": 141,
+        "context": "    <span style=\"position:absolute;left:66px;top:-22px;color:#9fc27a;font-size:14px;animation:hlwSteam 2.6s ease-out ${stagger(1.2)}s infinite\">〜</span>",
+        "property": "font-size",
+        "value": "14px"
+      },
+      {
+        "file": "js/wheel.js",
+        "line": 212,
+        "context": "  font-size:min(7vw,26px);box-shadow:3px 3px 0 #2A2D28}",
+        "property": "font-size",
+        "value": "min(7vw,26px)"
+      },
+      {
+        "file": "js/wheel.js",
+        "line": 224,
+        "context": ".dw-result .ri{font-size:46px}",
+        "property": "font-size",
+        "value": "46px"
+      }
+    ],
+    "failed": []
+  },
+  "counting": "One declaration per source occurrence, including overridden rules and fallbacks. One px-valued media condition per @media rule, not per numeric literal. Comments excluded.",
+  "counts": {
+    "borders and hairlines": {
+      "declarations": 886,
+      "customProperties": 3,
+      "conditions": 0
+    },
+    "spacing": {
+      "declarations": 1593,
+      "customProperties": 7,
+      "conditions": 0
+    },
+    "effects": {
+      "declarations": 344,
+      "customProperties": 2,
+      "conditions": 0
+    },
+    "fixed geometry": {
+      "declarations": 1249,
+      "customProperties": 23,
+      "conditions": 0
+    },
+    "media-query breakpoints": {
+      "declarations": 0,
+      "customProperties": 0,
+      "conditions": 12
+    },
+    "type size": {
+      "declarations": 5,
+      "customProperties": 0,
+      "conditions": 0
+    }
+  },
+  "fontSize": {
+    "total": 900,
+    "px": 5,
+    "fsToken": 885,
+    "talkboxToken": 2,
+    "rem": 1,
+    "other": 7
+  },
+  "fsUses": {
+    "--fs-0": 120,
+    "--fs-1": 161,
+    "--fs-2": 168,
+    "--fs-3": 127,
+    "--fs-4": 46,
+    "--fs-5": 69,
+    "--fs-6": 16,
+    "--fs-7": 12
+  }
+}

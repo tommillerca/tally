@@ -277,7 +277,7 @@ const PURE = [
 ];
 PURE.push('pet-morph-animation-audit.mjs'); // 2026-09-08: selective layers, named fallback and neutral-rest width controls; no browser.
 PURE.push('pet-palette-audit.mjs'); // r56 B1: actual PNG pairs and shipped-art CONTROL; offline Python image reads.
-PURE.push('fontscale-audit.mjs'); // R60-2: rem type seam, root doubling and px geometry controls; no browser or sockets.
+PURE.push('fontscale-audit.mjs'); // Full source census, 100% scaling ratchet, Dynamic Type root and fixed-art controls; no rendering.
 PURE.push('wheel-look-audit.mjs'); // Frozen wheel presentation: production labels, ring, type colours and print styling; Node only, pixel review owed.
 PURE.push('wheel-easing-audit.mjs'); // w1: no overshooting control points, with pre-fix CONTROL; no browser or sockets.
 PURE.unshift('store-copy-lint.mjs');
@@ -367,6 +367,10 @@ PURE.push('progress-playtest-audit.mjs'); // Frozen Progress lane: badge abort/r
 PURE.push('leaderboard-honesty-audit.mjs'); // Staleness copy across crew, leaderboard, podium and race; Node only.
 PURE.push('breed-two-tap-audit.mjs'); // Real #doBreed handler driven through a full two-tap breed; roster 4->3.
 PURE.push('after-await-event-lint.mjs'); // No async listener may read currentTarget after an await.
+PURE.push('boneyard-zoom-audit.mjs'); // Real view boot/teardown and scoped camera policy; device pinch verification owed.
+PURE.push('lab-conflict-audit.mjs'); // Offline pet/slot collisions, encrypted reconnect, retained receipts and honest recovery copy; Node only.
+PURE.push('lab-lock-recovery-audit.mjs'); // Lab fence recovers after a mid-transaction crash, incl. nickname-first and auto-equip.
+PURE.push('r3-rest-audit.mjs'); // R3-8 backup body, R3-4 refusal copy, R3-5 destroy gate, R3-6 dead guard.
 const BROWSER = [
   'today-dock-pixels-audit.mjs', // Dock exclusion: all-tab captures, row tap and lost-exclusion control, plus native bounce evidence. Pixel continuity remains manual/UNPROVEN; the former opaque-RGB predicate certified the black-line bug.
 

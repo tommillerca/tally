@@ -7,6 +7,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { scalingCensus } from './lib/fontscale-census.mjs';
 import { BH_BY_ID } from '../data/boneheadz.js';
 import { MORPHS, MORPH_LABEL, MORPH_TIER, ownedPairs, ownedCellCount } from '../js/pets.js';
 
@@ -114,9 +115,10 @@ check('TEXT all three pet sheets opt into relative type', () => {
   }
   assert.match(rule('.pet-a11y'), /--fs-1:\s*\.75rem/);
   for (const selector of ['.k-grid-head-cell', '.k-grid-label', '.k-id b', '.k-cap', '.cf-cap b', '.pdk-name']) {
-    assert.match(rule(selector), /font-size:\s*[\d.]+rem/, `${selector} must follow root size`);
+    assert.match(rule(selector), /font-size:\s*(?:[\d.]+rem|var\(--fs-[\w-]+\))/, `${selector} must follow root size`);
     assert.doesNotMatch(rule(selector), /font-size:\s*[\d.]+px/, `${selector} still pins pixels`);
   }
+  assert.deepEqual(scalingCensus({ 'app.css': css }).failed, [], 'CONTROL type tokens must resolve to scalable sizes, not merely have a var() spelling');
 });
 console.log(`PET A11Y NODE: ${failures ? `${failures} failed` : 'all passed'} (no pixel claim)`);
 process.exitCode = failures ? 1 : 0;

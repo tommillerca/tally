@@ -3,6 +3,16 @@
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { cssDeclarations, hasPx } from '../tests/lib/css-declarations.mjs';
+import assert from 'node:assert/strict';
+import { scalingCensus, readTypeSources, elementScalingCensus, assertElementFloor } from '../tests/lib/fontscale-census.mjs';
+
+const elementFlag = process.argv.indexOf('--elements');
+if (elementFlag !== -1) {
+  const measured = elementScalingCensus(assert, JSON.parse(readFileSync(process.argv[elementFlag + 1], 'utf8')));
+  console.log(JSON.stringify(measured, null, 2));
+  assertElementFloor(assert, measured);
+  process.exit(0);
+}
 
 const source = readFileSync(process.argv.includes('--stdin') ? 0 : new URL('../app.css', import.meta.url), 'utf8');
 const rows = cssDeclarations(source);
@@ -17,7 +27,7 @@ function group({ property: p }) {
   if (p === '@media') return 'media-query breakpoints';
   if (/^--fs-/.test(p) || p === '--tb-size' || p === 'font-size' || p === 'font') return 'type size';
   if (p.startsWith('--')) return customGroups[p] || 'fixed geometry';
-  if (/^(margin|padding|gap|row-gap|column-gap|letter-spacing|word-spacing|line-height|vertical-align)/.test(p)) return 'spacing';
+  if (/^(margin|padding|gap|row-gap|column-gap|letter-spacing|word-spacing|line-height|vertical-align|text-underline-offset)/.test(p)) return 'spacing';
   if (/^(border|outline|-webkit-text-stroke)/.test(p)) return 'borders and hairlines';
   if (/shadow|filter/.test(p)) return 'effects';
   if (/^(width|height|min-|max-|top$|right$|bottom$|left$|inset|transform|translate|perspective|background|mask|-webkit-mask|clip|flex|grid)/.test(p)) return 'fixed geometry';
@@ -34,6 +44,7 @@ for (const row of inventory) {
 const fonts = rows.filter(row => row.property === 'font-size');
 const fsUses = fonts.filter(row => /var\(--fs-/.test(row.value));
 const report = { source: 'app.css', sha256: createHash('sha256').update(source).digest('hex'),
+  scaling: scalingCensus(process.argv.includes('--stdin') ? { 'app.css': source } : readTypeSources()),
   counting: 'One declaration per source occurrence, including overridden rules and fallbacks. One px-valued media condition per @media rule, not per numeric literal. Comments excluded.',
   counts, fontSize: { total: fonts.length, px: fonts.filter(row => hasPx(row.value)).length,
     fsToken: fsUses.length, talkboxToken: fonts.filter(row => /var\(--tb-size/.test(row.value)).length,

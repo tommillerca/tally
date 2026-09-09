@@ -69,7 +69,7 @@ import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, petColourName, petInstanceName, salvageInstance, quotePetDestruction, petLastColourLoss, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear, bestInstance } from './loot.js';
-import { buildBattlePet, legalPicks, isKnownPet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, petStatBonusText, petBreedGainText, PET_STAT_MULT_CAP, PET_LINEAGE_STEP, SHINY_STAT_MULT, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs, ownedCellCount } from './pets.js';
+import { buildBattlePet, legalPicks, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, petStatBonusText, petBreedGainText, PET_STAT_MULT_CAP, PET_LINEAGE_STEP, SHINY_STAT_MULT, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs, ownedCellCount } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
@@ -1334,7 +1334,7 @@ async function showSplash(userEq) {
     await beat(430);
   }
   if (done) return;
-  el.innerHTML = `<div class="splash-inner"><div class="splash-stage">${avatarLayersHtml(userEq || { B: 'B0-1', SK: 'SK0-1' }, { shinyPetId: splashShiny, petMorph: splashMorph })}</div><img class="splash-mark" src="assets/brand/wordmark.png" alt="BONEHEADZ"><div class="splash-title" style="font-size:30px">GYM</div><div class="splash-sub">Feed the bones</div></div>`;
+  el.innerHTML = `<div class="splash-inner"><div class="splash-stage">${avatarLayersHtml(userEq || { B: 'B0-1', SK: 'SK0-1' }, { shinyPetId: splashShiny, petMorph: splashMorph })}</div><img class="splash-mark" src="assets/brand/wordmark.png" alt="BONEHEADZ"><div class="splash-title" style="font-size:var(--fs-display)">GYM</div><div class="splash-sub">Feed the bones</div></div>`;
   await beat(forced ? 2600 : 950);
   finish();
 }
@@ -1680,6 +1680,7 @@ async function boot() {
     return;
   }
   if (await guardSaveBeforeInit()) return;
+  await recoverLaboratoryAtBoot();
   const interruptedFight = await kvGet('pitFight', null);
   const interruptedDraft = await kvGet('addDraft', null);
   const unfinished = interruptionCopy({ fight: interruptedFight, draft: interruptedDraft });
@@ -3297,9 +3298,12 @@ function cloudFailLine(reason, skewMs = 0) {
     return `Backup is blocked: this device's clock is ${how}. Check your date and time. Everything catches up on its own once it is right.`;
   }
   if (reason === 'too-large') {
-    return 'Backup is blocked: this save has outgrown its slot on the server, and playing makes it bigger. Your progress is safe on this phone. Export a copy below until this is fixed.';
+    return 'Backup is blocked: this save has outgrown its slot on the server, and playing makes it bigger. A current cloud copy has not been confirmed. Keep this device and export a copy where file export is available until this is fixed.';
   }
-  return 'The last backup did not go through. Your progress is safe on this phone and it keeps retrying.';
+  if (/conflict|laboratory|experiment|incubator|invalid-daily/.test(reason || '')) {
+    return 'Backup is blocked because these saves cannot merge. Retrying alone will not fix this. Keep both devices and export both saves where file export is available. Update both apps, then tap On under Cloud backup to retry. If it still fails, use Send feedback in Settings.';
+  }
+  return 'The last backup did not go through. A current cloud copy has not been confirmed. Check your connection, then tap On under Cloud backup to retry. Export a copy where file export is available.';
 }
 
 /* THE VOICE FOR A CLOUD BACKUP THAT IS FAILING. Chained onto autoSync at boot
@@ -6854,7 +6858,7 @@ function healthCardHtml(hk, isToday) {
       <div class="hk-rows">
         <div class="hk-row"><span class="hk-ico">${ICONS.sneaker(21)}</span>
           <div style="flex:1">
-            <div class="row" style="display:flex;justify-content:space-between;font-size:13px;font-weight:600"><span>${steps != null ? steps.toLocaleString() : '·'} steps</span><span style="color:var(--text-3)">${steps >= goal ? 'goal hit!' : 'of ' + goal.toLocaleString()}</span></div>
+            <div class="row" style="display:flex;justify-content:space-between;font-size:var(--fs-2);font-weight:600"><span>${steps != null ? steps.toLocaleString() : '·'} steps</span><span style="color:var(--text-3)">${steps >= goal ? 'goal hit!' : 'of ' + goal.toLocaleString()}</span></div>
             <div class="bar steps" style="margin-top:5px"><i style="width:${stepPct}%"></i></div>
           </div>
         </div>
@@ -6863,9 +6867,9 @@ function healthCardHtml(hk, isToday) {
           const note = bonus > 0
             ? `<span style="color:var(--accent);font-weight:700">· +${bonus} kcal earned back</span>`
             : `<span style="color:var(--text-3);font-weight:500">· within your activity baseline</span>`;
-          return `<div class="hk-row"><span class="hk-ico">${ICONS.boltIco(19)}</span><div style="font-size:13.5px;font-weight:600">${active.toLocaleString()} kcal active burn ${note}</div></div>`;
+          return `<div class="hk-row"><span class="hk-ico">${ICONS.boltIco(19)}</span><div style="font-size:var(--fs-2);font-weight:600">${active.toLocaleString()} kcal active burn ${note}</div></div>`;
         })() : ''}
-        ${(hk.workouts || hk.exerciseMin) ? `<div class="hk-row"><span class="hk-ico">${pixCur('dumbbell', 24) || bhIcon('badge-muscle', 21)}</span><div style="font-size:13.5px;font-weight:600">${[
+        ${(hk.workouts || hk.exerciseMin) ? `<div class="hk-row"><span class="hk-ico">${pixCur('dumbbell', 24) || bhIcon('badge-muscle', 21)}</span><div style="font-size:var(--fs-2);font-weight:600">${[
           hk.workouts ? `${hk.workouts} workout${hk.workouts === 1 ? '' : 's'}` : '',
           hk.exerciseMin ? `${hk.exerciseMin} min` : '',
         ].filter(Boolean).join(' · ')}${hk.wtypes && hk.wtypes.length ? ` <span style="color:var(--text-3);font-weight:500">${hk.wtypes.slice(0, 3).join(', ')}</span>` : ''}</div></div>` : ''}
@@ -7957,7 +7961,7 @@ function openHollow(after) {
     ${firstEver ? '<p class="hlw-bar">Tap the shed. Your starter seeds are inside.</p>' : `<p class="note" style="margin:0 2px 8px">Tap a bed. Your bonehead does the rest. Water once mid-grow for the top yield. Nothing ever dies, and everything you pull goes to the cauldrons.</p>`}
     <div class="hlw-vp"><div class="hlw-stage" id="hlwStage">
       ${hollowBackdropHtml({ band })}
-      <div style="position:absolute;right:14px;top:14px;z-index:20;display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:999px;background:rgba(13,12,18,.42);backdrop-filter:blur(10px);font-family:var(--display),Bangers,sans-serif;font-size:15px;letter-spacing:.06em;color:#f2e9d7">${ICONS.coin(14)} ${coin.toLocaleString()}</div>
+      <div style="position:absolute;right:14px;top:14px;z-index:20;display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:999px;background:rgba(13,12,18,.42);backdrop-filter:blur(10px);font-family:var(--display),Bangers,sans-serif;font-size:var(--fs-3);letter-spacing:.06em;color:#f2e9d7">${ICONS.coin(14)} ${coin.toLocaleString()}</div>
       ${/* MUSIC STARTS MUTED. Tom, twice: "it starts muted but there's an unmute
             icon that shows it wants to be clicked the first time they go in the
             hollow." Muted is the default state, not a paused track: nothing is
@@ -8024,9 +8028,9 @@ function openHollow(after) {
           </span></span>
       </div>
       ${pouchOpen ? `<button id="hlwPouch" style="position:absolute;left:96px;top:190px;width:210px;z-index:30;background:#1d1b22;border:2.5px solid #17151d;border-radius:16px;box-shadow:4px 5px 0 rgba(0,0,0,.45);padding:12px 14px;display:grid;gap:9px;cursor:pointer;text-align:left">
-        <span style="display:flex;align-items:center;justify-content:space-between"><b style="font-family:var(--display),Bangers,sans-serif;font-size:16px;font-weight:400;letter-spacing:.06em;color:#f2e9d7">SEED POUCH</b><i style="font-size:10px;font-weight:700;color:#8f8578;font-style:normal">TAP TO CLOSE</i></span>
-        ${seedTotal ? SEED_IDS.filter(id => (garden.seeds[id] || 0) > 0).map(id => `<span style="display:flex;align-items:center;gap:9px">${bhIcon('garden-seed', 20, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}<b style="flex:1;font-size:12.5px;font-weight:700;color:#f2e9d7">${esc(seedName(id))}</b><b style="font-family:var(--display),Bangers,sans-serif;font-size:15px;color:#f2e9d7">×${garden.seeds[id]}</b></span>`).join('') : '<i style="font-size:11px;font-weight:600;color:#8f8578;font-style:normal">No seeds yet.</i>'}
-        <i style="font-size:10px;font-weight:600;color:#8f8578;font-style:normal">Seeds come from walks and compost · ${compost.left} composts left today</i>
+        <span style="display:flex;align-items:center;justify-content:space-between"><b style="font-family:var(--display),Bangers,sans-serif;font-size:var(--fs-body);font-weight:400;letter-spacing:.06em;color:#f2e9d7">SEED POUCH</b><i style="font-size:var(--fs-tiny);font-weight:700;color:#8f8578;font-style:normal">TAP TO CLOSE</i></span>
+        ${seedTotal ? SEED_IDS.filter(id => (garden.seeds[id] || 0) > 0).map(id => `<span style="display:flex;align-items:center;gap:9px">${bhIcon('garden-seed', 20, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}<b style="flex:1;font-size:var(--fs-2);font-weight:700;color:#f2e9d7">${esc(seedName(id))}</b><b style="font-family:var(--display),Bangers,sans-serif;font-size:var(--fs-3);color:#f2e9d7">×${garden.seeds[id]}</b></span>`).join('') : '<i style="font-size:var(--fs-0);font-weight:600;color:#8f8578;font-style:normal">No seeds yet.</i>'}
+        <i style="font-size:var(--fs-tiny);font-weight:600;color:#8f8578;font-style:normal">Seeds come from walks and compost · ${compost.left} composts left today</i>
       </button>` : ''}
       ${/* THE FIRST VISIT LAYER. The designer's first-visit comp carried three
             things the build never had: an accent arrow at the shed, a FREE
@@ -8248,7 +8252,7 @@ function openGardenSheet(after) {
           <span class="art">${bhIcon('garden-bed', 36)}</span><b>DIG A BED</b>
           <span class="t3-price" style="margin-top:3px">${ICONS.coin(12)} ${bedPrice.toLocaleString()}</span></button>` : ''}
       </div>
-      <div class="t3-sect"><b>Seed pouch${seedTotal ? ` · ${seedTotal}` : ''}</b><i></i><button class="r chip" id="compostBtn" style="font-size:11px">Compost · ${compost.left} left</button></div>
+      <div class="t3-sect"><b>Seed pouch${seedTotal ? ` · ${seedTotal}` : ''}</b><i></i><button class="r chip" id="compostBtn" style="font-size:var(--fs-0)">Compost · ${compost.left} left</button></div>
       ${seedTotal ? `<div class="t3-pouch">
         ${SEED_IDS.filter(id => (garden.seeds[id] || 0) > 0).map(id => `<button class="t3-seed" data-plantseed="${id}">
           ${bhIcon('garden-seed', 22, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}
@@ -11738,7 +11742,7 @@ async function openMetricDetail(metricKey) {
   const html = `
     <button class="sheet-close" style="position:absolute;top:12px;right:14px;z-index:2">Close</button>
     <div class="trend-scroll">
-      <h2 style="margin:2px 40px 2px 0;font-size:19px">${metric.label}</h2>
+      <h2 style="margin:2px 40px 2px 0;font-size:var(--fs-5)">${metric.label}</h2>
       <div class="trend-now"><span class="n">${latest != null ? metricNum(metricKey, latest) : '·'}</span><span class="u">${metricUnit(metricKey)}</span>${deltaHtml}</div>
       <div class="rtabs">${tabs}</div>
       <div class="trend-body">${bodyHtml(range0)}</div>
@@ -11951,7 +11955,7 @@ async function openSleepDetail() {
   const when = r.date === dateKey() ? 'Last night' : `Night of ${r.date}`;
   const html = `<button class="sheet-close" style="position:absolute;top:12px;right:14px;z-index:2">Close</button>
     <div class="trend-scroll">
-      <h2 style="margin:2px 40px 6px 0;font-size:19px">Sleep</h2>
+      <h2 style="margin:2px 40px 6px 0;font-size:var(--fs-5)">Sleep</h2>
       <div class="sleep-top">
         <div class="sleep-score" style="color:${bandCol}">${sc == null ? '·' : `${sc}<small>/100</small>`}</div>
         <div class="sleep-meta"><b>${hm(asleep)} asleep</b><span>${when}${r.sleepAuto ? ' · auto from your watch' : ''}</span></div>
@@ -12489,7 +12493,7 @@ async function renderFriends(el) {
   const whatsNewCard = `
     <button class="card crew-friends" id="crewWhatsNew" style="margin-bottom:12px">
       <span>What's New${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</span>
-      <span class="crew-friends-r"><span style="color:var(--text-3);font-size:12.5px">See recent updates</span><span class="crew-chev">›</span></span>
+      <span class="crew-friends-r"><span style="color:var(--text-3);font-size:var(--fs-2)">See recent updates</span><span class="crew-chev">›</span></span>
     </button>`;
 
   if (!me) {
@@ -14066,7 +14070,7 @@ function openFeedbackSheet() {
       <button class="btn ghost sheet-close" style="flex:0 0 auto">Cancel</button>
       <button class="btn" id="fbSend" style="flex:1">Send</button>
     </div>
-    <p class="muted" id="fbStatus" style="font-size:12px;margin:10px 0 0"></p>
+    <p class="muted" id="fbStatus" style="font-size:var(--fs-1);margin:10px 0 0"></p>
   `, { cls: 'sheet-report', name: 'feedback' });
   const btn = $('#fbSend'), st = $('#fbStatus');
   btn?.addEventListener('click', async () => {
@@ -14126,7 +14130,7 @@ function openSurveySheet(source = 'auto') {
         <button class="btn ghost" id="svLater" style="flex:0 0 auto">Maybe later</button>
         <button class="btn" id="svSend" style="flex:1">Claim my lizard 💜</button>
       </div>
-      <p class="muted" id="svStatus" style="font-size:12px;margin:10px 2px 0;text-align:center"></p>
+      <p class="muted" id="svStatus" style="font-size:var(--fs-1);margin:10px 2px 0;text-align:center"></p>
     </div>
   `, { cls: 'sheet-survey', name: 'survey' });
 
@@ -14329,7 +14333,7 @@ function openSurvey2Sheet(source = 'auto') {
         <button class="btn ghost" id="sv2Later" style="flex:0 0 auto">Not now</button>
         <button class="btn" id="sv2Send" style="flex:1">Send</button>
       </div>
-      <p class="muted" id="sv2Status" style="font-size:12px;margin:10px 2px 0;text-align:center"></p>
+      <p class="muted" id="sv2Status" style="font-size:var(--fs-1);margin:10px 2px 0;text-align:center"></p>
     </div>
   `, { cls: 'sheet-survey', name: 'survey2' });
   const form = $('#survey2Form');
@@ -15388,7 +15392,7 @@ async function renderSettings(el) {
         ? 'A cloud backup <b>does</b> exist for this account and can be restored later with your recovery code.'
         : why === 'no-backup' ? 'There is <b>no</b> cloud backup for this account, so this is the only copy.'
           : why === 'no-recovery' ? 'A cloud backup exists, but with <b>no recovery code set</b> there is no way to prove this account is yours on a new device: this is the only copy that will ever come back.'
-            : 'The cloud could not be reached, so no vault copy can be confirmed. Treat this as the only copy.';
+            : 'The cloud backup could not be verified, so no vault copy can be confirmed. Treat this as the only copy.';
     }).catch(() => {});
     const input = $('#erIn', wrap), go = $('#erGo', wrap);
     input.addEventListener('input', () => { go.disabled = input.value.trim().toUpperCase() !== 'ERASE'; });
@@ -15577,7 +15581,7 @@ function bindProfileForm(wrap, initial, onChange) {
     const problem = profileProblem(p);
     if (problem) { $('#pfPreview', wrap).textContent = problem; return; }
     const t = computeTargets(p);
-    $('#pfPreview', wrap).innerHTML = `<div class="big-stat" style="margin:0"><span class="v" style="font-size:26px">${t.kcal.toLocaleString()} kcal</span><span class="d">/ day</span></div>
+    $('#pfPreview', wrap).innerHTML = `<div class="big-stat" style="margin:0"><span class="v" style="font-size:var(--fs-6)">${t.kcal.toLocaleString()} kcal</span><span class="d">/ day</span></div>
       <div style="margin-top:6px;font-weight:600;color:var(--text)">Protein ${t.p} g · Carbs ${t.c} g · Fat ${t.f} g</div>
       <div style="margin-top:4px">Maintenance ~${t.tdee.toLocaleString()} kcal</div>
       <div style="margin-top:6px">${TARGET_DISCLOSURE}</div>`;
@@ -16385,14 +16389,14 @@ function openHatchReveal(res, charWrap) {
      species repeat. */
   const hatchName = `A ${MORPH_LABEL[res.morph] || ''} ${item ? item.name : ''}`.replace(/\s+/g, ' ').trim() + '!';
   const revealHtml = item
-    ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? `${sparkIco(24)} SHINY! ${sparkIco(24)}` : res.dupe ? 'ANOTHER ONE!' : esc(hatchName)}</div>
+    ? `<div class="lvl-stamp" style="font-size:var(--fs-display)${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? `${sparkIco(24)} SHINY! ${sparkIco(24)}` : res.dupe ? 'ANOTHER ONE!' : esc(hatchName)}</div>
        <div class="hatch-prize${res.shiny ? ' is-shiny' : ''}">
          <canvas class="hatch-art" width="512" height="512"></canvas>
          <b>${esc(petInstanceName({ sp: item.id, morph: res.morph, shiny: res.shiny }))}${res.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</b>
          <small>${res.shiny ? 'Ultra-rare variant · follows your bonehead' : res.dupe ? 'A spare pet · keep it for recipes, melt it or breed' : 'Pet · follows your bonehead'}</small>
          ${res.shiny ? '<span class="rar-chip" style="color:var(--gold)">SHINY</span>' : ''}
        </div>`
-    : `<div class="lvl-stamp" style="font-size:26px">A FAMILIAR FRIEND</div>
+    : `<div class="lvl-stamp" style="font-size:var(--fs-6)">A FAMILIAR FRIEND</div>
        <p class="note">This egg hatched a pet you already know. It scampered back into your crew and left you +${res.coins} coins. Keep hatching for shinies.</p>`;
   const wrap2 = openSheet(`
     <div class="reveal-take cool">
@@ -17921,7 +17925,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             quantity badge, the egg as a card with its own bar, consumables as
             rows. Crates group BY TYPE now: eight identical rows each saying
             "Golden Crate / Open" was a list to grind, not a stash to raid. */''}
-      <div class="t3-sect"><b>Crates · tap to crack</b><i></i>${crates.length ? `<span class="r chip" style="font-size:11px">${crates.length} to open</span>` : ''}</div>
+      <div class="t3-sect"><b>Crates · tap to crack</b><i></i>${crates.length ? `<span class="r chip" style="font-size:var(--fs-0)">${crates.length} to open</span>` : ''}</div>
       ${crates.length ? `<div class="t3-cells">${(() => {
         const byType = new Map();
         for (const c of crates) { if (!byType.has(c.crate)) byType.set(c.crate, []); byType.get(c.crate).push(c); }
@@ -17971,7 +17975,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             <div class="bar"><i style="width:${pct}%"></i></div>
             <small>${eggStale ? 'Your steps are not reaching the app, so this is not moving. Tap the banner on Today to reconnect.' : `${p.walked.toLocaleString()} / ${p.goal.toLocaleString()} steps${p.ready ? ' · a pet is inside' : ` · ${(p.goal - p.walked).toLocaleString()} to go`}`}</small>
           </div>
-          ${p.ready ? `<button class="btn" style="width:auto;padding:9px 16px;font-size:16px;box-shadow:var(--sh-sm)" data-hatch="${e.id}">HATCH</button>` : ''}
+          ${p.ready ? `<button class="btn" style="width:auto;padding:9px 16px;font-size:var(--fs-body);box-shadow:var(--sh-sm)" data-hatch="${e.id}">HATCH</button>` : ''}
         </div>`;
       }).join('')}` : ''}
       <div class="t3-sect"><b>Consumables</b><i></i></div>
@@ -18398,7 +18402,7 @@ function petPanelHtml(petId, fighter) {
         <b>${esc(fam.name)}${lineage ? ` <span class="lin-tag">${ICONS.star(11)}${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(10)} SHINY</span>` : ''} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
         <small>Pet level ${lvl}${lvl < PET_MAX_LEVEL ? ` · ${toNext.toLocaleString()} steps to Lv ${lvl + 1}` : ' · maxed'}</small>
         ${statLine}
-        <span class="note" style="font-size:11.5px">${esc(fam.blurb)} Passive: ${passives[fam.passive]}. ${esc(petStatBonusText(petId, shiny, lineage))}</span>
+        <span class="note" style="font-size:var(--fs-1)">${esc(fam.blurb)} Passive: ${passives[fam.passive]}. ${esc(petStatBonusText(petId, shiny, lineage))}</span>
       </div>
     </div>
     <div class="pet-tree">
@@ -19738,8 +19742,8 @@ function openPetLevelUp(petId, level, prevLevel, newTalent, inst = null) {
   const wrap = openSheet(`
     <div class="sheet-body" style="text-align:center;padding-top:12px">
       <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">${petPortraitHtml(petId, 104, shiny, { thumb: true, morph })}</div></div>
-      <div class="lvl-stamp" style="font-size:30px">PET LEVEL ${level}!</div>
-      <div class="cele-sub" style="font-size:15px;margin-top:2px">${esc(petName)}${lineage ? ` <span class="lin-tag">${ICONS.star(11)}${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
+      <div class="lvl-stamp" style="font-size:var(--fs-display)">PET LEVEL ${level}!</div>
+      <div class="cele-sub" style="font-size:var(--fs-3);margin-top:2px">${esc(petName)}${lineage ? ` <span class="lin-tag">${ICONS.star(11)}${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
       <div class="pet-gains">${gains}</div>
       ${newTalent ? `<div class="cele-bubble">New talent unlocked. Choose it in the Stable.</div>
         <button class="btn" id="petTalentBtn">Pick my talent</button>
@@ -20112,7 +20116,6 @@ async function openFriendPaddock(f) {
     </div>`, { cls: 'sheet-paddock pet-a11y' });
 }
 
-let stableGhostWarned = false;   // R39-31: one warning per session, not one per render
 // Re-read the instance and its earned level at the click, since an open tree
 // can outlive a restore or a removed pet. Never trust a button's cached level.
 async function choosePetTalent(iid, node) {
@@ -20180,11 +20183,9 @@ async function openStable(opts = {}) {
        records disagree (R39-1), and equipped() below has to read the repaired
        slot rather than race it inside the same Promise.all. */
     const eqIid0 = await equippedPetIid();
-    const [instsAll, bank, st, eqOwn, nicks, ownedCos, bonds, talentPicks] = await Promise.all([petInstances(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds(), kvGet('petBonds', {}), kvGet('pettalents', {})]);
-    /* R44-1: use the same known-species boundary as every state reader. */
-    const insts = instsAll.filter(x => x && isKnownPet(x.sp));
+    const [insts, bank, st, eqOwn, nicks, ownedCos, bonds, talentPicks] = await Promise.all([petInstances(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds(), kvGet('petBonds', {}), kvGet('pettalents', {})]);
+    // petInstances() already excludes unsupported rows and preserves them in storage.
     const labStock = laboratoryEngine() ? await laboratoryEngine().snapshot({ presentationOnly: true }).catch(() => null) : null;
-    if (insts.length !== instsAll.length && !stableGhostWarned) { stableGhostWarned = true; console.warn('Stable: skipped unsupported pet row(s)', instsAll.filter(x => !x || !isKnownPet(x.sp))); }
     /* OUT WITH YOU means the C slot holds her. A petEquipped that the worn outfit
        does not agree with is a pet the Stable must still offer EQUIP for, or the
        player has no control anywhere that can put her on Today (R39-1). */
@@ -21170,7 +21171,7 @@ async function openStable(opts = {}) {
       }
       const q = fresh.quote, nm = petDestructionName(q);
       // Preserve the stronger review for a last appearance or invested pet.
-      if (q.lastColour || q.lastCell || q.bankedSteps > 0 || q.inst.shiny || (q.inst.lineage || 0) > 0) {
+      if (q.lastColour || q.lastCell || q.bankedSteps > 0 || q.inst.shiny || (q.inst.lineage || 0) > 0 || q.nickname || q.bond > 0 || q.talents.length > 0 || q.equipped) {
         openPetDestructionReview(reviewFor(q));
         return;
       }
@@ -21263,6 +21264,18 @@ function laboratoryEngine() {
   return engine?.version === 1 && ['snapshot', 'quote', 'animate', 'purchase', 'acknowledge', 'setUi'].every(k => typeof engine[k] === 'function') ? engine : null;
 }
 
+async function recoverLaboratoryAtBoot() {
+  try {
+    const pending = await kvGet('labIntents', {});
+    if (pending && typeof pending === 'object' && !Array.isArray(pending) && !Object.keys(pending).length) return;
+    // Run after cloud restore and before Today reads its presentation snapshot.
+    // Equipment preparation elsewhere in boot cannot invalidate this recovery.
+    await laboratoryEngine()?.snapshot();
+  } catch {
+    toast(labStateCopy({ status: 'unknown' }), 8000, { error: true });
+  }
+}
+
 // LAB UI PURE BEGIN: these renderers consume the engine's coherent snapshot.
 const labRecipes = [
   { id: 'base-base', inputs: ['base', 'base'], outputs: ['ember', 'frost'] },
@@ -21296,16 +21309,20 @@ function labPetDetails(p, compact = false) {
   if (compact) return `${art}<b>${esc(labName(p))}</b><span>Level ${esc(p.level)}</span>`;
   return `${art}<b>${esc(labName(p))}</b><span>Level ${esc(p.level)} · ${esc(p.bankedSteps.toLocaleString())} banked training steps</span><span>Nickname: ${esc(p.nickname || 'none')}. Lineage ${esc(p.lineage)}. Bond ${esc(p.bond)}/5. ${p.shiny ? 'Shiny' : 'Non-shiny'}.</span><span>Talent choices: ${esc(p.talents.join(', ') || 'none')}. ${p.equipped ? 'Equipped' : 'Not equipped'}.</span>`;
 }
+function labDailyCopy(s) {
+  const count = s.used > s.capacity ? `${s.used} experiments were recorded across devices against a daily capacity of ${s.capacity}.` : `You've used ${s.used}/${s.capacity} experiments today.`;
+  return `${count} Experiments reset at ${s.resetTime}, ${s.zone}.`;
+}
 function labStateCopy(s, sp = '') {
   if (s.status === 'unavailable') return 'The Laboratory is not available in this build. Explore the recipes, view Collection, or hatch eggs.';
   if (s.status === 'read-error') return 'The Laboratory could not be read. Reopen the room to check your pets and experiments.';
-  if (s.status === 'unknown') return "The experiment's save could not be checked. Reopen The Laboratory to review it before trying again.";
+  if (s.status === 'unknown') return "The experiment's save could not be verified. Experiments are paused while its status is unresolved.";
   if (s.status === 'clock-backwards') return 'Your device date is before your last experiment day. Check automatic date and time.';
   if (s.status === 'unwitnessed-day') return "Connect briefly so the app can check today's date, then reopen The Laboratory.";
   if (s.status === 'restore-conflict') return 'These saves contain conflicting experiments or incubator purchases. Your current save is unchanged. Keep both backups for recovery.';
   if (!s.pets.length) return 'Hatch eggs to discover species. The recipe path is here when you have a pair.';
   if (!s.hasEligiblePair) return 'Your pets do not match a recipe yet. Hatch eggs to discover species and build matching pairs.';
-  if (s.remaining === 0) return `You've used ${s.used}/${s.capacity} experiments today. Experiments reset at ${s.resetTime}, ${s.zone}.`;
+  if (s.remaining === 0) return labDailyCopy(s);
   if (!s.hasSafePair) return `${s.collectionCount === labTotal() ? `All ${labTotal()} colours owned. ` : ''}No matching pair preserves both your collection and pet investment. You may review a risky pair and its exact losses, or hatch more copies first.`;
   if (s.collectionCount === labTotal()) return `All ${labTotal()} colours owned. Animate copies, melt spares for Bone Dust, or breed to raise lineage.`;
   if (sp && s.species[sp]?.complete) return `${labSpecies(sp)} has all ${MORPHS.length} colours. Choose another species to build the collection, or make an optional extra copy.`;
@@ -21380,12 +21397,16 @@ function labInterruptedFightHtml(fight) {
 }
 function labNeedsTyped(q) { return q.inputs.some(labInvested) || q.branches.some(b => b.lost.length > 0); }
 function labConfirmationHtml(q) {
-  return `<section class="lab-equation" aria-label="Experiment"><div class="lab-inputs" aria-label="Two pets to combine">${q.inputs.map(p => `<figure class="lab-input">${labPetDetails(p, true)}</figure>`).join('<span class="lab-plus" aria-hidden="true">+</span>')}</div>${labOutcomesHtml(q)}</section><h3>What you will lose</h3><p>Both pets are permanently consumed. Their training, names, lineage, bonds and talent choices do not transfer. The new pet starts at level 1, with 0 banked steps and lineage 0.</p>${q.inputs.map(p => `<section class="lab-loss">${labPetDetails(p)}<p>${esc(labName(p))} will be destroyed: level ${p.level}, ${p.bankedSteps.toLocaleString()} banked training steps. None of those steps transfer.</p>${p.nickname ? `<p>The name ${esc(p.nickname)} is removed with this pet.</p>` : ''}<p>${esc(labName(p))} loses lineage ${p.lineage} and bond ${p.bond}/5. The new pet starts with neither.</p>${p.talents.length ? `<p>${esc(labName(p))}'s talent choices are removed: ${esc(p.talents.join(', '))}. The new pet inherits none.</p>` : ''}${p.equipped ? `<p>${esc(labName(p))} is your equipped pet. The new level-1 pet will take its place.</p>` : ''}</section>`).join('')}${q.recipe === 'toxic-rose' ? '<p>Midnight: 100%. Both selected pets are permanently consumed. The new Midnight starts at level 1.</p>' : ''}${labBranchesHtml(q)}<p>Melting these two pets separately would pay ${q.salvageDust} Bone Dust. Animate pays no dust.</p>${labNeedsTyped(q) ? '<p>This cannot be undone. Type ANIMATE to destroy both pets and create one new pet.</p>' : '<p>This cannot be undone. Animate destroys both pets and creates one new pet.</p>'}`;
+  return `<section class="lab-equation" aria-label="Experiment"><div class="lab-inputs" aria-label="Two pets to combine">${q.inputs.map(p => `<figure class="lab-input">${labPetDetails(p, true)}</figure>`).join('<span class="lab-plus" aria-hidden="true">+</span>')}</div>${labOutcomesHtml(q)}</section><h3>What you will lose</h3><p>Offline devices cannot check each other's pets or daily uses. Use one device for experiments until both have synced.</p><p>Both pets are permanently consumed. Their training, names, lineage, bonds and talent choices do not transfer. The new pet starts at level 1, with 0 banked steps and lineage 0.</p>${q.inputs.map(p => `<section class="lab-loss">${labPetDetails(p)}<p>${esc(labName(p))} will be destroyed: level ${p.level}, ${p.bankedSteps.toLocaleString()} banked training steps. None of those steps transfer.</p>${p.nickname ? `<p>The name ${esc(p.nickname)} is removed with this pet.</p>` : ''}<p>${esc(labName(p))} loses lineage ${p.lineage} and bond ${p.bond}/5. The new pet starts with neither.</p>${p.talents.length ? `<p>${esc(labName(p))}'s talent choices are removed: ${esc(p.talents.join(', '))}. The new pet inherits none.</p>` : ''}${p.equipped ? `<p>${esc(labName(p))} is your equipped pet. The new level-1 pet will take its place.</p>` : ''}</section>`).join('')}${q.recipe === 'toxic-rose' ? '<p>Midnight: 100%. Both selected pets are permanently consumed. The new Midnight starts at level 1.</p>' : ''}${labBranchesHtml(q)}<p>Melting these two pets separately would pay ${q.salvageDust} Bone Dust. Animate pays no dust.</p>${labNeedsTyped(q) ? '<p>This cannot be undone. Type ANIMATE to destroy both pets and create one new pet.</p>' : '<p>This cannot be undone. Animate destroys both pets and creates one new pet.</p>'}`;
+}
+function labReconciledHtml(s) {
+  const count = s.reconciliation?.recovered?.length || 0;
+  return count ? `<section class="lab-recovery" role="status"><b>Offline experiments reconciled</b><p>${count} overlapping experiment${count === 1 ? ' was' : 's were'} recovered. All results and original receipts were kept. Shared input pets stay consumed once. Every recorded experiment counts toward that day's limit.</p><p>Offline devices cannot check each other's pets or daily uses. Use one device for experiments until both have synced.</p></section>` : '';
 }
 function labRevealHtml(r) {
   const b = r.branches.find(x => x.morph === r.result.morph);
   const certain = r.distribution.length === 1;
-  return `<div class="lab-reveal ${certain ? 'lab-direct' : 'lab-surprise'}" data-outcomes="${r.distribution.length}"><div data-lab-result-art>${petSpriteHtml(r.species, 144, false, { morph: r.result.morph, shiny: false, wear: null, thumb: true })}</div><h3>${esc(labColour(r.result.morph))} ${esc(labSpecies(r.species))}</h3><p role="status">${b.gained.length ? `Added to your collection. ${b.afterCount}/${labTotal()}.` : `Another copy. ${b.neededFor ? `Needed for ${esc(b.neededFor)}.` : 'Optional extra copy.'}`}</p><p>${certain ? r.recipe === 'toxic-rose' ? 'Midnight was guaranteed by this recipe.' : 'This saved experiment had a guaranteed result.' : 'Your experiment is saved.'}</p><p>At creation: Level 1. 0 banked steps. Lineage 0. Non-shiny. No inherited name, bond or talents. This receipt records the experiment, not later training or naming.</p><p>${Number.isInteger(r.remaining) ? `${r.remaining} experiment${r.remaining === 1 ? '' : 's'} available today.` : 'Back to Laboratory to check remaining experiments.'}</p>${r.resultPresent === false ? '<p>This saved pet has since left your Stable. Reviewing this receipt does not recreate it.</p>' : ''}</div>`;
+  return `<div class="lab-reveal ${certain ? 'lab-direct' : 'lab-surprise'}" data-outcomes="${r.distribution.length}"><div data-lab-result-art>${petSpriteHtml(r.species, 144, false, { morph: r.result.morph, shiny: false, wear: null, thumb: true })}</div><h3>${esc(labColour(r.result.morph))} ${esc(labSpecies(r.species))}</h3><p role="status">${b.gained.length ? `Added to your collection. ${b.afterCount}/${labTotal()}.` : `Another copy. ${b.neededFor ? `Needed for ${esc(b.neededFor)}.` : 'Optional extra copy.'}`}</p><p>${certain ? r.recipe === 'toxic-rose' ? 'Midnight was guaranteed by this recipe.' : 'This saved experiment had a guaranteed result.' : 'Your experiment is saved.'}</p><p>At creation: Level 1. 0 banked steps. Lineage 0. Non-shiny. No inherited name, bond or talents. This receipt records the experiment, not later training or naming.</p><p>${Number.isInteger(r.remaining) ? `${r.remaining} experiment${r.remaining === 1 ? '' : 's'} available today.` : 'Back to Laboratory to check remaining experiments.'}</p>${r.reconciliation ? '<p>This outcome was kept when overlapping offline experiments were reconciled. Reviewing it does not consume pets again.</p>' : ''}${r.resultPresent === false ? '<p>This saved pet has since left your Stable. Reviewing this receipt does not recreate it.</p>' : ''}</div>`;
 }
 function labTodayVisible(s, { current, priorDay, hidden }) {
   return current && priorDay && !hidden && s.status === 'ready' && s.remaining > 0 && s.hasSafeUsefulPair === true && s.collectionCount < labTotal();
@@ -21398,7 +21419,7 @@ function labIncubatorHtml(s) {
   if (n > 3) return '<p>All three incubators are available. Back to bench to choose your pets.</p>';
   if (!s.hasExperiment) return '<p>Try the free daily experiment before adding an incubator. It supplies no pets. Back to bench to see the recipes.</p>';
   const afford = s.coins >= price;
-  return `<p>Incubator ${n}: ${price.toLocaleString()} coins. Adds one experiment each day. It supplies no pets and does not change the odds.</p><p>Capacity: ${s.capacity} to ${n}. Today's remaining uses: ${s.remaining} to ${s.remaining + 1}.</p>${afford ? '' : `<p>Incubator ${n} costs ${price.toLocaleString()} coins. You have ${s.coins.toLocaleString()}; ${(price - s.coins).toLocaleString()} more needed. Earn coins from your daily activities, or use the bench with your current capacity.</p>`}<p>${s.used === 0 ? 'Your free daily experiment is available.' : 'Your free daily experiment has been used. It returns at the next experiment reset.'}</p><button class="btn" data-lab-buy="${n}" ${afford && s.status === 'ready' ? '' : 'disabled'}>Review incubator purchase</button>`;
+  return `<p>Incubator ${n}: ${price.toLocaleString()} coins. Adds one experiment each day. It supplies no pets and does not change the odds.</p><p>Capacity: ${s.capacity} to ${n}. Today's remaining uses: ${s.remaining} to ${Math.max(0, n - s.used)}.</p>${afford ? '' : `<p>Incubator ${n} costs ${price.toLocaleString()} coins. You have ${s.coins.toLocaleString()}; ${(price - s.coins).toLocaleString()} more needed. Earn coins from your daily activities, or use the bench with your current capacity.</p>`}<p>${s.used === 0 ? 'Your free daily experiment is available.' : 'Your free daily experiment has been used. It returns at the next experiment reset.'}</p><button class="btn" data-lab-buy="${n}" ${afford && s.status === 'ready' ? '' : 'disabled'}>Review incubator purchase</button>`;
 }
 function labPickerHtml(s, selected, slot, sp = '', colour = '') {
   const other = s.pets.find(p => p.iid === selected[1 - slot]);
@@ -21418,13 +21439,13 @@ function labBenchHtml(s, selected, sp, q = null, choosingSpecies = false) {
   const nextSlot = empty < 0 ? 0 : empty;
   const activeId = pair?.id || labRecipes.find(r => pets.some(p => p && r.inputs.includes(p.morph)))?.id || 'base-base';
   const active = labRecipes.find(r => r.id === activeId);
-  const prompt = s.status === 'ready' && s.remaining === 0 ? `You've used ${s.used}/${s.capacity} experiments today. Experiments reset at ${s.resetTime}, ${s.zone}.` : !canWork ? labStateCopy(s, sp) : !sp ? 'Choose a species, then choose two pets.' : empty >= 0 ? `Choose ${empty === 0 ? 'first' : 'second'} pet to review a pair.` : !pair ? 'These pets do not match a recipe. Choose a different first or second pet.' : 'Review shows the exact collection colours lost and gained before you confirm.';
+  const prompt = s.status === 'ready' && s.remaining === 0 ? labDailyCopy(s) : !canWork ? labStateCopy(s, sp) : !sp ? 'Choose a species, then choose two pets.' : empty >= 0 ? `Choose ${empty === 0 ? 'first' : 'second'} pet to review a pair.` : !pair ? 'These pets do not match a recipe. Choose a different first or second pet.' : 'Review shows the exact collection colours lost and gained before you confirm.';
   const working = `<section class="lab-working"><h3>${pets.some(Boolean) ? `${active.inputs.map(labColour).join(' + ')}: choose your pair` : 'Choose your pair'}</h3><div class="lab-slots" aria-label="Two pets to combine">${[0, 1].map(i => { const p = pets[i]; return `<section><button class="lab-pet${sp && canWork && !canReview && nextSlot === i ? ' lab-next' : ''}" data-lab-slot="${i}" ${canWork ? '' : 'disabled'}>${p ? labPetDetails(p, true) : `Choose ${i === 0 ? 'first' : 'second'} pet`}</button>${p ? `<button class="link" data-lab-clear="${i}">Clear ${i === 0 ? 'first' : 'second'} pet</button>` : ''}</section>`; }).join('<span class="lab-plus" aria-hidden="true">+</span>')}</div>${q ? labOutcomesHtml(q) : ''}${q ? labBranchesHtml(q) : ''}<p id="labPairHint"${canWork ? '' : ' role="status"'}>${esc(prompt)}</p><button class="btn ${canReview ? 'lab-next' : 'ghost'}" aria-describedby="labPairHint" data-lab-review ${canReview ? '' : 'disabled'}>Review pair</button></section>`;
   const status = labStateCopy(s, sp);
   const available = `${s.remaining} experiment${s.remaining === 1 ? '' : 's'} available today.`;
   const recovery = s.unseen?.length ? '<section class="lab-recovery"><p>Your last session ended before you saw your experiment. The result is saved. Open it to review.</p><button class="btn ghost" data-lab-recover>Review saved experiment</button></section>' : '';
   const noPair = !s.pets.length || !s.hasEligiblePair || (sp && s.species[sp]?.hasEligiblePair === false);
-  return `${recovery}<p>Make a new colour from two pets of the same species.</p>${labSpeciesHtml(s, sp, choosingSpecies)}<section class="lab-availability">${canWork ? `<details class="lab-clock"><summary>${available}</summary><p>${s.used}/${s.capacity} experiments used</p><p>Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p></details>` : ''}${status !== available && status !== prompt ? `<p role="status">${esc(status)}</p>` : ''}${noPair ? '<nav class="lab-links" aria-label="Find a pair"><button class="btn ghost" data-lab-nav="eggs">Eggs</button>' + (sp ? '<button class="btn ghost" data-lab-change-species>Change species</button>' : '') + '</nav>' : ''}</section>${working}${labRecipesHtml(s, sp)}
+  return `${labReconciledHtml(s)}${recovery}<p>Make a new colour from two pets of the same species.</p>${labSpeciesHtml(s, sp, choosingSpecies)}<section class="lab-availability">${canWork ? `<details class="lab-clock"><summary>${available}</summary><p>${s.used}/${s.capacity} experiments used</p><p>Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p></details>` : ''}${status !== available && status !== prompt ? `<p role="status">${esc(status)}</p>` : ''}${noPair ? '<nav class="lab-links" aria-label="Find a pair"><button class="btn ghost" data-lab-nav="eggs">Eggs</button>' + (sp ? '<button class="btn ghost" data-lab-change-species>Change species</button>' : '') + '</nav>' : ''}</section>${working}${labRecipesHtml(s, sp)}
 <details id="labHelp" ${s.ui?.introRead ? '' : 'open'}><summary>How the recipes work</summary><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>
 <button class="${sp && !canWork ? 'btn lab-next' : 'link lab-collection'}" data-lab-nav="collection">Your collection: ${s.collectionCount} of ${labTotal()} colours</button><details class="lab-more"><summary>More pet actions</summary>${s.status !== 'ready' ? '<p>One experiment each day is free. Permanent incubators can add two more.</p>' : ''}<div class="lab-eggs">${s.eggs.length ? s.eggs.map(e => `<p>Egg: ${e.ready ? 'Ready to hatch' : `${e.steps.toLocaleString()}/${e.goal.toLocaleString()} steps`}. Open eggs to ${e.ready ? 'hatch it' : 'check progress'}.</p>`).join('') : '<p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p>'}</div>${labSinksHtml()}${s.status === 'ready' ? '<button class="link" data-lab-incubators>Incubators</button>' : ''}</details>`;
 }
@@ -21501,7 +21522,7 @@ function openPetDestructionReview({ title, html, typed = false, accepts = t => t
       if (result?.close && wrap.isConnected) history.back();
     } catch {
       finished = true;
-      status.textContent = 'The save could not be checked. Reopen the room to review it before trying again.';
+      status.textContent = 'The save could not be verified. This action is paused while its status is unresolved.';
     } finally { busy = false; }
   });
   return wrap;
@@ -21619,7 +21640,7 @@ async function openLaboratory() {
         const refused = ['confirmed-abort', 'stale-quote', 'ineligible', 'cap-reached', 'clock-backwards', 'unwitnessed-day', 'restore-conflict'].includes(result.reason);
         if (refused) labUncertainOperation = null;
         quote = null;
-        return { message: result.reason === 'confirmed-abort' ? 'That experiment did not save. Both pets and your experiment are still available. Cancel and review the pair to try again.' : !refused ? labStateCopy({ status: 'unknown' }) : 'Your pets or available experiments changed. Cancel and review the updated pair and odds.' };
+        return { message: result.reason === 'confirmed-abort' ? 'That experiment did not save. Cancel and review your current pets and available experiments.' : !refused ? labStateCopy({ status: 'unknown' }) : 'Your pets or available experiments changed. Cancel and review the updated pair and odds.' };
       } });
     } catch { toast('The Laboratory could not be read. Reopen the room to check your pets and experiments.'); if (wrap.isConnected) await draw(); }
   }
@@ -22137,8 +22158,15 @@ async function importBackupFromFile(file) {
     const wrongFile = err instanceof SyntaxError || /Not a Tally backup/i.test(err.message || '');
     toast(wrongFile
       ? "That doesn't look like a Boneheadz Gym backup. Pick the .json file you exported."
-      : 'Import failed: ' + err.message, 6200);
+      : fileImportFailure(err), 6200);
   }
+}
+
+function fileImportFailure(err) {
+  if (err.message === 'laboratory-restore-conflict') {
+    return 'Restore blocked: this backup is missing or conflicts with Laboratory experiments or incubator purchases on this device. This protects pets and purchases from being undone or duplicated. Your current save is unchanged. Choose a newer backup that includes those records.';
+  }
+  return 'Import failed: ' + err.message;
 }
 
 function fileReplacementHtml(current, next) {
@@ -22198,7 +22226,7 @@ function openFileReplacementReview(data, current, next, undo = false) {
         await finishFileImport(counts);
         return { message: 'Backup restored. Return through Settings → Restore points.' };
       } catch (err) {
-        const message = 'Import failed: ' + err.message + ' Existing restore points remain available in Settings → Restore points.';
+        const message = fileImportFailure(err) + ' Existing restore points remain available in Settings → Restore points.';
         toast(message, 7200);
         return { message };
       }
@@ -23162,13 +23190,13 @@ async function renderBoneyard(el) {
       openSheet(`
         <h2>${title}</h2>
         <p class="muted" style="margin:0 0 12px">${lead}</p>
-        ${coords ? `<p class="muted" style="font-size:12px;margin:0 0 10px">📍 ${coords}</p>` : ''}
+        ${coords ? `<p class="muted" style="font-size:var(--fs-1);margin:0 0 10px">📍 ${coords}</p>` : ''}
         <textarea id="rptNote" rows="3" maxlength="280" placeholder="${esc(ph)}" style="width:100%;box-sizing:border-box;resize:vertical"></textarea>
         <div class="row" style="gap:8px;margin-top:12px">
           <button class="btn ghost sheet-close" style="flex:0 0 auto">Cancel</button>
           <button class="btn" id="rptSend" style="flex:1">Send to devs</button>
         </div>
-        <p class="muted" id="rptStatus" style="font-size:12px;margin:10px 0 0"></p>
+        <p class="muted" id="rptStatus" style="font-size:var(--fs-1);margin:10px 0 0"></p>
       `, { cls: 'sheet-report', name: 'map_report', onClose: () => { reportOpen = false; } });
       const btn = $('#rptSend'); const statusEl = $('#rptStatus');
       btn?.addEventListener('click', async () => {
@@ -24470,7 +24498,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v532'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v533'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
@@ -24904,14 +24932,14 @@ async function renderPit(wrap) {
   // a locked rung says WHY ("BEAT RUNG 1") instead of just "locked", and the
   // live fight is never hidden behind a summary you have to open.
   const sparringSect = `
-    <div class="t3-sect"><b>Sparring · no stakes</b><i></i><span class="r chip" style="font-size:11px">Always free</span></div>
+    <div class="t3-sect"><b>Sparring · no stakes</b><i></i><span class="r chip" style="font-size:var(--fs-0)">Always free</span></div>
     ${[['easy', 'Loose Bones', 0.8], ['even', 'Your Shadow', 1.0], ['hard', 'Mean Mirror', 1.15]].map(([id, name, m]) => `
       <div class="t3-row"><span class="t3-med">${ICONS.pit(24)}</span>
         <div class="t3-tx"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · ${sparBoard.line}</small></div>
         <button class="btn ghost" data-spar="${m}" data-name="${name}" aria-label="Fight ${esc(name)}">FIGHT</button>
       </div>`).join('')}`;
   const ladderSect = `
-    <div class="t3-sect"><b>The ladder</b><i></i><span class="r chip" style="font-size:11px">${champOpen ? 'Cleared' : `Rung ${Math.min(rungsBeaten + 1, LADDER.length)} of ${LADDER.length}`}</span></div>
+    <div class="t3-sect"><b>The ladder</b><i></i><span class="r chip" style="font-size:var(--fs-0)">${champOpen ? 'Cleared' : `Rung ${Math.min(rungsBeaten + 1, LADDER.length)} of ${LADDER.length}`}</span></div>
     ${LADDER.map(r => {
       const done = beaten.has(`pitrung-${r.rung}`);
       const locked = r.rung > rungsBeaten + 1;
@@ -24943,7 +24971,7 @@ async function renderPit(wrap) {
      nothing on screen ever said so. */
   const rDone = xpRows.some(r => r.key === denKey(date, rDen));
   const remoteSect = `
-    <div class="t3-sect"><b>Remote den · one a day</b><i></i><span class="r chip" style="font-size:11px">No walking needed</span></div>
+    <div class="t3-sect"><b>Remote den · one a day</b><i></i><span class="r chip" style="font-size:var(--fs-0)">No walking needed</span></div>
     <div class="t3-row${rDone ? ' done' : ''}">
       <span class="t3-med">${badgePixHtml('badge-skull', 20)}</span>
       <div class="t3-tx"><b>${esc(rDen.boss)}</b><small>${esc(rDen.name)} · ${rDone
@@ -24962,7 +24990,7 @@ async function renderPit(wrap) {
       ${champOpen ? `<button class="btn ${champBeaten ? 'ghost' : ''}" id="champBtn" ${gate} aria-label="${champBeaten ? 'Rematch' : 'Fight'} ${esc(CHAMPION.name)}, the Champion">${champBeaten ? 'REMATCH' : 'FIGHT'}</button>` : `<span class="t3-lock">BEAT RUNG ${LADDER.length}</span>`}
     </div>`;
   const endlessSect = `
-    <div class="t3-sect"><b>Endless · The Gauntlet</b><i></i>${champBeaten ? `<span class="r chip" style="font-size:11px">${canNewRank ? `Rank ${fightRank}` : 'At the cap'}</span>` : ''}</div>
+    <div class="t3-sect"><b>Endless · The Gauntlet</b><i></i>${champBeaten ? `<span class="r chip" style="font-size:var(--fs-0)">${canNewRank ? `Rank ${fightRank}` : 'At the cap'}</span>` : ''}</div>
     ${champBeaten ? `
     ${canNewRank
       ? `<p class="note" style="margin:2px 2px 8px">Foes scale as you climb ranks. World bosses raise the ceiling by 3 each. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'} of a possible ${ceiling}.</p>`
@@ -27445,7 +27473,7 @@ async function renderTalents(wrap) {
       <div class="t3-cell"><b>${Math.round(d.spellArmor * 100)}%</b><span class="lab">SPELL ARMOR</span><small>cuts magic damage · grows from Reflex</small></div>
     </div>
 
-    <div class="t3-sect"><b>Training points</b><i></i><span class="r chip" style="font-size:11px">${fighter.tpAvail} to spend${fighter.tpTotal ? ` · ${fighter.tpTotal - fighter.tpAvail}/${fighter.tpTotal} used` : ''}</span></div>
+    <div class="t3-sect"><b>Training points</b><i></i><span class="r chip" style="font-size:var(--fs-0)">${fighter.tpAvail} to spend${fighter.tpTotal ? ` · ${fighter.tpTotal - fighter.tpAvail}/${fighter.tpTotal} used` : ''}</span></div>
     ${STAT_META.map(m => {
       const bonus = (fighter.alloc[m.key] || 0) * TRAIN_STEP;
       const gb = fighter.gearBonus?.[m.key] || 0;
@@ -27479,7 +27507,7 @@ async function renderTalents(wrap) {
     ${/* The mockup put a row here linking to "the talent tree". The trees are
           already inline on this screen, so a button pointing 100px down would be
           furniture: the section rule + its count carries the same job. */''}
-    <div class="t3-sect"><b>Talents</b><i></i><span class="r chip" style="font-size:11px">${unspent} to pick · Lv ${lvl.level}</span></div>
+    <div class="t3-sect"><b>Talents</b><i></i><span class="r chip" style="font-size:var(--fs-0)">${unspent} to pick · Lv ${lvl.level}</span></div>
     <p class="note" style="margin:2px 2px 14px">Specs change how you fight: new moves, new rhythms. Mix trees or go deep. Respec any time, free.</p>
     ${TALENT_TREES.map(tree => {
       const treeMax = tree.nodes.reduce((a, n) => a + nodeRanks(n), 0);

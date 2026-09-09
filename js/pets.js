@@ -350,8 +350,8 @@ function rng() {
 // nothing but base across 200 draws (see git history / KENNEL.md section 3).
 //
 // KENNEL PALETTES, 2026-09-05 afternoon, Tom: "roll Bumbleseal into things,
-// her time as shop-exclusive has passed ... part of the morph grid = 6
-// species x 5 morphs = 30 pairs, fresh-first accounting includes her." The
+// her time as shop-exclusive has passed ... part of the morph grid".
+// With Midnight added, 6 species x 6 morphs = 36 pairs. The
 // exclusion above is gone: js/loot.js pickRandomPet no longer special-cases
 // her (hatchChance removed from her catalogue entry), so she is now an
 // ordinary member of the same hatch pool as C1-C5 and belongs in this

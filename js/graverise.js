@@ -172,11 +172,11 @@ const INTRO_STYLE = `
 .gr-intro.gr-out { animation: grIntroOut 0.3s ease both; }
 .gr-intro .gr { width: min(84vw, 60vh * 0.8259); }
 .gr-intro-title { position: absolute; bottom: 12vh; left: 0; right: 0; text-align: center;
-  font-family: var(--display, 'Bangers', 'Arial Black', sans-serif); font-size: clamp(30px, 9vw, 44px);
+  font-family: var(--display, 'Bangers', 'Arial Black', sans-serif); font-size: var(--fs-hero);
   letter-spacing: .04em; color: #b6f04a; text-shadow: 3px 3px 0 rgba(0,0,0,.6);
   animation: grStamp 0.45s cubic-bezier(.34,1.8,.64,1) 1.1s both; }
 .gr-intro-hint { position: absolute; bottom: max(3.4vh, 22px); left: 0; right: 0; text-align: center;
-  font-size: 11px; font-weight: 600; color: #8f8a99; opacity: 0; animation: grIntroFade 0.5s ease 1.5s both; }
+  font-size: var(--fs-0); font-weight: 600; color: #8f8a99; opacity: 0; animation: grIntroFade 0.5s ease 1.5s both; }
 @keyframes grIntroIn { from { opacity: 0; } }
 @keyframes grIntroOut { to { opacity: 0; } }
 @keyframes grStamp { from { opacity: 0; transform: scale(2.2); } to { opacity: 1; transform: scale(1); } }
