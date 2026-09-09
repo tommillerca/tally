@@ -8264,6 +8264,12 @@ test('P1 quest budgets and wheel payouts survive aborted writes', () => {
   assert.match(output, /PASS F21/);
 });
 
+test('p1-kitchen paid cooks and dishes survive aborted delivery with CONTROLs', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'kitchen-delivery-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /KITCHEN DELIVERY: \d+ passed, 0 failed/);
+  assert.match(output, /PASS CONTROL concurrent Serve/);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

@@ -8678,11 +8678,15 @@ async function openKitchen() {
       const price = nextPotPrice(cook.potsOwned);
       armToConfirm($('#buyPot', body), price != null ? `Spend ${price.toLocaleString()}?` : 'Spend?', async () => {
         if (price == null) return;
-        if ((await coins()) < price) { toast(`Need ${price.toLocaleString()} coins for another pot.`, 2800); return; }
-        await coinsAdd(-price);
-        await addPot();
+        const result = await addPot(cook.potsOwned);
+        if (!result.ok) {
+          toast(result.reason === 'coins' ? `Need ${price.toLocaleString()} coins for another pot.`
+            : 'Your cauldrons have changed. Check the current pot offer.', 2800);
+          render();
+          return;
+        }
         popSound(S.sounds);
-        toast(`New cauldron bought! You can now cook ${cook.potsOwned + 1} dishes at once.`, 3200);
+        toast(`New cauldron bought! You can now cook ${result.owned} dishes at once.`, 3200);
         render();
       });
     }
