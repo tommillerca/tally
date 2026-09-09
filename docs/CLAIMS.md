@@ -1,6 +1,6 @@
 # What each patch note claims, and what backs it
 
-## vNEXT
+## v538 (2026-09-09)
 
 Unversioned pending notes in `NEXT_CHANGES`, in matching order.
 
