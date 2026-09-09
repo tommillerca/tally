@@ -182,9 +182,22 @@ for (const httpStatus of [200, 503]) await check(`CONTROL due backup HTTP ${http
   assert.ok(paths.indexOf('/profile') > paths.indexOf('/backup'));
   assert.ok(await kvGet('socialSyncAt', 0));
 });
-await check('CONTROL unregistered player does not build or upload a snapshot', async () => {
+await check('CONTROL missing registration recovers before building and uploading a snapshot', async () => {
+  await seed();
+  const identity = await kvGet('identity');
+  await kvSet('social', null);
+  assert.equal(await social.isOnline(), false);
+  let builds = 0;
+  await social.autoSync(async () => { builds++; return {}; });
+  assert.equal(builds, 1);
+  assert.deepEqual(requests.map(r => r.path), ['/register', '/profile', '/grants']);
+  assert.deepEqual(await kvGet('identity'), identity);
+  assert.ok(await kvGet('socialSyncAt', 0));
+});
+await check('CONTROL a player without an identity does not build or upload a snapshot', async () => {
   await seed();
   await kvSet('social', null);
+  await kvSet('identity', null);
   assert.equal(await social.isOnline(), false);
   let builds = 0;
   await social.autoSync(async () => { builds++; return {}; });

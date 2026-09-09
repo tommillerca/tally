@@ -4,6 +4,12 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 529, date: '2026-09-09', title: 'The app stops failing quietly', items: [
+    'When your profile cannot reach the server, the app now records why and shows you in Settings. It used to fail in complete silence, which is how a problem went unnoticed for three days.',
+    'If a sign-up was interrupted halfway, the app repairs it on the next open instead of leaving you permanently offline while looking perfectly normal.',
+    'A rejected upload no longer blocks the next attempt for five minutes.',
+  ] },
+
   { n: 528, date: '2026-09-09', title: 'Eight things you told us about', items: [
     'The Paddock, the Laboratory and the Kennel are three tiles at the top of the Stable, and the daily wheel has been redrawn so its labels read the right way up instead of sideways.',
     'The Laboratory says things once. It was telling you the same rule three different ways, and printing the same sentence about your daily experiments twice on one screen.',

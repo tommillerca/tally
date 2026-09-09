@@ -1,0 +1,49 @@
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Got unwanted rejection: boot must resolve without an escaping exception
+Actual message: "social.onSyncTrouble is not a function"
+    at async runBoot (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/sync-observability/tests/storage-boot-audit.mjs:68:3)
+    at async file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/sync-observability/tests/storage-boot-audit.mjs:124:3 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: TypeError: social.onSyncTrouble is not a function
+      at boot (evalmachine.<anonymous>:61:10)
+      at async waitForActual (node:assert:644:5)
+      at async Function.doesNotReject (node:assert:787:33)
+      at async runBoot (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/sync-observability/tests/storage-boot-audit.mjs:68:3)
+      at async file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/sync-observability/tests/storage-boot-audit.mjs:124:3,
+  expected: undefined,
+  operator: 'doesNotReject',
+  diff: 'simple'
+}
+
+Node.js v22.22.2
+FAIL R54-4 unavailable storage renders a disclosure; normal boot does not
+  Command failed: /Users/tommiller/.nvm/versions/node/v22.22.2/bin/node /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/sync-observability/tests/storage-boot-audit.mjs
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Got unwanted rejection: boot must resolve without an escaping exception
+Actual message: "social.onSyncTrouble is not a function"
+    at async runBoot (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/sync-observability/tests/storage-boot-audit.mjs:68:3)
+    at async file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/sync-observability/tests/storage-boot-audit.mjs:124:3 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: TypeError: social.onSyncTrouble is not a function
+      at boot (evalmachine.<anonymous>:61:10)
+      at async waitForActual (node:assert:644:5)
+      at async Function.doesNotReject (node:assert:787:33)
+      at async runBoot (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/sync-observability/tests/storage-boot-audit.mjs:68:3)
+      at async file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/sync-observability/tests/storage-boot-audit.mjs:124:3,
+  expected: undefined,
+  operator: 'doesNotReject',
+  diff: 'simple'
+}
+
+Node.js v22.22.2
+
+
+376 passed, 1 failed

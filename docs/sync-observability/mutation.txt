@@ -1,0 +1,71 @@
+Mutation: restore autoSync bare catch and remove outcome finalizer, in an isolated temporary copy.
+FAIL autoSync offline-gate: persisted outcome: NO sync outcome; fetch calls=0; kv keys=["backupAt"]
+FAIL autoSync offline-gate: correct hop and network evidence: Cannot read properties of null (reading 'entries')
+FAIL autoSync offline-gate: real Settings row reports outcome: <div class="settings-row" id="profileSyncStatus"><div class="lab"><b>Profile sync</b><span>No profile server reply recorded yet. No sync attempt recorded yet.</span></div></div>
+FAIL autoSync null-snapshot: persisted outcome: NO sync outcome; fetch calls=1; kv keys=["social","backupAt","identity","idMinted","socialSyncAt"]
+FAIL autoSync null-snapshot: correct hop and network evidence: Cannot read properties of null (reading 'entries')
+FAIL autoSync null-snapshot: real Settings row reports outcome: <div class="settings-row" id="profileSyncStatus"><div class="lab"><b>Profile sync</b><span>No profile server reply recorded yet. No sync attempt recorded yet.</span></div></div>
+FAIL autoSync snapshot-failed: persisted outcome: NO sync outcome; fetch calls=0; kv keys=["social","backupAt"]
+FAIL autoSync snapshot-failed: correct hop and network evidence: Cannot read properties of null (reading 'entries')
+FAIL autoSync snapshot-failed: real Settings row reports outcome: <div class="settings-row" id="profileSyncStatus"><div class="lab"><b>Profile sync</b><span>No profile server reply recorded yet. No sync attempt recorded yet.</span></div></div>
+FAIL autoSync request-failed: persisted outcome: NO sync outcome; fetch calls=1; kv keys=["social","backupAt","identity","idMinted"]
+FAIL autoSync request-failed: correct hop and network evidence: Cannot read properties of null (reading 'entries')
+FAIL autoSync request-failed: real Settings row reports outcome: <div class="settings-row" id="profileSyncStatus"><div class="lab"><b>Profile sync</b><span>No profile server reply recorded yet. No sync attempt recorded yet.</span></div></div>
+FAIL autoSync non-2xx: persisted outcome: NO sync outcome; fetch calls=2; kv keys=["social","backupAt","identity","idMinted","socialSyncAt"]
+FAIL autoSync non-2xx: correct hop and network evidence: Cannot read properties of null (reading 'entries')
+FAIL autoSync non-2xx: real Settings row reports outcome: <div class="settings-row" id="profileSyncStatus"><div class="lab"><b>Profile sync</b><span>No profile server reply recorded yet. No sync attempt recorded yet.</span></div></div>
+FAIL autoSync grants-failed: persisted outcome: NO sync outcome; fetch calls=2; kv keys=["social","backupAt","identity","idMinted","socialSyncAt"]
+FAIL autoSync grants-failed: correct hop and network evidence: Cannot read properties of null (reading 'entries')
+FAIL autoSync grants-failed: real Settings row reports outcome: <div class="settings-row" id="profileSyncStatus"><div class="lab"><b>Profile sync</b><span>No profile server reply recorded yet. No sync attempt recorded yet.</span></div></div>
+FAIL autoSync grants-throw: persisted outcome: NO sync outcome; fetch calls=2; kv keys=["social","backupAt","identity","idMinted"]
+FAIL autoSync grants-throw: correct hop and network evidence: Cannot read properties of null (reading 'entries')
+FAIL autoSync grants-throw: real Settings row reports outcome: <div class="settings-row" id="profileSyncStatus"><div class="lab"><b>Profile sync</b><span>No profile server reply recorded yet. No sync attempt recorded yet.</span></div></div>
+FAIL autoSync grants-body: persisted outcome: NO sync outcome; fetch calls=2; kv keys=["social","backupAt","identity","idMinted","socialSyncAt"]
+FAIL autoSync grants-body: correct hop and network evidence: Cannot read properties of null (reading 'entries')
+FAIL autoSync grants-body: real Settings row reports outcome: <div class="settings-row" id="profileSyncStatus"><div class="lab"><b>Profile sync</b><span>No profile server reply recorded yet. No sync attempt recorded yet.</span></div></div>
+FAIL autoSync success: persisted outcome: NO sync outcome; fetch calls=2; kv keys=["social","backupAt","identity","idMinted","socialSyncAt"]
+FAIL autoSync success: correct hop and network evidence: Cannot read properties of null (reading 'entries')
+FAIL autoSync success: real Settings row reports outcome: <div class="settings-row" id="profileSyncStatus"><div class="lab"><b>Profile sync</b><span>No profile server reply recorded yet. No sync attempt recorded yet.</span></div></div>
+PASS pushProfileSoon offline-gate: persisted outcome
+PASS pushProfileSoon offline-gate: correct hop and network evidence
+PASS pushProfileSoon offline-gate: real Settings row reports outcome
+PASS pushProfileSoon null-snapshot: persisted outcome
+PASS pushProfileSoon null-snapshot: correct hop and network evidence
+PASS pushProfileSoon null-snapshot: real Settings row reports outcome
+PASS pushProfileSoon snapshot-failed: persisted outcome
+PASS pushProfileSoon snapshot-failed: correct hop and network evidence
+PASS pushProfileSoon snapshot-failed: real Settings row reports outcome
+PASS pushProfileSoon request-failed: persisted outcome
+PASS pushProfileSoon request-failed: correct hop and network evidence
+PASS pushProfileSoon request-failed: real Settings row reports outcome
+PASS pushProfileSoon non-2xx: persisted outcome
+PASS pushProfileSoon non-2xx: correct hop and network evidence
+PASS pushProfileSoon non-2xx: real Settings row reports outcome
+PASS pushProfileSoon success: persisted outcome
+PASS pushProfileSoon success: correct hop and network evidence
+PASS pushProfileSoon success: real Settings row reports outcome
+FAIL autoSync: signing failure is recorded before fetch: Cannot read properties of null (reading 'entries')
+PASS pushProfileSoon: signing failure is recorded before fetch
+FAIL real request deadline records TimeoutError and no server reply: Cannot read properties of null (reading 'entries')
+PASS direct syncProfile success
+PASS direct syncProfile non-2xx
+PASS direct syncProfile request-failed
+PASS brief failures stay quiet
+FAIL three failures across an hour give one calm notice: Expected values to be strictly equal:
+
+0 !== 1
+
+FAIL a continuing three-day outage does not repeat the notice: Expected values to be strictly equal:
+
+0 !== 1
+
+file:///private/tmp/sync-mutation-rlida9jp/tests/sync-observability-audit.mjs:145
+  const accepted = state.lastAcceptedAt;
+                         ^
+
+TypeError: Cannot read properties of null (reading 'lastAcceptedAt')
+    at file:///private/tmp/sync-mutation-rlida9jp/tests/sync-observability-audit.mjs:145:26
+
+Node.js v22.22.2
+
+Exit code: 1

@@ -245,7 +245,7 @@ const QUIET_KV = new Set([
   'hkStaleNotified', 'hkSyncIssue', 'hkSleepDiag', 'lastExportAt', 'backupAt', 'backupVersion', 'transmuteAt',
   // cloud-health diagnostics + their once-a-day nudge throttle: all three are
   // re-derived by the next push / the next /health, same class as backupAt
-  'backupFail', 'clockSkewMs', 'cloudNudgeAt',
+  'backupFail', 'clockSkewMs', 'cloudNudgeAt', 'syncHealth',
   // idempotent one-shot migrations and backfills: they re-run next launch
   'game-init', 'loot-init', 'bootRestored', 'dayOneEquipFix', 'denceil-backfill',
   'seedpouch-backfill', 'freeze-refunded', 'wheelResetOnce_v61', 'petLvlV', 'hkScopesV',
@@ -1362,7 +1362,7 @@ export async function exportAll() {
     for (const store of STORES) {
       const g = t.objectStore(store).getAll();
       g.onsuccess = () => {
-        snapshot[store] = g.result;
+        snapshot[store] = store === 'kv' ? g.result.filter(r => r.k !== 'syncHealth') : g.result;
         if (store === 'log') seedDiary();
         if (store !== 'kv') return;
         try {
@@ -1428,7 +1428,7 @@ export async function exportAll() {
  * has climbed to (the newest day it has stood on, and the newest day it has
  * seen the server stand on), and a restore is a statement about the save, not
  * about where this device's clock has been. */
-const DEVICE_KV = ['identity', 'social', 'recoveryId', 'recoverySetAt', 'vaultConflict', 'bootRestored', 'cloudOff', 'apiBase', 'backupVersion', DAY_WITNESS_KEY, 'dayHighWater'];
+const DEVICE_KV = ['syncHealth', 'identity', 'social', 'recoveryId', 'recoverySetAt', 'vaultConflict', 'bootRestored', 'cloudOff', 'apiBase', 'backupVersion', DAY_WITNESS_KEY, 'dayHighWater'];
 
 // P3: refuse unreadable known containers before replacing any store. Unknown
 // keys and unknown fields remain opaque, so exporting cannot discard new data.
@@ -1571,6 +1571,8 @@ export function validateImport(data) {
 }
 
 export function fileReplacementPreview(current, data) {
+  // Diagnostics describe this device and must never travel with a save.
+  if (data.kv) data = { ...data, kv: data.kv.filter(r => r?.k !== 'syncHealth') };
   const next = Object.fromEntries(STORES.map(s => [s, data[s] || current[s]]));
   const local = Object.fromEntries(current.kv.map(r => [r.k, r.v]));
   const file = Object.fromEntries((data.kv || []).map(r => [r.k, r.v]));
@@ -1589,6 +1591,8 @@ export function fileReplacementPreview(current, data) {
 export async function importAll(data, { replace = true, expectedFileState = null } = {}) {
   if (frozen) throw new Error('this save was erased in another tab. Reload and try again.');
   validateImport(data);
+  // Diagnostics describe this device and must never travel with a save.
+  if (data.kv) data = { ...data, kv: data.kv.filter(r => r?.k !== 'syncHealth') };
   const idb = await open();
   const declared = new Set(STORES.filter(s => Array.isArray(data[s])));
   const skipped = STORES.filter(s => !declared.has(s));

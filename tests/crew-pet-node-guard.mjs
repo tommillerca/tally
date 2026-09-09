@@ -7,6 +7,8 @@ import vm from 'node:vm';
 import * as art from '../data/boneheadz.js';
 import * as pets from '../js/pets.js';
 import * as anim from '../js/petanim.js';
+import './mem-idb.mjs';
+import * as syncHealth from '../js/sync-health.js';
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 const app = read('../js/app.js');
@@ -25,7 +27,7 @@ vm.runInContext(cut(server, 'const RACE_RULES =', '\n') + '\n' +
 vm.runInContext(cut(server, '        const shape = r => {', '\n        /* `truncated`'), serverCtx);
 
 let input, response, uploaded;
-const ctx = vm.createContext({ ...art, ...pets, ...anim,
+const ctx = vm.createContext({ ...art, ...pets, ...anim, ...syncHealth,
   window: { devicePixelRatio: 2 },
   // A different viewer wardrobe must not supply the friend's accessories.
   S: { petWear: { CE: 'CE1' } },
@@ -44,10 +46,10 @@ const ctx = vm.createContext({ ...art, ...pets, ...anim,
     if (method === 'PUT') {
       assert.equal(path, '/profile');
       uploaded = clean(body).snapshot;
-      return { ok: true, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => ({}) };
     }
     assert.equal(method, 'GET'); assert.equal(path, '/friends');
-    return { ok: true, json: async () => clean(response) };
+    return { ok: true, status: 200, json: async () => clean(response) };
   },
   // Avatar composition is a sibling, outside the pet markup being graded.
   avatarLayersHtml: () => '<div class="bh-anim"></div>',
@@ -56,7 +58,7 @@ const ctx = vm.createContext({ ...art, ...pets, ...anim,
 const pieces = [
   cut(social, '// Validate parsed responses', '/* ---------------- account').replaceAll('export ', ''),
   cut(app, 'async function socialSnapshot()', '// Push the public profile snapshot'),
-  cut(social, 'export async function syncProfile(', '/* ---------------- full encrypted backup').replace('export ', ''),
+  cut(social, 'export async function syncProfile(', '/* ---------------- full encrypted backup').replaceAll('export ', ''),
   cut(social, 'export async function listFriends()', '// Incoming friend requests').replace('export ', ''),
   cut(app, 'function staticMassScale(', '// Render a static pet image'),
   cut(app, 'const wearOf =', '\n'),
