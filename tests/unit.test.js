@@ -5744,9 +5744,10 @@ test('R22-W13 the bar disarms on commit, every price tag carries the unit, a dol
   const apply = app.slice(app.indexOf('async function applyLook(btn)'), app.indexOf("$$('[data-equipgear]', content)"));
   const ok = apply.indexOf('S.lookPreview = null;'), disarm = apply.indexOf("classList.remove('armed')"), dis = apply.indexOf('btn.disabled = true;'), restage = apply.indexOf('restageLook({ committed: true })');
   assert.ok(ok > 0 && disarm > ok && dis > ok && restage > dis, 'applyLook must drop .armed and disable the button before restageLook({ committed: true }) (QA round 22 W13a)');
-  // the resting bar: not armed, button disabled
+  // An idle slot has no bar. A real pending change arms the bar.
   assert.match(app, /class="look-bar mog-bar\$\{changed \? ' armed' : ''\}"/, 'the bar is armed only while a change is selected');
-  assert.match(app, /: '<button class="btn ghost mog-go" disabled>Wear it<\/button>'/, 'nothing selected renders a disabled Wear it');
+  const bar = app.slice(app.indexOf('const mogBarHtml ='), app.indexOf('const fbWornItem ='));
+  assert.match(bar, /if \(!changed\) return '';/, 'nothing selected renders no confirm bar');
   // (b) no bare price span is left: every priced look tag goes through costTag (dust unit)
   assert.doesNotMatch(app, /<span class="look-cost">\$\{/, 'a bare `12` price tag survives; use costTag (QA round 22 W13b)');
   // 3 since 2026-09-05: the v2 grid prices a lone tile and a family tile separately
@@ -6221,7 +6222,7 @@ test('REV-2: TestFlight invite card is gated by the store build flag', () => {
 
 test('REV-5: wheel weights sum to 95 and comment reflects it', () => {
   const wheel = readFileSync(join(here, '..', 'js', 'wheel.js'), 'utf8');
-  assert.match(wheel, /weights\s+sum\s+to\s+95.*probabilities\s+are\s+w\/95/, 'wheel comment does not state weights sum to 95 with normalized probabilities');
+  assert.match(wheel, /weights\s+sum\s+to\s+95.*probabilities\s+are\s+w\/95/i, 'wheel comment does not state weights sum to 95 with normalized probabilities');
   const prizeMatch = wheel.match(/const\s+PRIZES\s*=\s*\[[^]*?\n\];/);
   assert.ok(prizeMatch, 'PRIZES array not found');
   const prizes = prizeMatch[0];

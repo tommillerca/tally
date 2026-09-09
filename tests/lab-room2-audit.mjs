@@ -25,7 +25,7 @@ function observations(rows) {
     11:{status:r('one-spare').status,hasEligiblePair:r('one-spare').hasEligiblePair},
     12:{button:terminal.first.match(/<section class="lab-pick-row">[\s\S]*?<\/section>/g).find(h=>h.includes('Midnight')).match(/<button[^>]*>/)[0],text:plain(terminal.first)},
     13:{hasExperiment:r('incubator-hidden').hasExperiment,html:r('incubator-hidden').bench.match(/<button[^>]*data-lab-incubators[^>]*>/)?.[0]||'',purchase:plain(r('incubator-hidden').incubator)},
-    14:{slots:capped.match(/<button[^>]*data-lab-slot="\d"[^>]*>/g),hint:capped.match(/<p id="labPairHint">(.*?)<\/p>/)[1]},
+    14:{slots:capped.match(/<button[^>]*data-lab-slot="\d"[^>]*>/g),hint:capped.match(/<p id="labPairHint"[^>]*>(.*?)<\/p>/)[1]},
     16:{live:r('old-receipt').live,text:plain(r('old-receipt').html)},
     17:{introRead:r('help-callback').introRead,details:r('help-callback').html.match(/<details id="labHelp"[^>]*>/)[0]},
     18:r('clock-callback'),19:r('ingredient-callback'),

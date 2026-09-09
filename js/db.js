@@ -1247,6 +1247,98 @@ export async function dayGuardState() {
   return { highWater, witness: w, witnessGrace: WITNESS_GRACE, ceiling: w ? w + WITNESS_GRACE : null };
 }
 
+// File review must not call exportAll: that function seeds merge histories.
+export function sameSaveRows(a, b) {
+  const canonical = value => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k])]));
+    return value;
+  };
+  const rows = value => (value || []).map(row => JSON.stringify(canonical(row))).sort();
+  return JSON.stringify(rows(a)) === JSON.stringify(rows(b));
+}
+
+export async function readFileSave() {
+  if (frozen) throw new Error(FROZEN_MSG);
+  const idb = await open();
+  return new Promise((resolve, reject) => {
+    const t = idb.transaction(STORES, 'readonly');
+    const data = { app: 'tally', version: DB_VERSION, exportedAt: new Date().toISOString() };
+    for (const s of STORES) {
+      const r = t.objectStore(s).getAll();
+      r.onsuccess = () => { data[s] = r.result; };
+    }
+    t.oncomplete = () => resolve(data);
+    t.onerror = t.onabort = () => reject(t.error || new Error('Could not read the current save.'));
+  });
+}
+
+// Separate from the imported stores, scoped to this database, and append-only.
+// No retention eviction: a full/disabled localStorage refuses the import.
+const filePointPrefix = () => `tally-file-restore:${encodeURIComponent(dbName)}:`;
+export function fileRestorePoints() {
+  const points = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key?.startsWith(filePointPrefix())) {
+      const point = JSON.parse(localStorage.getItem(key));
+      if (!point?.data || STORES.some(s => !Array.isArray(point.data[s]))) throw new Error('A restore point could not be read.');
+      points.push({ ...point, key });
+    }
+  }
+  return points.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+export function saveFileRestorePoint(data) {
+  if (frozen) throw new Error(FROZEN_MSG);
+  const point = { createdAt: new Date().toISOString(), data };
+  const key = filePointPrefix() + newId();
+  try {
+    const bytes = JSON.stringify(point);
+    localStorage.setItem(key, bytes);
+    if (localStorage.getItem(key) !== bytes) throw new Error('Restore point verification failed');
+  } catch {
+    throw new Error('Could not save a restore point (storage is full or unavailable). Nothing was replaced. Free device storage and try again.');
+  }
+  return { ...point, key };
+}
+function eraseFileRestorePoints() {
+  // No localStorage in Node-only consumers. In a browser, a removal failure
+  // rejects eraseAll, so the destructive UI offers retry instead of success.
+  if (typeof localStorage === 'undefined') return;
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key?.startsWith(filePointPrefix())) keys.push(key);
+  }
+  for (const key of keys) localStorage.removeItem(key);
+}
+
+// A local restore point is an exact rollback, including internal bookkeeping.
+// Cloud and ordinary file imports continue to use importAll's existing rules.
+export async function restoreFileSave(data, expected) {
+  if (frozen) throw new Error(FROZEN_MSG);
+  if (STORES.some(s => !Array.isArray(data?.[s]))) throw new Error('That restore point is damaged.');
+  const idb = await open();
+  return new Promise((resolve, reject) => {
+    const t = idb.transaction(STORES, 'readwrite');
+    const reads = STORES.map(s => [s, t.objectStore(s).getAll()]);
+    let error;
+    reads.at(-1)[1].onsuccess = () => {
+      try {
+        if (reads.some(([s, r]) => !sameSaveRows(r.result, expected[s]))) throw new Error('Your save changed after the review. Nothing was replaced. Reopen Restore points to review it again.');
+        for (const s of STORES) {
+          const store = t.objectStore(s);
+          store.clear();
+          for (const row of data[s]) store.put(row);
+          bumpStore(s);
+        }
+      } catch (e) { error = e; t.abort(); }
+    };
+    t.oncomplete = resolve;
+    t.onerror = t.onabort = () => reject(error || t.error || new Error('The restore did not finish. Your old data is unchanged.'));
+  });
+}
+
 export async function exportAll() {
   if (frozen) throw new Error(FROZEN_MSG);
   const idb = await open();
@@ -1441,8 +1533,7 @@ function validateRestoreKv(rows) {
  * `replace: false` keeps the old additive behaviour for callers whose
  * contract is a merge rather than a restore. js/social.js's cloud pull is
  * the only one. */
-export async function importAll(data, { replace = true } = {}) {
-  if (frozen) throw new Error('this save was erased in another tab. Reload and try again.');
+export function validateImport(data) {
   if (!data || data.app !== 'tally' || !Array.isArray(data.log)) throw new Error('Not a Tally backup file');
   /* STORES is the module-level export above. importAll used to keep its own
      copy of this list, and a second copy in js/app.js's erase loop is what
@@ -1477,6 +1568,27 @@ export async function importAll(data, { replace = true } = {}) {
     }
   }
   validateMergeHistory(data.kv || [], data.log);
+}
+
+export function fileReplacementPreview(current, data) {
+  const next = Object.fromEntries(STORES.map(s => [s, data[s] || current[s]]));
+  const local = Object.fromEntries(current.kv.map(r => [r.k, r.v]));
+  const file = Object.fromEntries((data.kv || []).map(r => [r.k, r.v]));
+  if (data.kv) {
+    const kv = new Map(data.kv.map(r => [r.k, r]));
+    for (const r of current.kv) if (DEVICE_KV.includes(r.k) && !kv.has(r.k)) kv.set(r.k, r);
+    for (const [k, rank] of [[DAY_WITNESS_KEY, v => Number(v) || 0], ['dayHighWater', v => dayOrdinal(v) || 0]]) {
+      if (rank(local[k]) > rank(file[k])) kv.set(k, { k, v: local[k] });
+    }
+    next.kv = [...kv.values()];
+  }
+  mergeLabSave(local, file, Object.fromEntries(next.kv.map(r => [r.k, r.v])), true);
+  return next;
+}
+
+export async function importAll(data, { replace = true, expectedFileState = null } = {}) {
+  if (frozen) throw new Error('this save was erased in another tab. Reload and try again.');
+  validateImport(data);
   const idb = await open();
   const declared = new Set(STORES.filter(s => Array.isArray(data[s])));
   const skipped = STORES.filter(s => !declared.has(s));
@@ -1490,10 +1602,17 @@ export async function importAll(data, { replace = true } = {}) {
     catch { reject(new Error('the restore could not open storage. Your old data is unchanged. Try again.')); return; }
     t.oncomplete = () => resolve({ foods: (data.foods || []).length, log: (data.log || []).length, weights: (data.weights || []).length, skipped });
     t.onerror = t.onabort = () => reject(mergeError || new Error('the restore did not finish. Your old data is unchanged. Try again.'));
+    // File imports alone carry a reviewed state. Check every store under the
+    // replacement's write lock, before any clear/put, including queued payouts.
+    const reviewedReads = expectedFileState && replace
+      ? STORES.map(s => [s, t.objectStore(s).getAll()]) : null;
     const localLogRead = t.objectStore('log').getAll();
     const read = t.objectStore('kv').getAll();
     read.onsuccess = () => {
       try {
+        if (reviewedReads && reviewedReads.some(([s, r]) => !sameSaveRows(r.result, expectedFileState[s]))) {
+          throw new Error('Your save changed after the review. Nothing was replaced. Pick the file again to review the latest progress.');
+        }
         const localKv = read.result;
         if (!replace) validateMergeHistory(localKv, localLogRead.result);
         if (replace && !declared.has('kv')) {
@@ -1809,6 +1928,7 @@ export async function eraseAll() {
     t.onerror = () => reject(t.error);
     t.onabort = () => reject(t.error || new Error('erase aborted'));
   });
+  eraseFileRestorePoints();
   if (ch) try { ch.postMessage({ t: 'erased' }); } catch { /* channel gone */ }
   markErased();
 }

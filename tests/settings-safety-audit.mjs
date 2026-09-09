@@ -18,6 +18,19 @@ function run(code, deps) {
   return new AsyncFunction(...Object.keys(deps), code)(...Object.values(deps));
 }
 let passed = 0, failed = 0, sequence = 0, abortClear = false;
+let events = [], quotaFailure = false, snapshotHook = null, verificationFailure = false, lastDatabase;
+const local = new Map();
+globalThis.localStorage = {
+  get length() { return local.size; }, key: i => [...local.keys()][i] ?? null,
+  getItem: key => verificationFailure ? null : local.get(key) ?? null,
+  setItem(key, value) {
+    events.push('snapshot-write');
+    if (quotaFailure) throw new DOMException('full', 'QuotaExceededError');
+    local.set(key, String(value));
+    snapshotHook?.();
+  },
+  removeItem: key => local.delete(key),
+};
 // Inject an actual transaction abort after eraseAll schedules its clears.
 const originalOpen = indexedDB.open;
 indexedDB.open = (...args) => {
@@ -27,14 +40,17 @@ indexedDB.open = (...args) => {
     get: () => event => {
       const originalTransaction = request.result.transaction;
       request.result.transaction = (...args) => {
+        events.push(`transaction:${args[1]}`);
         const tx = originalTransaction(...args), objectStore = tx.objectStore;
         tx.objectStore = name => {
-          const store = objectStore(name), clear = store.clear;
-          store.clear = () => { const result = clear(); if (abortClear) tx.abort(); return result; };
+          const store = objectStore(name), clear = store.clear, put = store.put;
+          store.put = value => { events.push('put:' + name); return put(value); };
+          store.clear = () => { events.push('clear:' + name); const result = clear(); if (abortClear === true || abortClear === name) tx.abort(); return result; };
           return store;
         };
         return tx;
       };
+      lastDatabase = request.result;
       success?.(event);
     },
     set: fn => { success = fn; },
@@ -44,13 +60,14 @@ indexedDB.open = (...args) => {
 async function test(name, fn) {
   try {
     D.useDbName(`settings-safety-${++sequence}`);
+    events = [];
     await fn(); passed++; console.log(`PASS ${name}`);
   } catch (error) { failed++; console.log(`FAIL ${name}: ${error.message}`); }
-  finally { abortClear = false; }
+  finally { abortClear = false; quotaFailure = false; snapshotHook = null; verificationFailure = false; }
 }
 function harness(extra = {}) {
   const nodes = new Map(), messages = [], downloads = [];
-  let reloads = 0, html = '';
+  let reloads = 0, html = '', sheetOptions;
   const $ = selector => {
     if (!nodes.has(selector)) nodes.set(selector, {
       value: '', disabled: false, textContent: '', handlers: {},
@@ -64,7 +81,9 @@ function harness(extra = {}) {
     toast: message => messages.push(message), refresh() {}, dateKey: () => '2026-09-08',
     Blob, URL: { createObjectURL: () => 'blob:audit', revokeObjectURL() {} },
     document: { createElement: () => ({ click() { downloads.push(this.download); } }) },
-    openSheet: markup => { html = markup; return {}; }, ICONS: { close: () => '' },
+    esc: value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;'),
+    openSheet: (markup, options) => { html = markup; sheetOptions = options; return { isConnected: true }; },
+    history: { back: () => sheetOptions?.onClose?.() }, ICONS: { close: () => '' },
     location: { reload: () => { reloads++; } },
     social: { hasCloudBackup: async () => null, hasRecoveryPhrase: async () => false,
       myRecoveryId: async () => null, restoreTruth, forgetIdentity: async () => {},
@@ -197,10 +216,40 @@ const summaryCode = source.match(/const STORE_WORDS = [\s\S]*?\nfunction importS
 assert.ok(summaryCode, 'CONTROL production import summary exists');
 const importSummary = new Function('STORES', summaryCode + '; return importSummary;')(D.STORES);
 function fileHarness() {
-  return harness({ S: { settings: { targets: {} } }, saveRecoveryActive: false, saveWitness: null,
+  const h = harness({ S: { settings: { targets: {} } }, saveRecoveryActive: false, saveWitness: null,
     snapSettings() {}, hydrateGenericUse: async () => {}, closeAllSheetsViaHistory() {},
-    importSummary, route() {} });
+    importSummary, STORE_WORDS: { foods: 'custom foods', log: 'food log', weights: 'weigh-ins', kv: 'settings', xp: 'XP', health: 'health', inv: 'inventory' }, route() {} });
+  const reviewCode = cut('function openPetDestructionReview(', '\nfunction wireLabLinks(');
+  h.deps.openPetDestructionReview = new Function(...Object.keys(h.deps), reviewCode + '; return openPetDestructionReview;')(...Object.values(h.deps));
+  return h;
 }
+function files(h) {
+  return new Function(...Object.keys(h.deps), fileCode + '; return { importBackupFromFile, openFileRestorePoints: typeof openFileRestorePoints === "function" ? openFileRestorePoints : null };')(...Object.values(h.deps));
+}
+async function fixture() {
+  await D.kvSet('settings', { targets: {} });
+  await D.kvSet('coins', 100);
+  const old = await D.exportAll();
+  await D.kvBump('coins', 25);
+  await D.db.put('inv', { id: 'new-earned-crate', kind: 'crate', name: '<Earned crate>' });
+  await D.db.put('foods', { id: 'new-food', name: 'Earned meal', kcal: 250 });
+  await D.db.put('log', { id: 'new-log', date: '2026-09-09', name: 'Lunch', kcal: 250 });
+  await D.db.put('weights', { date: '2026-09-09', kg: 80 });
+  await D.db.put('xp', { key: 'earned-xp', amount: 55 });
+  await D.db.put('health', { date: '2026-09-09', steps: 4200 });
+  const current = {};
+  for (const s of D.STORES) current[s] = await D.db.all(s);
+  return { old, current, file: { text: async () => JSON.stringify(old) } };
+}
+async function assertState(expected) {
+  for (const s of D.STORES) assert.deepEqual(await D.db.all(s), expected[s], s + ' must be coherent');
+}
+async function confirm(h) {
+  h.$('#pdIn').value = 'REPLACE';
+  await h.$('#pdGo').click();
+}
+function points() { return [...local.values()].map(v => JSON.parse(v)); }
+
 await test('CONTROL file import refuses malformed JSON and damaged stores without losing earnings', async () => {
   await D.kvSet('coins', 125);
   await D.db.put('inv', { id: 'earned-crate', kind: 'crate' });
@@ -214,21 +263,132 @@ await test('CONTROL file import refuses malformed JSON and damaged stores withou
   assert.match(h.messages[1], /damaged/i);
 });
 
-// Optional observation of the unresolved replacement policy. It is reported,
-// not graded as desirable behavior or silently converted into a merge.
+await test('FILE real losses are disclosed before any write; cancel preserves every store', async () => {
+  const f = await fixture(), h = fileHarness();
+  events = [];
+  await files(h).importBackupFromFile(f.file);
+  assert.match(h.html, /Coins<\/b>: 125 → 100 \(25 lost\)/);
+  assert.match(h.html, /inventory: 1 → 0/);
+  assert.match(h.html, /&lt;Earned crate&gt;/);
+  assert.doesNotMatch(h.html, /<Earned crate>/);
+  assert.ok(!events.some(e => /snapshot-write|put:|clear:|transaction:readwrite/.test(e)), events.join(', '));
+  await h.$('#pdGo').click(); // No typed acknowledgement.
+  await assertState(f.current);
+});
+await test('FILE verified snapshot exists before replacement transaction opens', async () => {
+  const f = await fixture(), h = fileHarness(), start = local.size;
+  await files(h).importBackupFromFile(f.file);
+  events = [];
+  await confirm(h);
+  assert.equal(local.size, start + 1, 'a durable restore point must exist');
+  const write = events.indexOf('snapshot-write'), transaction = events.indexOf('transaction:readwrite');
+  assert.ok(write >= 0 && transaction > write, events.join(', '));
+  for (const s of D.STORES) assert.deepEqual(points().at(-1).data[s], f.current[s]);
+  assert.equal(await D.kvGet('coins'), 100);
+  assert.equal((await D.db.all('inv')).length, 0);
+  assert.match(h.messages.join(' '), /Settings.*Restore points/);
+});
+await test('FILE persisted restore-point UI returns every store to the pre-import state', async () => {
+  const f = await fixture(), h = fileHarness();
+  await files(h).importBackupFromFile(f.file); await confirm(h);
+  // Fresh handler/harness models reopening Settings after app restart.
+  const fresh = fileHarness(), api = files(fresh);
+  assert.equal(typeof api.openFileRestorePoints, 'function', 'recovery must be reachable after restart');
+  await api.openFileRestorePoints();
+  assert.match(fresh.html, /Review save from/);
+  await fresh.$('[data-file-point="0"]').click();
+  await confirm(fresh);
+  await assertState(f.current);
+  assert.equal(fresh.reloads, 1);
+  assert.ok(D.fileRestorePoints().length === 2, 'undo must also keep the save being left');
+});
+await test('FILE aborted replacement leaves exactly the old state and a valid restore point', async () => {
+  const f = await fixture(), h = fileHarness(), start = local.size;
+  abortClear = 'inv'; // Abort after the other six stores have staged clears and puts.
+  await files(h).importBackupFromFile(f.file); await confirm(h);
+  assert.equal(local.size, start + 1, 'abort must retain the restore point');
+  await assertState(f.current);
+  for (const s of D.STORES) assert.deepEqual(points().at(-1).data[s], f.current[s]);
+  assert.match(h.messages.join(' '), /failed/i);
+  assert.doesNotMatch(h.messages.join(' '), /Backup restored/);
+});
+await test('FILE snapshot quota failure blocks replacement before its transaction', async () => {
+  const f = await fixture(), h = fileHarness();
+  quotaFailure = true; events = [];
+  await files(h).importBackupFromFile(f.file); await confirm(h);
+  assert.ok(!events.includes('transaction:readwrite'), events.join(', '));
+  await assertState(f.current);
+  assert.match(h.messages.join(' '), /restore point.*storage is full or unavailable/i);
+  assert.doesNotMatch(h.messages.join(' '), /Backup restored/);
+});
+await test('FILE progress earned during review refuses a stale confirmation', async () => {
+  const f = await fixture(), h = fileHarness();
+  await files(h).importBackupFromFile(f.file);
+  await D.kvBump('coins', 9);
+  await confirm(h);
+  assert.equal(await D.kvGet('coins'), 134);
+  assert.equal((await D.db.all('inv')).length, 1);
+  assert.match(h.messages.join(' '), /save changed after the review/i);
+});
+await test('FILE unreadable snapshot verification blocks the import transaction', async () => {
+  const f = await fixture(), h = fileHarness();
+  verificationFailure = true; events = [];
+  await files(h).importBackupFromFile(f.file); await confirm(h);
+  assert.ok(!events.includes('transaction:readwrite'), events.join(', '));
+  await assertState(f.current);
+  assert.match(h.messages.join(' '), /Could not save a restore point/);
+});
+await test('FILE payout queued after snapshot persists is checked under the import lock', async () => {
+  const f = await fixture(), h = fileHarness();
+  let payout;
+  await files(h).importBackupFromFile(f.file);
+  snapshotHook = () => {
+    // Model another connection's already-open payout transaction, queued ahead
+    // of the importer. The shared mem-idb lock decides their actual order.
+    const tx = lastDatabase.transaction(['inv'], 'readwrite');
+    tx.objectStore('inv').put({ id: 'racing-reward', kind: 'crate' });
+    payout = new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onabort = reject; });
+  };
+  await confirm(h); await payout;
+  assert.equal(await D.kvGet('coins'), 125);
+  assert.equal((await D.db.all('inv')).length, 2);
+  assert.match(h.messages.join(' '), /save changed after the review/i);
+});
+await test('FILE undo quota failure preserves the imported state and original point', async () => {
+  const f = await fixture(), h = fileHarness();
+  const api = files(h);
+  await api.importBackupFromFile(f.file); await confirm(h);
+  const imported = {};
+  for (const s of D.STORES) imported[s] = await D.db.all(s);
+  assert.equal(typeof api.openFileRestorePoints, 'function');
+  await api.openFileRestorePoints(); await h.$('[data-file-point="0"]').click();
+  quotaFailure = true; events = [];
+  await confirm(h);
+  assert.ok(!events.includes('transaction:readwrite'), events.join(', '));
+  await assertState(imported);
+  assert.equal(D.fileRestorePoints().length, 1);
+});
+await test('FILE repeated imports retain older points; ERASE removes points only after success', async () => {
+  const f = await fixture(), h = fileHarness();
+  await files(h).importBackupFromFile(f.file); await confirm(h);
+  await files(h).importBackupFromFile(f.file); await confirm(h);
+  assert.equal(D.fileRestorePoints?.().length, 2, 'successive points must not overwrite each other');
+  abortClear = true;
+  await assert.rejects(() => D.eraseAll());
+  assert.equal(D.fileRestorePoints().length, 2);
+  abortClear = false; await D.eraseAll();
+  assert.equal(D.fileRestorePoints().length, 0);
+});
+
+// Same measured fixture as the original RED; do not auto-confirm the review.
 if (process.argv.includes('--observe-replacement')) {
   D.useDbName(`settings-replacement-${++sequence}`);
-  await D.kvSet('settings', { targets: {} });
-  await D.kvSet('coins', 100);
-  const old = await D.exportAll();
-  await D.kvBump('coins', 25);
-  await D.db.put('inv', { id: 'new-earned-crate', kind: 'crate' });
+  const f = await fixture(), h = fileHarness();
   const before = { coins: await D.kvGet('coins'), inventory: (await D.db.all('inv')).length };
-  assert.equal(before.coins, 125); assert.equal(before.inventory, 1);
-  const h = fileHarness();
-  await run(fileCode + '\nawait importBackupFromFile(file);', { ...h.deps, file: { text: async () => JSON.stringify(old) } });
+  await files(h).importBackupFromFile(f.file);
   console.log('OBSERVED file replacement: ' + JSON.stringify({ before,
-    after: { coins: await D.kvGet('coins'), inventory: (await D.db.all('inv')).length }, messages: h.messages }));
+    after: { coins: await D.kvGet('coins'), inventory: (await D.db.all('inv')).length },
+    review: /Type REPLACE/.test(h.html), messages: h.messages }));
 }
 console.log(`settings-safety: ${passed} passed, ${failed} failed`);
 process.exitCode = failed ? 1 : 0;

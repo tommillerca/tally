@@ -1,5 +1,6 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
 import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, storageStatus, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG, dayIsUnwitnessed } from './db.js';
+import { validateImport, fileReplacementPreview, readFileSave, sameSaveRows, saveFileRestorePoint, fileRestorePoints, restoreFileSave } from './db.js';
 import { takeSaveInterruption, interruptionCopy, writeFailureCopy, ERASED_COPY, stepSyncStatus, healthSyncInfo, healthSyncCopy } from './save-disclosure.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
@@ -41,9 +42,9 @@ import { isWater } from './water.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares, scheduleSiegeReminder, cancelSiegeReminder } from './notify.js';
 import { snapToWalkable } from './geo.js';
 /* js/changelog.js is 155KB of prose: 234 player-facing entries, the largest
-   single module in js/, and NOTHING on the boot path or on Today needs it. It
-   is imported on demand at its four use sites (What's New, the two unseen
-   badges, the onboarding catch-up mark) instead of being parsed at boot.
+   single module in js/. It is imported on demand, including by the restored
+   post-update boot gate, at its use sites (What's New, the two unseen
+   badges, the onboarding catch-up mark) rather than as a static entry import.
    sw.js still precaches it, so opening What's New offline works as before. */
 import { bhIcon, hasBhIcon, BH_ICON_TINTS } from './icons-pack.js';
 import { pixCur } from './icons-pix.js';
@@ -1863,7 +1864,9 @@ async function boot() {
   refundStreakFreezes().then(r => {
     if (r) toast(`Streak Freezes have been retired. Your ${r.count} paid out: +${r.coins.toLocaleString()} coins.`, 5200);
   }).catch(() => {});
-  /* THE BOOT TAKEOVERS ARE GONE. Tom, 2026-08-25, watching a real simulator
+  /* THE MARKETING BOOT TAKEOVERS ARE GONE. Patch notes alone were restored
+     on 2026-09-09 after Tom clarified that the old popup was fine.
+     Historical removal, Tom, 2026-08-25, watching a real simulator
      launch: "i see in the simulator you have popups showing i told you to remove
      all those from the game? the only news things staying are the new one with
      the wanderer on it and the ones on crew that link the discord."
@@ -1874,9 +1877,9 @@ async function boot() {
      So the whole class leaves the launch path. Not one of them, all of them:
      the cosmetic teaser, the drop, the spire / bestiary / Live Wire / race
      intros, the settled-race poster, the Discord card, the TestFlight card,
-     the What's New sheet, the recovery sheet, the name builder, the iOS
-     notification ask and the Day One survey. NOTHING here opens a sheet, a veil
-     or an OS dialog on its own any more.
+     the What's New sheet (now restored alone), the recovery sheet, the name
+     builder, the iOS notification ask and the Day One survey. The marketing
+     sheets, veils and OS dialog remain off the launch path.
      WHAT WAS NOT DELETED. Every card still exists and every one is still
      reachable, on purpose: the News tab in What's New lists all of them (Tom
      asked for that list himself, 2026-08-09, "so people can catch up if they
@@ -1902,6 +1905,8 @@ async function boot() {
      was built for this and carries MORE than the poster did (every place's full
      purse, not just the winner's haul). */
   maybeShowRenameNotice();
+  // 2026-09-09: patch notes alone return after an update. Marketing stays off boot.
+  maybeShowWhatsNew();
   maybeNudgeRecovery();
   setTimeout(checkFriendRequests, 3000);
   /* Survey v2 S3: a submit whose POST failed left its body in kv; one retry per
@@ -1977,7 +1982,23 @@ async function maybeWelcomeBack() {
   return true;
 }
 
-/* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeShowWhatsNew opened the What's New sheet over the app on the first launch after every update. What's New is still reachable from Settings and from the Crew tab, and the unseen-entry dot still points at it */
+// R2 (v151): the first time the app opens after an update, pop the What's New
+// sheet once so players (and friends) actually see what changed. Gated so it
+// never nags: only when there ARE unseen entries, never over onboarding / the
+// daily wheel / any open sheet (retries next boot), and new players are seeded
+// caught-up at onboarding so they don't get the historical backlog. Opening the
+// sheet sets changelogSeen = latest, so it won't fire again until the next patch.
+async function maybeShowWhatsNew() {
+  try {
+    if (CALM_BOOT() || !S.settings) return;
+    const { changelogUnseen } = await import('./changelog.js');
+    if (changelogUnseen(await kvGet('changelogSeen', 0)) <= 0) return;
+    await new Promise(r => setTimeout(r, 1700)); // let splash/wheel settle
+    if ($('#sheets')?.children.length) return;   // something already open. Try again next launch
+    if (!claimBootSheet(window.__whatsNewForce)) return;   // another sheet already had this open
+    openWhatsNew();
+  } catch { /* never block boot */ }
+}
 
 /* ---------- Dark Spires: the announcement + the pinned explainer ---------- */
 // Shown once (kv flag), then the Today banner carries it, same etiquette as the
@@ -14995,7 +15016,8 @@ async function renderSettings(el) {
   <div class="card">
     <div class="card-title">YOUR DATA</div>
     <div class="settings-row"><div class="lab"><b>Export backup</b><span>${exportAgo == null ? 'Never backed up yet' : exportAgo === 0 ? 'Last backup: today' : `Last backup: ${exportAgo} day${exportAgo === 1 ? '' : 's'} ago`}</span></div><button class="btn small ghost" id="exportBtn">Export</button></div>
-    <div class="settings-row"><div class="lab"><b>Import backup</b><span>Restore from a Boneheadz Gym export</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
+    <div class="settings-row"><div class="lab"><b>Import backup</b><span>Review what will be replaced. A restore point is required before importing.</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
+    <div class="settings-row"><div class="lab"><b>Restore points</b><span>Return to a save kept before a file import, on this device. Erase all data also removes these.</span></div><button class="btn small ghost" id="filePointsBtn">Review</button></div>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
     <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights, gear</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
     ${me ? `<div class="settings-row"><div class="lab"><b>Delete account &amp; cloud data</b><span>Removes your cloud account, friends + backup</span></div><button class="btn small danger" id="delAcctBtn">Delete</button></div>` : ''}
@@ -15328,6 +15350,7 @@ async function renderSettings(el) {
     }
   });
   $('#importBtn').addEventListener('click', () => $('#importFile').click());
+  $('#filePointsBtn').addEventListener('click', openFileRestorePoints);
   $('#importFile').addEventListener('change', async e => {
     const file = e.target.files[0];
     e.target.value = ''; // so re-picking the same file fires change again
@@ -16905,6 +16928,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     const mogBarHtml = () => {
       if (!mogOn) return '';
       const { sel, cost, afford, changed } = mogState();
+      if (!changed) return '';
       return `<div class="look-bar mog-bar${changed ? ' armed' : ''}">
             <div class="mog-lines">
               <span><i>You keep</i><b>${wornGear ? gearLabel(wornGear) : 'every piece you own'}</b></span>
@@ -17060,11 +17084,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
           ? `<button class="fit-chip reset" data-fit-reset="1" title="Unequip everything, gear included. Nothing is lost: it all stays in your Backpack.">Take it all off</button>`
           : ''}
       </div>
-      ${fitList.length ? `<p class="note fit-note">Tap a fit to wear it. A fit brings its gear back to empty slots and never bumps gear you are already wearing. Long-press a fit to rename or bin it.</p>` : ''}
-      ${/* v425: fits record gear now. An older fit has no gear map, so after
+      ${fitList.length ? `<details class="stable-help">
+        <summary>How fits work</summary>
+        <p class="note fit-note">Tap a fit to wear it. A fit brings its gear back to empty slots and never bumps gear you are already wearing. Long-press a fit to rename or bin it.</p>
+        ${/* v425: fits record gear now. An older fit has no gear map, so after
             Take it all off it can only bring back part of the look; one quiet
             line tells the player the re-save fixes it. No migration, no modal. */''}
-      ${fitList.some(f => !f.gear) ? `<p class="note fit-note">Fits saved a while ago remember only the look. Put one on, gear up, and save it again to keep the gear with it.</p>` : ''}`;
+        ${fitList.some(f => !f.gear) ? `<p class="note fit-note">Fits saved a while ago remember only the look. Put one on, gear up, and save it again to keep the gear with it.</p>` : ''}
+      </details>` : ''}`;
 
     content.innerHTML = `
       ${fitRail}
@@ -17271,6 +17298,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
                 way as the v2 panel's tiles (QA round 22 W13b) */''}
           ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${costTag(i.id)}`, i.name)).join('')}
         </div>
+        ${changed ? `
         <div class="look-bar${changed ? ' armed' : ''}">
           <span class="lb-txt">${changed ? 'Trying' : 'Wearing'}: <b>${esc(nameOf(sel))}</b></span>
           ${changed
@@ -17278,7 +17306,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
                 ? `<button class="btn" data-look-apply="${esc(sel)}" data-look-price="${cost || 0}">${cost ? `Wear it · ${cost} dust` : 'Wear it · free'}</button>`
                 : `<button class="btn ghost" disabled>Need ${cost} dust · you have ${dustBal}</button>`)
             : ''}
-        </div>
+        </div>` : ''}
         <p class="note" style="text-align:center;margin-top:8px">${wornGear
           ? `Your ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} keeps <b>${gearLabel(wornGear)}</b> whatever it looks like. Trying one on is free, you only spend Bone Dust when you wear it. You have <b><span class="dust-ico">${ICONS.dust(12)}</span> ${dustBal}</b>.`
           : `Nothing with stats in this ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} slot, so a look here is only a look: <b>switching is free</b>.`}${arts.length ? '' : ' No other looks collected for this slot yet, keep hunting.'}</p>`;
@@ -17622,8 +17650,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
          a look tap replaced the team bar with a copy of this one and left the real
          one stale (dressing-room-audit PICK, 2026-09-06, "You get Boneyard Bruisers
          Cleats, as equipped" after tapping Thornback Toads). */
-      const panel = $('.mog-panel', content), figs = $('.mog-figs', content), bar = $('.mog-dock > .mog-bar', content);
-      if (!done || !panel || !figs || !bar) { renderCharacter(wrap, 'wardrobe', { instant: true }); return; }
+      const panel = $('.mog-panel', content), figs = $('.mog-figs', content), dock = $('.mog-dock', content);
+      if (!done || !panel || !figs || !dock) { renderCharacter(wrap, 'wardrobe', { instant: true }); return; }
       const { cur, sel } = mogState();
       figs.innerHTML = mogFigsHtml();
       for (const c of $$('[data-look]', panel)) {
@@ -17638,7 +17666,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
         const tag = $('.look-cost', c);
         if (tag && lookPriceMap[c.dataset.look] !== undefined) tag.outerHTML = costTag(c.dataset.look);
       }
-      bar.outerHTML = mogBarHtml();
+      // No bar on arrival or after reverting/committing. Insert it directly in
+      // the dock on the first choice, preserving the sticky travel and the doll.
+      const bar = $('.mog-dock > .mog-bar', content);
+      if (bar) bar.outerHTML = mogBarHtml();
+      else dock.insertAdjacentHTML('beforeend', mogBarHtml());
       wireMogBar();
       if (committed) {
         const pill = $('.ward-dust', wrap);
@@ -19121,6 +19153,8 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
   };
 }
 
+// Deliberate inter-card pace, independent of art decoding and frame delivery.
+const CRATE_CARD_CADENCE_MS = 300;
 function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}) {
   if (!cards.length && !coins) return Promise.resolve();
   /* BEST FIRST. Tom, 2026-08-08: "the rarest thing should come out of the chest
@@ -19428,7 +19462,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         tilt.style.opacity = '0';
         if (outgoing) {
           at(340, () => outgoing.remove());
-          at(0, advance); // the next rise overlaps the readable outgoing flight
+          at(CRATE_CARD_CADENCE_MS, advance); // pace only; art and frames never gate the next card
         } else at(330, last ? done : advance);
       };
       tilt.addEventListener('pointerdown', e => {
@@ -20978,6 +21012,7 @@ async function openStable(opts = {}) {
     $$('[data-petwear]', body).forEach(btn => btn.addEventListener('click', async () => {
       const r = await togglePetWear(btn.dataset.petwear);
       if (!r.ok) { toast('That piece is not in your wardrobe.'); return; }
+      pushProfileSoon(); // Crew reads this wardrobe from the public snapshot.
       await refreshPetWear();
       popSound(S.sounds);
       render();
@@ -21012,6 +21047,7 @@ async function openStable(opts = {}) {
       for (const cur of worn.filter(i => i.football.team !== team && hasHere(i))) {
         const r = await togglePetWear(footballItemId(team, cur.football.garment));
         if (!r.ok) toast(`Could not put the ${t.name} ${label(cur)} on.`);
+        else pushProfileSoon(); // Coalesce successful pieces into one kit upload.
       }
       await refreshPetWear();
       popSound(S.sounds);
@@ -21275,7 +21311,7 @@ function labStateCopy(s, sp = '') {
   return `${s.remaining} experiment${s.remaining === 1 ? '' : 's'} available today.`;
 }
 function labSinksHtml(next = '') {
-  return `<p class="lab-sinks">Melting clears the pile. Breeding builds strength. The Laboratory builds the collection.</p><p class="note">Clearing lots of spares? Melt them for Bone Dust. The Laboratory reduces your total by one pet per experiment.</p><nav class="lab-links" aria-label="Pet actions"><button class="btn ${next === 'collection' ? 'lab-next' : 'ghost'}" data-lab-nav="collection">Collection</button><button class="btn ghost" data-lab-nav="eggs">Eggs</button><button class="btn ghost" data-lab-nav="melt">Melt spares</button><button class="btn ghost" data-lab-nav="breed">Breed</button></nav>`;
+  return `<p class="lab-sinks">Melting clears the pile. Breeding builds strength. The Laboratory builds the collection.</p><p class="note">Clearing lots of spares? Melt them for Bone Dust.</p><nav class="lab-links" aria-label="Pet actions"><button class="btn ${next === 'collection' ? 'lab-next' : 'ghost'}" data-lab-nav="collection">Collection</button><button class="btn ghost" data-lab-nav="eggs">Eggs</button><button class="btn ghost" data-lab-nav="melt">Melt spares</button><button class="btn ghost" data-lab-nav="breed">Breed</button></nav>`;
 }
 function labCollected(s, sp, morph) {
   return s.ownedCells ? s.ownedCells.includes(`${sp}|${morph}`) : s.pets.some(p => p.sp === sp && !p.shiny && p.morph === morph);
@@ -21308,12 +21344,8 @@ function labRecipesHtml(s, sp) {
     /* Tom, 2026-09-08: the missing-colour and ingredient filters are GONE from
        the first two recipes. "you could make 3 frost before you make 1 ember
        thats the risk part". Any copy promising an ordered outcome is a lie. */
-    return `<div class="lab-connection" data-recipe="${r.id}"${coinFlipRecipes.includes(r.id) ? ' aria-describedby="labCoinFlipOdds"' : ''}><p><span aria-hidden="true">↓</span> ${esc(use)} <b>${esc(promise)}</b></p><p class="lab-odds">${dist.map(d => `${Math.round(d.weight / weight * 100)}% ${esc(labColour(d.morph))}`).join(' · ')}</p>${r.id === 'toxic-rose' ? '<p>Midnight is the only output. Both pets are consumed.</p>' : sp ? '' : `<p>Example odds. Choose a species to see your chances.</p>`}${coinFlipRecipes[0] === r.id ? '<p id="labCoinFlipOdds">Always 50/50. Each coin flip can repeat a colour you already have.</p>' : ''}</div>${tier(r.outputs)}`;
+    return `<div class="lab-connection" data-recipe="${r.id}"${coinFlipRecipes.includes(r.id) ? ' aria-describedby="labCoinFlipOdds"' : ''}><p><span aria-hidden="true">↓</span> ${esc(use)} <b>${esc(promise)}</b></p><p class="lab-odds">${dist.map(d => `${Math.round(d.weight / weight * 100)}% ${esc(labColour(d.morph))}`).join(' · ')}</p>${r.id === 'toxic-rose' || sp ? '' : `<p>Example odds. Choose a species to see your chances.</p>`}${coinFlipRecipes[0] === r.id ? '<p id="labCoinFlipOdds">Always 50/50. Each coin flip can repeat a colour you already have.</p>' : ''}</div>${tier(r.outputs)}`;
   }).join('')}</section>`;
-}
-function labIngredientCounts(s, sp, recipe) {
-  if (!sp || !recipe) return '';
-  return `<div class="lab-stock"><p>Spare pets: ${[...new Set(recipe.inputs)].map(m => `${esc(labColour(m))} ${s.species[sp]?.safeCounts?.[m] ?? 'Unknown'}. Need ${recipe.inputs.filter(x => x === m).length}.`).join(' ')}</p><small>Spare counts keep one of each colour and exclude invested pets.</small></div>`;
 }
 function labOutcomesHtml(q) {
   const total = q.distribution.reduce((n, d) => n + d.weight, 0);
@@ -21384,13 +21416,13 @@ function labBenchHtml(s, selected, sp, q = null, choosingSpecies = false) {
   const nextSlot = empty < 0 ? 0 : empty;
   const activeId = pair?.id || labRecipes.find(r => pets.some(p => p && r.inputs.includes(p.morph)))?.id || 'base-base';
   const active = labRecipes.find(r => r.id === activeId);
-  const prompt = !canWork ? labStateCopy(s, sp) : !sp ? 'Choose a species, then choose two pets.' : empty >= 0 ? `Choose ${empty === 0 ? 'first' : 'second'} pet to review a pair.` : !pair ? 'These pets do not match a recipe. Choose a different first or second pet.' : 'Review shows the exact collection colours lost and gained before you confirm.';
-  const working = `<section class="lab-working"><h3>${pets.some(Boolean) ? `${active.inputs.map(labColour).join(' + ')}: choose your pair` : 'Choose your pair'}</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class="lab-slots" aria-label="Two pets to combine">${[0, 1].map(i => { const p = pets[i]; return `<section><button class="lab-pet${sp && canWork && !canReview && nextSlot === i ? ' lab-next' : ''}" data-lab-slot="${i}" ${canWork ? '' : 'disabled'}>${p ? labPetDetails(p, true) : `Choose ${i === 0 ? 'first' : 'second'} pet`}</button>${p ? `<button class="link" data-lab-clear="${i}">Clear ${i === 0 ? 'first' : 'second'} pet</button>` : ''}</section>`; }).join('<span class="lab-plus" aria-hidden="true">+</span>')}</div>${q ? labOutcomesHtml(q) : ''}${labIngredientCounts(s, sp, active)}${q ? labBranchesHtml(q) : ''}<p id="labPairHint">${esc(prompt)}</p><button class="btn ${canReview ? 'lab-next' : 'ghost'}" aria-describedby="labPairHint" data-lab-review ${canReview ? '' : 'disabled'}>Review pair</button></section>`;
+  const prompt = s.status === 'ready' && s.remaining === 0 ? `You've used ${s.used}/${s.capacity} experiments today. Experiments reset at ${s.resetTime}, ${s.zone}.` : !canWork ? labStateCopy(s, sp) : !sp ? 'Choose a species, then choose two pets.' : empty >= 0 ? `Choose ${empty === 0 ? 'first' : 'second'} pet to review a pair.` : !pair ? 'These pets do not match a recipe. Choose a different first or second pet.' : 'Review shows the exact collection colours lost and gained before you confirm.';
+  const working = `<section class="lab-working"><h3>${pets.some(Boolean) ? `${active.inputs.map(labColour).join(' + ')}: choose your pair` : 'Choose your pair'}</h3><div class="lab-slots" aria-label="Two pets to combine">${[0, 1].map(i => { const p = pets[i]; return `<section><button class="lab-pet${sp && canWork && !canReview && nextSlot === i ? ' lab-next' : ''}" data-lab-slot="${i}" ${canWork ? '' : 'disabled'}>${p ? labPetDetails(p, true) : `Choose ${i === 0 ? 'first' : 'second'} pet`}</button>${p ? `<button class="link" data-lab-clear="${i}">Clear ${i === 0 ? 'first' : 'second'} pet</button>` : ''}</section>`; }).join('<span class="lab-plus" aria-hidden="true">+</span>')}</div>${q ? labOutcomesHtml(q) : ''}${q ? labBranchesHtml(q) : ''}<p id="labPairHint"${canWork ? '' : ' role="status"'}>${esc(prompt)}</p><button class="btn ${canReview ? 'lab-next' : 'ghost'}" aria-describedby="labPairHint" data-lab-review ${canReview ? '' : 'disabled'}>Review pair</button></section>`;
   const status = labStateCopy(s, sp);
   const available = `${s.remaining} experiment${s.remaining === 1 ? '' : 's'} available today.`;
   const recovery = s.unseen?.length ? '<section class="lab-recovery"><p>Your last session ended before you saw your experiment. The result is saved. Open it to review.</p><button class="btn ghost" data-lab-recover>Review saved experiment</button></section>' : '';
   const noPair = !s.pets.length || !s.hasEligiblePair || (sp && s.species[sp]?.hasEligiblePair === false);
-  return `${recovery}${sp ? '' : '<p>Make a new colour from two pets of the same species.</p>'}${labSpeciesHtml(s, sp, choosingSpecies)}<section class="lab-availability">${s.status === 'ready' ? `<details class="lab-clock"><summary>${s.remaining > 0 ? available : 'Experiment use details'}</summary><p>${s.used}/${s.capacity} experiments used</p><p>Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p></details>` : ''}${status !== available ? `<p role="status">${esc(status)}</p>` : ''}${s.status === 'ready' && s.remaining === 0 && !status.includes('Experiments reset at') ? `<p>You've used ${s.used}/${s.capacity} experiments today. Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p>` : ''}${noPair ? '<nav class="lab-links" aria-label="Find a pair"><button class="btn ghost" data-lab-nav="eggs">Eggs</button>' + (sp ? '<button class="btn ghost" data-lab-change-species>Change species</button>' : '') + '</nav>' : ''}</section>${working}<p>Every experiment removes two pets to make one.</p>${labRecipesHtml(s, sp)}
+  return `${recovery}<p>Make a new colour from two pets of the same species.</p>${labSpeciesHtml(s, sp, choosingSpecies)}<section class="lab-availability">${canWork ? `<details class="lab-clock"><summary>${available}</summary><p>${s.used}/${s.capacity} experiments used</p><p>Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p></details>` : ''}${status !== available && status !== prompt ? `<p role="status">${esc(status)}</p>` : ''}${noPair ? '<nav class="lab-links" aria-label="Find a pair"><button class="btn ghost" data-lab-nav="eggs">Eggs</button>' + (sp ? '<button class="btn ghost" data-lab-change-species>Change species</button>' : '') + '</nav>' : ''}</section>${working}${labRecipesHtml(s, sp)}
 <details id="labHelp" ${s.ui?.introRead ? '' : 'open'}><summary>How the recipes work</summary><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>
 <button class="${sp && !canWork ? 'btn lab-next' : 'link lab-collection'}" data-lab-nav="collection">Your collection: ${s.collectionCount} of ${labTotal()} colours</button><details class="lab-more"><summary>More pet actions</summary>${s.status !== 'ready' ? '<p>One experiment each day is free. Permanent incubators can add two more.</p>' : ''}<div class="lab-eggs">${s.eggs.length ? s.eggs.map(e => `<p>Egg: ${e.ready ? 'Ready to hatch' : `${e.steps.toLocaleString()}/${e.goal.toLocaleString()} steps`}. Open eggs to ${e.ready ? 'hatch it' : 'check progress'}.</p>`).join('') : '<p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p>'}</div>${labSinksHtml()}${s.status === 'ready' ? '<button class="link" data-lab-incubators>Incubators</button>' : ''}</details>`;
 }
@@ -22090,33 +22122,110 @@ function importSummary(counts) {
   return 'Restored ' + andJoin(parts);
 }
 
-/* THE one file-import path, shared by Settings > Import and the restore sheet
-   (which onboarding opens). Routing and copy only: importAll owns the actual
-   restore and is untouched. Lands the player on Today afterwards; a restore
-   mid-onboarding also ends onboarding, exactly like a successful cloud restore. */
+/* File imports and local undo share the pet review's explicit acknowledgement.
+   Each accepted replacement gets a new, independently stored restore point. */
 async function importBackupFromFile(file) {
-  const wasOnb = saveRecoveryActive || !S.settings;   // recovery also needs the shell rebound
-  let counts;
   try {
-    counts = await importAll(JSON.parse(await file.text()));
+    const data = JSON.parse(await file.text());
+    validateImport(data);
+    const current = await readFileSave();
+    const next = fileReplacementPreview(current, data);
+    openFileReplacementReview(data, current, next);
   } catch (err) {
-    /* A wrong pick is a SyntaxError out of JSON.parse or importAll's own
-       'Not a Tally backup file' shape check; both mean "not our file", and the
-       raw parser message ("Unexpected token...") is useless to a player.
-       Every other importAll failure carries player-facing copy: pass it on. */
     const wrongFile = err instanceof SyntaxError || /Not a Tally backup/i.test(err.message || '');
     toast(wrongFile
       ? "That doesn't look like a Boneheadz Gym backup. Pick the .json file you exported."
-      : 'Import failed: ' + err.message, 4200);
-    return;
+      : 'Import failed: ' + err.message, 6200);
   }
+}
+
+function fileReplacementHtml(current, next) {
+  const words = { coins: 'Coins', bonedust: 'Bone Dust', petInst: 'Pets', petNick: 'Pet nicknames', petBonds: 'Pet bonds', petLvlSteps: 'Pet level steps', pettalents: 'Pet talents' };
+  const label = k => words[k] || k.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]/g, ' ');
+  const value = v => v === undefined ? 'absent' : v === null ? 'none' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+  const change = (name, before, after) => {
+    const loss = typeof before === 'number' && (typeof after === 'number' || after === undefined) && before > (after || 0)
+      ? ` (${before - (after || 0)} lost)` : '';
+    return `<li><b>${esc(name)}</b>: ${esc(value(before))} → ${esc(value(after))}${esc(loss)}</li>`;
+  };
+  const fields = (before, after, path) => {
+    if (sameSaveRows([{v:before}], [{v:after}])) return '';
+    if (before && typeof before === 'object' && !Array.isArray(before)) {
+      return Object.keys(before).map(k => fields(before[k], after?.[k], `${path} / ${label(k)}`)).join('');
+    }
+    return change(path, before, after);
+  };
+  const sections = [];
+  for (const store of STORES) {
+    const before = current[store], after = next[store];
+    if (sameSaveRows(before, after)) continue;
+    const key = store === 'kv' ? 'k' : store === 'xp' ? 'key' : ['weights', 'health'].includes(store) ? 'date' : 'id';
+    const byKey = new Map(after.map(r => [r[key], r]));
+    const details = before.map(row => {
+      const other = byKey.get(row[key]);
+      if (sameSaveRows([row], other ? [other] : [])) return '';
+      if (store === 'kv') {
+        // Credentials and signed receipts must never be printed in a dialog.
+        if (/identity|social|history|merge|receipt|token|secret|apiBase/i.test(row.k)) return `<li>${esc(label(row.k))}: saved record ${other ? 'changes' : 'removed'}.</li>`;
+        return fields(row.v, other?.v, label(row.k));
+      }
+      const name = row.name || row.petId || row.kind || row[key];
+      return fields(row, other, String(name));
+    }).join('');
+    sections.push(`<h3>${esc(STORE_WORDS[store])}: ${before.length} → ${after.length} records</h3><ul>${details || '<li>New records from the backup.</li>'}</ul>`);
+  }
+  return `<p>This replaces the save on this device. Current values → values after replacement:</p>${sections.join('') || '<p>No current records change.</p>'}<p>A restore point of your current save must be saved first. If storage is full or unavailable, replacement is blocked. Afterwards, use Settings → Restore points to return. Points stay on this device until Erase all data or Delete account removes them.</p>`;
+}
+
+function openFileReplacementReview(data, current, next, undo = false) {
+  return openPetDestructionReview({
+    title: undo ? 'Return to this restore point?' : 'Replace your save with this file?',
+    html: fileReplacementHtml(current, next), typed: true,
+    accepts: text => text.trim().toUpperCase() === 'REPLACE',
+    prompt: 'Type REPLACE to confirm these changes', action: 'Replace save',
+    commit: async () => {
+      try {
+        // Synchronous verified storage write completes before any import opens.
+        saveFileRestorePoint(current);
+        if (undo) {
+          await restoreFileSave(data, current);
+          location.reload(); // Also refresh if the review was dismissed while storage was committing.
+          return { message: 'Restore point recovered. The save you just left is also kept in Restore points.' };
+        }
+        const counts = await importAll(data, { replace: true, expectedFileState: current });
+        await finishFileImport(counts);
+        return { message: 'Backup restored. Return through Settings → Restore points.' };
+      } catch (err) {
+        const message = 'Import failed: ' + err.message + ' Existing restore points remain available in Settings → Restore points.';
+        toast(message, 7200);
+        return { message };
+      }
+    },
+  });
+}
+
+async function openFileRestorePoints() {
+  try {
+    const points = fileRestorePoints();
+    const wrap = openSheet(`<div class="sheet-head"><h2>Restore points</h2><button class="sheet-close">Done</button></div><div class="sheet-body"><p>Each point is the save before a replacement on this device. Returning also keeps your current save.</p>${points.length ? points.map((p, i) => `<button class="btn ghost" data-file-point="${i}">Review save from ${esc(new Date(p.createdAt).toLocaleString())}</button>`).join('') : '<p>No file restore points saved yet.</p>'}</div>`, { name: 'FileRestorePoints' });
+    for (let i = 0; i < points.length; i++) {
+      $(`[data-file-point="${i}"]`, wrap).addEventListener('click', async () => {
+        try { const current = await readFileSave(); openFileReplacementReview(points[i].data, current, points[i].data, true); }
+        catch (err) { toast('Could not read the save: ' + err.message, 6200); }
+      });
+    }
+  } catch (err) { toast('Could not read restore points: ' + err.message, 6200); }
+}
+
+async function finishFileImport(counts) {
+  const wasOnb = saveRecoveryActive || !S.settings;
   S.settings = await kvGet('settings') || (wasOnb ? null : S.settings);
   saveWitness = { settings: !!S.settings, loot: !!(await kvGet('loot-init', false)) };
   snapSettings();
   S.userFoods = await db.all('foods');
   await hydrateGenericUse(); // L3: generic use + stars back onto GENERIC_FOODS
   closeAllSheetsViaHistory();   // no-op when no sheet is open (Settings > Import)
-  toast(importSummary(counts), 4200);
+  toast(importSummary(counts) + '. Your previous save is kept in Settings → Restore points.', 7200);
   if (wasOnb) {
     /* A real export always carries settings; if this one somehow did not,
        onboarding stays on screen and finishes normally over the imported data.
@@ -22144,10 +22253,12 @@ async function openRestoreSheet() {
       <p class="rc-err" id="rsErr" hidden></p>
       <button class="btn" id="rsGo" style="margin-top:14px">Restore my Bonehead</button>
       <p class="note" style="margin:16px 2px 0;text-align:center">Got a backup file instead? Use the .json you exported from Settings.</p>
+      <button class="btn ghost" id="rsPointsBtn" style="margin-top:8px">Review local restore points</button>
       <button class="btn ghost" id="rsFileBtn" style="margin-top:8px">Restore from a backup file</button>
       <input type="file" id="rsFile" accept="application/json,.json" hidden>
     </div>`, { cls: '', name: 'Restore' });
   const err = m => { const e = $('#rsErr', wrap); e.hidden = !m; e.textContent = m || ''; };
+  $('#rsPointsBtn', wrap).addEventListener('click', () => openFileRestorePoints());
   $('#rsFileBtn', wrap).addEventListener('click', () => $('#rsFile', wrap).click());
   $('#rsFile', wrap).addEventListener('change', async e => {
     const file = e.target.files[0];
@@ -24354,7 +24465,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v527'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v528'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

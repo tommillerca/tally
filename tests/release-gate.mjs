@@ -252,6 +252,14 @@ const coverageOnly = process.argv.includes('--coverage-only');
    the evidence in the failure line. */
 // Frozen loss-prevention work order, 2026-09-08: real UI and service controls, Node only.
 const PURE = [
+  'lab-density-audit.mjs', // Frozen density work order: production copy and destruction controls, no sockets.
+  'crew-outfit-audit.mjs', // Real wardrobe handlers, snapshot round trip and Crew figure contracts, no sockets.
+  'dock-line-audit.mjs', // Dock band source regression and FAB flex geometry controls; rendered pixels/taps remain browser/manual proof.
+  'whatsnew-boot-audit.mjs',
+  'wardrobe-noise-audit.mjs',
+  'sync-clientpath-audit.mjs', // Real boot/snapshot/signing over mem-idb; failed profile retries, no sockets.
+  'sync-authpath-audit.mjs', // Real signed client to in-process Worker and SQLite; mature profiles and rejection controls, no sockets.
+  'sync-path-audit.mjs', // Behavioural profile sync, real snapshot/modules and boot/resume callbacks over mem-idb; no sockets.
   'wardrobe-playtest-audit.mjs', 'lab-room2-audit.mjs', 'stable-stale-disclosure-audit.mjs', 'breed-last-colour-audit.mjs', 'stable-loss-disclosure-audit.mjs', 'lab-health-recovery-audit.mjs',
   'lab-integration-audit.mjs', 'lab-ui-audit.mjs', 'laboratory-audit.mjs', 'lab-foundation-audit.mjs', 'pet-stress-guard.mjs', 'crew-pet-node-guard.mjs',
   'transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-atomic-audit.mjs', 'backup-encoder-audit.mjs', 'backup-key-audit.mjs', 'backup-version-audit.mjs',
@@ -266,6 +274,7 @@ const PURE = [
 PURE.push('pet-morph-animation-audit.mjs'); // 2026-09-08: selective layers, named fallback and neutral-rest width controls; no browser.
 PURE.push('pet-palette-audit.mjs'); // r56 B1: actual PNG pairs and shipped-art CONTROL; offline Python image reads.
 PURE.push('fontscale-audit.mjs'); // R60-2: rem type seam, root doubling and px geometry controls; no browser or sockets.
+PURE.push('wheel-look-audit.mjs'); // Frozen wheel presentation: production labels, ring, type colours and print styling; Node only, pixel review owed.
 PURE.push('wheel-easing-audit.mjs'); // w1: no overshooting control points, with pre-fix CONTROL; no browser or sockets.
 PURE.unshift('store-copy-lint.mjs');
 PURE.push('storage-boot-audit.mjs'); // R54-4: throwing IndexedDB boot and normal control, no browser or sockets.
@@ -349,10 +358,10 @@ PURE.push('stable-rooms-top-audit.mjs'); // Frozen room row: production template
 PURE.push('today-playtest-audit.mjs'); // 2026-09-08: Today handlers, rollover retries, protected streak copy and atomic milestone crates; Node only.
 PURE.push('crew-playtest-audit.mjs'); // Frozen Crew playtest: owed gifts, aborted opens and actual social controls; Node only.
 PURE.push('firstrun-audit.mjs'); // Frozen first-run: interrupted kit, onboarding handlers and day-one play; Node only.
-PURE.push('settings-safety-audit.mjs'); // Settings templates, export and destructive handlers with transaction abort/retry controls; Node only.
+PURE.push('settings-safety-audit.mjs'); // Settings/file-import loss review, durable undo, quota refusal, stale review and transaction abort/retry; Node only.
 PURE.push('progress-playtest-audit.mjs'); // Frozen Progress lane: badge abort/retry, real charts, sleep and detail handlers; no sockets.
 const BROWSER = [
-  'today-dock-pixels-audit.mjs', // v522: the Today dock band must not paint --hero-edge. Browser tier: it screenshots and samples real pixels, which is the only instrument that catches this class (the geometry measures correct either way). Its CONTROL-PIXELS row is deliberately UNPROVEN, see docs/CLAIMS.md v522.
+  'today-dock-pixels-audit.mjs', // Dock exclusion: all-tab captures, row tap and lost-exclusion control, plus native bounce evidence. Pixel continuity remains manual/UNPROVEN; the former opaque-RGB predicate certified the black-line bug.
 
   'device-loss-browser-audit.mjs', // L3 recovery choice, known-save retry, file replacement and Settings restore reachability; local disposable origin only.
   'multidevice-earnings-browser-audit.mjs', // L2: real IndexedDB and visibilitychange listener, encrypted two-device merge both directions; pending reviewer browser proof.

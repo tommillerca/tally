@@ -206,10 +206,11 @@ await check('recipe progression uses engine distributions and preserves certain 
   rejectsMutation(html, html.replace('50% Ember', '100% Ember'), grade);
   rejectsMutation(html, html.replace('50% Toxic', '75% Toxic'), grade);
   assert.match(ui.labRecipesHtml(state(), ''), /Example odds. Choose a species to see your chances./);
-  const counts = ui.labBenchHtml(state(), [null,null], 'C1');
-  rejectsMutation(counts, counts.replace('Base 2. Need 2.', 'Base 0. Need 2.'), h => assert.match(h, /Spare pets: Base 2. Need 2./));
-  const unknown = ui.labBenchHtml(state({ pets: [pet('a','ember')] }), ['a',null], 'C1');
-  rejectsMutation(unknown, unknown.replaceAll('Unknown', '0'), h => assert.match(h, /Spare pets: Ember Unknown. Need 1. Frost Unknown. Need 1./));
+  // Frozen density work order, 2026-09-09: stock jargon was removed from browse.
+  for (const [snapshot, selected] of [[state(), [null,null]], [state({ pets: [pet('a','ember')] }), ['a',null]]]) {
+    const bench = ui.labBenchHtml(snapshot, selected, 'C1');
+    rejectsMutation(bench, bench + '<p>Spare pets: Base 0. Need 2.</p>', h => assert.doesNotMatch(h, /Spare pets:|Spare counts/));
+  }
 });
 await check('the two repeated sentences occur once in their applicable context', () => {
   const snapshot = state({ species: { C1: { count: 1, recipes: {
@@ -217,7 +218,7 @@ await check('the two repeated sentences occur once in their applicable context',
     'ember-frost': { distribution: [{ morph: 'toxic', weight: 10 }, { morph: 'rose', weight: 10 }], protection: 'none' }
   } } } });
   const html = ui.labBenchHtml(snapshot, [null,null], 'C1');
-  for (const sentence of ['Two pets in. One new pet out.', 'Always 50/50. Each coin flip can repeat a colour you already have.']) {
+  for (const sentence of ['Make a new colour from two pets of the same species.', 'Always 50/50. Each coin flip can repeat a colour you already have.']) {
     const grade = h => assert.equal(h.split(sentence).length - 1, 1);
     rejectsMutation(html, html + sentence, grade);
     rejectsMutation(html, html.replace(sentence, ''), grade);
@@ -254,11 +255,11 @@ await check('compact supporting disclosures preserve help, recovery and the full
   const grade = h => {
     assert.ok(h.indexOf('data-lab-recover') < h.indexOf('class="lab-working"'));
     assert.ok(h.includes(ui.labBranchesHtml(quote())));
-    for (const text of ['Both inputs are permanently consumed.', 'Every experiment removes two pets to make one.', 'Both pets are consumed.', 'Spending your last copy can remove a colour from your collection.', 'Trained pets are allowed, but all their investment is lost.', '0/1 experiments used', '00:00, America/Vancouver', 'More pet actions']) assert.ok(h.includes(text), text);
+    for (const text of ['Spending your last copy can remove a colour from your collection.', 'Trained pets are allowed, but all their investment is lost.', '0/1 experiments used', '00:00, America/Vancouver', 'More pet actions']) assert.ok(h.includes(text), text);
     assert.match(h, /<details id="labHelp" >/);
   };
   rejectsMutation(html, html.replace(ui.labBranchesHtml(quote()), ''), grade);
-  rejectsMutation(html, html.replaceAll('Both pets are consumed.', ''), grade);
+  rejectsMutation(html, html.replace('Trained pets are allowed, but all their investment is lost.', ''), grade);
   assert.match(ui.labBenchHtml(state(),[null,null],'C1'), /<details id="labHelp" open>/);
   const exhausted = ui.labBenchHtml(state({ remaining: 0, used: 1, pets: [], hasEligiblePair: false }),[null,null],'C1');
   const visible = exhausted.replace(/<details[^>]*>[\s\S]*?<\/details>/g,'');

@@ -1,0 +1,1514 @@
+{
+  "unit": {
+    "file": "agreed-unit",
+    "exit": 0,
+    "seconds": 17.03,
+    "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/agreed-unit.txt"
+  },
+  "pure": [
+    {
+      "file": "version-align-lint.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/version-align-lint.mjs.txt"
+    },
+    {
+      "file": "no-debug-markers-lint.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/no-debug-markers-lint.mjs.txt"
+    },
+    {
+      "file": "store-copy-lint.mjs",
+      "exit": 0,
+      "seconds": 0.13,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/store-copy-lint.mjs.recheck.txt"
+    },
+    {
+      "file": "sync-path-audit.mjs",
+      "exit": 0,
+      "seconds": 0.41,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/sync-path-audit.mjs.recheck.txt"
+    },
+    {
+      "file": "wardrobe-playtest-audit.mjs",
+      "exit": 0,
+      "seconds": 0.37,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/wardrobe-playtest-audit.mjs.txt"
+    },
+    {
+      "file": "lab-room2-audit.mjs",
+      "exit": 0,
+      "seconds": 8.73,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/lab-room2-audit.mjs.txt"
+    },
+    {
+      "file": "stable-stale-disclosure-audit.mjs",
+      "exit": 0,
+      "seconds": 0.16,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/stable-stale-disclosure-audit.mjs.txt"
+    },
+    {
+      "file": "breed-last-colour-audit.mjs",
+      "exit": 0,
+      "seconds": 0.2,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/breed-last-colour-audit.mjs.txt"
+    },
+    {
+      "file": "stable-loss-disclosure-audit.mjs",
+      "exit": 0,
+      "seconds": 0.14,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/stable-loss-disclosure-audit.mjs.txt"
+    },
+    {
+      "file": "lab-health-recovery-audit.mjs",
+      "exit": 0,
+      "seconds": 0.33,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/lab-health-recovery-audit.mjs.txt"
+    },
+    {
+      "file": "lab-integration-audit.mjs",
+      "exit": 0,
+      "seconds": 0.66,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/lab-integration-audit.mjs.txt"
+    },
+    {
+      "file": "lab-ui-audit.mjs",
+      "exit": 0,
+      "seconds": 0.1,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/lab-ui-audit.mjs.txt"
+    },
+    {
+      "file": "laboratory-audit.mjs",
+      "exit": 0,
+      "seconds": 1.14,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/laboratory-audit.mjs.txt"
+    },
+    {
+      "file": "lab-foundation-audit.mjs",
+      "exit": 0,
+      "seconds": 0.83,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/lab-foundation-audit.mjs.txt"
+    },
+    {
+      "file": "pet-stress-guard.mjs",
+      "exit": 0,
+      "seconds": 2.4,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-stress-guard.mjs.txt"
+    },
+    {
+      "file": "crew-pet-node-guard.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/crew-pet-node-guard.mjs.txt"
+    },
+    {
+      "file": "transmog-receipt-audit.mjs",
+      "exit": 0,
+      "seconds": 0.23,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/transmog-receipt-audit.mjs.txt"
+    },
+    {
+      "file": "today-reads-lint.mjs",
+      "exit": 0,
+      "seconds": 3.86,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/today-reads-lint.mjs.txt"
+    },
+    {
+      "file": "kitchen-atomic-audit.mjs",
+      "exit": 0,
+      "seconds": 0.14,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/kitchen-atomic-audit.mjs.txt"
+    },
+    {
+      "file": "backup-encoder-audit.mjs",
+      "exit": 0,
+      "seconds": 0.68,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/backup-encoder-audit.mjs.txt"
+    },
+    {
+      "file": "backup-key-audit.mjs",
+      "exit": 0,
+      "seconds": 0.15,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/backup-key-audit.mjs.txt"
+    },
+    {
+      "file": "backup-version-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/backup-version-audit.mjs.txt"
+    },
+    {
+      "file": "backup-conflict-audit.mjs",
+      "exit": 0,
+      "seconds": 0.14,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/backup-conflict-audit.mjs.txt"
+    },
+    {
+      "file": "unit.test.js",
+      "exit": 0,
+      "seconds": 16.86,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/unit.test.js.txt"
+    },
+    {
+      "file": "log-xp-farm-audit.mjs",
+      "exit": 0,
+      "seconds": 2.54,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/log-xp-farm-audit.mjs.txt"
+    },
+    {
+      "file": "drip-badge-audit.mjs",
+      "exit": 0,
+      "seconds": 0.08,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/drip-badge-audit.mjs.txt"
+    },
+    {
+      "file": "xp-key-provenance-lint.mjs",
+      "exit": 0,
+      "seconds": 0.43,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/xp-key-provenance-lint.mjs.txt"
+    },
+    {
+      "file": "facegate-audit.mjs",
+      "exit": 0,
+      "seconds": 0.39,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/facegate-audit.mjs.txt"
+    },
+    {
+      "file": "garden-appetite-guard.mjs",
+      "exit": 0,
+      "seconds": 0.06,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/garden-appetite-guard.mjs.txt"
+    },
+    {
+      "file": "pit.test.js",
+      "exit": 0,
+      "seconds": 0.1,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pit.test.js.txt"
+    },
+    {
+      "file": "quest-daymore-audit.mjs",
+      "exit": 0,
+      "seconds": 0.06,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/quest-daymore-audit.mjs.txt"
+    },
+    {
+      "file": "quest-pick-audit.mjs",
+      "exit": 0,
+      "seconds": 0.07,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/quest-pick-audit.mjs.txt"
+    },
+    {
+      "file": "first-fight-audit.mjs",
+      "exit": 0,
+      "seconds": 0.07,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/first-fight-audit.mjs.txt"
+    },
+    {
+      "file": "stat-source-audit.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/stat-source-audit.mjs.txt"
+    },
+    {
+      "file": "bastions-rep-sim.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/bastions-rep-sim.mjs.txt"
+    },
+    {
+      "file": "analytics-tag-audit.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/analytics-tag-audit.mjs.txt"
+    },
+    {
+      "file": "icon-inventory-audit.mjs",
+      "exit": 0,
+      "seconds": 0.59,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/icon-inventory-audit.mjs.txt"
+    },
+    {
+      "file": "version-stamp-audit.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/version-stamp-audit.mjs.txt"
+    },
+    {
+      "file": "boneyard-supply-audit.mjs",
+      "exit": 0,
+      "seconds": 0.12,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/boneyard-supply-audit.mjs.txt"
+    },
+    {
+      "file": "loot-fallback-audit.mjs",
+      "exit": 0,
+      "seconds": 3.51,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/loot-fallback-audit.mjs.txt"
+    },
+    {
+      "file": "guard-hygiene-lint.mjs",
+      "exit": 0,
+      "seconds": 7.59,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/guard-hygiene-lint.mjs.recheck.txt"
+    },
+    {
+      "file": "guard-provenance-lint.mjs",
+      "exit": 0,
+      "seconds": 0.07,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/guard-provenance-lint.mjs.txt"
+    },
+    {
+      "file": "feedback-status-lint.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/feedback-status-lint.mjs.txt"
+    },
+    {
+      "file": "rack-theme-lint.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/rack-theme-lint.mjs.txt"
+    },
+    {
+      "file": "rack-rotate-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/rack-rotate-audit.mjs.txt"
+    },
+    {
+      "file": "pet-accessory-lint.mjs",
+      "exit": 0,
+      "seconds": 0.45,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-accessory-lint.mjs.txt"
+    },
+    {
+      "file": "pet-pool-audit.mjs",
+      "exit": 0,
+      "seconds": 2.81,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-pool-audit.mjs.txt"
+    },
+    {
+      "file": "manifest-exports-audit.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/manifest-exports-audit.mjs.txt"
+    },
+    {
+      "file": "xp-curve-audit.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/xp-curve-audit.mjs.txt"
+    },
+    {
+      "file": "live-api-register-lint.mjs",
+      "exit": 0,
+      "seconds": 0.08,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/live-api-register-lint.mjs.txt"
+    },
+    {
+      "file": "claim-evidence-lint.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/claim-evidence-lint.mjs.txt"
+    },
+    {
+      "file": "thumb-freshness-lint.mjs",
+      "exit": 0,
+      "seconds": 4.08,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/thumb-freshness-lint.mjs.txt"
+    },
+    {
+      "file": "render-sink-lint.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/render-sink-lint.mjs.txt"
+    },
+    {
+      "file": "lapse-witness-audit.mjs",
+      "exit": 0,
+      "seconds": 1.77,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/lapse-witness-audit.mjs.txt"
+    },
+    {
+      "file": "spawn-claim-atomic-audit.mjs",
+      "exit": 0,
+      "seconds": 0.08,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/spawn-claim-atomic-audit.mjs.txt"
+    },
+    {
+      "file": "wardrobe-family-audit.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/wardrobe-family-audit.mjs.txt"
+    },
+    {
+      "file": "football-kit-audit.mjs",
+      "exit": 0,
+      "seconds": 0.46,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/football-kit-audit.mjs.txt"
+    },
+    {
+      "file": "restore-latch-audit.mjs",
+      "exit": 0,
+      "seconds": 0.15,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/restore-latch-audit.mjs.txt"
+    },
+    {
+      "file": "first-pet-audit.mjs",
+      "exit": 0,
+      "seconds": 0.2,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/first-pet-audit.mjs.txt"
+    },
+    {
+      "file": "shop-economy-audit.mjs",
+      "exit": 0,
+      "seconds": 0.47,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/shop-economy-audit.mjs.txt"
+    },
+    {
+      "file": "recovery-status-audit.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/recovery-status-audit.mjs.txt"
+    },
+    {
+      "file": "currency-revision-lint.mjs",
+      "exit": 0,
+      "seconds": 0.1,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/currency-revision-lint.mjs.txt"
+    },
+    {
+      "file": "inv-tombstone-audit.mjs",
+      "exit": 0,
+      "seconds": 4.2,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/inv-tombstone-audit.mjs.txt"
+    },
+    {
+      "file": "take-and-pay-audit.mjs",
+      "exit": 0,
+      "seconds": 2.68,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/take-and-pay-audit.mjs.txt"
+    },
+    {
+      "file": "pet-morph-animation-audit.mjs",
+      "exit": 0,
+      "seconds": 0.71,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-morph-animation-audit.mjs.txt"
+    },
+    {
+      "file": "pet-palette-audit.mjs",
+      "exit": 0,
+      "seconds": 3.08,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-palette-audit.mjs.txt"
+    },
+    {
+      "file": "fontscale-audit.mjs",
+      "exit": 0,
+      "seconds": 0.19,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/fontscale-audit.mjs.txt"
+    },
+    {
+      "file": "wheel-easing-audit.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/wheel-easing-audit.mjs.txt"
+    },
+    {
+      "file": "storage-boot-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/storage-boot-audit.mjs.txt"
+    },
+    {
+      "file": "crate-cadence-audit.mjs",
+      "exit": 0,
+      "seconds": 0.06,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/crate-cadence-audit.mjs.txt"
+    },
+    {
+      "file": "silence-disclosure-audit.mjs",
+      "exit": 0,
+      "seconds": 0.06,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/silence-disclosure-audit.mjs.txt"
+    },
+    {
+      "file": "health-disclosure-audit.mjs",
+      "exit": 0,
+      "seconds": 0.2,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/health-disclosure-audit.mjs.txt"
+    },
+    {
+      "file": "paddock-pack-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/paddock-pack-audit.mjs.txt"
+    },
+    {
+      "file": "numbers-honesty-audit.mjs",
+      "exit": 0,
+      "seconds": 0.06,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/numbers-honesty-audit.mjs.txt"
+    },
+    {
+      "file": "locale-numbers-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/locale-numbers-audit.mjs.txt"
+    },
+    {
+      "file": "audit-output-audit.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/audit-output-audit.mjs.txt"
+    },
+    {
+      "file": "branch-graveyard-audit.mjs",
+      "exit": 0,
+      "seconds": 0.16,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/branch-graveyard-audit.mjs.txt"
+    },
+    {
+      "file": "store-runtime-audit.mjs",
+      "exit": 0,
+      "seconds": 1.88,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/store-runtime-audit.mjs.recheck.txt"
+    },
+    {
+      "file": "r47-rest-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/r47-rest-audit.mjs.txt"
+    },
+    {
+      "file": "r47-economy-audit.mjs",
+      "exit": 0,
+      "seconds": 0.23,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/r47-economy-audit.mjs.txt"
+    },
+    {
+      "file": "submission-build-audit.mjs",
+      "exit": 0,
+      "seconds": 6.83,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/submission-build-audit.mjs.recheck.txt"
+    },
+    {
+      "file": "harness-environment-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/harness-environment-audit.mjs.txt"
+    },
+    {
+      "file": "guard-debts-audit.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/guard-debts-audit.mjs.txt"
+    },
+    {
+      "file": "submission-preflight-audit.mjs",
+      "exit": 0,
+      "seconds": 0.58,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/submission-preflight-audit.mjs.recheck.txt"
+    },
+    {
+      "file": "pet-state-audit.mjs",
+      "exit": 0,
+      "seconds": 0.44,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-state-audit.mjs.txt"
+    },
+    {
+      "file": "pet-family-audit.mjs",
+      "exit": 0,
+      "seconds": 0.12,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-family-audit.mjs.txt"
+    },
+    {
+      "file": "crew-pet-audit.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/crew-pet-audit.mjs.txt"
+    },
+    {
+      "file": "coins-merge-tie-audit.mjs",
+      "exit": 0,
+      "seconds": 0.15,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/coins-merge-tie-audit.mjs.txt"
+    },
+    {
+      "file": "routine-race-audit.mjs",
+      "exit": 0,
+      "seconds": 0.09,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/routine-race-audit.mjs.txt"
+    },
+    {
+      "file": "dayone-topup-audit.mjs",
+      "exit": 0,
+      "seconds": 1.7,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/dayone-topup-audit.mjs.txt"
+    },
+    {
+      "file": "dish-worth-audit.mjs",
+      "exit": 0,
+      "seconds": 2.57,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/dish-worth-audit.mjs.txt"
+    },
+    {
+      "file": "pet-C-node-guard.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-C-node-guard.mjs.txt"
+    },
+    {
+      "file": "r48-state-audit.mjs",
+      "exit": 0,
+      "seconds": 1.61,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/r48-state-audit.mjs.txt"
+    },
+    {
+      "file": "r46-logging-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/r46-logging-audit.mjs.txt"
+    },
+    {
+      "file": "r46-diary-audit.mjs",
+      "exit": 0,
+      "seconds": 0.07,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/r46-diary-audit.mjs.txt"
+    },
+    {
+      "file": "zero-calorie-seam-audit.mjs",
+      "exit": 0,
+      "seconds": 2.69,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/zero-calorie-seam-audit.mjs.txt"
+    },
+    {
+      "file": "audit-completion-audit.mjs",
+      "exit": 0,
+      "seconds": 0.56,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/audit-completion-audit.mjs.txt"
+    },
+    {
+      "file": "machine-character-audit.mjs",
+      "exit": 0,
+      "seconds": 2.37,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/machine-character-audit.mjs.txt"
+    },
+    {
+      "file": "n3-deadpaths-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/n3-deadpaths-audit.mjs.txt"
+    },
+    {
+      "file": "m5-prove-red.mjs",
+      "exit": 1,
+      "seconds": 1.58,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/m5-prove-red.mjs.recheck.txt",
+      "tail": "AUDIT START m5-prove-red.mjs: completion pending; planned rows undeclared\nPASS CONTROL green-first-run: exit 0, expected 0\n3/3 M5 guards passed\nPASS CONTROL green-lint: exit 0, expected 0\nlookup-guard: PASS\nPASS CONTROL red-old-disclosure: exit 1, expected 1\nFAIL M5 Gwart introduces himself and discloses the anonymous account verbatim: Expected values to be strictly equal:\n2/3 M5 guards passed\nPASS CONTROL red-first-run-suppressed: exit 1, expected 1\nFAIL M5 splash keeps first run and skips returning only: returning=false, forced=false\n2/3 M5 guards passed\nPASS CONTROL red-old-splash-gate: exit 1, expected 1\nFAIL M5 splash keeps first run and skips returning only: returning=false, forced=false\n2/3 M5 guards passed\nPASS CONTROL red-returning-splash: exit 1, expected 1\nFAIL M5 splash keeps first run and skips returning only: returning=true, forced=false\n2/3 M5 guards passed\nPASS CONTROL red-toast-cap-deleted: exit 1, expected 1\nFAIL M5 toast retains the four-job backlog cap and each retained job gets its dwell: Expected values to be strictly deep-equal:\n2/3 M5 guards passed\nPASS CONTROL red-pet-species: exit 1, expected 1\nSITE js/app.js:20149 filtered-id-boundary x.sp -> insts -> petPortraitHtml(x.sp [UNREVIEWED]\nFAIL NEW unresolved lookup guard: js/app.js:20149 x.sp\nlookup-guard: 1 FAILED\nPASS CONTROL red-equipped-art: exit 1, expected 1\nSITE js/app.js:17159 lookup-alias baseArtId -> BH_BY_ID[baseArtId] -> bhAsset(ownArt) [UNREVIEWED]\nFAIL NEW unresolved lookup guard: js/app.js:17159 baseArtId\nlookup-guard: 1 FAILED\nPASS CONTROL restored-first-run: exit 0, expected 0\n3/3 M5 guards passed\nPASS CONTROL restored-lint: exit 0, expected 0\nlookup-guard: PASS\nEvidence: /var/folders/k7/gh5s55k16q17nlm_hj_3g3bm0000gp/T/m5-red-9TPFnS\nm5-prove-red: PASS\nRETAINED FAIL M5 Gwart introduces himself and discloses the anonymous account verbatim: Expected values to be strictly equal:\nRETAINED FAIL M5 splash keeps first run and skips returning only: returning=false, forced=false\nRETAINED FAIL M5 splash keeps first run and skips returning only: returning=false, forced=false\nRETAINED FAIL M5 splash keeps first run and skips returning only: returning=true, forced=false\nRETAINED FAIL M5 toast retains the four-job backlog cap and each retained job gets its dwell: Expected values to be strictly deep-equal:\nRETAINED FAIL NEW unresolved lookup guard: js/app.js:20149 x.sp\nRETAINED FAIL NEW unresolved lookup guard: js/app.js:17159 baseArtId\nAUDIT END m5-prove-red.mjs: FAILED; NORMAL EXIT (row coverage undeclared); rows=18/undeclared; failed=7; unproven=0; exit=1\n"
+    },
+    {
+      "file": "lookup-guard-lint.mjs",
+      "exit": 0,
+      "seconds": 0.36,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/lookup-guard-lint.mjs.txt"
+    },
+    {
+      "file": "restore-state-audit.mjs",
+      "exit": 0,
+      "seconds": 0.27,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/restore-state-audit.mjs.txt"
+    },
+    {
+      "file": "restore-debt-edges-audit.mjs",
+      "exit": 0,
+      "seconds": 0.23,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/restore-debt-edges-audit.mjs.txt"
+    },
+    {
+      "file": "restore-debt-audit.mjs",
+      "exit": 0,
+      "seconds": 0.07,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/restore-debt-audit.mjs.txt"
+    },
+    {
+      "file": "p1-r48-rest-audit.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/p1-r48-rest-audit.mjs.txt"
+    },
+    {
+      "file": "pet-a11y-audit.mjs",
+      "exit": 0,
+      "seconds": 0.06,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-a11y-audit.mjs.txt"
+    },
+    {
+      "file": "kennel-copy-audit.mjs",
+      "exit": 0,
+      "seconds": 0.28,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/kennel-copy-audit.mjs.txt"
+    },
+    {
+      "file": "breed-lock-audit.mjs",
+      "exit": 0,
+      "seconds": 0.07,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/breed-lock-audit.mjs.txt"
+    },
+    {
+      "file": "device-loss-audit.mjs",
+      "exit": 0,
+      "seconds": 1.66,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/device-loss-audit.mjs.txt"
+    },
+    {
+      "file": "multidevice-earnings-audit.mjs",
+      "exit": 0,
+      "seconds": 0.99,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/multidevice-earnings-audit.mjs.txt"
+    },
+    {
+      "file": "response-bodies-audit.mjs",
+      "exit": 0,
+      "seconds": 1.28,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/response-bodies-audit.mjs.txt"
+    },
+    {
+      "file": "p1-merge-audit.mjs",
+      "exit": 0,
+      "seconds": 0.29,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/p1-merge-audit.mjs.txt"
+    },
+    {
+      "file": "quest-wheel-budget-audit.mjs",
+      "exit": 0,
+      "seconds": 0.62,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/quest-wheel-budget-audit.mjs.txt"
+    },
+    {
+      "file": "kitchen-delivery-audit.mjs",
+      "exit": 0,
+      "seconds": 0.42,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/kitchen-delivery-audit.mjs.txt"
+    },
+    {
+      "file": "map-playtest-audit.mjs",
+      "exit": 0,
+      "seconds": 0.22,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/map-playtest-audit.mjs.txt"
+    },
+    {
+      "file": "p1-dens-audit.mjs",
+      "exit": 0,
+      "seconds": 0.4,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/p1-dens-audit.mjs.txt"
+    },
+    {
+      "file": "crew-yard-row-audit.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/crew-yard-row-audit.mjs.txt"
+    },
+    {
+      "file": "pet-rarity-audit.mjs",
+      "exit": 0,
+      "seconds": 0.11,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-rarity-audit.mjs.txt"
+    },
+    {
+      "file": "stable-rooms-top-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/stable-rooms-top-audit.mjs.txt"
+    },
+    {
+      "file": "today-playtest-audit.mjs",
+      "exit": 0,
+      "seconds": 0.5,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/today-playtest-audit.mjs.txt"
+    },
+    {
+      "file": "crew-playtest-audit.mjs",
+      "exit": 0,
+      "seconds": 0.89,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/crew-playtest-audit.mjs.txt"
+    },
+    {
+      "file": "firstrun-audit.mjs",
+      "exit": 0,
+      "seconds": 0.86,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/firstrun-audit.mjs.txt"
+    },
+    {
+      "file": "settings-safety-audit.mjs",
+      "exit": 0,
+      "seconds": 0.12,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/settings-safety-audit.mjs.txt"
+    },
+    {
+      "file": "progress-playtest-audit.mjs",
+      "exit": 0,
+      "seconds": 0.28,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/progress-playtest-audit.mjs.txt"
+    }
+  ],
+  "total": 124,
+  "complete": true,
+  "initialPure": [
+    {
+      "file": "version-align-lint.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/version-align-lint.mjs.txt"
+    },
+    {
+      "file": "no-debug-markers-lint.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/no-debug-markers-lint.mjs.txt"
+    },
+    {
+      "file": "store-copy-lint.mjs",
+      "exit": 97,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/store-copy-lint.mjs.txt",
+      "tail": "AUDIT START store-copy-lint.mjs: completion pending; planned rows undeclared\nUNPRV esprima  DID NOT RUN: missing dependency esprima. Install from this checkout root: npm ci --include=dev\nAUDIT END store-copy-lint.mjs: UNPROVEN; NORMAL EXIT (row coverage undeclared); rows=1/undeclared; failed=0; unproven=1; exit=97\n"
+    },
+    {
+      "file": "sync-path-audit.mjs",
+      "exit": 0,
+      "seconds": 0.41,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/sync-path-audit.mjs.txt"
+    },
+    {
+      "file": "wardrobe-playtest-audit.mjs",
+      "exit": 0,
+      "seconds": 0.37,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/wardrobe-playtest-audit.mjs.txt"
+    },
+    {
+      "file": "lab-room2-audit.mjs",
+      "exit": 0,
+      "seconds": 8.73,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/lab-room2-audit.mjs.txt"
+    },
+    {
+      "file": "stable-stale-disclosure-audit.mjs",
+      "exit": 0,
+      "seconds": 0.16,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/stable-stale-disclosure-audit.mjs.txt"
+    },
+    {
+      "file": "breed-last-colour-audit.mjs",
+      "exit": 0,
+      "seconds": 0.2,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/breed-last-colour-audit.mjs.txt"
+    },
+    {
+      "file": "stable-loss-disclosure-audit.mjs",
+      "exit": 0,
+      "seconds": 0.14,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/stable-loss-disclosure-audit.mjs.txt"
+    },
+    {
+      "file": "lab-health-recovery-audit.mjs",
+      "exit": 0,
+      "seconds": 0.33,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/lab-health-recovery-audit.mjs.txt"
+    },
+    {
+      "file": "lab-integration-audit.mjs",
+      "exit": 0,
+      "seconds": 0.66,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/lab-integration-audit.mjs.txt"
+    },
+    {
+      "file": "lab-ui-audit.mjs",
+      "exit": 0,
+      "seconds": 0.1,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/lab-ui-audit.mjs.txt"
+    },
+    {
+      "file": "laboratory-audit.mjs",
+      "exit": 0,
+      "seconds": 1.14,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/laboratory-audit.mjs.txt"
+    },
+    {
+      "file": "lab-foundation-audit.mjs",
+      "exit": 0,
+      "seconds": 0.83,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/lab-foundation-audit.mjs.txt"
+    },
+    {
+      "file": "pet-stress-guard.mjs",
+      "exit": 0,
+      "seconds": 2.4,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-stress-guard.mjs.txt"
+    },
+    {
+      "file": "crew-pet-node-guard.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/crew-pet-node-guard.mjs.txt"
+    },
+    {
+      "file": "transmog-receipt-audit.mjs",
+      "exit": 0,
+      "seconds": 0.23,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/transmog-receipt-audit.mjs.txt"
+    },
+    {
+      "file": "today-reads-lint.mjs",
+      "exit": 0,
+      "seconds": 3.86,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/today-reads-lint.mjs.txt"
+    },
+    {
+      "file": "kitchen-atomic-audit.mjs",
+      "exit": 0,
+      "seconds": 0.14,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/kitchen-atomic-audit.mjs.txt"
+    },
+    {
+      "file": "backup-encoder-audit.mjs",
+      "exit": 0,
+      "seconds": 0.68,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/backup-encoder-audit.mjs.txt"
+    },
+    {
+      "file": "backup-key-audit.mjs",
+      "exit": 0,
+      "seconds": 0.15,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/backup-key-audit.mjs.txt"
+    },
+    {
+      "file": "backup-version-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/backup-version-audit.mjs.txt"
+    },
+    {
+      "file": "backup-conflict-audit.mjs",
+      "exit": 0,
+      "seconds": 0.14,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/backup-conflict-audit.mjs.txt"
+    },
+    {
+      "file": "unit.test.js",
+      "exit": 0,
+      "seconds": 16.86,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/unit.test.js.txt"
+    },
+    {
+      "file": "log-xp-farm-audit.mjs",
+      "exit": 0,
+      "seconds": 2.54,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/log-xp-farm-audit.mjs.txt"
+    },
+    {
+      "file": "drip-badge-audit.mjs",
+      "exit": 0,
+      "seconds": 0.08,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/drip-badge-audit.mjs.txt"
+    },
+    {
+      "file": "xp-key-provenance-lint.mjs",
+      "exit": 0,
+      "seconds": 0.43,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/xp-key-provenance-lint.mjs.txt"
+    },
+    {
+      "file": "facegate-audit.mjs",
+      "exit": 0,
+      "seconds": 0.39,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/facegate-audit.mjs.txt"
+    },
+    {
+      "file": "garden-appetite-guard.mjs",
+      "exit": 0,
+      "seconds": 0.06,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/garden-appetite-guard.mjs.txt"
+    },
+    {
+      "file": "pit.test.js",
+      "exit": 0,
+      "seconds": 0.1,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pit.test.js.txt"
+    },
+    {
+      "file": "quest-daymore-audit.mjs",
+      "exit": 0,
+      "seconds": 0.06,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/quest-daymore-audit.mjs.txt"
+    },
+    {
+      "file": "quest-pick-audit.mjs",
+      "exit": 0,
+      "seconds": 0.07,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/quest-pick-audit.mjs.txt"
+    },
+    {
+      "file": "first-fight-audit.mjs",
+      "exit": 0,
+      "seconds": 0.07,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/first-fight-audit.mjs.txt"
+    },
+    {
+      "file": "stat-source-audit.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/stat-source-audit.mjs.txt"
+    },
+    {
+      "file": "bastions-rep-sim.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/bastions-rep-sim.mjs.txt"
+    },
+    {
+      "file": "analytics-tag-audit.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/analytics-tag-audit.mjs.txt"
+    },
+    {
+      "file": "icon-inventory-audit.mjs",
+      "exit": 0,
+      "seconds": 0.59,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/icon-inventory-audit.mjs.txt"
+    },
+    {
+      "file": "version-stamp-audit.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/version-stamp-audit.mjs.txt"
+    },
+    {
+      "file": "boneyard-supply-audit.mjs",
+      "exit": 0,
+      "seconds": 0.12,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/boneyard-supply-audit.mjs.txt"
+    },
+    {
+      "file": "loot-fallback-audit.mjs",
+      "exit": 0,
+      "seconds": 3.51,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/loot-fallback-audit.mjs.txt"
+    },
+    {
+      "file": "guard-hygiene-lint.mjs",
+      "exit": 1,
+      "seconds": 7.95,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/guard-hygiene-lint.mjs.txt",
+      "tail": "AUDIT START guard-hygiene-lint.mjs: completion pending; planned rows undeclared\nok    SETUP the lint found test files to scan  392 files\nok    RUNNER no case is registered after the runner has already drained  none\nok    SETUP the audit scan is not vacuous  356 audits\nok    CONTROL the number of audits with NO positive control does not rise above 49  49 of 356 carry no CONTROL/PREMISE/SETUP/REACH/SAMPLE row. ratchet holding\nok    LITERAL-TRUE no audit asserts a constant success (including NO page errors)  0 offenders\nok    LITERAL-TRUE the ten justified reports are excused exactly once  10 excused; 0 stale or duplicated\nok    CONTROL literal-true catches a new offender even inside an excused file\nok    PARSES every audit is something Node will actually execute  392 files parse\nok    SEAM no NEW audit proves a feature only through a test hook  29 known seam-only, 0 new\nok    SEAM the seam-only inventory has no stale entries (fixed one? delete its line)  inventory matches\nFAIL  OUTPUT all recognized audit writes validate destinations outside the graded checkout  lib/sync-controls.mjs:11 mkdtempSync | lib/sync-controls.mjs:13 cpSync | lib/sync-controls.mjs:31 writeFileSync | lib/sync-controls.mjs:40 rmSync | lib/sync-history.mjs:13 mkdtempSync | lib/sync-history.mjs:21 rmSync\nok    CONTROL the output sweep is nonempty and rejects an unguarded checkout screenshot  411 files scanned recursively\n\nguard-hygiene: 1 FAILED\nRETAINED FAIL OUTPUT all recognized audit writes validate destinations outside the graded checkout  lib/sync-controls.mjs:11 mkdtempSync | lib/sync-controls.mjs:13 cpSync | lib/sync-controls.mjs:31 writeFileSync | lib/sync-controls.mjs:40 rmSync | lib/sync-history.mjs:13 mkdtempSync | lib/sync-history.mjs:21 rmSync\nAUDIT END guard-hygiene-lint.mjs: FAILED; NORMAL EXIT (row coverage undeclared); rows=12/undeclared; failed=1; unproven=0; exit=1\n"
+    },
+    {
+      "file": "guard-provenance-lint.mjs",
+      "exit": 0,
+      "seconds": 0.07,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/guard-provenance-lint.mjs.txt"
+    },
+    {
+      "file": "feedback-status-lint.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/feedback-status-lint.mjs.txt"
+    },
+    {
+      "file": "rack-theme-lint.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/rack-theme-lint.mjs.txt"
+    },
+    {
+      "file": "rack-rotate-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/rack-rotate-audit.mjs.txt"
+    },
+    {
+      "file": "pet-accessory-lint.mjs",
+      "exit": 0,
+      "seconds": 0.45,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-accessory-lint.mjs.txt"
+    },
+    {
+      "file": "pet-pool-audit.mjs",
+      "exit": 0,
+      "seconds": 2.81,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-pool-audit.mjs.txt"
+    },
+    {
+      "file": "manifest-exports-audit.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/manifest-exports-audit.mjs.txt"
+    },
+    {
+      "file": "xp-curve-audit.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/xp-curve-audit.mjs.txt"
+    },
+    {
+      "file": "live-api-register-lint.mjs",
+      "exit": 0,
+      "seconds": 0.08,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/live-api-register-lint.mjs.txt"
+    },
+    {
+      "file": "claim-evidence-lint.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/claim-evidence-lint.mjs.txt"
+    },
+    {
+      "file": "thumb-freshness-lint.mjs",
+      "exit": 0,
+      "seconds": 4.08,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/thumb-freshness-lint.mjs.txt"
+    },
+    {
+      "file": "render-sink-lint.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/render-sink-lint.mjs.txt"
+    },
+    {
+      "file": "lapse-witness-audit.mjs",
+      "exit": 0,
+      "seconds": 1.77,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/lapse-witness-audit.mjs.txt"
+    },
+    {
+      "file": "spawn-claim-atomic-audit.mjs",
+      "exit": 0,
+      "seconds": 0.08,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/spawn-claim-atomic-audit.mjs.txt"
+    },
+    {
+      "file": "wardrobe-family-audit.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/wardrobe-family-audit.mjs.txt"
+    },
+    {
+      "file": "football-kit-audit.mjs",
+      "exit": 0,
+      "seconds": 0.46,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/football-kit-audit.mjs.txt"
+    },
+    {
+      "file": "restore-latch-audit.mjs",
+      "exit": 0,
+      "seconds": 0.15,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/restore-latch-audit.mjs.txt"
+    },
+    {
+      "file": "first-pet-audit.mjs",
+      "exit": 0,
+      "seconds": 0.2,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/first-pet-audit.mjs.txt"
+    },
+    {
+      "file": "shop-economy-audit.mjs",
+      "exit": 0,
+      "seconds": 0.47,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/shop-economy-audit.mjs.txt"
+    },
+    {
+      "file": "recovery-status-audit.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/recovery-status-audit.mjs.txt"
+    },
+    {
+      "file": "currency-revision-lint.mjs",
+      "exit": 0,
+      "seconds": 0.1,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/currency-revision-lint.mjs.txt"
+    },
+    {
+      "file": "inv-tombstone-audit.mjs",
+      "exit": 0,
+      "seconds": 4.2,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/inv-tombstone-audit.mjs.txt"
+    },
+    {
+      "file": "take-and-pay-audit.mjs",
+      "exit": 0,
+      "seconds": 2.68,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/take-and-pay-audit.mjs.txt"
+    },
+    {
+      "file": "pet-morph-animation-audit.mjs",
+      "exit": 0,
+      "seconds": 0.71,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-morph-animation-audit.mjs.txt"
+    },
+    {
+      "file": "pet-palette-audit.mjs",
+      "exit": 0,
+      "seconds": 3.08,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-palette-audit.mjs.txt"
+    },
+    {
+      "file": "fontscale-audit.mjs",
+      "exit": 0,
+      "seconds": 0.19,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/fontscale-audit.mjs.txt"
+    },
+    {
+      "file": "wheel-easing-audit.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/wheel-easing-audit.mjs.txt"
+    },
+    {
+      "file": "storage-boot-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/storage-boot-audit.mjs.txt"
+    },
+    {
+      "file": "crate-cadence-audit.mjs",
+      "exit": 0,
+      "seconds": 0.06,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/crate-cadence-audit.mjs.txt"
+    },
+    {
+      "file": "silence-disclosure-audit.mjs",
+      "exit": 0,
+      "seconds": 0.06,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/silence-disclosure-audit.mjs.txt"
+    },
+    {
+      "file": "health-disclosure-audit.mjs",
+      "exit": 0,
+      "seconds": 0.2,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/health-disclosure-audit.mjs.txt"
+    },
+    {
+      "file": "paddock-pack-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/paddock-pack-audit.mjs.txt"
+    },
+    {
+      "file": "numbers-honesty-audit.mjs",
+      "exit": 0,
+      "seconds": 0.06,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/numbers-honesty-audit.mjs.txt"
+    },
+    {
+      "file": "locale-numbers-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/locale-numbers-audit.mjs.txt"
+    },
+    {
+      "file": "audit-output-audit.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/audit-output-audit.mjs.txt"
+    },
+    {
+      "file": "branch-graveyard-audit.mjs",
+      "exit": 0,
+      "seconds": 0.16,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/branch-graveyard-audit.mjs.txt"
+    },
+    {
+      "file": "store-runtime-audit.mjs",
+      "exit": 97,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/store-runtime-audit.mjs.txt",
+      "tail": "AUDIT START store-runtime-audit.mjs: completion pending; planned rows undeclared\nUNPRV esprima  DID NOT RUN: missing dependency esprima. Install from this checkout root: npm ci --include=dev\nAUDIT END store-runtime-audit.mjs: UNPROVEN; NORMAL EXIT (row coverage undeclared); rows=1/undeclared; failed=0; unproven=1; exit=97\n"
+    },
+    {
+      "file": "r47-rest-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/r47-rest-audit.mjs.txt"
+    },
+    {
+      "file": "r47-economy-audit.mjs",
+      "exit": 0,
+      "seconds": 0.23,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/r47-economy-audit.mjs.txt"
+    },
+    {
+      "file": "submission-build-audit.mjs",
+      "exit": 97,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/submission-build-audit.mjs.txt",
+      "tail": "AUDIT START submission-build-audit.mjs: completion pending; planned rows undeclared\nUNPRV esprima  DID NOT RUN: missing dependency esprima. Install from this checkout root: npm ci --include=dev\nAUDIT END submission-build-audit.mjs: UNPROVEN; NORMAL EXIT (row coverage undeclared); rows=1/undeclared; failed=0; unproven=1; exit=97\n"
+    },
+    {
+      "file": "harness-environment-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/harness-environment-audit.mjs.txt"
+    },
+    {
+      "file": "guard-debts-audit.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/guard-debts-audit.mjs.txt"
+    },
+    {
+      "file": "submission-preflight-audit.mjs",
+      "exit": 97,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/submission-preflight-audit.mjs.txt",
+      "tail": "AUDIT START submission-preflight-audit.mjs: completion pending; planned rows undeclared\nUNPRV esprima  DID NOT RUN: missing dependency esprima. Install from this checkout root: npm ci --include=dev\nAUDIT END submission-preflight-audit.mjs: UNPROVEN; NORMAL EXIT (row coverage undeclared); rows=1/undeclared; failed=0; unproven=1; exit=97\n"
+    },
+    {
+      "file": "pet-state-audit.mjs",
+      "exit": 0,
+      "seconds": 0.44,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-state-audit.mjs.txt"
+    },
+    {
+      "file": "pet-family-audit.mjs",
+      "exit": 0,
+      "seconds": 0.12,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-family-audit.mjs.txt"
+    },
+    {
+      "file": "crew-pet-audit.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/crew-pet-audit.mjs.txt"
+    },
+    {
+      "file": "coins-merge-tie-audit.mjs",
+      "exit": 0,
+      "seconds": 0.15,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/coins-merge-tie-audit.mjs.txt"
+    },
+    {
+      "file": "routine-race-audit.mjs",
+      "exit": 0,
+      "seconds": 0.09,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/routine-race-audit.mjs.txt"
+    },
+    {
+      "file": "dayone-topup-audit.mjs",
+      "exit": 0,
+      "seconds": 1.7,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/dayone-topup-audit.mjs.txt"
+    },
+    {
+      "file": "dish-worth-audit.mjs",
+      "exit": 0,
+      "seconds": 2.57,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/dish-worth-audit.mjs.txt"
+    },
+    {
+      "file": "pet-C-node-guard.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-C-node-guard.mjs.txt"
+    },
+    {
+      "file": "r48-state-audit.mjs",
+      "exit": 0,
+      "seconds": 1.61,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/r48-state-audit.mjs.txt"
+    },
+    {
+      "file": "r46-logging-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/r46-logging-audit.mjs.txt"
+    },
+    {
+      "file": "r46-diary-audit.mjs",
+      "exit": 0,
+      "seconds": 0.07,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/r46-diary-audit.mjs.txt"
+    },
+    {
+      "file": "zero-calorie-seam-audit.mjs",
+      "exit": 0,
+      "seconds": 2.69,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/zero-calorie-seam-audit.mjs.txt"
+    },
+    {
+      "file": "audit-completion-audit.mjs",
+      "exit": 0,
+      "seconds": 0.56,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/audit-completion-audit.mjs.txt"
+    },
+    {
+      "file": "machine-character-audit.mjs",
+      "exit": 0,
+      "seconds": 2.37,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/machine-character-audit.mjs.txt"
+    },
+    {
+      "file": "n3-deadpaths-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/n3-deadpaths-audit.mjs.txt"
+    },
+    {
+      "file": "m5-prove-red.mjs",
+      "exit": 1,
+      "seconds": 1.7,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/m5-prove-red.mjs.txt",
+      "tail": "AUDIT START m5-prove-red.mjs: completion pending; planned rows undeclared\nPASS CONTROL green-first-run: exit 0, expected 0\n3/3 M5 guards passed\nPASS CONTROL green-lint: exit 0, expected 0\nlookup-guard: PASS\nPASS CONTROL red-old-disclosure: exit 1, expected 1\nFAIL M5 Gwart introduces himself and discloses the anonymous account verbatim: Expected values to be strictly equal:\n2/3 M5 guards passed\nPASS CONTROL red-first-run-suppressed: exit 1, expected 1\nFAIL M5 splash keeps first run and skips returning only: returning=false, forced=false\n2/3 M5 guards passed\nPASS CONTROL red-old-splash-gate: exit 1, expected 1\nFAIL M5 splash keeps first run and skips returning only: returning=false, forced=false\n2/3 M5 guards passed\nPASS CONTROL red-returning-splash: exit 1, expected 1\nFAIL M5 splash keeps first run and skips returning only: returning=true, forced=false\n2/3 M5 guards passed\nPASS CONTROL red-toast-cap-deleted: exit 1, expected 1\nFAIL M5 toast retains the four-job backlog cap and each retained job gets its dwell: Expected values to be strictly deep-equal:\n2/3 M5 guards passed\nPASS CONTROL red-pet-species: exit 1, expected 1\nSITE js/app.js:20149 filtered-id-boundary x.sp -> insts -> petPortraitHtml(x.sp [UNREVIEWED]\nFAIL NEW unresolved lookup guard: js/app.js:20149 x.sp\nlookup-guard: 1 FAILED\nPASS CONTROL red-equipped-art: exit 1, expected 1\nSITE js/app.js:17159 lookup-alias baseArtId -> BH_BY_ID[baseArtId] -> bhAsset(ownArt) [UNREVIEWED]\nFAIL NEW unresolved lookup guard: js/app.js:17159 baseArtId\nlookup-guard: 1 FAILED\nPASS CONTROL restored-first-run: exit 0, expected 0\n3/3 M5 guards passed\nPASS CONTROL restored-lint: exit 0, expected 0\nlookup-guard: PASS\nEvidence: /var/folders/k7/gh5s55k16q17nlm_hj_3g3bm0000gp/T/m5-red-OYfGWV\nm5-prove-red: PASS\nRETAINED FAIL M5 Gwart introduces himself and discloses the anonymous account verbatim: Expected values to be strictly equal:\nRETAINED FAIL M5 splash keeps first run and skips returning only: returning=false, forced=false\nRETAINED FAIL M5 splash keeps first run and skips returning only: returning=false, forced=false\nRETAINED FAIL M5 splash keeps first run and skips returning only: returning=true, forced=false\nRETAINED FAIL M5 toast retains the four-job backlog cap and each retained job gets its dwell: Expected values to be strictly deep-equal:\nRETAINED FAIL NEW unresolved lookup guard: js/app.js:20149 x.sp\nRETAINED FAIL NEW unresolved lookup guard: js/app.js:17159 baseArtId\nAUDIT END m5-prove-red.mjs: FAILED; NORMAL EXIT (row coverage undeclared); rows=18/undeclared; failed=7; unproven=0; exit=1\n"
+    },
+    {
+      "file": "lookup-guard-lint.mjs",
+      "exit": 0,
+      "seconds": 0.36,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/lookup-guard-lint.mjs.txt"
+    },
+    {
+      "file": "restore-state-audit.mjs",
+      "exit": 0,
+      "seconds": 0.27,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/restore-state-audit.mjs.txt"
+    },
+    {
+      "file": "restore-debt-edges-audit.mjs",
+      "exit": 0,
+      "seconds": 0.23,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/restore-debt-edges-audit.mjs.txt"
+    },
+    {
+      "file": "restore-debt-audit.mjs",
+      "exit": 0,
+      "seconds": 0.07,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/restore-debt-audit.mjs.txt"
+    },
+    {
+      "file": "p1-r48-rest-audit.mjs",
+      "exit": 0,
+      "seconds": 0.03,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/p1-r48-rest-audit.mjs.txt"
+    },
+    {
+      "file": "pet-a11y-audit.mjs",
+      "exit": 0,
+      "seconds": 0.06,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-a11y-audit.mjs.txt"
+    },
+    {
+      "file": "kennel-copy-audit.mjs",
+      "exit": 0,
+      "seconds": 0.28,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/kennel-copy-audit.mjs.txt"
+    },
+    {
+      "file": "breed-lock-audit.mjs",
+      "exit": 0,
+      "seconds": 0.07,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/breed-lock-audit.mjs.txt"
+    },
+    {
+      "file": "device-loss-audit.mjs",
+      "exit": 0,
+      "seconds": 1.66,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/device-loss-audit.mjs.txt"
+    },
+    {
+      "file": "multidevice-earnings-audit.mjs",
+      "exit": 0,
+      "seconds": 0.99,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/multidevice-earnings-audit.mjs.txt"
+    },
+    {
+      "file": "response-bodies-audit.mjs",
+      "exit": 0,
+      "seconds": 1.28,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/response-bodies-audit.mjs.txt"
+    },
+    {
+      "file": "p1-merge-audit.mjs",
+      "exit": 0,
+      "seconds": 0.29,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/p1-merge-audit.mjs.txt"
+    },
+    {
+      "file": "quest-wheel-budget-audit.mjs",
+      "exit": 0,
+      "seconds": 0.62,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/quest-wheel-budget-audit.mjs.txt"
+    },
+    {
+      "file": "kitchen-delivery-audit.mjs",
+      "exit": 0,
+      "seconds": 0.42,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/kitchen-delivery-audit.mjs.txt"
+    },
+    {
+      "file": "map-playtest-audit.mjs",
+      "exit": 0,
+      "seconds": 0.22,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/map-playtest-audit.mjs.txt"
+    },
+    {
+      "file": "p1-dens-audit.mjs",
+      "exit": 0,
+      "seconds": 0.4,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/p1-dens-audit.mjs.txt"
+    },
+    {
+      "file": "crew-yard-row-audit.mjs",
+      "exit": 0,
+      "seconds": 0.04,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/crew-yard-row-audit.mjs.txt"
+    },
+    {
+      "file": "pet-rarity-audit.mjs",
+      "exit": 0,
+      "seconds": 0.11,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/pet-rarity-audit.mjs.txt"
+    },
+    {
+      "file": "stable-rooms-top-audit.mjs",
+      "exit": 0,
+      "seconds": 0.05,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/stable-rooms-top-audit.mjs.txt"
+    },
+    {
+      "file": "today-playtest-audit.mjs",
+      "exit": 0,
+      "seconds": 0.5,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/today-playtest-audit.mjs.txt"
+    },
+    {
+      "file": "crew-playtest-audit.mjs",
+      "exit": 0,
+      "seconds": 0.89,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/crew-playtest-audit.mjs.txt"
+    },
+    {
+      "file": "firstrun-audit.mjs",
+      "exit": 0,
+      "seconds": 0.86,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/firstrun-audit.mjs.txt"
+    },
+    {
+      "file": "settings-safety-audit.mjs",
+      "exit": 0,
+      "seconds": 0.12,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/settings-safety-audit.mjs.txt"
+    },
+    {
+      "file": "progress-playtest-audit.mjs",
+      "exit": 0,
+      "seconds": 0.28,
+      "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/progress-playtest-audit.mjs.txt"
+    }
+  ],
+  "m5Direct": {
+    "command": "node tests/m5-prove-red.mjs",
+    "exit": 0,
+    "log": "/private/tmp/sync-bisect-proof-fo0ls4iu/m5-direct.txt"
+  }
+}
