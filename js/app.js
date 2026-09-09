@@ -18972,7 +18972,7 @@ function lazyHydrateWardArt(scope) {
 function hydratePackArt(scope, sel = '.pc-canvas[data-art]') {
   /* A MANNEQUIN CARD HAS NO CANVAS, AND SILENCE HERE WOULD MEAN AN UNDECODED
      ENTRANCE. Every caller uses this promise as "the art is ready": renderCard
-     races it before letting the card fly in, and wireLootChoice awaits it before
+     races it before the first browsing card, and wireLootChoice awaits it before
      the boss-loot grid is touchable. A wear card's layers are plain <img>s, so
      without this branch the promise resolved instantly and the card rose with an
      empty panel -- the same failure the canvas path was built to avoid, and the
@@ -19266,6 +19266,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         burst.restart(0);
       }
 
+      let sx = 0, dx = 0, pid = null, flung = false;
       // Two frames, so tearing .go off and putting it back really does restart
       // the entrance instead of being coalesced into no change at all.
       /* SAME SHAPE AS THE ROUTE REVEAL, FOUND BY SWEEPING FOR IT.
@@ -19303,20 +19304,30 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         at(beat('--b-card'), () => landed(tier));                             // the card is up
         if (CRATE_SEQ[crate]) playCrateSeq(reveal, wrap, crateSeqReady, at, crate, tOpen);
       } else {
-        // Art first, THEN the entrance. The card used to fly in with an empty art
-        // panel and fill itself a moment later, which robbed the payoff. Capped so
-        // a slow asset delays the reveal rather than blocking it forever.
-        Promise.race([hydratePackArt(deck), new Promise(r => setTimeout(r, 700))]).then(() => {
+        const artReady = hydratePackArt(deck);
+        const next = i > 0 && !reduced;
+        const enter = () => {
           if (flung || !reveal.isConnected) return;
-          go(); landed(tier);
+          if (next) {
+            // The deck contains a NEW rise node. Commit its hidden starting
+            // style now so browsing needs neither two frames nor the 300ms
+            // fallback before its authored 20ms + 380ms entrance can start.
+            void deck.offsetWidth;
+            deck.classList.add('go');
+          } else go();
+          landed(tier);
           // The move now overlaps: 20ms delay + 380ms rise. Keep the shader
           // paused through the audit's full 520ms flick window, and never let
           // an older card's timer resume it during a newer throw.
           at(560, () => { if (!flung && reveal.isConnected) burst?.resume(); });
-        });
+        };
+        // Warmed art continues hydrating while subsequent cards rise. Waiting
+        // here added up to 700ms between items despite immediate advance dispatch.
+        // Cold art can fill late; the first card retains its art-first gate.
+        if (next) enter();
+        else Promise.race([artReady, new Promise(r => setTimeout(r, 700))]).then(enter);
       }
 
-      let sx = 0, dx = 0, pid = null, flung = false;
       const settle = () => {
         if (flung) return;
         tilt.style.transition = 'transform .3s cubic-bezier(.22,1,.36,1)';
