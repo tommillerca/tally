@@ -1325,7 +1325,9 @@ async function applyGrant(g) {
     await kvUpdate(GIFTBOX, list => {
       const box = list || [];
       if (box.some(x => x.key === g.key)) return box;
-      return [...box, { key: g.key, type: g.type, payload: p, ts: g.ts || Date.now() }].slice(-100);
+      // Unopened rewards are owed, not an archive. Truncating this queue loses
+      // gifts permanently once pullGrants advances its cursor past them.
+      return [...box, { key: g.key, type: g.type, payload: p, ts: g.ts || Date.now() }];
     }, []);
     return true;    // it landed: it is in your box, sealed
   }

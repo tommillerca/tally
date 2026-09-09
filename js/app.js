@@ -12,7 +12,7 @@ import {
   bagPick, seedBagFromRecent, GW_RECENT_CAP,
 } from './game.js';
 import {
-  RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, grantCosmetic, inventory, ownedCosmeticIds,
+  RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, spendCoins, grantCrate, grantCosmetic, inventory, ownedCosmeticIds,
   unopenedCrates, openCrate, crateOdds, buyShopItem, equipped, equip, activateBattleCharm,
   ownedGearIds, grantGear, gearLoadout, equipGear,
   migrateLegacyEggs, eggProgress, repairEggAnchors, hatchEgg, lifetimeStepsSum,
@@ -12652,7 +12652,13 @@ async function renderFriends(el) {
         $$('[data-gift]', giftList).forEach(b => b.addEventListener('click', async () => {
           if (b.dataset.busy === '1') return;
           b.dataset.busy = '1';
-          const g = await social.openGift(b.dataset.gift);
+          let g;
+          try { g = await social.openGift(b.dataset.gift); }
+          catch {
+            b.dataset.busy = '0';
+            toast('Could not open that gift. Try again.', 3400);
+            return;
+          }
           if (!g) { b.remove(); return; }
           b.classList.add('popping');
           await new Promise(r => setTimeout(r, 260));
@@ -13193,7 +13199,8 @@ async function renderFriends(el) {
     if (!r.ok) {
       toast(r.reached === false ? 'Could not reach the Crew server. Try again when you have signal.'
         : r.error === 'that is your own code' ? "That's your own code!"
-        : 'No Bonehead has that code. Double-check it.', 3200);
+        : r.error === 'no player with that code' ? 'No Bonehead has that code. Double-check it.'
+        : 'Could not send that request. Try again in a bit.', 3200);
       return;
     }
     inp.value = '';
@@ -13693,6 +13700,7 @@ async function renderFriends(el) {
       await paint();
     } else if (rem) {
       if (await social.removeFriend(rem.dataset.remove)) { toast('Removed.'); await paint(); }
+      else toast('Could not remove that friend. Try again.', 3200);
     }
   });
 
@@ -13875,6 +13883,7 @@ function openFriendProfile(f, onChange, opts = {}) {
   });
   $('#fpRemove', wrap)?.addEventListener('click', async () => {
     if (await social.removeFriend(f.playerId)) { toast('Removed.'); onChange && onChange(); history.back(); }
+    else toast('Could not remove that friend. Try again.', 3200);
   });
 }
 
@@ -13897,7 +13906,7 @@ async function openGiftSheet(f) {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Send a gift</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
-      <p class="note" style="margin:0 0 14px">To <b>${esc(f.alias || f.name)}</b>. Gifts land in their Backpack the next time they open the app.</p>
+      <p class="note" style="margin:0 0 14px">To <b>${esc(f.alias || f.name)}</b>. They open your gift in Crew the next time they use the app. Coins go to their balance; items go to their Backpack.</p>
       <div class="gift-free ${alreadyFree ? 'done' : ''}" id="giftFreeCard">
         <div class="gift-free-l"><div class="gift-free-t">${ICONS.coin(16)} Free daily gift</div><div class="note">A surprise drop: coins, a crate, sometimes an egg. Once a day per friend, on the house.</div></div>
         <button class="btn small" id="giftFree"${alreadyFree ? ' disabled' : ''}>${alreadyFree ? `Sent ${ICONS.check(11)}` : 'Send'}</button>
@@ -13957,10 +13966,14 @@ async function openGiftSheet(f) {
   $$('.gift-amt', wrap).forEach(b => armToConfirm(b, `Send ${b.dataset.amt}?`, async () => {
     if (b.disabled) return;
     const amt = +b.dataset.amt;
-    const have = await coins();
-    if (amt > have) { toast("You don't have that many coins."); return; }
     b.disabled = true;
-    await coinsAdd(-amt); // deduct locally first; refund if the send fails
+    // Check and debit together: two confirmed chips can otherwise both spend
+    // the same pre-send balance. Refund a refused send below as before.
+    if (await spendCoins(amt) === null) {
+      b.disabled = false;
+      toast("You don't have that many coins.");
+      return;
+    }
     if (!giftKeys.has(amt)) giftKeys.set(amt, social.newSendKey());
     const r = await social.sendGift(f.playerId, 'spend', amt, giftKeys.get(amt));
     if (r.ok) {
