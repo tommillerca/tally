@@ -1,4 +1,5 @@
 import { auditOutputPath } from './lib/audit-output.mjs';
+import { requirePythonPackages } from './lib/audit-dependencies.mjs';
 /* IS EVERY COMMITTED THUMBNAIL STILL THE ART CAM DREW? 2026-08-24.
  *
  * assets/bh/thumb/{192,384} is GENERATED from the masters in assets/bh/<slot>/
@@ -59,6 +60,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, '..');
 const gen = join(repo, 'scripts', 'build-bh-thumbs.py');
 
+requirePythonPackages('python3', { PIL: 'Pillow' });
 const fails = [];
 const ok = (n, pass, d = '') => { console.log(`${pass ? 'ok  ' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!pass) fails.push(n); };
 
@@ -73,7 +75,7 @@ function check(...args) {
 
 /* ---- THE REAL TREE ------------------------------------------------------ */
 const real = check();
-ok('SETUP the checker ran at all (a missing python3 or Pillow must FAIL, never skip)',
+ok('SETUP the checker ran at all after dependency preflight',
   real.code >= 0 && /checked \d+ committed thumbnails/.test(real.out),
   real.out.split('\n')[0] || 'no output');
 

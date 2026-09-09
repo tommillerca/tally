@@ -9,7 +9,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import vm from 'node:vm';
-import esprima from 'esprima';
+import { importAuditPackage } from './lib/audit-dependencies.mjs';
+const { default: esprima } = await importAuditPackage('esprima');
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = mkdtempSync(auditOutputPath(path.join(tmpdir(), 'store-runtime-')));

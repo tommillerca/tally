@@ -7,7 +7,8 @@
  * two copies disagreed (a comment stripper that silently stopped stripping a
  * third of the way through a file, so the word `fetch` in an English sentence
  * failed a check). One copy, two callers. */
-import esprima from 'esprima';
+import { importAuditPackage } from './lib/audit-dependencies.mjs';
+const { default: esprima } = await importAuditPackage('esprima');
 
 export const FORBIDDEN = /testflight\.apple\.com|testflight|\bbeta\b/i;
 

@@ -77,6 +77,11 @@ test('r56 B1 all species palettes separate and pre-fix frost fails CONTROL', asy
   checkPetPalette();
 });
 
+test('PURE dependency outages are UNPROVEN; installed package defects stay RED', async () => {
+  const { checkAuditDependencies } = await import('./lib/audit-dependencies.test.mjs');
+  checkAuditDependencies();
+});
+
 test('R52-9 locale formatter/parser round trips and ambiguity control', async () => {
   const { checkLocaleNumbers } = await import('./locale-numbers-audit.mjs');
   checkLocaleNumbers();
