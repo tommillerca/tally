@@ -9169,17 +9169,15 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 #stableBody .stable-danger small { flex-basis: 100%; font-size: .75rem; line-height: 1.5; color: var(--text-2); }
 #stableBody .stable-wallet { display: flex; justify-content: space-between; gap: 12px; margin: 20px 0 8px; padding: 10px 0; background: none; border: 0; border-radius: 0; color: var(--text-2); font-size: .78125rem; }
 #stableBody .stable-wallet b { font: 700 .875rem/1.4 system-ui, sans-serif; }
-/* Paper rims and a hard, lighter offset remain visible on the dark Stable.
-   Uneven corner cuts suggest a sticker without transforming the pixel art. */
+/* Option B: dark tiles, a light rim and a hard near-black sticker drop. */
 #stableBody .stable-rooms { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 18px; }
-#stableBody .stable-room { position: relative; display: grid; grid-template-rows: 48px auto auto; justify-items: center; align-content: center; gap: 1px; min-width: 0; min-height: 105px; margin: 0; padding: 6px 2px; border: 3px solid #fff4d9; border-radius: 9px 5px 11px 6px; background: #efe2c3; color: #292622; box-shadow: inset 0 0 0 1px #70634e, 3px 4px 0 #a79b80; }
-#stableBody .stable-room:nth-child(2) { border-radius: 5px 10px 6px 9px; }
-#stableBody .stable-room:nth-child(3) { border-radius: 10px 6px 8px 5px; }
-#stableBody .stable-room:active { transform: translateY(2px); box-shadow: inset 0 0 0 1px #70634e, 2px 2px 0 #a79b80; }
-#stableBody .stable-room-picture { display: grid; place-items: center; width: 48px; height: 48px; }
-#stableBody .stable-room b { font: 400 1rem/1.2 var(--display); letter-spacing: .02em; }
-#stableBody .stable-room small { font: 600 .6875rem/1.4 system-ui, sans-serif; overflow-wrap: anywhere; }
-#stableBody .stable-room .new-dot { top: 7px; right: 7px; }
+#stableBody .stable-room { --dim: var(--text-3); position: relative; display: grid; grid-template-rows: 54px auto auto; justify-items: center; align-content: center; gap: 1px; min-width: 0; min-height: 112px; margin: 0; padding: 6px 2px; border: 2px solid #3a3647; border-radius: 18px; background: var(--surface-2); color: var(--text); box-shadow: 3px 4px 0 #05040a; }
+#stableBody .stable-room:active { transform: translate(2px, 3px); box-shadow: 1px 1px 0 #05040a; }
+#stableBody .stable-room-picture { display: grid; place-items: center; width: 100%; height: 54px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
+#stableBody .stable-room-picture img { image-rendering: pixelated; }
+#stableBody .stable-room b { font: 400 .96875rem/1.2 var(--display); letter-spacing: .02em; }
+#stableBody .stable-room small { color: var(--dim); font: 600 .6875rem/1.4 system-ui, sans-serif; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+#stableBody .stable-room .new-dot { top: 7px; right: 7px; width: 13px; height: 13px; background: var(--coral); box-shadow: 0 0 0 2px var(--surface-2); }
 #stableBody .stable-help { margin-top: 8px; border-block: 1px solid var(--line); font-size: .8125rem; line-height: 1.5; }
 #stableBody .stable-help summary, #stableBody .stable-help .link { min-height: 44px; padding: 12px 0; }
 #stableBody .stable-help p { margin: 0 0 10px; }

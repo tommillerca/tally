@@ -71,7 +71,7 @@ await test('R44-14 carousel repaint preserves the new focused colour', async () 
   assert(nodes.b.innerHTML.includes('Frost Drizzle'), 'repaint omitted Frost');
 });
 await test('R44-14 breed picker and irreversible facts name colour and level', async () => {
-  const html = await run(cut('    const spChips =', '    /* THE WAY IN.') + '\nreturn spChips;',
+  const html = await run(cut('    const spChips =', '    // Count owned colour cells,') + '\nreturn spChips;',
     { ...selection, pair: true, a: frost, b: ember, offSp: frost.iid });
   assert(html.includes('Frost Drizzle'), 'nicknamed keeper lost colour/species');
   assert(html.includes('Ember Drizzle'), 'spare lost colour/species');

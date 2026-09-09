@@ -2,6 +2,8 @@
  * CONTROL uses real ownership helpers and icon emitters. No layout/pixel claim.
  * --prove-red moves the Laboratory button below the album in the source passed
  * to the renderer, then runs the SAME grading function and must exit nonzero.
+ * --prove-red-color and --prove-red-radius mutate CSS in memory and must fail
+ * the same treatment guard used for the production source.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -12,6 +14,38 @@ import { bhIcon } from '../js/icons-pack.js';
 
 const app = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../app.css', import.meta.url), 'utf8');
+// Source guards only: rendered dimensions and pixels still need visual review.
+const tileRule = /(#stableBody \.stable-room\s*\{)([^}]*)(\})/;
+function gradeTileTreatment(source) {
+  const base = source.match(tileRule)?.[2];
+  assert(base, 'CONTROL shared tile rule exists');
+  assert.match(base, /(?:^|;)\s*color:\s*(?:var\(--text\)|#[\da-f]{3,8})\s*;/i,
+    'tile sets an explicit text color, preventing UA buttontext inheritance');
+  const rules = [...source.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+  const radii = rules.filter(([, selector, body]) =>
+    /\.stable-room(?![\w-])/.test(selector) && /(?:^|;)\s*border-(?:radius|[\w-]+-radius)\s*:/.test(body));
+  assert.equal(radii.length, 1, 'all three tiles share one border radius, without per-child overrides');
+  assert.equal(radii[0][1].trim(), '#stableBody .stable-room', 'radius belongs to the shared tile rule');
+  assert.equal([...base.matchAll(/(?:^|;)\s*border-(?:radius|[\w-]+-radius)\s*:/g)].length, 1,
+    'shared tile radius has no duplicate or individual-corner overrides');
+  assert.match(base, /(?:^|;)\s*border-radius:\s*18px\s*;/, 'all four tile corners are 18px');
+  assert.match(base, /(?:^|;)\s*color:\s*var\(--text\)\s*;/, 'Option B uses the app text token');
+}
+if (process.argv.includes('--prove-red-color')) {
+  const mutated = css.replace(tileRule, (_, open, body, close) =>
+    open + body.replace(/(?:^|;)\s*color:[^;]*;/, ';') + close);
+  assert.notEqual(mutated, css, 'CONTROL removed explicit tile color');
+  console.log('RED CONTROL: removed explicit tile color from production CSS');
+  gradeTileTreatment(mutated);
+  assert.fail('missing tile color escaped the guard');
+}
+if (process.argv.includes('--prove-red-radius')) {
+  console.log('RED CONTROL: added a per-child radius override to production CSS');
+  gradeTileTreatment(css + '\n#stableBody .stable-room:nth-child(2) { border-radius: 5px 10px 6px 9px; }');
+  assert.fail('per-child tile radius escaped the guard');
+}
+gradeTileTreatment(css);
+console.log('PASS CONTROL tile explicitly sets var(--text); all three tiles share uniform 18px corners');
 function block(from, to) {
   const a = app.indexOf(from), b = app.indexOf(to, a);
   assert(a >= 0 && b > a, `CONTROL production block exists: ${from}`);
@@ -137,7 +171,7 @@ const labWire = app.split('\n').find(l => l.includes("$$('[data-lab-open]', root
 new Function('$$', 'root', 'openLaboratory', labWire)(() => [$('[data-lab-open]')], {}, () => { destination = 'openLaboratory'; });
 callbacks['[data-lab-open]'](); assert.equal(destination, 'openLaboratory');
 assert.match(css, /#stableBody \.stable-rooms\s*\{[^}]*grid-template-columns: repeat\(3, 1fr\);[^}]*gap: 8px/);
-assert.match(css, /#stableBody \.stable-room\s*\{[^}]*min-height: 105px/);
+assert.match(css, /#stableBody \.stable-room\s*\{[^}]*min-height: 112px/);
 for (const icon of ['badge-signpost', 'potion', 'paw']) {
   const png = readFileSync(new URL(`../assets/icons-pix/${icon}.png`, import.meta.url));
   assert.equal(png.readUInt32BE(16), 48); assert.equal(png.readUInt32BE(20), 48);
