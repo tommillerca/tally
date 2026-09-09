@@ -1,5 +1,30 @@
 # What each patch note claims, and what backs it
 
+## v528 (2026-09-09)
+
+1. PROOF: stable-rooms-top-audit.mjs, wheel-look-audit.mjs | REACH: The three rooms render above the album with live counts and their own pixel icons from assets/icons-pix. The wheel is restyled to the brand deck with labels upright rather than rotated to the wedge; the prize table is byte-identical and the weights still sum to 95, so no odds changed. Visual review of both is owed: neither lane could render.
+2. PROOF: lab-density-audit.mjs | REACH: The Laboratory stated the same consumption rule three ways and printed its daily-experiment sentence twice on one screen. The duplicate is gone and the rules are stated once, at the point of commitment. No destroy disclosure or safety warning was weakened.
+3. PROOF: dock-line-audit.mjs | REACH: The 13px band that excludes the FAB's overhang from the scrollport no longer paints itself an opaque fixed colour, which read as a black line against the Today hero. The FAB exclusion itself is proven still intact: a row under the FAB's box remains tappable.
+4. PROOF: wardrobe-playtest-audit.mjs | REACH: The transmog confirm bar no longer renders on arrival for a choice the player has not made; it appears once a real change is pending. The fits explainer moved into a closed disclosure with its copy intact, including the warning that older fits remember only the look.
+5. PROOF: crate-cadence-audit.mjs | REACH: Two independent rows: the authored gap between cards equals a single named constant, and advancing does NOT wait on art readiness even when art never resolves. The v525 change had removed the stall and the pacing in one edit, so neither could be tested alone. On-device cadence is unverified.
+6. PROOF: whatsnew-boot-audit.mjs | REACH: What's New opens once after an update, marks itself seen, does not reopen, never fires for a new player seeded caught-up, and does not open over an existing sheet. A further row asserts NO other boot takeover was restored, guarding the eleven removed in v448.
+7. PROOF: settings-safety-audit.mjs | REACH: A file import now discloses what replacement will cost using the real values, takes a restore point before the transaction opens, and leaves exactly one coherent state if the import aborts. A snapshot that cannot be written blocks the import rather than proceeding silently.
+8. PROOF: crew-outfit-audit.mjs, sync-clientpath-audit.mjs | REACH: Pet wardrobe changes now schedule a public profile upload; only body changes did. Separately, an HTTP-rejected profile or a null snapshot no longer advances the sync throttle stamp, which previously suppressed the next attempt for five minutes after a failure.
+
+**The production sync outage is NOT fixed by this release and is NOT claimed to
+be.** Since 2026-09-06 no player has synced. Three lanes investigated and all
+returned negative with evidence: 60 release trees from v475 to v527 across five
+scenarios produced 300 observations that all reached `PUT /profile`; no signing
+or canonicalisation regression exists; the real boot path reaches a signed
+request. The cause is not in this codebase's sync path and remains unknown.
+Item 8's throttle fix is a failure amplifier, not the cause.
+
+The assembled release runs 377 unit assertions with 0 failures and all 132 PURE
+entries exit 0. One integration break was found while stitching and fixed here:
+the What's New restoration added a boot collaborator that the sync-path audit's
+sandbox did not stand in for, so a healthy lane read red. No browser, device or
+socket proof was run.
+
 ## v527 (2026-09-09)
 
 1. PROOF: wardrobe-playtest-audit.mjs | REACH: Transmog charges only on delivery and a failed melt no longer removes a collected look or strips equipped stats; a failed single-crate open recovers its control. Each case is driven through the production handler with an injected write failure and carries a pre-fix observation the grade rejects.

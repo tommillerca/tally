@@ -77,7 +77,8 @@ function context() {
   });
   for (const name of ['watchForWipe', 'snapSettings', 'setHaptics', 'route', 'routeFromHash', 'bindTabs', 'installPaddockSeam',
     'backupNudge', 'checkPetLevelUp', 'rollDayIfNeeded', 'refreshNotifSchedules', 'flushAnalytics', 'initAnalytics',
-    'refresh', 'toast', 'dayGuardToast', 'trackEvent', 'maybeShowRenameNotice', 'maybeNudgeRecovery']) c[name] = noop;
+    'refresh', 'toast', 'dayGuardToast', 'trackEvent', 'maybeShowRenameNotice', 'maybeNudgeRecovery',
+    'maybeShowWhatsNew']) c[name] = noop;
   for (const name of ['hydrateGenericUse', 'showSplash', 'refreshShinyPets', 'refreshPetMorphs', 'refreshSlimedSlots',
     'refreshPetWear', 'maybeWelcomeBack', 'restoreAddDraft', 'drainCookQueue', 'ingestHkPayload', 'nativeAutoSync',
     'checkSieges', 'presentGrantDelivery', 'cloudTroubleNotice', 'checkFriendRequests', 'maybeShowDailyWheel',

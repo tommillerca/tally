@@ -4,6 +4,17 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 528, date: '2026-09-09', title: 'Eight things you told us about', items: [
+    'The Paddock, the Laboratory and the Kennel are three tiles at the top of the Stable, and the daily wheel has been redrawn so its labels read the right way up instead of sideways.',
+    'The Laboratory says things once. It was telling you the same rule three different ways, and printing the same sentence about your daily experiments twice on one screen.',
+    'The dark band above the tab bar is gone. It was painted a fixed colour to hide a seam, which looked like a black line against the Today screen.',
+    'The Wardrobe no longer greets you with a confirm bar for a choice you have not made, and its instructions are tucked into a note you can open when you want them.',
+    'Crate cards are back to a deliberate pace between reveals. The previous fix removed the stall and the pacing together.',
+    'What is new pops up again after an update, so you do not have to go looking for what changed. The other launch popups stay gone.',
+    'Importing a backup file now shows you exactly what it will replace and quietly keeps a restore point first, so an accidental import is recoverable.',
+    'Your pet\'s outfit changes now reach your crew. Only your own clothes were being published.',
+  ] },
+
   { n: 527, date: '2026-09-09', title: 'An overnight sweep of eight rooms', items: [
     'Transmog could take your coins without giving you the look, and melting could erase a look the game had promised was yours forever. Both now finish or refund.',
     'Gifts stop going missing. The hundred-and-first unopened gift no longer silently discards the oldest one, a confirmed gift can no longer spend the same coins twice, and a gift whose reward fails to save no longer strands the Open button.',
