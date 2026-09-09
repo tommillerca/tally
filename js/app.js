@@ -19121,6 +19121,8 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
   };
 }
 
+// Deliberate inter-card pace, independent of art decoding and frame delivery.
+const CRATE_CARD_CADENCE_MS = 300;
 function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}) {
   if (!cards.length && !coins) return Promise.resolve();
   /* BEST FIRST. Tom, 2026-08-08: "the rarest thing should come out of the chest
@@ -19428,7 +19430,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         tilt.style.opacity = '0';
         if (outgoing) {
           at(340, () => outgoing.remove());
-          at(0, advance); // the next rise overlaps the readable outgoing flight
+          at(CRATE_CARD_CADENCE_MS, advance); // pace only; art and frames never gate the next card
         } else at(330, last ? done : advance);
       };
       tilt.addEventListener('pointerdown', e => {

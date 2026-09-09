@@ -1,6 +1,8 @@
 /* c1, 2026-09-08: authored cadence, not browser performance evidence.
  * Execute the real pointer/render path with a minimal DOM and clock. The old serial path
  * is a positive control: 330 + 40 + 420 = 790ms must fail the same grader.
+ * 2026-09-09: grade the chosen 300ms dispatch separately from art/frame
+ * independence, including two consecutive gestures and a retuned constant.
  * TAIL in crate-reveal-audit watches OPENING, so its 60ms measured floor and
  * playCrateSeq's 100ms authored HOLD remain unchanged.
  */
@@ -9,7 +11,16 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const read = file => readFileSync(new URL(file, import.meta.url), 'utf8');
-const app = read('../js/app.js'), css = read('../app.css');
+let app = read('../js/app.js');
+const css = read('../app.css');
+// Controls mutate only the source string, never the checkout.
+function artWait(source) {
+  const changed = source.replace('if (next) enter();', 'if (next) artReady.then(enter);');
+  assert.notEqual(changed, source, 'art-wait control must apply');
+  return changed;
+}
+if (process.argv.includes('--control=art-wait')) app = artWait(app);
+const cadenceDeclaration = source => source.match(/const CRATE_CARD_CADENCE_MS = \d+;/)?.[0] || '';
 let passed = 0, failed = 0;
 function check(label, fn) {
   try { fn(); passed++; console.log(`PASS ${label}`); }
@@ -54,7 +65,7 @@ function drive(source, { last = false, reduced = false, dir = -1 } = {}) {
     done() { closes.push(now); },
   };
   vm.createContext(context);
-  vm.runInContext(`let flung = false; ${between(source, '      const fling = dir => {', "      tilt.addEventListener('pointerdown'")}\nthis.fling = fling;`, context);
+  vm.runInContext(`${cadenceDeclaration(source)}\nlet flung = false; ${between(source, '      const fling = dir => {', "      tilt.addEventListener('pointerdown'")}\nthis.fling = fling;`, context);
   context.fling(dir); context.fling(dir); // duplicate click must not deal twice
   const outgoing = scene.children.find(n => n !== deck);
   const tick = t => {
@@ -73,8 +84,8 @@ function numbers(source, styles) {
   const rise = Number(styles.match(/animation: crNext ([.\d]+)s/)[1]) * 1000;
   return { advance: run.advances[0], delay, rise, settled: run.advances[0] + delay + rise };
 }
-function grade(n) {
-  assert.deepEqual(n, { advance: 0, delay: 20, rise: 380, settled: 400 });
+function grade(n, cadence = 300) {
+  assert.deepEqual(n, { advance: cadence, delay: 20, rise: 380, settled: cadence + 400 });
 }
 
 // Drive the real renderCard, advance and pointer listeners, not a stub advance.
@@ -126,7 +137,9 @@ async function driveRender(source, { artDelay = 0, frames = true, dx = -100, ope
     packCardHtml: () => '', wirePackArtFallback() {},
     hydratePackArt() {
       artCalls++;
-      return new Promise(resolve => later(resolve, artCalls === 1 ? 0 : artDelay));
+      return new Promise(resolve => {
+        if (artCalls === 1 || Number.isFinite(artDelay)) later(resolve, artCalls === 1 ? 0 : artDelay);
+      });
     },
     getComputedStyle: () => ({ transform: 'none', getPropertyValue: () => '' }),
     at: (ms, fn) => later(fn, ms), setTimeout: later,
@@ -138,7 +151,7 @@ async function driveRender(source, { artDelay = 0, frames = true, dx = -100, ope
   const render = between(source, '    function renderCard() {', '\n    // a coins-only payout');
   const advance = between(source, '    const advance = () => {', '\n    // No confetti');
   vm.createContext(ctx);
-  vm.runInContext(`${advance}\n${render}\nrenderCard();`, ctx);
+  vm.runInContext(`${cadenceDeclaration(source)}\n${advance}\n${render}\nrenderCard();`, ctx);
   const tick = async t => {
     // Flush native Promise.race/then jobs between authored timer callbacks.
     for (;;) {
@@ -152,24 +165,38 @@ async function driveRender(source, { artDelay = 0, frames = true, dx = -100, ope
   await tick(1000);
   assert.equal(reveal.dataset.landed, '1', 'first card actually reaches its input gate');
   now = 0; tasks.length = 0; entrances.length = 0; renders.length = 0; reads.length = 0;
-  const tilt = query('.pack-tilt');
-  for (const [type, clientX] of [['pointerdown', 200], ['pointermove', 200 + dx], ['pointerup', 200 + dx]]) {
-    tilt.dispatchEvent({ type, clientX, pointerId: 7, target: tilt });
+  const schedule = numbers(source, css).advance;
+  const gaps = [];
+  for (let index = 1; index <= 2; index++) {
+    const start = now, tilt = query('.pack-tilt');
+    for (const [type, clientX] of [['pointerdown', 200], ['pointermove', 200 + dx], ['pointerup', 200 + dx]]) {
+      tilt.dispatchEvent({ type, clientX, pointerId: 7, target: tilt });
+    }
+    assert.equal(captures.length, index, 'pointerdown must capture the real gesture');
+    const outgoing = scene.children.find(el => el !== deck);
+    assert.ok(outgoing, 'pointerup must actually fling');
+    assert.equal(outgoing.children[0], tilt);
+    tilt.dispatchEvent({ type: 'click', target: tilt }); // must not queue a duplicate
+    if (schedule > 0) {
+      await tick(start + schedule - 1);
+      assert.equal(ctx.i, index - 1, 'no early advance');
+      assert.equal(entrances.length, index - 1, 'no early entrance');
+    }
+    await tick(start + schedule);
+    assert.equal(ctx.i, index, 'real advance increments exactly once at the deadline');
+    assert.deepEqual(renders[index - 1], { i: index, t: start + schedule });
+    assert.deepEqual(entrances[index - 1], { i: index, t: start + schedule },
+      `card ${index} must enter at ${schedule}ms even when art never resolves`);
+    assert.ok(reads.some(r => r.el === deck && r.t === start + schedule), 'commit starting style at entrance');
+    gaps.push(entrances[index - 1].t - start);
+    await tick(start + 339); assert.equal(outgoing.parentNode, scene);
+    await tick(start + 340); assert.equal(outgoing.parentNode, null);
+    await tick(start + 6000);
+    assert.equal(entrances.length, index, 'late callbacks cannot restart the entrance');
   }
-  assert.deepEqual(captures, [7], 'pointerdown must capture the real gesture');
-  await tick(0);
-  const outgoing = scene.children.find(el => el !== deck);
-  assert.ok(outgoing, 'pointerup must actually fling, not just record pointerdown');
-  assert.equal(outgoing.children[0], tilt);
-  assert.equal(ctx.i, 1, 'real advance increments exactly once');
-  tilt.dispatchEvent({ type: 'click', target: tilt });
-  await tick(339); assert.equal(outgoing.parentNode, scene);
-  await tick(340); assert.equal(outgoing.parentNode, null);
-  await tick(2000);
-  assert.deepEqual(renders, [{ i: 1, t: 0 }]);
-  assert.equal(artCalls, 2, 'both cards still hydrate their actual art');
-  assert.equal(entrances.length, 1, 'late callbacks cannot restart the next entrance');
-  return { start: entrances[0].t, layoutCommitted: reads.some(r => r.el === deck && r.t === 0) };
+  assert.equal(artCalls, 3, 'all cards still hydrate their art');
+  assert.equal(renders.length, 2, 'no duplicate advance');
+  return gaps;
 }
 
 async function checkAsync(label, fn) {
@@ -177,35 +204,38 @@ async function checkAsync(label, fn) {
   catch (error) { failed++; console.log(`FAIL ${label}: ${error.stack}`); }
 }
 
-check('CADENCE exact authored 0 + 20 + 380 = 400ms', () => grade(numbers(app, css)));
+check('CADENCE exact authored 300 + 20 + 380 = 700ms', () => grade(numbers(app, css)));
 check('ENTRY shipped page loads the audited JS and scoped browsing animation', () => {
   const entry = read('../index.html');
   assert.match(entry, /<script type="module" src="js\/app\.js"><\/script>/);
   assert.match(entry, /<link rel="stylesheet" href="app\.css">/);
   assert.match(css, /\.pack-reveal\.browsing \.pack-deck\.go \.pc-rise \{ animation: crNext \.38s cubic-bezier\(\.2,\.9,\.3,1\) var\(--b-card\) both; \}/);
 });
-await checkAsync('POINTER-RENDER real advance starts the next entrance at 0ms despite cold art or stalled frames', async () => {
-  for (const options of [
-    { artDelay: 0 }, { artDelay: 500, dx: 100 },
-    { artDelay: 5000, frames: false }, { opening: false, artDelay: 5000, dx: 0 },
-  ]) {
-    const run = await driveRender(app, options);
-    assert.equal(run.start, 0);
-    assert.equal(run.layoutCommitted, true);
-    const n = numbers(app, css);
-    grade({ ...n, settled: run.start + n.delay + n.rise });
+await checkAsync('CADENCE consecutive cards follow the single constant, including retuning to 175ms', async () => {
+  assert.equal(cadenceDeclaration(app), 'const CRATE_CARD_CADENCE_MS = 300;');
+  assert.equal(app.match(/const CRATE_CARD_CADENCE_MS =/g)?.length, 1);
+  for (const cadence of [300, 175]) {
+    const source = app.replace(cadenceDeclaration(app), `const CRATE_CARD_CADENCE_MS = ${cadence};`);
+    grade(numbers(source, css), cadence);
+    assert.deepEqual(await driveRender(source), [cadence, cadence]);
   }
 });
-await checkAsync('CONTROL hidden art/frame gates add 1000ms and fail the end-to-end grader', async () => {
-  const legacy = app.replace('const next = i > 0 && !reduced;', 'const next = false;');
-  assert.notEqual(legacy, app, 'control mutation must apply');
-  const run = await driveRender(legacy, { artDelay: 5000, frames: false });
-  assert.equal(run.start, 1000, '700ms art race plus 300ms frame fallback');
-  const n = numbers(legacy, css);
-  assert.throws(() => grade({ ...n, settled: run.start + n.delay + n.rise }), assert.AssertionError);
+await checkAsync('STALL next cards arrive on schedule with never-resolving art and no frames', async () => {
+  // Measure the dispatch separately so this guard does not fail merely because
+  // the chosen pace changes. Missing entrance at that deadline is the defect.
+  const schedule = numbers(app, css).advance;
+  for (const options of [
+    { artDelay: Infinity, frames: false },
+    { artDelay: 0 }, { artDelay: 500, dx: 100 }, { opening: false, artDelay: Infinity, frames: false, dx: 0 },
+  ]) assert.deepEqual(await driveRender(app, options), [schedule, schedule]);
+});
+if (!process.argv.includes('--control=art-wait')) await checkAsync('CONTROL art-dependent wait is rejected by the same runtime deadline guard', async () => {
+  await assert.rejects(() => driveRender(artWait(app), { artDelay: Infinity, frames: false }),
+    /must enter at \d+ms even when art never resolves/);
 });
 check('CONTROL old serial 330 + 40 + 420 = 790ms is rejected', () => {
-  const legacyApp = app.replace('at(0, advance)', 'at(330, advance)');
+  const legacyApp = app.replace(/at\((?:0|CRATE_CARD_CADENCE_MS), advance\)/, 'at(330, advance)');
+  assert.notEqual(legacyApp, app, 'serial control must apply');
   const legacyCss = css.replace('--b-card: .02s;', '--b-card: .04s;').replace('crNext .38s', 'crNext .42s');
   const old = numbers(legacyApp, legacyCss);
   assert.equal(old.settled, 790);
@@ -225,11 +255,12 @@ check('OVERLAP both throw directions retain the old art through the full 340ms f
     assert.equal(r.pauses, 1);
     assert.match(r.tilt.style.transition, /transform \.34s/);
     assert.equal(r.tilt.style.transform, `translateX(${dir * 480}px) rotate(${dir * 15}deg)`);
-    r.tick(0); assert.deepEqual(r.advances, [0]);
+    const cadence = numbers(app, css).advance;
+    r.tick(cadence); assert.deepEqual(r.advances, [cadence]);
     assert.equal(r.tilt.parentNode, r.outgoing, 'deck rebuild cannot delete outgoing card');
     r.tick(339); assert.equal(r.outgoing.parentNode, r.scene);
     r.tick(340); assert.equal(r.outgoing.parentNode, null);
-    assert.deepEqual(r.advances, [0]); assert.deepEqual(r.closes, []);
+    assert.deepEqual(r.advances, [cadence]); assert.deepEqual(r.closes, []);
   }
 });
 check('LAST and REDUCED keep their existing 330ms dispatch and create no outgoing layer', () => {
