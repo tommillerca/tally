@@ -1,5 +1,18 @@
 # What each patch note claims, and what backs it
 
+## v532 (2026-09-09)
+
+1. PROOF: breed-two-tap-audit.mjs, after-await-event-lint.mjs | REACH: `#doBreed` read `e.currentTarget` AFTER an `await`, by which point dispatch had completed and it was null, so the next `.dataset` read threw on every tap, before arming, before the review, and before `breedPets` was ever called. Nothing changed on screen; the only signal was a console error. Verified independently against live `origin/main` before the fix. The capture now happens before the first await, as v516 had it. The guard drives the REAL handler through a full two-tap breed and asserts the roster actually changes, which is what a registration-only or no-exception test would have missed. A second lint fails on any async listener reading `currentTarget` after an await, so the class cannot return.
+
+Found by a playtester, not by the gate, on the release titled "the app stops
+failing quietly". The fix is one line; the reason it shipped is that nothing
+caught it, which is why this release lands two guards for one bug.
+
+378 unit assertions, 0 failures, all 138 PURE entries exit 0. The PURE list was
+rebuilt after a cherry-pick left conflict markers in `release-gate.mjs`, which
+had briefly produced an EMPTY list and a false green; the run above is over the
+full 138 and a floor check now refuses a suspiciously short list.
+
 ## v531 (2026-09-09)
 
 1. PROOF: migration-guard-audit.mjs | REACH: The 2026-09-05 migration adding `last_week_key` and `last_week_steps` was written, the Worker was deployed, and the migration was never applied to production D1. Every `PUT /profile` threw `no such column: last_week_key` from 2026-09-05 to 2026-09-09 while returning a success-shaped response, so 80 players stopped syncing and nothing surfaced it. This lands a schema/write-contract check that derives the required columns FROM THE SOURCE rather than a hand list, a health check that exercises the write path instead of returning 200 without touching the affected columns, and a deploy-order check. Prove-red is that exact scenario: a local D1 missing the 2026-09-05 migration makes the checks go red naming the missing column, and applying it makes them green.

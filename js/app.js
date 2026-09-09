@@ -21188,9 +21188,9 @@ async function openStable(opts = {}) {
     $$('[data-offsp]', body).forEach(c => c.addEventListener('click', () => { offSp = c.dataset.offsp; render(); }));
     $('#doBreed', body)?.addEventListener('click', async e => {
       const keepIid = offSp, feedIid = sel.find(x => x !== offSp);
+      const btn = e.currentTarget;
       const fresh = await quotePetDestruction(feedIid, keepIid);
       if (!fresh.ok) { toast('Could not review that pet.'); return; }
-      const btn = e.currentTarget;
       const reviewFor = q => ({
         title: `Feed ${petDestructionName(q)} in?`,
         html: `${petDestructionHtml(q)}<p>Your keeper gains a lineage rank. ${q.inst.shiny ? 'Shinies are about a 1 in 30 hatch and its colour will NOT carry over. ' : ''}${q.inst.lineage ? 'Its bloodline is lost; lineage does not transfer. ' : ''}Feed a plain spare in instead unless you are sure.</p>`,
@@ -24470,7 +24470,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v531'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v532'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

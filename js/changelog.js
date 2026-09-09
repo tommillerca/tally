@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 532, date: '2026-09-09', title: 'Breeding works again', items: [
+    'Breeding was completely broken: tapping the button did nothing at all, with no error and no message. It has been fixed, and a test now drives a real two-pet breed from tap to result so it cannot break silently again.',
+  ] },
+
   { n: 531, date: '2026-09-09', title: 'A missed database change cannot hide again', items: [
     'Sync was dead for four days because a database change was written but never applied to the server. The app kept sending, the server kept throwing it away, and nothing anywhere said so. The release process now checks that the live database has every column the code needs, and refuses quietly shipping without it.',
   ] },
