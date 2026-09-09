@@ -25,7 +25,8 @@ function cut(start, end) {
 }
 function run(code, args = {}) {
   const all = { ...deps, ...args };
-  return new AsyncFunction(...Object.keys(all), code)(...Object.values(all));
+  const disclosure = cut('// PET DESTRUCTION UI PURE BEGIN', '// PET DESTRUCTION UI PURE END');
+  return new AsyncFunction(...Object.keys(all), disclosure + '\n' + code)(...Object.values(all));
 }
 let passed = 0, failed = 0, sequence = 0;
 async function test(name, fn) {
@@ -72,13 +73,19 @@ await test('R44-14 breed picker and irreversible facts name colour and level', a
   assert(html.includes('Frost Drizzle'), 'nicknamed keeper lost colour/species');
   assert(html.includes('Ember Drizzle'), 'spare lost colour/species');
   const facts = cut('          <ul class="breed-facts">', '          ${spareIsPrecious ?');
-  const rendered = await run('return `' + facts + '`;', { keeper: frost, spare: ember, bank, offLineage: 1 });
+  const rendered = await run('return `' + facts + '`;', { keeper: frost, spare: ember, insts: [frost, ember], bank, offLineage: 1 });
   assert(rendered.includes('Frost Drizzle · Lv 10'), 'keeper facts omit colour/level');
   assert(rendered.includes('Ember Drizzle · Lv 1'), 'destroy facts omit colour/level');
   const button = app.match(/<button class="btn" id="doBreed"[^\n]+/)[0];
   assert((await run('return `' + button + '`;', { spare: ember, bank, canBreedNow: true })).includes('Ember Drizzle · Lv 1'));
 });
 await test('R44-14 armed breeding button and toast keep the spare identity', async () => {
+  // A duplicate exercises the quick path. A last colour now requires typing,
+  // covered by breed-last-colour-audit (frozen work order, 2026-09-08).
+  const roster = [frost, ember, {...ember, iid:'ember-spare'}];
+  useDbName(`kennel-breed-${++sequence}`);
+  for (const [key,value] of Object.entries({petInst:roster, petLvlV:2, petLvlSteps:bank,
+    pettalents:{__iidV:2}, petStepCredit:0, petEquipped:null})) await kvSet(key,value);
   const events = {}, messages = [];
   const btn = { dataset: {}, textContent: 'Feed in', classList: { add() {} },
     addEventListener: (name, fn) => { events[name] = fn; } };

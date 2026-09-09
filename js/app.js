@@ -67,7 +67,7 @@ import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribut
 import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
-import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, petColourName, petInstanceName, salvageInstance, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear, bestInstance } from './loot.js';
+import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, petColourName, petInstanceName, salvageInstance, quotePetDestruction, petLastColourLoss, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear, bestInstance } from './loot.js';
 import { buildBattlePet, legalPicks, isKnownPet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, petStatBonusText, petBreedGainText, PET_STAT_MULT_CAP, PET_LINEAGE_STEP, SHINY_STAT_MULT, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs, ownedCellCount } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
@@ -20548,7 +20548,7 @@ async function openStable(opts = {}) {
           <ul class="breed-facts">
             <li>You keep <b>${esc(petInstanceName(keeper, bank[keeper.iid] || 0))}</b>. Same pet, same name, <b>same level and look</b>.</li>
             <li>It reaches <b>lineage ${offLineage}</b>: ${esc(petBreedGainText(keeper.sp, petLevel(bank[keeper.iid] || 0), keeper.shiny, offLineage))} ${esc(petStatBonusText(keeper.sp, keeper.shiny, offLineage))}</li>
-            <li><b>${esc(petInstanceName(spare, bank[spare.iid] || 0))} is destroyed</b> and does not come back.</li>
+            <li><b>${esc(petInstanceName(spare, bank[spare.iid] || 0))} is destroyed</b> and does not come back.${petLastColourLoss(spare, insts) ? ` This is your last ${esc(petColourName(spare))} of this species. Its collection cell will become empty.` : ''}</li>
           </ul>
           ${spareIsPrecious ? `<div class="breed-warn">
             ${ICONS.warn(17)}
@@ -21100,79 +21100,90 @@ async function openStable(opts = {}) {
       while (dock.nextSibling) dock.appendChild(dock.nextSibling);
     }
     $$('[data-destroy]', body).forEach(btn => btn.addEventListener('click', async () => {
-      const inst = insts.find(x => x.iid === btn.dataset.destroy);
-      if (!inst) return;
-      const iid = inst.iid;
-      const steps = bank[iid] || 0;
-      const nm = petInstanceName(inst, steps);
-      const isShiny = !!(inst && inst.shiny);
-      const dustVal = btn.dataset.dust || '?';
-      const doSalvage = async () => {
-        const res = await salvageInstance(iid);
-        if (!res.ok) { toast('Could not destroy that pet.'); return false; }
+      const iid = btn.dataset.destroy;
+      const fresh = await quotePetDestruction(iid);
+      if (!fresh.ok) { toast('Could not review that pet.'); return; }
+      const reviewFor = q => ({
+        title: `Destroy ${petDestructionName(q)}?`, html: petDestructionHtml(q),
+        typed: true, prompt: `Type ${petDestructionName(q).toUpperCase()} or DESTROY to confirm`,
+        accepts: value => ['DESTROY', petDestructionName(q).toUpperCase()].includes(value.trim().toUpperCase()),
+        action: 'Destroy it', commit: () => doSalvage(q),
+      });
+      const doSalvage = async q => {
+        const res = await salvageInstance(iid, q);
+        if (res.reason === 'stale-quote') return {review:reviewFor(res.quote), message:'This pet changed. Review its losses again before destroying it.'};
+        if (!res.ok) return {close:false, message:'Could not destroy that pet. Cancel and review it again.'};
         popSound(S.sounds);
-        toast(`${nm} salvaged into ${res.dust} Bone Dust.`, 2600);
-        return true;
+        toast(`${petDestructionName(q)} salvaged into ${res.dust} Bone Dust.`, 2600);
+        await render();
+        return {close:true};
       };
-      // A colour's last copy or any investment needs a typed confirmation.
-      // Only an untrained, plain duplicate keeps the quick two-tap action.
-      const lastColour = insts.filter(x => x.sp === inst.sp && petColourName(x) === petColourName(inst)).length === 1;
-      if (lastColour || steps > 0 || isShiny || (inst.lineage || 0) > 0) {
-        openPetDestructionReview({
-          title: `Destroy ${nm}?`,
-          html: `<p>${lastColour ? 'This is your last copy of this colour. ' : ''}<b>${esc(nm)}</b> has <b>${steps.toLocaleString()} banked steps</b>${inst.lineage ? ` and lineage ${inst.lineage}` : ''}. Its steps and lineage are lost. Destroying it pays <b>${esc(dustVal)} Bone Dust</b> and it does not come back.</p>`,
-          typed: true, prompt: `Type ${nm.toUpperCase()} or DESTROY to confirm`,
-          accepts: value => ['DESTROY', nm.toUpperCase()].includes(value.trim().toUpperCase()),
-          action: 'Destroy it', commit: async () => {
-            const done = await doSalvage();
-            if (done) render();
-            return { close: done, message: done ? '' : 'Could not destroy that pet. Cancel and review it again.' };
-          },
-        });
+      // Keep the disclosed quote across the quick path's two taps as well.
+      if (btn.dataset.armed === iid && btn.destructionQuote) {
+        const result = await doSalvage(btn.destructionQuote);
+        delete btn.dataset.armed; delete btn.destructionQuote;
+        if (result.review) openPetDestructionReview({...result.review, message:result.message});
+        else if (result.message) toast(result.message);
         return;
       }
-      if (btn.dataset.armed !== iid) {
-        btn.dataset.armed = iid; const t = btn.innerHTML;
-        btn.innerHTML = `Melt ${esc(nm)} for <span class="dust-ico">${ICONS.dust(13)}</span>${dustVal}?`;
-        toast(`${nm} will be destroyed for ${dustVal} Bone Dust. This cannot be undone. Tap again to confirm.`, 4600);
-        setTimeout(() => {
-          if (btn.isConnected && btn.dataset.armed === iid) {
-            delete btn.dataset.armed;
-            if (btn.dataset.destroy === iid) btn.innerHTML = t;
-          }
-        }, 4600);
+      const q = fresh.quote, nm = petDestructionName(q);
+      // Preserve the stronger review for a last appearance or invested pet.
+      if (q.lastColour || q.lastCell || q.bankedSteps > 0 || q.inst.shiny || (q.inst.lineage || 0) > 0) {
+        openPetDestructionReview(reviewFor(q));
         return;
       }
-      if (await doSalvage()) render();
+      btn.dataset.armed = iid; btn.destructionQuote = q;
+      const t = btn.innerHTML;
+      btn.innerHTML = `Melt ${esc(nm)} for <span class="dust-ico">${ICONS.dust(13)}</span>${q.dust}?`;
+      toast(`${nm} will be destroyed for ${q.dust} Bone Dust. ${petDestructionLosses(q)} This cannot be undone. Tap again to confirm.`, 4600);
+      setTimeout(() => {
+        if (btn.isConnected && btn.dataset.armed === iid) {
+          delete btn.dataset.armed; delete btn.destructionQuote;
+          if (btn.dataset.destroy === iid) btn.innerHTML = t;
+        }
+      }, 4600);
     }));
     $$('[data-offsp]', body).forEach(c => c.addEventListener('click', () => { offSp = c.dataset.offsp; render(); }));
     $('#doBreed', body)?.addEventListener('click', async e => {
-      // breeding CONSUMES both parents. If one is shiny, warn once - the shiny
-      // colour carries to (and overtakes any common colour in) the offspring,
-      // but the parent itself is gone. Arm-then-confirm.
-      const spareInst = insts.find(x => x.iid === sel.find(y => y !== offSp)) || {};
-      const spareName = petInstanceName(spareInst, bank[spareInst.iid] || 0);
+      const keepIid = offSp, feedIid = sel.find(x => x !== offSp);
+      const fresh = await quotePetDestruction(feedIid, keepIid);
+      if (!fresh.ok) { toast('Could not review that pet.'); return; }
       const btn = e.currentTarget;
-      /* ARM ON EVERY BREED. It permanently destroys a pet, and since v270 every
-         irreversible spend takes two taps. A precious spare gets a louder line,
-         because "maybe you shouldn't" is the whole point of the pause. */
-      if (btn.dataset.armed !== '1') {
-        btn.dataset.armed = '1';
-        const t = btn.textContent;
-        btn.textContent = spareInst.shiny ? `Destroy the SHINY ${spareName}?` : `Destroy ${spareName}?`;
-        btn.classList.add('danger-ish');
-        toast(spareInst.shiny
-          ? `${spareName} is SHINY, roughly a 1 in 30 hatch, and its colour will not carry over. Destroying it is permanent. Tap again only if you are sure.`
-          : `${spareName} is destroyed for good and your keeper gains a lineage rank. Tap again to confirm.`, 5200);
-        setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = t; btn.classList.remove('danger-ish'); } }, 5200);
+      const reviewFor = q => ({
+        title: `Feed ${petDestructionName(q)} in?`,
+        html: `${petDestructionHtml(q)}<p>Your keeper gains a lineage rank. ${q.inst.shiny ? 'Shinies are about a 1 in 30 hatch and its colour will NOT carry over. ' : ''}${q.inst.lineage ? 'Its bloodline is lost; lineage does not transfer. ' : ''}Feed a plain spare in instead unless you are sure.</p>`,
+        typed:true, prompt:'Type DESTROY to confirm', accepts:value => value.trim().toUpperCase() === 'DESTROY',
+        action:'Feed it in', commit:() => doBreed(q),
+      });
+      const doBreed = async q => {
+        const res = await breedPets(keepIid, feedIid, q);
+        if (res.reason === 'stale-quote') return {review:reviewFor(res.quote), message:'This pet changed. Review its losses again before breeding.'};
+        if (!res.ok) return {close:false, message:BREED_ERR[res.reason] || 'Could not breed those.'};
+        sel = []; offSp = null; saveBreed();
+        await render();
+        // Close the review before opening the result, so history cannot close
+        // the result sheet in place of the confirmation underneath it.
+        return {close:true, afterClose:() => openPetBreedResult(res.offspring, petLevel(bank[res.offspring.iid] || 0))};
+      };
+      if (btn.dataset.armed === '1' && btn.destructionQuote) {
+        const result = await doBreed(btn.destructionQuote);
+        btn.dataset.armed = '0'; delete btn.destructionQuote;
+        if (result.review) openPetDestructionReview({...result.review, message:result.message});
+        else if (result.close) result.afterClose();
+        else toast(result.message);
         return;
       }
-      const keepIid = offSp, feedIid = sel.find(x => x !== offSp);
-      const res = await breedPets(keepIid, feedIid);
-      if (!res.ok) { toast(BREED_ERR[res.reason] || 'Could not breed those.'); render(); return; }
-      sel = []; offSp = null; saveBreed();
-      await render();                          // refresh the stable underneath
-      openPetBreedResult(res.offspring, petLevel(bank[res.offspring.iid] || 0));       // reveal on top (Stable stays open, no race)
+      const q = fresh.quote, spareInst = q.inst, spareName = petDestructionName(q);
+      if (q.lastCell) { openPetDestructionReview(reviewFor(q)); return; }
+      // Every other breed retains its two taps and its existing shiny warning.
+      btn.dataset.armed = '1'; btn.destructionQuote = q;
+      const t = btn.textContent;
+      btn.textContent = spareInst.shiny ? `Destroy the SHINY ${spareName}?` : `Destroy ${spareName}?`;
+      btn.classList.add('danger-ish');
+      toast(spareInst.shiny
+        ? `${spareName} is SHINY, roughly a 1 in 30 hatch, and its colour will not carry over. Destroying it is permanent. Tap again only if you are sure.`
+        : `${spareName} is destroyed for good and your keeper gains a lineage rank. Tap again to confirm.`, 5200);
+      setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; delete btn.destructionQuote; btn.textContent = t; btn.classList.remove('danger-ish'); } }, 5200);
     });
     $$('[data-petpick2]', body).forEach(btn => btn.addEventListener('click', async () => {
       const iid = btn.dataset.iid, tier = Number(btn.dataset.tier), node = btn.dataset.petpick2;
@@ -21387,21 +21398,57 @@ async function labReadSnapshot(pre = null) {
   return { status: 'unavailable', pets: rows, collectionCount: ownedCellCount(cells, KENNEL_SPECIES.map(s => s.id)), species: Object.fromEntries(KENNEL_SPECIES.map(s => [s.id, { count: MORPHS.filter(m => cells.has(`${s.id}|${m}`)).length }])), eggs: inv.filter(r => r.kind === 'egg').map(e => { const p = eggProgress(e, steps); return { ready: p.ready, steps: p.walked, goal: p.goal }; }), ui: {}, unseen: [] };
 }
 
-/* Both salvage and Animate use this same review/typed-confirmation sheet.
- * Text is never prefilled. Cancellation never invokes commit. */
-function openPetDestructionReview({ title, html, typed = false, accepts = t => t === 'ANIMATE', prompt = 'Type ANIMATE to confirm', action = 'Animate', commit, onClose = null }) {
-  let busy = false, finished = false;
-  const wrap = openSheet(`<div class="sheet-head"><h2>${esc(title)}</h2><button class="sheet-close">Cancel</button></div><div class="sheet-body lab-review">${html}${typed ? `<div class="t1-field"><label for="pdIn">${esc(prompt)}</label><input id="pdIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false"></div>` : ''}<p id="pdStatus" role="status"></p></div><div class="t1-foot"><button class="btn danger-ish" id="pdGo" ${typed ? 'disabled' : ''}>${esc(action)}</button></div>`, { cls: 't1 pet-a11y', name: 'PetDestruction', onClose });
-  const input = $('#pdIn', wrap), go = $('#pdGo', wrap), status = $('#pdStatus', wrap);
+/* Both salvage and Animate use this review, as does Breed. */
+// PET DESTRUCTION UI PURE BEGIN
+function petDestructionName(q) {
+  const kind = petInstanceName(q.inst, q.bankedSteps);
+  return q.nickname ? `${q.nickname} (${kind})` : kind;
+}
+function petDestructionLosses(q) {
+  const talents = q.talents.map(id => Object.values(PET_TREES).flatMap(tree => tree.flatMap(row => row.opts)).find(t => t.id === id)?.name || id);
+  return [
+    `${q.bankedSteps.toLocaleString()} banked steps and lineage ${q.inst.lineage || 0} are lost.`,
+    q.nickname ? `The nickname ${q.nickname} is lost.` : '',
+    q.bond ? `Bond ${q.bond}/5 is lost.` : '',
+    talents.length ? `Chosen talents are lost: ${talents.join(', ')}.` : '',
+    q.inst.shiny ? 'Its shiny appearance is lost.' : '',
+    q.equipped ? (q.replacement ? `It is equipped. ${q.replacement.name} will take its place.` : 'It is equipped. No pet will remain equipped.') : '',
+  ].filter(Boolean).join(' ');
+}
+function petDestructionHtml(q) {
+  const colour = MORPH_LABEL[q.inst.shiny ? 'base' : q.inst.morph || 'base'] || petColourName(q.inst);
+  return `<p>${q.lastColour ? 'This is your last copy of this colour. ' : ''}${q.lastCell ? `Your last ${esc(colour)} ${(esc(BH_BY_ID[q.inst.sp]?.name || q.inst.sp))} will be lost. Its collection cell will become empty. ` : ''}<b>${esc(petDestructionName(q))}</b> is destroyed and does not come back.</p><p>${esc(petDestructionLosses(q))}</p>${q.keepIid ? '' : `<p>Destroying it pays <b>${q.dust} Bone Dust</b>.</p>`}`;
+}
+// PET DESTRUCTION UI PURE END
+
+/* Salvage, Breed and Animate share this review. A stale quote replaces the
+ * disclosure in place and clears the typed acknowledgement before another try. */
+function openPetDestructionReview({ title, html, typed = false, accepts = t => t === 'ANIMATE', prompt = 'Type ANIMATE to confirm', action = 'Animate', commit, onClose = null, message = '' }) {
+  let busy = false, finished = false, afterClose = null;
+  const wrap = openSheet(`<div class="sheet-head"><h2>${esc(title)}</h2><button class="sheet-close">Cancel</button></div><div class="sheet-body lab-review">${html}${typed ? `<div class="t1-field"><label for="pdIn">${esc(prompt)}</label><input id="pdIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false"></div>` : ''}<p id="pdStatus" role="status"></p></div><div class="t1-foot"><button class="btn danger-ish" id="pdGo" ${typed ? 'disabled' : ''}>${esc(action)}</button></div>`, { cls: 't1 pet-a11y', name: 'PetDestruction', onClose: () => { onClose?.(); if (afterClose) queueMicrotask(afterClose); } });
+  let input = $('#pdIn', wrap), status = $('#pdStatus', wrap);
+  const go = $('#pdGo', wrap);
+  status.textContent = message;
   const typedOk = () => !typed || accepts(input.value);
-  input?.addEventListener('input', () => { go.disabled = busy || finished || !typedOk(); });
+  const wireInput = () => input?.addEventListener('input', () => { go.disabled = busy || finished || !typedOk(); });
+  wireInput();
   go.addEventListener('click', async () => {
     if (busy || finished || !typedOk()) return;
     busy = true; go.disabled = true;
     status.textContent = action === 'Animate' ? 'Saving your experiment...' : 'Saving...';
     try {
       const result = await commit();
+      if (result?.review) {
+        ({title, html, typed, accepts, prompt, action, commit} = result.review);
+        $('h2', wrap).textContent = title;
+        $('.lab-review', wrap).innerHTML = `${html}<div class="t1-field"><label for="pdIn">${esc(prompt)}</label><input id="pdIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false"></div><p id="pdStatus" role="status"></p>`;
+        input = $('#pdIn', wrap); status = $('#pdStatus', wrap);
+        input.value = ''; wireInput(); go.textContent = action; go.disabled = true;
+        status.textContent = result.message || ''; input.focus?.();
+        return;
+      }
       finished = true;
+      afterClose = result?.afterClose || null;
       if (result?.message) status.textContent = result.message;
       if (result?.close && wrap.isConnected) history.back();
     } catch {

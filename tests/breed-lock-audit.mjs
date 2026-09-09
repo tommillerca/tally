@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { BREED_COOLDOWN_STEPS } from '../js/loot.js';
+import { BREED_COOLDOWN_STEPS, petLastColourLoss, petColourName } from '../js/loot.js';
 
 const app = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 const start = app.indexOf('    const breedLockNote =');
@@ -32,7 +32,7 @@ function render(cooldownLeft, picks, cfActs = '') {
     PET_STAT_MULT_CAP: 2, cfWasPanelled: false, openIid: null,
     cfCards: '', cfWear: '', cfCaption: '', cfActs,
     petPortraitHtml: emptyArt, esc: String,
-    petInstanceName: pet => pet.iid, petLevel: () => 1,
+    petInstanceName: pet => pet.iid, petLevel: () => 1, petLastColourLoss, petColourName,
     petBreedGainText: emptyArt, petStatBonusText: emptyArt,
   };
   new Function(...Object.keys(scope), code)(...Object.values(scope));

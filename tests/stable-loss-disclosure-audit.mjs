@@ -1,0 +1,20 @@
+// Finding 4, frozen work order 2026-09-08. Quick and typed losses are cumulative.
+import assert from 'node:assert/strict';
+import {D,P,pet,seed,stable} from './lib/pet-destruction-harness.mjs';
+let roster=[pet('a'),pet('b')];
+await seed(roster,{petNick:{a:'BISCUIT'},petBonds:{a:4}});
+const ui=await stable(roster);await ui.click();
+assert.match(ui.disclosure,/BISCUIT/,'CONTROL quick review identifies the nickname');
+assert.match(ui.disclosure,/nickname BISCUIT is lost/);assert.match(ui.disclosure,/Bond 4\/5 is lost/);
+assert.match(ui.button.innerHTML,/BISCUIT/);assert.equal(ui.sheets.length,0);
+await ui.click();assert.equal((await D.kvGet('petNick')).a,undefined);assert.equal((await D.kvGet('petBonds')).a,undefined);
+console.log('PASS CONTROL: quick Destroy identifies BISCUIT and names the nickname and bond it removes');
+const talent=P.PET_TREES[P.familyOf('C1').key][0].opts[0];
+roster=[pet('a','ember',{lineage:2}),pet('b')];
+await seed(roster,{petLvlSteps:{a:50000,b:0},pettalents:{__iidV:2,a:[talent.id]},petNick:{a:'<BISCUIT>'},petBonds:{a:4}});
+const typed=await stable(roster);await typed.click();
+assert.ok(typed.disclosure.includes(talent.name));assert.match(typed.disclosure,/Chosen talents are lost/);
+assert.match(typed.disclosure,/50,000 banked steps and lineage 2/);assert.match(typed.disclosure,/&lt;BISCUIT&gt;/);
+assert.match(typed.disclosure,/Bond 4\/5 is lost/);assert.match(typed.disclosure,/last copy/);
+typed.cancel();assert.equal((await D.kvGet('pettalents')).a[0],talent.id);
+console.log('PASS CONTROL: typed Destroy retains training and lineage warnings and names talent, nickname and bond losses');
