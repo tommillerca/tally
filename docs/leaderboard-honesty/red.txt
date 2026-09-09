@@ -1,0 +1,160 @@
+FAIL fresh: leaderboard: The input was expected to not match the regular expression /online now|\bonline\b|last seen|\b\d+d ago|\byesterday\b/i. Input:
+
+'Every Bonehead in the game, ranked by level. Add anyone: they accept by adding you back. 1 Pal 1st Level 8 · Bones · 2 badges · 1 spire · online Crew 2 Me 2nd Level 8 · Bones · 2 badges · 1 spire · online You'
+
+FAIL fresh: fan card: expected "Synced recently", got Pal Bones LV 8 Just took a spire
+FAIL fresh: fan selection: The input was expected to not match the regular expression /online now|\bonline\b|last seen|\b\d+d ago|\byesterday\b/i. Input:
+
+'Pal online LV 8 2 badges Cheer Gift'
+
+FAIL fresh: requests: The input did not match the regular expression /last shared/i. Input:
+
+'Wants to be friends · 1 Pal Lv 8 Accept Ignore'
+
+FAIL fresh: profile: expected "Synced recently", got Pal Done Lv 8 Bones Holds 1 spire · beat their defender to take one + Add to my Crew 2 Badges 0 Gear - No pet THEIR PADDOCK 3 PETS Visit their paddock › Their stats will show once they next open the app.
+FAIL fresh: podium: The input did not match the regular expression /last shared/i. Input:
+
+'Me Lv 8 2 Pal Lv 8 1 #2 of 2 · Pal is one rung up at Lv 8'
+
+FAIL fresh: newcomers: The input was expected to not match the regular expression /online now|\bonline\b|last seen|\b\d+d ago|\byesterday\b/i. Input:
+
+'Pal Level 8 · 2 badges · online now + ADD'
+
+FAIL fresh: race: expected "Synced recently", got THE STEP RACE 5 DAYS LEFT You are 2th , 2,345 behind Pal › 1 Pal 12,345 2 Me 10,000 You are 2,345 steps behind Pal · about 26 minutes of walking. Everyone playing is in it. Steps count from the day the race starts.
+FAIL fresh: paddock: expected "Synced recently", got Pal's Paddock Done Shared paddock scene 3 PETS 1 out in the field right now
+FAIL day-old: leaderboard: The input was expected to not match the regular expression /online now|\bonline\b|last seen|\b\d+d ago|\byesterday\b/i. Input:
+
+'Every Bonehead in the game, ranked by level. Add anyone: they accept by adding you back. 1 Pal 1st Level 8 · Bones · 2 badges · 1 spire · yesterday Crew 2 Me 2nd Level 8 · Bones · 2 badges · 1 spire · online You'
+
+FAIL day-old: fan card: expected "Awaiting a recent sync", got Pal Bones LV 8 Just took a spire
+FAIL day-old: fan selection: The input was expected to not match the regular expression /online now|\bonline\b|last seen|\b\d+d ago|\byesterday\b/i. Input:
+
+'Pal yesterday LV 8 2 badges Cheer Gift'
+
+FAIL day-old: requests: The input did not match the regular expression /last shared/i. Input:
+
+'Wants to be friends · 1 Pal Lv 8 Accept Ignore'
+
+FAIL day-old: profile: expected "Awaiting a recent sync", got Pal Done Lv 8 Bones Holds 1 spire · beat their defender to take one + Add to my Crew 2 Badges 0 Gear - No pet THEIR PADDOCK 3 PETS Visit their paddock › Their stats will show once they next open the app.
+FAIL day-old: podium: The input did not match the regular expression /last shared/i. Input:
+
+'Me Lv 8 2 Pal Lv 8 1 #2 of 2 · Pal is one rung up at Lv 8'
+
+FAIL day-old: newcomers: The input was expected to not match the regular expression /online now|\bonline\b|last seen|\b\d+d ago|\byesterday\b/i. Input:
+
+'Pal Level 8 · 2 badges · yesterday + ADD'
+
+FAIL day-old: race: The input was expected to not match the regular expression /online now|\bonline\b|last seen|\b\d+d ago|\byesterday\b/i. Input:
+
+'THE STEP RACE 5 DAYS LEFT You are 2th , 2,345 behind Pal › 1 Pal last seen 1d ago 12,345 2 Me 10,000 You are 2,345 steps behind Pal · about 26 minutes of walking. Everyone playing is in it. Steps count from the day the race starts.'
+
+FAIL day-old: paddock: expected "Awaiting a recent sync", got Pal's Paddock Done Shared paddock scene 3 PETS 1 out in the field right now
+FAIL week-old: leaderboard: The input was expected to not match the regular expression /online now|\bonline\b|last seen|\b\d+d ago|\byesterday\b/i. Input:
+
+'Every Bonehead in the game, ranked by level. Add anyone: they accept by adding you back. 1 Pal 1st Level 8 · Bones · 2 badges · 1 spire · 7d ago Crew 2 Me 2nd Level 8 · Bones · 2 badges · 1 spire · online You'
+
+FAIL week-old: fan card: expected "Awaiting a recent sync", got Pal Bones LV 8 Just took a spire
+FAIL week-old: fan selection: The input was expected to not match the regular expression /online now|\bonline\b|last seen|\b\d+d ago|\byesterday\b/i. Input:
+
+'Pal 7d ago LV 8 2 badges Cheer Gift'
+
+FAIL week-old: requests: The input did not match the regular expression /last shared/i. Input:
+
+'Wants to be friends · 1 Pal Lv 8 Accept Ignore'
+
+FAIL week-old: profile: expected "Awaiting a recent sync", got Pal Done Lv 8 Bones Holds 1 spire · beat their defender to take one + Add to my Crew 2 Badges 0 Gear - No pet THEIR PADDOCK 3 PETS Visit their paddock › Their stats will show once they next open the app.
+FAIL week-old: podium: The input did not match the regular expression /last shared/i. Input:
+
+'Me Lv 8 2 Pal Lv 8 1 #2 of 2 · Pal is one rung up at Lv 8'
+
+FAIL week-old: newcomers: The input was expected to not match the regular expression /online now|\bonline\b|last seen|\b\d+d ago|\byesterday\b/i. Input:
+
+'Pal Level 8 · 2 badges · 7d ago + ADD'
+
+FAIL week-old: race: The input was expected to not match the regular expression /online now|\bonline\b|last seen|\b\d+d ago|\byesterday\b/i. Input:
+
+'THE STEP RACE 5 DAYS LEFT You are 2th , 2,345 behind Pal › 1 Pal last seen 7d ago 12,345 2 Me 10,000 You are 2,345 steps behind Pal · about 26 minutes of walking. Everyone playing is in it. Steps count from the day the race starts.'
+
+FAIL week-old: paddock: expected "Awaiting a recent sync", got Pal's Paddock Done Shared paddock scene 3 PETS 1 out in the field right now
+FAIL fleet-stale: leaderboard: The input was expected to not match the regular expression /online now|\bonline\b|last seen|\b\d+d ago|\byesterday\b/i. Input:
+
+'Every Bonehead in the game, ranked by level. Add anyone: they accept by adding you back. 1 Pal 1st Level 8 · Bones · 2 badges · 1 spire · 7d ago Crew 2 Me 2nd Level 8 · Bones · 2 badges · 1 spire · 3d ago You'
+
+FAIL fleet-stale: fan card: expected "Awaiting a recent sync", got Pal Bones LV 8 Just took a spire
+FAIL fleet-stale: fan selection: The input was expected to not match the regular expression /online now|\bonline\b|last seen|\b\d+d ago|\byesterday\b/i. Input:
+
+'Pal 7d ago LV 8 2 badges Cheer Gift'
+
+FAIL fleet-stale: requests: The input did not match the regular expression /last shared/i. Input:
+
+'Wants to be friends · 1 Pal Lv 8 Accept Ignore'
+
+FAIL fleet-stale: profile: expected "Awaiting a recent sync", got Pal Done Lv 8 Bones Holds 1 spire · beat their defender to take one + Add to my Crew 2 Badges 0 Gear - No pet THEIR PADDOCK 3 PETS Visit their paddock › Their stats will show once they next open the app.
+FAIL fleet-stale: podium: The input did not match the regular expression /last shared/i. Input:
+
+'Me Lv 8 2 Pal Lv 8 1 #2 of 2 · Pal is one rung up at Lv 8'
+
+FAIL fleet-stale: newcomers: The input was expected to not match the regular expression /online now|\bonline\b|last seen|\b\d+d ago|\byesterday\b/i. Input:
+
+'Pal Level 8 · 2 badges · 7d ago + ADD'
+
+FAIL fleet-stale: race: The input was expected to not match the regular expression /online now|\bonline\b|last seen|\b\d+d ago|\byesterday\b/i. Input:
+
+'THE STEP RACE 5 DAYS LEFT You are 2th , 2,345 behind Pal › 1 Pal last seen 7d ago 12,345 2 Me 10,000 You are 2,345 steps behind Pal · about 26 minutes of walking. Everyone playing is in it. Steps count from the day the race starts.'
+
+FAIL fleet-stale: paddock: expected "Awaiting a recent sync", got Pal's Paddock Done Shared paddock scene 3 PETS 1 out in the field right now
+PASS fresh: recent-sync filter
+FAIL day-old: recent-sync filter: Expected values to be strictly equal:
++ actual - expected
+
++ 'Nobody in your Crew is online right now. Tap Online again to see everyone.'
+- 'No recent syncs in this selection. Tap Recent syncs again to see everyone.'
+
+FAIL week-old: recent-sync filter: Expected values to be strictly equal:
++ actual - expected
+
++ 'Nobody in your Crew is online right now. Tap Online again to see everyone.'
+- 'No recent syncs in this selection. Tap Recent syncs again to see everyone.'
+
+FAIL fleet-stale: recent-sync filter: Expected values to be strictly equal:
++ actual - expected
+
++ 'Nobody in your Crew is online right now. Tap Online again to see everyone.'
+- 'No recent syncs in this selection. Tap Recent syncs again to see everyone.'
+
+FAIL fresh: map race strip: The input did not match the regular expression /Last shared/. Input:
+
+'2th · 2,345 behind Pal'
+
+FAIL day-old: map race strip: Expected values to be strictly equal:
++ actual - expected
+
++ '2th · 2,345 behind Pal'
+- 'Step race updates may be delayed.'
+
+FAIL week-old: map race strip: Expected values to be strictly equal:
++ actual - expected
+
++ '2th · 2,345 behind Pal'
+- 'Step race updates may be delayed.'
+
+FAIL fleet-stale: map race strip: Expected values to be strictly equal:
++ actual - expected
+
++ '2th · 2,345 behind Pal'
+- 'Step race updates may be delayed.'
+
+PASS CONTROL pending rows do not invent sync times
+FAIL CONTROL empty race and stale own row do not imply player inactivity: The input did not match the regular expression /No steps have reached this board yet/. Input:
+
+'THE STEP RACE 5 DAYS LEFT Nobody has walked a step yet. Go take the lead. › Nobody has walked a step yet this race. The top of this board is going spare. Everyone playing is in it. Steps count from the day the race starts.'
+
+FAIL CONTROL timestamp boundaries and unavailable clocks: Expected values to be strictly equal:
++ actual - expected
+
++ ''
+- 'Sync time unavailable'
+
+FAIL CONTROL shared notice is bounded to available snapshots: snapshotNotice is not defined
+FAIL filter copy and stale fan notice are wired: recent-sync filter label
+LEADERBOARD HONESTY: 2 passed, 47 failed

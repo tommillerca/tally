@@ -1,5 +1,16 @@
 # What each patch note claims, and what backs it
 
+## v530 (2026-09-09)
+
+1. PROOF: leaderboard-honesty-audit.mjs | REACH: Every surface that turned `last_seen` into a claim about a person now describes a server contact instead. Under 6 minutes reads "Synced recently"; under a day keeps minute or hour precision; 24 hours or older drops the day count entirely and reads "Awaiting a recent sync"; a missing, zero, negative or future timestamp reads "Sync time unavailable". Driven with fresh, day-old, week-old and fleet-stale snapshots across the Crew fan, leaderboard, podium and step race; the week-old and fleet-stale rows go red against the previous code, which printed a confident day count.
+2. PROOF: leaderboard-honesty-audit.mjs | REACH: When no row in a view carries a valid timestamp under 24 hours, the shared notice says no recent updates have reached this view and syncing may be delayed, rather than implying the players are absent. The viewer's own recent server timestamp counts as evidence; a locally synthesised race row does not, so the app cannot reassure itself with its own data.
+
+This release does NOT fix the sync outage and does not claim to. No player has
+synced since 2026-09-06 and the cause remains unknown after five investigating
+lanes. What it fixes is the app stating as fact something it never measured:
+`last_seen` moves only when a sync succeeds, so it has never meant "last time
+they played". No browser or device proof was run.
+
 ## v529 (2026-09-09)
 
 1. PROOF: sync-observability-audit.mjs | REACH: Every sync attempt now records its outcome and the hop it stopped at, and a Settings row reports it in plain language. Driven with an injected failure of each kind: today's code leaves no trace anywhere for any of them. A guard fails if a bare catch returns to the sync path. Nothing new is uploaded and the cloud opt-out is never reported as a failure.
