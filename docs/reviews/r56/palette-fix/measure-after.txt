@@ -1,0 +1,7 @@
+{"species": "C1", "first": "base", "second": "toxic", "recolour_core_pixels": 8694, "mean_core_delta_ok_100": 21.39951055724873, "alpha_weighted_visible_delta_ok_100": 11.640743752853117}
+{"species": "C2", "first": "base", "second": "ember", "recolour_core_pixels": 7540, "mean_core_delta_ok_100": 21.138601127271812, "alpha_weighted_visible_delta_ok_100": 11.68712434107559}
+{"species": "C3", "first": "ember", "second": "rose", "recolour_core_pixels": 8252, "mean_core_delta_ok_100": 21.349882442060856, "alpha_weighted_visible_delta_ok_100": 13.543046858305377}
+{"species": "C4", "first": "base", "second": "rose", "recolour_core_pixels": 6947, "mean_core_delta_ok_100": 23.599592283659753, "alpha_weighted_visible_delta_ok_100": 10.486918199516722}
+{"species": "C5", "first": "ember", "second": "midnight", "recolour_core_pixels": 8833, "mean_core_delta_ok_100": 21.18583634110746, "alpha_weighted_visible_delta_ok_100": 11.359396688856872}
+{"species": "C6", "first": "ember", "second": "rose", "recolour_core_pixels": 126833, "mean_core_delta_ok_100": 21.776558462831904, "alpha_weighted_visible_delta_ok_100": 2.1387380335242523}
+90 pairs and 18 layer inventories written; probe outputs discarded.

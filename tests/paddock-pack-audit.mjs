@@ -127,9 +127,11 @@ await check('R44-25 copy rail restores 2160px',()=>{
 });
 await check('R44-17 scoreboard units',()=>{
   assert.match(read('js/paddock-cards.js'),/Pets are individual copies\. Kinds are species, including the founder/,'Paddock counts have no unit explanation');
-  assert.match(app.slice(stableStart),/species colourways &middot; founder excluded/,'Stable Kennel door has no cell unit');
+  const collectionUnit = text => assert.match(text,/\$\{kennelFound\} of \$\{KENNEL_SPECIES.length \* MORPHS.length\} colours collected/,'Stable Kennel door has no colour collection unit');
+  collectionUnit(app.slice(stableStart));
+  assert.throws(() => collectionUnit(app.slice(stableStart).replace('colours collected', 'pets')), 'CONTROL pet copies must not label collection cells');
   assert.ok(!app.slice(stableStart,app.indexOf('/* THE SIX ORDINARY',stableStart)).includes('out in the field</small>'),'Stable door falsely claims every pet is in field');
-  return 'copies, species (CX included), species colourways (CX excluded) named separately';
+  return 'copies, species (CX included), collected colours (ordinary species only) named separately';
 });
 console.log(`${6-failed}/6 R1 Node guards pass. Real-render proofs were not run.`);
 process.exitCode=failed?1:0;

@@ -20394,12 +20394,8 @@ async function openStable(opts = {}) {
         return `<button class="chip ${offSp === x.iid ? 'on' : ''}" data-offsp="${x.iid}">${esc(lbl)}${x.shiny ? ' ✦' : ''} &middot; ${bits.join(' &middot; ')} &middot; <b>${offSp === x.iid ? 'KEPT' : 'FED'}</b></button>`;
       }).join('') : '';
 
-    /* THE WAY IN. Tom, 2026-08-11: the Paddock's entry was the FOURTH CHIP in the row
-       below, `chip chip-btn`, measured 134x38 and therefore the same class and the same
-       size as "How pets work". The newest place in the game looked like a help link and
-       read as less important than a sentence about levelling. Mocked both ways first
-       (market-quality-mockups/paddock-entry/) and Tom picked the door, above the
-       carousel, counting PETS.
+    /* THE WAY IN. r56: the pet leads; room doors follow the carousel with quiet, consistent
+       type. The Kennel is a secondary collection link. Retain the Paddock scene:
        It is a DOOR, not a louder label: the Paddock's pitch is "not a list, a place", so
        the entry shows the place with your own animals standing in it. Figure contract in
        full, because this is a new figure surface:
@@ -20436,7 +20432,7 @@ async function openStable(opts = {}) {
     const doorPx = 28;
     /* The Kennel door's own numbers, from the same instances this render already
        has: which colourways you own anywhere (the swatch strip) and how many of
-       the 30 cells are filled (the count, ownedCellCount so CX cannot inflate
+       the 36 cells are filled (the count, ownedCellCount so CX cannot inflate
        it -- R39-10). Pure reads, no extra query. */
     const kennelOwned = ownedPairs(insts);
     const kennelMorphs = new Set([...kennelOwned].map(k => k.split('|')[1]));
@@ -20445,72 +20441,8 @@ async function openStable(opts = {}) {
     const breedLockNote = st.ready ? '' : `<p class="note" data-breed-lock>Breeding is locked. Walk ${st.cooldownLeft.toLocaleString()} more ${st.cooldownLeft === 1 ? 'step' : 'steps'} to unlock it.</p>`;
     const bodyScroll = body.scrollTop;
     body.innerHTML = `
-      <button class="pdk-door" id="stableToPaddock" type="button">
-        <span class="pdk-door-scene" aria-hidden="true">
-          <i class="pdk-door-moon"></i>
-          <i class="pdk-door-rail r1"></i><i class="pdk-door-rail r2"></i>
-          <i class="pdk-door-post" style="left:16px"></i><i class="pdk-door-post" style="left:70px"></i><i class="pdk-door-post" style="left:124px"></i>
-          ${/* 192, because the door draws the whole figure in a 60x78 box:
-               measured 60.2 CSS px, which is 120 device px on a 2x phone and 181
-               on a 3x, both comfortably inside the small tier. Seven layers at
-               640 was 10.9 MB standing in a thumbnail. */''}
-          <span class="pdk-door-keeper">${avatarLayersHtml(eqOwn, { skip: ['BG', 'C'], noYard: true, thumb: 192 })}</span>
-          <span class="pdk-door-pets">${doorSp.map(sp => `<span class="pdk-door-pet">${petAsideHtml(petFrom(null, sp), doorPx, { thumb: true })}</span>`).join('')}</span>
-          <i class="pdk-door-vig"></i>
-        </span>
-        <span class="pdk-door-tx">
-          <b>THE PADDOCK</b>
-          <small>${insts.length} pet${insts.length === 1 ? '' : 's'} in your collection</small>
-        </span>
-        <!-- the house disclosure arrow: a plain glyph in a span, as in .gbn-chev,
-             .gd-arrow and .ul-chev. No ICONS ternary fallback here, per the note in
-             the chip row below: a ternary hides a missing icon from readers and ships
-             a bare "?" glyph.
-             NO BACKTICKS IN THIS COMMENT EITHER. The first draft of this very comment
-             quoted the ternary in backticks, closed the template literal it sits
-             inside, and broke the app on the spot: "Unexpected identifier ICONS". The
-             warning below is not decoration, it is a rake, and I stepped on it. -->
-        <span class="pdk-door-go" aria-hidden="true">›</span>
-      </button>
-      <!-- THE KENNEL DOOR. Same grammar as the Paddock's above it (name in
-           Bangers, one line saying what is inside, count, chevron) because it
-           answers the same kind of question and a second vocabulary would be
-           the cost of a second idea. It carries NO scene: the Paddock's pitch
-           is "not a list, a place", so its door shows the place; the Kennel is
-           a collection, so its door shows the collection -- the six colourway
-           swatches, filled for the ones you own, which is the SAME reading rule
-           the grid inside uses. That is the teaching, and it costs no image.
-           The small line is the one-line explanation at the point of use, the
-           way the Dressing Room and the Paddock's "Tap a pet to say hi" teach:
-           no tutorial screen, no takeover. -->
-      <button class="pdk-door kdoor" id="kennelBtn" type="button">
-        <span class="kdoor-sw" style="--kennel-columns:${MORPHS.length}" aria-hidden="true">${MORPHS.map(m => `<i class="${kennelMorphs.has(m) ? 'on' : ''}" style="--kc:${morphSwatch(m)}"></i>`).join('')}</span>
-        <span class="pdk-door-tx">
-          <b>THE KENNEL</b>
-          <small>${kennelFound} of ${KENNEL_SPECIES.length * MORPHS.length} species colourways &middot; founder excluded</small>
-        </span>
-        <span class="pdk-door-go" aria-hidden="true">›</span>
-      </button>
-      <button class="btn ghost lab-door" data-lab-open>The Laboratory · Build your collection</button>
-      <p class="lab-sinks">Melting clears the pile. Breeding builds strength. The Laboratory builds the collection.</p>
+      <div class="wallet-line stable-wallet"><span>Bone Dust</span><b><span class="dust-ico">${ICONS.dust(14)}</span> ${st.dust.toLocaleString()}</b></div>
       ${opts.labAction ? `<p role="status">${opts.labAction === 'melt' ? 'Choose a pet in the Stable, then use Destroy to melt that one pet for Bone Dust.' : 'Choose a keeper and a spare in the Stable, then review Breed to raise the keeper’s lineage.'}</p>` : ''}
-      <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap">
-        <span class="chip">${ICONS.dust(14)} ${st.dust.toLocaleString()}</span>
-        <span class="chip" style="font-size:.6875rem">Only the active pet levels as you walk</span>
-        <!-- no ICONS.info exists; the ternary fallback shipped a bare "?" glyph
-             and hid the missing icon from readers but not from t2-audit's
-             ICONS-RESOLVE guard, which is exactly what that guard is for.
-             Reggie's branch re-added that call because it forked before the fix;
-             keeping BOTH halves: my removal and his new Paddock entry.
-             NO BACKTICKS IN THIS COMMENT: it sits inside a template literal, and
-             the first draft quoted the ternary in backticks, which closed the
-             string and took the whole app down. Every browser suite failed in
-             four seconds and the gate said so immediately.
-             THE PADDOCK CHIP IS GONE FROM THIS ROW: it is the door above now. It
-             moved rather than being duplicated, so there is still exactly one way
-             in and it still carries the id every handler and audit clicks. -->
-        <button class="chip chip-btn" id="petsHelp" type="button">How pets work</button>
-      </div>
       <!-- WAITING FOR THE SECOND PICK, AT THE TOP. Tom, 2026-08-10: "the breeding
            popup is good but it covers the breed button when you swipe to another
            pet." It was a sticky footer, and BREED lives in the carousel's action
@@ -20523,7 +20455,6 @@ async function openStable(opts = {}) {
           <span class="bw-say"><b>Now pick the second pet</b><small>Swipe across and tap BREED on it</small></span>
           <button class="btn ghost bw-cancel" id="breedCancel" type="button">Cancel</button>
         </div>` : ''}
-      ${pair ? '' : `<p class="note" style="margin:2px 2px 10px"><b>Breed</b> feeds a spare pet into one you keep: the <b>keeper gains a lineage rank</b> (combat stats stop growing at the combined ${PET_STAT_MULT_CAP}x cap) and the spare is destroyed. <b>Destroy</b> trades a spare for Bone Dust instead.</p>`}
       ${pair ? '' : breedLockNote}
       ${roster.length ? `
         <div class="cf${cfWasPanelled ? ' panelled' : ''}" data-want="${openIid || pair ? 'panelled' : 'open'}">
@@ -20542,6 +20473,54 @@ async function openStable(opts = {}) {
         </div>
         ${openIid && openInst ? petTalentTree(openInst, petLevel(bank[openInst.iid] || 0), openPicks) : ''}
       ` : '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}
+      <nav class="stable-rooms" aria-label="Pet rooms">
+      <button class="pdk-door stable-door" id="stableToPaddock" type="button">
+        <span class="pdk-door-scene" aria-hidden="true">
+          <i class="pdk-door-moon"></i>
+          <i class="pdk-door-rail r1"></i><i class="pdk-door-rail r2"></i>
+          <i class="pdk-door-post" style="left:16px"></i><i class="pdk-door-post" style="left:70px"></i><i class="pdk-door-post" style="left:124px"></i>
+          ${/* 192, because the door draws the whole figure in a 60x78 box:
+               measured 60.2 CSS px, which is 120 device px on a 2x phone and 181
+               on a 3x, both comfortably inside the small tier. Seven layers at
+               640 was 10.9 MB standing in a thumbnail. */''}
+          <span class="pdk-door-keeper">${avatarLayersHtml(eqOwn, { skip: ['BG', 'C'], noYard: true, thumb: 192 })}</span>
+          <span class="pdk-door-pets">${doorSp.map(sp => `<span class="pdk-door-pet">${petAsideHtml(petFrom(null, sp), doorPx, { thumb: true })}</span>`).join('')}</span>
+          <i class="pdk-door-vig"></i>
+        </span>
+        <span class="pdk-door-tx">
+          <b>The Paddock</b>
+          <small>${insts.length} pet${insts.length === 1 ? '' : 's'} in your collection</small>
+        </span>
+        <!-- the house disclosure arrow: a plain glyph in a span, as in .gbn-chev,
+             .gd-arrow and .ul-chev. No ICONS ternary fallback here, per the note in
+             the chip row below: a ternary hides a missing icon from readers and ships
+             a bare "?" glyph.
+             NO BACKTICKS IN THIS COMMENT EITHER. The first draft of this very comment
+             quoted the ternary in backticks, closed the template literal it sits
+             inside, and broke the app on the spot: "Unexpected identifier ICONS". The
+             warning below is not decoration, it is a rake, and I stepped on it. -->
+        <span class="pdk-door-go" aria-hidden="true">›</span>
+      </button>
+      <button class="pdk-door stable-door" data-lab-open type="button">
+        <span class="pdk-door-tx"><b>The Laboratory</b><small>Make new pet colours</small></span>
+        <span class="pdk-door-go" aria-hidden="true">›</span>
+      </button>
+      </nav>
+      <button class="pdk-door kdoor stable-collection" id="kennelBtn" type="button">
+        <span class="kdoor-sw" style="--kennel-columns:${MORPHS.length}" aria-hidden="true">${MORPHS.map(m => `<i class="${kennelMorphs.has(m) ? 'on' : ''}" style="--kc:${morphSwatch(m)}"></i>`).join('')}</span>
+        <span class="pdk-door-tx">
+          <b>The Kennel</b>
+          <small>${kennelFound} of ${KENNEL_SPECIES.length * MORPHS.length} colours collected</small>
+        </span>
+        <span class="pdk-door-go" aria-hidden="true">›</span>
+      </button>
+      <details class="stable-help">
+        <summary>How pets work</summary>
+        <p>Only the active pet levels as you walk</p>
+        <p class="lab-sinks">Melting clears the pile. Breeding builds strength. The Laboratory builds the collection.</p>
+      ${pair ? '' : `<p class="note" style="margin:2px 2px 10px"><b>Breed</b> feeds a spare pet into one you keep: the <b>keeper gains a lineage rank</b> (combat stats stop growing at the combined ${PET_STAT_MULT_CAP}x cap) and the spare is destroyed. <b>Destroy</b> trades a spare for Bone Dust instead.</p>`}
+        <button class="link" id="petsHelp" type="button">Full pet guide</button>
+      </details>
       <!-- THE DECISION FOLLOWS YOU DOWN THE PAGE. Tom, 2026-08-08: "when you
            select two pets to breed it's unclear that i need to scroll to the top
            to see whats happening." It used to render ABOVE the pet list, so
@@ -21282,8 +21261,10 @@ function labInvested(p) {
   return p.bankedSteps > 0 || p.level > 1 || !!p.nickname || p.lineage > 0 || p.bond > 0 || p.talents.length > 0 || p.equipped;
 }
 function labName(p) { return `${p.nickname ? p.nickname + ' · ' : ''}${labColour(p.morph)} ${labSpecies(p.sp)}`; }
-function labPetDetails(p) {
-  return `<span class="lab-instance-art" aria-hidden="true">${petPortraitHtml(p.sp, 64, !!p.shiny, { morph: p.morph, wear: null, thumb: true })}</span><b>${esc(labName(p))}</b><span>Level ${esc(p.level)} · ${esc(p.bankedSteps.toLocaleString())} banked training steps</span><span>Nickname: ${esc(p.nickname || 'none')}. Lineage ${esc(p.lineage)}. Bond ${esc(p.bond)}/5. ${p.shiny ? 'Shiny' : 'Non-shiny'}.</span><span>Talent choices: ${esc(p.talents.join(', ') || 'none')}. ${p.equipped ? 'Equipped' : 'Not equipped'}.</span>`;
+function labPetDetails(p, compact = false) {
+  const art = `<span class="lab-instance-art" aria-hidden="true">${petPortraitHtml(p.sp, 64, !!p.shiny, { morph: p.morph, wear: null, thumb: true })}</span>`;
+  if (compact) return `${art}<b>${esc(labName(p))}</b><span>Level ${esc(p.level)}</span>`;
+  return `${art}<b>${esc(labName(p))}</b><span>Level ${esc(p.level)} · ${esc(p.bankedSteps.toLocaleString())} banked training steps</span><span>Nickname: ${esc(p.nickname || 'none')}. Lineage ${esc(p.lineage)}. Bond ${esc(p.bond)}/5. ${p.shiny ? 'Shiny' : 'Non-shiny'}.</span><span>Talent choices: ${esc(p.talents.join(', ') || 'none')}. ${p.equipped ? 'Equipped' : 'Not equipped'}.</span>`;
 }
 function labStateCopy(s, sp = '') {
   if (s.status === 'unavailable') return 'The Laboratory is not available in this build. Explore the recipes, view Collection, or hatch eggs.';
@@ -21342,13 +21323,20 @@ function labIngredientCounts(s, sp, recipe) {
   if (!sp || !recipe) return '';
   return `<div class="lab-stock"><p>Spare pets: ${[...new Set(recipe.inputs)].map(m => `${esc(labColour(m))} ${s.species[sp]?.safeCounts?.[m] ?? 'Unknown'}. Need ${recipe.inputs.filter(x => x === m).length}.`).join(' ')}</p><small>Spare counts keep one of each colour and exclude invested pets.</small></div>`;
 }
+function labOutcomesHtml(q) {
+  const total = q.distribution.reduce((n, d) => n + d.weight, 0);
+  return `<section class="lab-outcomes" aria-label="Possible outcomes: one new pet"><h4><span aria-hidden="true">↓</span> ${q.distribution.length === 1 ? 'Will become' : 'Could become'}</h4><div class="lab-alternatives">${q.distribution.map(b => {
+    const odds = Math.round(b.weight / total * 100);
+    const art = petSpriteHtml(q.species, 64, false, { morph: b.morph, shiny: false, wear: null, thumb: true });
+    return `<figure class="lab-outcome">${art}<figcaption><b>${esc(labColour(b.morph))} ${esc(labSpecies(q.species))}</b><span>${odds}%</span></figcaption></figure>`;
+  }).join('<span class="lab-or">or</span>')}</div><p>One new pet</p></section>`;
+}
 function labBranchesHtml(q) {
   const total = q.distribution.reduce((n, d) => n + d.weight, 0);
   const certain = q.distribution.length === 1;
-  return `<div class="lab-branches">${q.branches.map(b => {
+  return `<div class="lab-branches"><h4>Collection changes by outcome</h4>${q.branches.map(b => {
     const odds = Math.round(q.distribution.find(d => d.morph === b.morph).weight / total * 100);
-    const art = petSpriteHtml(q.species, 64, false, { morph: b.morph, shiny: false, wear: null, thumb: true });
-    return `<section class="lab-branch">${art}<b>${esc(labColour(b.morph))} ${esc(labSpecies(q.species))}: ${odds}%</b><p>${certain ? 'These' : `If ${esc(labColour(b.morph))} appears (${odds}%), these`} cells become empty: ${esc(b.lost.map(labCell).join(', ') || 'none')}. New cells: ${esc(b.gained.map(labCell).join(', ') || 'none')}. Collection after: ${b.afterCount}/${labTotal()}.</p><p>${b.gained.length ? 'New collection colour.' : `You already own ${esc(labColour(b.morph))}. This makes another copy and uses one experiment today.`} ${b.neededFor ? `Needed for ${esc(b.neededFor)}.` : !b.gained.length ? 'Optional extra copy.' : ''}</p>${b.counts ? `<small>${b.counts.map(c => `${esc(labCell(c.cell))}: ${c.before} to ${c.after} pets`).join(' · ')}</small>` : ''}</section>`;
+    return `<section class="lab-branch"><b>${esc(labColour(b.morph))} ${esc(labSpecies(q.species))}: ${odds}%</b><p>${certain ? 'These' : `If ${esc(labColour(b.morph))} appears (${odds}%), these`} cells become empty: ${esc(b.lost.map(labCell).join(', ') || 'none')}. New cells: ${esc(b.gained.map(labCell).join(', ') || 'none')}. Collection after: ${b.afterCount}/${labTotal()}.</p><p>${b.gained.length ? 'New collection colour.' : `You already own ${esc(labColour(b.morph))}. This makes another copy and uses one experiment today.`} ${b.neededFor ? `Needed for ${esc(b.neededFor)}.` : !b.gained.length ? 'Optional extra copy.' : ''}</p>${b.counts ? `<small>${b.counts.map(c => `${esc(labCell(c.cell))}: ${c.before} to ${c.after} pets`).join(' · ')}</small>` : ''}</section>`;
   }).join('')}</div>`;
 }
 function labQuoteSupported(q) {
@@ -21366,7 +21354,7 @@ function labInterruptedFightHtml(fight) {
 }
 function labNeedsTyped(q) { return q.inputs.some(labInvested) || q.branches.some(b => b.lost.length > 0); }
 function labConfirmationHtml(q) {
-  return `<p>Both pets are permanently consumed. Their training, names, lineage, bonds and talent choices do not transfer. The new pet starts at level 1, with 0 banked steps and lineage 0.</p>${q.inputs.map(p => `<section class="lab-loss">${labPetDetails(p)}<p>${esc(labName(p))} will be destroyed: level ${p.level}, ${p.bankedSteps.toLocaleString()} banked training steps. None of those steps transfer.</p>${p.nickname ? `<p>The name ${esc(p.nickname)} is removed with this pet.</p>` : ''}<p>${esc(labName(p))} loses lineage ${p.lineage} and bond ${p.bond}/5. The new pet starts with neither.</p>${p.talents.length ? `<p>${esc(labName(p))}'s talent choices are removed: ${esc(p.talents.join(', '))}. The new pet inherits none.</p>` : ''}${p.equipped ? `<p>${esc(labName(p))} is your equipped pet. The new level-1 pet will take its place.</p>` : ''}</section>`).join('')}${q.recipe === 'toxic-rose' ? '<p>Midnight: 100%. Both selected pets are permanently consumed. The new Midnight starts at level 1.</p>' : ''}${labBranchesHtml(q)}<p>Melting these two pets separately would pay ${q.salvageDust} Bone Dust. Animate pays no dust.</p>${labNeedsTyped(q) ? '<p>This cannot be undone. Type ANIMATE to destroy both pets and create one new pet.</p>' : '<p>This cannot be undone. Animate destroys both pets and creates one new pet.</p>'}`;
+  return `<section class="lab-equation" aria-label="Experiment"><div class="lab-inputs" aria-label="Two pets to combine">${q.inputs.map(p => `<figure class="lab-input">${labPetDetails(p, true)}</figure>`).join('<span class="lab-plus" aria-hidden="true">+</span>')}</div>${labOutcomesHtml(q)}</section><h3>What you will lose</h3><p>Both pets are permanently consumed. Their training, names, lineage, bonds and talent choices do not transfer. The new pet starts at level 1, with 0 banked steps and lineage 0.</p>${q.inputs.map(p => `<section class="lab-loss">${labPetDetails(p)}<p>${esc(labName(p))} will be destroyed: level ${p.level}, ${p.bankedSteps.toLocaleString()} banked training steps. None of those steps transfer.</p>${p.nickname ? `<p>The name ${esc(p.nickname)} is removed with this pet.</p>` : ''}<p>${esc(labName(p))} loses lineage ${p.lineage} and bond ${p.bond}/5. The new pet starts with neither.</p>${p.talents.length ? `<p>${esc(labName(p))}'s talent choices are removed: ${esc(p.talents.join(', '))}. The new pet inherits none.</p>` : ''}${p.equipped ? `<p>${esc(labName(p))} is your equipped pet. The new level-1 pet will take its place.</p>` : ''}</section>`).join('')}${q.recipe === 'toxic-rose' ? '<p>Midnight: 100%. Both selected pets are permanently consumed. The new Midnight starts at level 1.</p>' : ''}${labBranchesHtml(q)}<p>Melting these two pets separately would pay ${q.salvageDust} Bone Dust. Animate pays no dust.</p>${labNeedsTyped(q) ? '<p>This cannot be undone. Type ANIMATE to destroy both pets and create one new pet.</p>' : '<p>This cannot be undone. Animate destroys both pets and creates one new pet.</p>'}`;
 }
 function labRevealHtml(r) {
   const b = r.branches.find(x => x.morph === r.result.morph);
@@ -21388,11 +21376,11 @@ function labIncubatorHtml(s) {
 }
 function labPickerHtml(s, selected, slot, sp = '', colour = '') {
   const other = s.pets.find(p => p.iid === selected[1 - slot]);
-  const rows = s.pets.filter(p => (!sp || p.sp === sp) && (!colour || p.morph === colour)).sort((a, b) => Number(!a.safeSurplus || labInvested(a)) - Number(!b.safeSurplus || labInvested(b)));
+  const rows = s.pets.filter(p => p.iid !== other?.iid && (!sp || p.sp === sp) && (!colour || p.morph === colour)).sort((a, b) => Number(!a.safeSurplus || labInvested(a)) - Number(!b.safeSurplus || labInvested(b)));
   return rows.length ? rows.map(p => {
-    const reason = p.reason || (p.iid === other?.iid ? 'Choose a different pet.' : other && !labPair(p, other) ? 'Does not match this same-species recipe.' : '');
+    const reason = p.reason || (other && !labPair(p, other) ? 'Does not match this same-species recipe.' : '');
     const tags = [p.safeSurplus && !labInvested(p) ? 'Untrained spare' : '', p.lastCopy ? 'Last collection copy' : '', p.bankedSteps > 0 || p.level > 1 ? 'Trained' : '', p.nickname ? 'Named' : '', p.bond > 0 ? 'Bonded' : '', p.lineage > 0 ? `Lineage ${p.lineage}` : '', p.equipped ? 'Equipped' : '', p.neededFor ? `Needed as an ingredient for ${p.neededFor}` : ''].filter(Boolean);
-    return `<button class="lab-pet" data-lab-pick="${esc(p.iid)}" ${p.eligible !== true || reason ? 'disabled' : ''}>${labPetDetails(p)}<small>${esc(tags.join(' · '))}</small>${reason ? `<small>${esc(reason)}</small>` : ''}</button>`;
+    return `<section class="lab-pick-row"><button class="lab-pet" aria-describedby="lab-pick-info-${esc(p.iid)}" data-lab-pick="${esc(p.iid)}" ${p.eligible !== true || reason ? 'disabled' : ''}>${labPetDetails(p, true)}</button><div class="lab-pick-info" id="lab-pick-info-${esc(p.iid)}"><small>${esc(p.bankedSteps.toLocaleString())} banked training steps · Bond ${esc(p.bond)}/5${p.talents.length ? ` · ${esc(p.talents.join(', '))}` : ''}</small><small>${esc(tags.join(' · '))}</small>${reason ? `<small>${esc(reason)}</small>` : ''}</div></section>`;
   }).join('') : '<p>No pets match these filters. Try another species or colour, or hatch eggs.</p>';
 }
 function labBenchHtml(s, selected, sp, q = null, choosingSpecies = false) {
@@ -21405,12 +21393,12 @@ function labBenchHtml(s, selected, sp, q = null, choosingSpecies = false) {
   const activeId = pair?.id || labRecipes.find(r => pets.some(p => p && r.inputs.includes(p.morph)))?.id || 'base-base';
   const active = labRecipes.find(r => r.id === activeId);
   const prompt = !sp ? 'Choose a species, then choose two pets.' : empty >= 0 ? `Choose ${empty === 0 ? 'first' : 'second'} pet to review a pair.` : !pair ? 'These pets do not match a recipe. Choose a different first or second pet.' : !canWork ? labStateCopy(s, sp) : 'Review shows the exact collection colours lost and gained before you confirm.';
-  const working = `<section class="lab-working"><h3>${pets.some(Boolean) ? `${active.inputs.map(labColour).join(' + ')}: choose your pair` : 'Choose your pair'}</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class="lab-slots">${[0, 1].map(i => { const p = pets[i]; return `<section><button class="lab-pet${sp && canWork && !canReview && nextSlot === i ? ' lab-next' : ''}" data-lab-slot="${i}">${p ? labPetDetails(p) : `Choose ${i === 0 ? 'first' : 'second'} pet`}</button>${p ? `<button class="link" data-lab-clear="${i}">Clear ${i === 0 ? 'first' : 'second'} pet</button>` : ''}</section>`; }).join('')}</div>${labIngredientCounts(s, sp, active)}${q ? labBranchesHtml(q) : ''}<p id="labPairHint">${esc(prompt)}</p><button class="btn ${canReview ? 'lab-next' : 'ghost'}" aria-describedby="labPairHint" data-lab-review ${canReview ? '' : 'disabled'}>Review pair</button></section>`;
+  const working = `<section class="lab-working"><h3>${pets.some(Boolean) ? `${active.inputs.map(labColour).join(' + ')}: choose your pair` : 'Choose your pair'}</h3><p>Two pets in. One new pet out. Both inputs are permanently consumed. The new pet starts at level 1.</p><div class="lab-slots" aria-label="Two pets to combine">${[0, 1].map(i => { const p = pets[i]; return `<section><button class="lab-pet${sp && canWork && !canReview && nextSlot === i ? ' lab-next' : ''}" data-lab-slot="${i}">${p ? labPetDetails(p, true) : `Choose ${i === 0 ? 'first' : 'second'} pet`}</button>${p ? `<button class="link" data-lab-clear="${i}">Clear ${i === 0 ? 'first' : 'second'} pet</button>` : ''}</section>`; }).join('<span class="lab-plus" aria-hidden="true">+</span>')}</div>${q ? labOutcomesHtml(q) : ''}${labIngredientCounts(s, sp, active)}${q ? labBranchesHtml(q) : ''}<p id="labPairHint">${esc(prompt)}</p><button class="btn ${canReview ? 'lab-next' : 'ghost'}" aria-describedby="labPairHint" data-lab-review ${canReview ? '' : 'disabled'}>Review pair</button></section>`;
   const status = labStateCopy(s, sp);
   const available = `${s.remaining} experiment${s.remaining === 1 ? '' : 's'} available today.`;
   const recovery = s.unseen?.length ? '<section class="lab-recovery"><p>Your last session ended before you saw your experiment. The result is saved. Open it to review.</p><button class="btn ghost" data-lab-recover>Review saved experiment</button></section>' : '';
   const noPair = !s.pets.length || !s.hasEligiblePair || (sp && s.species[sp]?.hasEligiblePair === false);
-  return `${recovery}<p>Make a new colour from two pets of the same species.</p>${labSpeciesHtml(s, sp, choosingSpecies)}<section class="lab-availability">${s.status === 'ready' ? `<details class="lab-clock"><summary>${s.remaining > 0 ? available : 'Experiment use details'}</summary><p>${s.used}/${s.capacity} experiments used</p><p>Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p></details>` : ''}${status !== available ? `<p role="status">${esc(status)}</p>` : ''}${s.status === 'ready' && s.remaining === 0 && !status.includes('Experiments reset at') ? `<p>You've used ${s.used}/${s.capacity} experiments today. Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p>` : ''}${noPair ? '<nav class="lab-links" aria-label="Find a pair"><button class="btn ghost" data-lab-nav="eggs">Eggs</button>' + (sp ? '<button class="btn ghost" data-lab-change-species>Change species</button>' : '') + '</nav>' : ''}</section>${working}<p>Every experiment removes two pets to make one.</p>${labRecipesHtml(s, sp)}
+  return `${recovery}${sp ? '' : '<p>Make a new colour from two pets of the same species.</p>'}${labSpeciesHtml(s, sp, choosingSpecies)}<section class="lab-availability">${s.status === 'ready' ? `<details class="lab-clock"><summary>${s.remaining > 0 ? available : 'Experiment use details'}</summary><p>${s.used}/${s.capacity} experiments used</p><p>Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p></details>` : ''}${status !== available ? `<p role="status">${esc(status)}</p>` : ''}${s.status === 'ready' && s.remaining === 0 && !status.includes('Experiments reset at') ? `<p>You've used ${s.used}/${s.capacity} experiments today. Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p>` : ''}${noPair ? '<nav class="lab-links" aria-label="Find a pair"><button class="btn ghost" data-lab-nav="eggs">Eggs</button>' + (sp ? '<button class="btn ghost" data-lab-change-species>Change species</button>' : '') + '</nav>' : ''}</section>${working}<p>Every experiment removes two pets to make one.</p>${labRecipesHtml(s, sp)}
 <details id="labHelp" ${s.ui?.introRead ? '' : 'open'}><summary>How the recipes work</summary><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>
 <button class="${sp && !canWork ? 'btn lab-next' : 'link lab-collection'}" data-lab-nav="collection">Your collection: ${s.collectionCount} of ${labTotal()} colours</button><details class="lab-more"><summary>More pet actions</summary>${s.status !== 'ready' ? '<p>One experiment each day is free. Permanent incubators can add two more.</p>' : ''}<div class="lab-eggs">${s.eggs.length ? s.eggs.map(e => `<p>Egg: ${e.ready ? 'Ready to hatch' : `${e.steps.toLocaleString()}/${e.goal.toLocaleString()} steps`}. Open eggs to ${e.ready ? 'hatch it' : 'check progress'}.</p>`).join('') : '<p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p>'}</div>${labSinksHtml()}${s.hasEligiblePair && s.status === 'ready' ? '<button class="link" data-lab-incubators>Incubators</button>' : ''}</details>`;
 }
@@ -24322,7 +24310,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v523'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v524'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

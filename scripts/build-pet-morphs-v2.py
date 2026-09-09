@@ -58,18 +58,20 @@ def rgb(hx):
 # ---------------------------------------------------------------------------
 KEEP = "keep"
 
-# Rose targets inherited unchanged from docs/PRIOR-V3.md, section 7.
+# r56 B1: mean source-core OKLab delta * 100 > 20 for all 90 pairs.
+# Cold masters need frost saturation/value separation; rose stays pink, away
+# from rarity cyan #6fd0ff, violet #c084fc and gold #ffc961.
 SPECIES = {
  "C1": dict(name="Drizzle", scale=1, regions={
-   "body":  dict(src=["#cffbff"], ember=[hsv(16,.72,.98)], frost=[hsv(200,.32,.96)], toxic=[hsv(82,.72,.95)], midnight=[hsv(252,.55,.50)], rose=[hsv(342,.66,.96)]),
-   "drops": dict(src=["#62e6f2"], ember=[hsv(40,.85,1.0)], frost=[hsv(205,.15,1.0)], toxic=[hsv(95,.85,.60)], midnight=[hsv(220,.35,.85)], rose=[hsv(345,.86,.64)]),
+   "body":  dict(src=["#cffbff"], ember=[hsv(16,.72,.98)], frost=[hsv(208,0.72,0.92)], toxic=[hsv(82,.72,.95)], midnight=[hsv(252,.55,.50)], rose=[hsv(322,0.9,1)]),
+   "drops": dict(src=["#62e6f2"], ember=[hsv(40,.85,1.0)], frost=[hsv(200,0.45,1)], toxic=[hsv(95,.85,.60)], midnight=[hsv(220,.35,.85)], rose=[hsv(335,0.9,0.65)]),
    "cream": dict(src=["#fff9dd"], keep=True),      # eye whites AND the dome highlight streaks (same fill; both stay)
    "white": dict(src=["#ffffe7"], keep=True),      # pupil specular dots
    "blush": dict(src=["#ff918d"], keep=True),
  }),
  "C2": dict(name="Mallard", scale=1, regions={
-   "body":  dict(src=["#9f6b2e"], ember=[hsv(16,.80,.72)], frost=[hsv(203,.35,.85)], toxic=[hsv(82,.80,.85)], midnight=[hsv(250,.55,.45)], rose=[hsv(342,.70,.86)]),
-   "head":  dict(src=["#2eb920"], ember=[hsv(355,.85,.55)], frost=[hsv(215,.65,.62)], toxic=[hsv(135,.85,.50)], midnight=[hsv(270,.55,.55)], rose=[hsv(346,.88,.52)]),
+   "body":  dict(src=["#9f6b2e"], ember=[hsv(25,0.95,1)], frost=[hsv(203,.35,.85)], toxic=[hsv(82,.80,.85)], midnight=[hsv(250,.55,.45)], rose=[hsv(322,0.9,1)]),
+   "head":  dict(src=["#2eb920"], ember=[hsv(12,0.95,0.7)], frost=[hsv(215,.65,.62)], toxic=[hsv(135,.85,.50)], midnight=[hsv(270,.55,.55)], rose=[hsv(335,0.85,0.7)]),
    "beak":  dict(src=["#ff7536"], ember=[hsv(42,.90,1.0)], frost=[hsv(18,.40,.96)], toxic=[hsv(55,.90,1.0)], midnight=[hsv(235,.40,.78)], rose=[hsv(340,.27,1.0)]),
    "speculum": dict(src=["#4646bd"], ember=[hsv(42,.85,1.0)], frost=[hsv(205,.12,1.0)], toxic=[hsv(65,.80,1.0)], midnight=[hsv(220,.35,.85)], rose=[hsv(340,.42,.98)]),
    "cream": dict(src=["#fcf0d0"], keep=True),      # wing bars, neck ring, tail
@@ -77,15 +79,15 @@ SPECIES = {
  }),
  "C3": dict(name="Catfish", scale=1, regions={
    "body":  dict(src=["#a8a6ff", "#6460fc"],
-                 ember=[hsv(14,.50,.98), hsv(12,.85,.92)], frost=[hsv(200,.32,.98), hsv(205,.58,.90)],
-                 toxic=[hsv(82,.55,.96), hsv(88,.88,.68)], midnight=[hsv(250,.50,.58), hsv(252,.72,.42)], rose=[hsv(340,.46,.98), hsv(344,.82,.70)]),
+                 ember=[hsv(14,.50,.98), hsv(12,.85,.92)], frost=[hsv(185,0.65,1), hsv(188,0.85,1)],
+                 toxic=[hsv(82,.55,.96), hsv(88,.88,.68)], midnight=[hsv(250,.50,.58), hsv(252,.72,.42)], rose=[hsv(322,0.75,1), hsv(325,0.9,0.7)]),
    "rolls": dict(src=["#ff9692"], ember=[hsv(38,.60,1.0)], frost=[hsv(232,.22,1.0)], toxic=[hsv(55,.55,1.0)], midnight=[hsv(280,.35,.62)], rose=[hsv(346,.75,.80)]),
    "hilite": dict(src=["#affeff"], ember=[hsv(45,.35,1.0)], frost=[hsv(200,.08,1.0)], toxic=[hsv(65,.28,1.0)], midnight=[hsv(220,.35,.88)], rose=[hsv(340,.12,1.0)]),
    "cream": dict(src=["#fff7d3"], keep=True),      # X eye patch, roll tops
    "white": dict(src=["#ffffe7"], keep=True),
  }),
  "C4": dict(name="Beardie", scale=1, regions={
-   "body":  dict(src=["#ff8245"], ember=[hsv(10,.85,.92)], frost=[hsv(203,.45,.90)], toxic=[hsv(92,.85,.72)], midnight=[hsv(250,.65,.50)], rose=[hsv(342,.78,.90)]),
+   "body":  dict(src=["#ff8245"], ember=[hsv(10,0.95,0.58)], frost=[hsv(203,.45,.90)], toxic=[hsv(92,.85,.72)], midnight=[hsv(250,.65,.50)], rose=[hsv(322,0.9,1)]),
    "marks": dict(src=["#fcf428"], ember=[hsv(40,.85,1.0)], frost=[hsv(200,.12,1.0)], toxic=[hsv(68,.85,1.0)], midnight=[hsv(220,.35,.85)], rose=[hsv(338,.28,1.0)]),  # stripes + cheek ear-spot
    "belly": dict(src=["#fff9dd"], big=True,        # cream comps >= 500 px = belly; small cream comps (eye whites, teeth) protected
                  ember=[hsv(38,.16,1.0)], frost=[hsv(70,.07,1.0)], toxic=[hsv(60,.14,1.0)], midnight=[hsv(60,.08,.96)], rose=[hsv(340,.07,1.0)]),
@@ -93,13 +95,13 @@ SPECIES = {
    "white": dict(src=["#ffffe7"], keep=True),
  }),
  "C5": dict(name="Bulldog", scale=1, regions={
-   "body":  dict(src=["#ca906c"], ember=[hsv(14,.72,.80)], frost=[hsv(205,.30,.78)], toxic=[hsv(88,.55,.70)], midnight=[hsv(250,.50,.45)], rose=[hsv(342,.66,.80)]),
+   "body":  dict(src=["#ca906c"], ember=[hsv(10,0.95,0.58)], frost=[hsv(208,0.65,0.9)], toxic=[hsv(112,0.75,0.85)], midnight=[hsv(250,.50,.45)], rose=[hsv(322,0.9,1)]),
    "stripes": dict(src=["#ff7b5b"], ember=[hsv(40,.80,1.0)], frost=[hsv(205,.55,.88)], toxic=[hsv(65,.80,.95)], midnight=[hsv(225,.40,.80)], rose=[hsv(338,.34,1.0)]),
    "cream": dict(src=["#fff2d4"], keep=True),      # shirt, collar spikes, teeth
    "white": dict(src=["#ffffe3"], keep=True),
  }),
  "C6": dict(name="Bumbleseal", scale=3.2, regions={
-   "stripes": dict(src=["#ffe100"], ember=[hsv(20,.90,1.0)], frost=[hsv(200,.35,1.0)], toxic=[hsv(85,.90,.95)], midnight=[hsv(250,.65,.62)], rose=[hsv(342,.82,.98)]),
+   "stripes": dict(src=["#ffe100"], ember=[hsv(20,.90,1.0)], frost=[hsv(200,.35,1.0)], toxic=[hsv(120,0.9,0.85)], midnight=[hsv(250,.65,.62)], rose=[hsv(322,0.9,1)]),
    "cream": dict(src=["#fff1c7"], keep=True),      # face, ears, wings, tail rings, tuft dots: identity, never changes
    "blush": dict(src=["#ffb7a1"], keep=True),
  }),

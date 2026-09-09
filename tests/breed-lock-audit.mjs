@@ -57,4 +57,38 @@ for (const picks of [0, 1, 2]) {
   if (picks === 2) assert.match(ready, /id="doBreed"\s*>/);
   console.log(`PASS CONTROL READY: ${picks} picks, no lock message`);
 }
-console.log('BREED LOCK: 6 passed, 0 failed (Node only; browser and sockets unrun)');
+// r56 Stable polish uses the same production template as the cooldown proof.
+// CONTROL: populated and ready/locked renders, plus deliberately restored clutter.
+const count = (html, pattern) => (html.match(pattern) || []).length;
+const gradeRoom = html => {
+  const help = html.match(/<details class="stable-help">[\s\S]*?<\/details>/)?.[0];
+  assert(help, 'one closed help disclosure exists');
+  assert.equal(count(html, /class="stable-help"/g), 1);
+  for (const text of ['Only the active pet levels as you walk', 'Melting clears the pile.', 'feeds a spare pet into one you keep:', 'id="petsHelp"']) assert(help.includes(text), text);
+  const outsideHelp = html.replace(help, '');
+  assert(!/Only the active|lab-sinks|feeds a spare|id="petsHelp"/.test(outsideHelp), 'zero scattered explainers');
+  assert.equal(count(html, /id="cfFrame"/g), 1, 'CONTROL one pet carousel remains');
+  const pet = html.indexOf('id="cfFrame"');
+  for (const door of ['id="stableToPaddock"', 'data-lab-open', 'id="kennelBtn"']) {
+    assert.equal(html.split(door).length - 1, 1, `CONTROL ${door} remains reachable once`);
+    assert(pet < html.indexOf(door), 'the pet precedes navigation');
+  }
+  assert.match(html, /class="pdk-door kdoor stable-collection" id="kennelBtn"/);
+  assert.match(html, /class="wallet-line stable-wallet"><span>Bone Dust<\/span>/);
+  assert.doesNotMatch(html, /class="chip">/);
+};
+for (const remaining of [0, 2345]) {
+  const html = render(remaining, 0);
+  gradeRoom(html);
+  for (const faulty of [
+    html + '<p>Only the active pet levels as you walk</p>',
+    html.replace('class="stable-help"', 'class="old-help"'),
+    html.replace('<details class="stable-help">', '<details class="stable-help" open>'),
+    html.replace('id="cfFrame"', 'id="lost-carousel"'),
+    html.replace('id="kennelBtn"', 'id="lost-kennel"'),
+    html.replace('class="wallet-line stable-wallet"', 'class="chip"'),
+    html.replace('data-lab-open', '') + '<button data-lab-open></button><button data-lab-open></button>',
+  ]) assert.throws(() => gradeRoom(faulty), 'CONTROL restored clutter or missing capability must fail');
+}
+console.log('PASS CONTROL Stable: one collapsed explainer, labelled currency, retained doors after the pet');
+console.log('BREED LOCK + STABLE UI: 7 passed, 0 failed (Node only; browser and sockets unrun)');
