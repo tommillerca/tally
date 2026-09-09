@@ -382,7 +382,6 @@ PURE.push('cloud-optout-transport-audit.mjs'); // All-request counter and direct
 PURE.push('r4-restore-audit.mjs'); // R4-7/R4-9: quota-bounded history, exact undo and isolated malformed entries. R4-10 separately remains blocked by the frozen app.js boundary.
 PURE.push('reachable-density-audit.mjs'); // R4-21: guards the shared reachability METER with dense/sparse controls; shipped spacing is a deferred MODEL finding.
 PURE.push('native-shell-comment-audit.mjs'); // R4-21: remote iOS shell cannot claim a wrapped web build; mutation controls.
-PURE.push('hand-registration-audit.mjs'); // 2026-09-09 v536 revert: historical source-only diagnostic, not rendered registration. Retained unchanged assertions are expected red on restored brushes.
 const BROWSER = [
   'boneyard-scroll-audit.mjs', // P1: rendered intro reachability at 100/150%, main-button hit tests, scroll preservation and dock exclusion.
   'today-dock-pixels-audit.mjs', // Dock exclusion: all-tab captures, row tap and lost-exclusion control, plus native bounce evidence. Pixel continuity remains manual/UNPROVEN; the former opaque-RGB predicate certified the black-line bug.
@@ -678,6 +677,7 @@ const HELPERS = new Set([
   'badge-centre-lib.mjs', // the badge measurement badge-centre-audit.mjs drives; no assertions of its own
   'mem-idb.mjs',       // shared in-memory IndexedDB for PURE audits; installs a global, asserts nothing (gate7 coverage red, 2026-09-04)
   'garden-sim.mjs',    // balance instrument, prints a model and asserts no release property
+  'hand-registration-audit.mjs', // source diagnostic: master ink vs B0-1, NOT the shipping renderer
   'arena-static-probe.mjs', // measurement probe, fight-layout-audit owns the assertion
   'today-d2-shots.mjs', // screenshot capture only
   'wanderer-patrol-sim.mjs', // balance instrument; its one control protects the model, not the app
@@ -718,6 +718,7 @@ const onDisk = (await readdir(here))
  * 1, in the gate itself. The complement cannot be computed AND have teeth. One line
  * per file is the price, and it puts each omission on the record as a decision. */
 const DECLARED = {
+  'hand-registration-audit.mjs': ['skip', 'a source DIAGNOSTIC, not a guard: it scores 640x640 master ink against B0-1 in SOURCE coordinates, which is not the shipping avatar renderer, so it cannot prove on-body alignment. v536 was derived from exactly this measure, passed it, and shipped art Tom reported as worse on the live build. Moved out of PURE during the v536 revert because the restored pre-v536 brushes fail its historical floor and a permanently red guard blocks every release. It still prints its census for reference. THE REAL GUARD IS OWED: it must grade RENDERED pixels from the avatar, and the off-hand misalignment stays OPEN until it exists.'],
   'reachable-density-model.mjs': ['skip', 'a balance MODEL, not a guard: the shipped route scores 0.568 spawns/fix against a floor of 1 (N=400). This is the finding rather than a failure; the spacing decision is deferred by the product owner, Tom. Reports the gap and synthetic controls, asserting nothing about the app. reachable-density-audit.mjs guards the shared meter in PURE.'],
   'hand-registration-audit.mjs': ['fast', 'Historical source-composite diagnostic only. A source composite is not evidence of rendered registration or on-body alignment. The v536 revert retains the original assertions and expected brush failures. Proposed follow-up: remove this release guard and replace it with shipping-renderer measurements; no alignment fix is claimed.'],
   'serve-tree-identity-audit.mjs': ['full', 'R3: binds real Python/Node loopback sockets to prove wrong-tree refusal, read-only serving and child exit. Includes the server exit proof moved out of unit.test.js; cannot run in socket-denied PURE environments.'],

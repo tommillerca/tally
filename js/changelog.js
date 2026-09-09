@@ -5,10 +5,13 @@
 // Pending train notes. The operator assigns a build number and moves these
 // into CHANGES when assembling the release. No version stamp is advanced here.
 export const NEXT_CHANGES = [
-  'The off-hand toothbrush and spade artwork is restored to its state before the rejected adjustment. The underlying hand misalignment remains open and unfixed.',
 ];
 
 export const CHANGES = [
+
+  { n: 541, date: '2026-09-09', title: 'Off-hand art back to where it was', items: [
+    'The off-hand toothbrush and spade artwork is restored to its state before the rejected adjustment. The underlying hand misalignment remains open and unfixed.',
+  ] },
 
   { n: 540, date: '2026-09-09', title: 'The Boneyard scrolls again', items: [
     'The Boneyard intro and location error screens now allow scrolling as text grows.',
