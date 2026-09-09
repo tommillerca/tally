@@ -5,6 +5,11 @@
 // Pending train notes. The operator assigns a build number and moves these
 // into CHANGES when assembling the release. No version stamp is advanced here.
 export const NEXT_CHANGES = [
+  'Viewport metadata no longer disables pinch zoom.',
+  'The shop price notes now acknowledge that 40 starting coins cannot buy the unchanged 300-coin anchor.',
+  'Year trend ranges and extremes now use recorded daily readings. The average still uses monthly averages.',
+  'The cloud opt-out audit now counts every API request. Its strict check still conflicts with Crew grant downloads while opted out.',
+  'The write-contract audit now reports a missing parser as did not run, with exit 97.',
 ];
 
 export const CHANGES = [

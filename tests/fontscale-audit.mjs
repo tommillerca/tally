@@ -7,6 +7,14 @@ import { scalingCensus, readTypeSources, assertScalingFloor, assertNamedRamp, el
 const root = new URL('../', import.meta.url);
 const read = path => readFileSync(new URL(path, root), 'utf8');
 const source = read('app.css');
+// Accessibility policy is independent of the typography census.
+function assertPinchZoom(html) {
+  const viewport = html.match(/<meta\b[^>]*name=["']viewport["'][^>]*>/i)?.[0] || '';
+  assert.doesNotMatch(viewport, /user-scalable\s*=\s*(?:no|0)\b/i, 'pinch-zoom must not be disabled');
+}
+assertPinchZoom(read('index.html'));
+assert.throws(() => assertPinchZoom('<meta name="viewport" content="initial-scale=1, user-scalable=no">'), /pinch-zoom/);
+
 const census = scalingCensus(readTypeSources());
 console.log(`SOURCE CENSUS ${census.scalable}/${census.total} (${(100 * census.proportion).toFixed(2)}%); fixed glyphs ${census.fixedGlyphs.length}`);
 assertScalingFloor(assert, census);
@@ -124,8 +132,6 @@ for (const policy of ['yes', 'no']) {
   assert.equal(verify(source, changed), count, 'font audit must accept either viewport policy');
 }
 console.log('PASS 9 regression mutations rejected; viewport yes/no policy changes accepted');
-assert.match(read('index.html'), /user-scalable=no/, 'viewport zoom policy is outside this lane');
-console.log('PASS 9 regression mutations rejected; viewport zoom policy preserved');
 
 // CONTROL the full census must see each source route, not just token definitions.
 const allSources = readTypeSources();

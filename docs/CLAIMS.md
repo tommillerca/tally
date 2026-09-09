@@ -1,5 +1,31 @@
 # What each patch note claims, and what backs it
 
+## vNEXT
+
+Unversioned pending notes in `NEXT_CHANGES`, in matching order.
+
+Changelog item: Viewport metadata no longer disables pinch zoom.
+
+1. PROOF: fontscale-audit.mjs | REACH: R3-7: The viewport guard rejected the original user-scalable=no. Typography still passes all source and mutation controls with the attribute removed. Existing scoped touch policy is unchanged; physical pinch remains unverified.
+
+Changelog item: The shop price notes now acknowledge that 40 starting coins cannot buy the unchanged 300-coin anchor.
+
+2. PROOF: verify-tail-audit.mjs | REACH: R4-4: Both source comments identify DAYONE_TOPUP = 40 and state that a starting wallet cannot afford the 300-coin anchor. Price unchanged, shortfall 260; affordability needs a product-owner decision.
+
+Changelog item: Year trend ranges and extremes now use recorded daily readings. The average still uses monthly averages.
+
+3. PROOF: progress-playtest-audit.mjs | REACH: R4-23: Production Year sheet proves steps 14,570, resting heart rate 48, HRV 80, weight range 70-100 kg in kg and lb, and excludes out-of-window readings. Monthly-mean Average and raw Latest are separately checked and explained.
+
+Changelog item: The cloud opt-out audit now counts every API request. Its strict check still conflicts with Crew grant downloads while opted out.
+
+4. PROOF: cloud-optout-transport-audit.mjs | REACH: PARTIAL: The browser audit shares an all-method, all-endpoint counter with the Node transport proof. Removing syncProfile opt-out on a scratch copy fails with one profile request versus zero backup writes. Current autoSync separately fails with one grants GET. Browser/server counts are BLOCKED by Chromium launch denial. No claim of zero requests across autoSync.
+
+Changelog item: The write-contract audit now reports a missing parser as did not run, with exit 97.
+
+5. PROOF: verify-tail-audit.mjs | REACH: The actual write-contract script is copied into a dependency-free scratch tree. Before the fix it exits 1 with ERR_MODULE_NOT_FOUND; after the fix it prints UNPRV acorn DID NOT RUN and exits 97. No installed dependency is moved.
+
+R3-9 BLOCKED: Chromium cannot launch under this macOS sandbox. The rendered element census was not run; the existing synthetic-only disclosure and 95% ratchet remain unchanged. No changelog claim is made for rendered scaling.
+
 ## v537 (2026-09-09)
 
 1. PROOF: r4-restore-audit.mjs | REACH: Settings file replacements retain the two newest readable restore points, including migration from an eight-point quota-full history. Nine imports succeed under a simulated 5,242,880-byte quota. Undo through the production Settings callback preserves all 35,491 fields in both retained synthetic year-sized snapshots (589,788 bytes each before import). The original measured fixture was not supplied, so this is equivalent-size synthetic proof, not a replay of that original save.
