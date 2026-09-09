@@ -1931,12 +1931,14 @@ async function rollDayIfNeeded() {
     // If you had deliberately paged back to an earlier day, stay there: only
     // follow the clock forward when you were actually sitting on "today".
     const wasOnToday = S.date === _dayAnchor;
-    _dayAnchor = today;
-    if (wasOnToday) {
-      S.date = today;
-      await kvSet('lastOpenDay', today);
-    }
+    // Keep the old checkpoint until settlement succeeds, so a rejected write
+    // can retry on the next resume, timer tick or Add tap in this session.
     const closed = await awardDayCloseIfDue(S.settings.targets);
+    if (wasOnToday) {
+      await kvSet('lastOpenDay', today);
+      S.date = today;
+    }
+    _dayAnchor = today;
     // The router defers its repaint while inputs are open; the day and its
     // close-out still roll before commitLogEntry writes a fresh row.
     if (wasOnToday) route({ dayRoll: true });
@@ -4259,7 +4261,6 @@ async function renderToday(el) {
   const yEntries = await entriesFor(copySourceDate);
   const allLog = await db.all('log');
   const firstDate = firstDiaryDate(S.settings.createdAt, allLog);
-  const streak = streakFrom([...new Set(allLog.map(e => e.date))], dateKey());
   /* ONE READ PER STORE PER DRAW (QA round 28 G3). M13 stopped renderToday's own
      body re-reading log/xp/health, and tests/today-reads-lint.mjs graded that
      body; the screen a player opens still paid three whole-inv scans from
@@ -4270,6 +4271,7 @@ async function renderToday(el) {
      whole draw (every function this one calls in the tick) at exactly one scan
      per store. Same rows, same snapshot, same screen. */
   const allXp = await db.all('xp');
+  const streak = streakFrom([...streakDateSet(allLog, allXp)], dateKey());
   const inv = await db.all('inv');
   const xp = allXp.reduce((a, r) => a + (r.xp || 0), 0);   // the same sum totalXp keeps, off the rows in hand
   const lvl = levelFor(xp);
@@ -15875,10 +15877,10 @@ async function commitLogEntry(e, btn, via = null) {
      So the commit asks the clock first. If the roll moved the day, a FRESH row
      built for the day that just ended follows it; an edit (a row already in the
      store) keeps the day it was eaten on. The timer stays for the idle case. */
-  const dayBefore = S.date;
-  await rollDayIfNeeded();
-  if (S.date !== dayBefore && e.date === dayBefore && !(await db.get('log', e.id))) e.date = S.date;
   try {
+    const dayBefore = S.date;
+    await rollDayIfNeeded();
+    if (S.date !== dayBefore && e.date === dayBefore && !(await db.get('log', e.id))) e.date = S.date;
     // L5: entitlement travels with the meal's first write. A copied row gets
     // its own intent; a backdated edit cannot acquire a new reward entitlement.
     const previous = await db.get('log', e.id);

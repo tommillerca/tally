@@ -344,6 +344,7 @@ PURE.push('p1-dens-audit.mjs'); // P1: den reward queue, Wanderer settle, charm 
 PURE.push('crew-yard-row-audit.mjs'); // Profile total, visit callback and absent portrait row; Node only.
 PURE.push('pet-rarity-audit.mjs'); // Frozen rarity-out: real pet markup, neutral tiles and retained gear rarity; Node only.
 PURE.push('stable-rooms-top-audit.mjs'); // Frozen room row: production template, live counts, empty/null and order mutation controls; Node only.
+PURE.push('today-playtest-audit.mjs'); // 2026-09-08: Today handlers, rollover retries, protected streak copy and atomic milestone crates; Node only.
 const BROWSER = [
   'today-dock-pixels-audit.mjs', // v522: the Today dock band must not paint --hero-edge. Browser tier: it screenshots and samples real pixels, which is the only instrument that catches this class (the geometry measures correct either way). Its CONTROL-PIXELS row is deliberately UNPROVEN, see docs/CLAIMS.md v522.
 

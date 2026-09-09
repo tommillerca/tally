@@ -659,15 +659,19 @@ export async function earnedBadgeIds() {
 
 const STREAK_MILESTONES = [3, 7, 14, 30, 50, 100];
 
-async function streakAwards(streak) {
-  let gained = 0, milestone = null;
+async function streakAwards(streak, { deliverCrates = false } = {}) {
+  let gained = 0, milestone = null, crates = 0;
   for (const n of STREAK_MILESTONES) {
     if (streak >= n) {
-      const g = await award(`streak-${n}`, 'streakms', 100, `${n}-day streak`);
-      if (g) { gained += g; milestone = n; }
+      // Live food rewards deliver inside the claim, as day-close already does.
+      // A failed crate write rolls back its XP too. Historical initialization
+      // keeps its existing XP-only baseline and does not retro-drop crates.
+      const pay = deliverCrates ? { puts: [{ store: 'inv', val: crateRow('golden', 'streak-' + n) }] } : null;
+      const r = await awardOnce(`streak-${n}`, 'streakms', 100, `${n}-day streak`, null, null, pay);
+      if (r.claimed) { gained += r.xp; milestone = n; if (deliverCrates) crates++; }
     }
   }
-  return { gained, milestone };
+  return { gained, milestone, crates };
 }
 
 // Called after a log entry is written. Returns {xp, newBadges, streakMilestone, boosted}.
@@ -720,9 +724,8 @@ async function finishFoodLogged(entry, { via = null, targets = null, entriesForD
 
   const [log, xpRows] = await Promise.all([db.all('log'), db.all('xp')]);
   const streak = streakFrom([...streakDateSet(log, xpRows)], dateKey());
-  const sa = await streakAwards(streak);
+  const sa = await streakAwards(streak, { deliverCrates: true });
   gained += sa.gained;
-  if (sa.milestone) await grantCrate('golden', 'streak-' + sa.milestone);
 
   const newBadges = await evaluateBadges();
   gained += newBadges.length * 25;
@@ -751,7 +754,7 @@ async function finishFoodLogged(entry, { via = null, targets = null, entriesForD
     boosted,
     // streak crates only. Level crates are granted and counted by the level
     // crossing's own owner (awardOnce -> grantLevelRewards).
-    crates: sa.milestone ? 1 : 0,
+    crates: sa.crates,
   };
   if (entry.foodXp?.id === entry.id) await kvSet(`foodXpDone:${entry.id}`, true);
   return result;
