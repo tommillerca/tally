@@ -4,6 +4,12 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 524, date: '2026-09-08', title: 'Colours you can actually tell apart', items: [
+    'A Frost pet used to look almost the same as its ordinary version, and Rose and Ember were close enough to confuse. Every colour on every creature has been pulled further apart. Cam\'s linework, eyes and blush are untouched.',
+    'The Stable puts your pet first. The doors to the Paddock, Kennel and Laboratory sit quietly at the bottom instead of crowding the top, Bone Dust has its own row, and the explanations are in one place.',
+    'The Laboratory picker no longer offers you the pet you already chose, and its buttons use the right lettering.',
+  ] },
+
   { n: 523, date: '2026-09-08', title: 'The Laboratory is open', items: [
     'Your spare pets are worth something now. Take two of the same creature down to The Laboratory and animate a new one in a colour you cannot hatch. Both pets that go in are consumed, and the new one starts at level 1.',
     'Every creature has six looks instead of five. Rose is new, and it exists for all six of them.',
