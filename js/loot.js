@@ -1124,19 +1124,18 @@ export async function disenchantGear(gearId) {
   const inv = await db.all('inv');
   const row = inv.find(r => r.kind === 'gear' && r.gearId === gearId);
   if (!row) return { ok: false, reason: 'not-owned' };
-  const gl = await gearLoadout();
-  if (gl[g.slot] === gearId) { const next = { ...gl }; delete next[g.slot]; await kvSet('gearloadout', next); }
-  /* ASK THE AUTHORITY FIRST, PAY SECOND. The row is the thing being spent, so
-     removing it has to be what decides whether there is a payout. `db.del`
-     succeeds whether or not anything was there, so two tabs melting the same
-     piece both deleted (the second a no-op) and both paid full dust. `take`
-     does the read and the delete in one transaction and reports which call
-     actually found it, so exactly one melt can ever be paid for.
-     AND PAY IN THE SAME TRANSACTION (2026-09-06): the dust used to be a second
-     write after the take, so a process death between them melted the piece and
-     paid nothing. takeAndPay is the same take with the dust riding inside it. */
+  // Consume, pay, preserve the appearance and remove worn stats together.
+  // A failed write leaves the whole pre-melt state intact. Read the live
+  // loadout in the updater so another slot's newer equipment is retained.
   const dust = gearDustValue(g);
-  if (!await takeAndPay('inv', row.id, { kv: bumpPay('bonedust', 'dustRev', dust) })) return { ok: false, reason: 'not-owned' };
+  if (!await takeAndPay('inv', row.id, { kv: {
+    ...bumpPay('bonedust', 'dustRev', dust),
+    looks: cur => looksWith(cur, [g.artId]),
+    gearloadout: cur => {
+      if (cur?.[g.slot] !== gearId) return undefined;
+      const next = { ...cur }; delete next[g.slot]; return next;
+    },
+  } })) return { ok: false, reason: 'not-owned' };
   return { ok: true, dust, name: g.name };
 }
 
@@ -2850,10 +2849,10 @@ export async function collectedLooks() {
 }
 export async function collectLook(artId) {
   if (!artId) return;
-  const stored = (await kvGet('looks', [])) || [];
-  if (stored.includes(artId)) return;
-  stored.push(artId);
-  await kvSet('looks', stored);
+  await kvUpdate('looks', cur => {
+    if (cur?.includes(artId)) return undefined;
+    return looksWith(cur, [artId]);
+  }, []);
 }
 
 export async function transmogMap() { return (await kvGet('transmog', {})) || {}; }
@@ -2891,10 +2890,10 @@ export async function paidLooks() {
   if (add.length) await kvUpdate('paidlooks', cur => [...new Set([...(cur || []), ...add])], []);
   return set;
 }
-/* THE PAID-LOOK LEDGER, and it is a CLAIM, not a note. It returns true only to
-   the caller that actually added the key, which is what lets applyTransmog use
-   it as a receipt: whoever loses gets the dust back rather than paying a second
-   time for a look somebody else's tap just banked.
+/* THE PAID-LOOK LEDGER. Rack purchases use this idempotent helper to bank
+   their included transmog credit. It returns true only to the caller that
+   added the key. applyTransmog banks its own credit inside the transaction
+   that debits dust and applies the appearance.
    kvUpdate rather than the old kvGet/push/kvSet, which lost one of two
    concurrent additions every time it interleaved. A dropped entry here is not
    cosmetic: paidlooks is what makes a bought look free to wear forever, so
@@ -2933,46 +2932,43 @@ export async function applyTransmog(slot, artId) {
   if (artId !== TRANSMOG_HIDE) {
     const art = BH_BY_ID[artId];
     if (!art || art.slot !== slot) return { ok: false, reason: 'slot' };
-    if (!(await collectedLooks()).has(artId)) return { ok: false, reason: 'not-collected' };
   }
-  const tm = await transmogMap();
-  /* NO RECEIPT FOR RE-TAPPING A WORN LOOK (QA round 22 W1). This branch used
-     to markPaid, so a look worn for 0 through an empty slot became "owned" on
-     the next tap. A paid look was already banked by the spend below; a free one
-     must stay free-and-unbanked. */
-  if (tm[slot] === artId) return { ok: true, cost: 0, already: true };
-  const cost = await transmogPrice(slot, artId);
-  /* SPEND, THEN CLAIM THE LOOK, THEN REFUND IF THE CLAIM WAS ALREADY WON.
-     There is no per-item receipt here the way the rack has one, but there does
-     not need to be a new one: markPaid IS the receipt, because a banked look is
-     free to wear forever after. So this is the buyDropItem shape with the
-     paid-look ledger playing the part grantCosmetic plays there.
-     Both halves of the old shape were measured broken on origin/main 2faa73b6.
-     Two concurrent applies of the SAME look at 12 dust took 24 and applied one,
-     charging twice for one change; and the read-then-debit overdrew against any
-     other dust spend the same way the rack did. */
-  let paid = 0;
-  if (cost > 0) {
-    const left = await spendDust(cost);
-    if (left === null) return { ok: false, reason: 'dust', need: cost, have: await boneDust() };
-    paid = cost;
-    /* THE RECEIPT IS BANKED ONLY WHEN DUST ACTUALLY MOVED (QA round 22 W1).
-       markPaid used to run on every apply, zero-cost ones included, so the
-       free rule in transmogPrice (no statted gear in the slot: 0) became an
-       exploit: unequip, apply a 60-dust look for 0, re-equip, and the look read
-       "owned" forever. Lane G measured an epic chest look taken for 0. The free
-       rule itself is unchanged (Tom, 2026-08-11); what changed is that a free
-       wear is a wear, not a purchase. Receipts already banked this way by
-       existing players are kept: no migration, on purpose. */
-    if (artId !== TRANSMOG_HIDE && !(await markPaid(slot, artId))) {
-      await boneDustAdd(paid);   // somebody else's tap banked this look: give it back
-      paid = 0;
-    }
-  }
-  /* kvUpdate, not read-mutate-kvSet: `tm` was read before the spend, so writing
-     it whole put back whatever another slot's concurrent apply had just set. */
-  await kvUpdate('transmog', cur => ({ ...(cur || {}), [slot]: artId }), {});
-  return { ok: true, cost: paid, already: cost > 0 && !paid };
+  // Ownership, current equipment, price, debit, receipt and appearance share
+  // one transaction. A crash cannot charge without delivering, and a second
+  // tap sees the first purchase even when only one purchase was affordable.
+  return payAtomic({
+    snapshot: { keys: ['looks', 'paidlooks', 'transmog', 'gearloadout', 'bonedust', 'dustRev'], stores: ['inv'] },
+    decide: (s, { inv }) => {
+      if (artId !== TRANSMOG_HIDE) {
+        const collected = (s.looks || []).includes(artId)
+          || BH_SLOTS.some(entry => entry.default === artId)
+          || inv.some(row => (row.kind === 'cos' && row.itemId === artId)
+            || (row.kind === 'gear' && GEAR_BY_ID[row.gearId]?.artId === artId));
+        if (!collected) return { result: { ok: false, reason: 'not-collected' } };
+      }
+      const tm = s.transmog || {}, lo = s.gearloadout || {};
+      if (tm[slot] === artId) return { result: { ok: true, cost: 0, already: true } };
+      // Preserve paidLooks' legacy grandfathering, using this same snapshot.
+      // Free wears on empty slots still do not become purchase receipts.
+      const paid = new Set(s.paidlooks || []);
+      for (const [wornSlot, wornArt] of Object.entries(tm)) {
+        if (wornArt !== TRANSMOG_HIDE && lo[wornSlot]) paid.add(paidKey(wornSlot, wornArt));
+      }
+      const cost = artId === TRANSMOG_HIDE || !lo[slot] || paid.has(paidKey(slot, artId))
+        ? 0 : transmogCost(artId);
+      const have = Number(s.bonedust) || 0;
+      if (cost > have) return { result: { ok: false, reason: 'dust', need: cost, have } };
+      if (cost > 0) paid.add(paidKey(slot, artId));
+      return {
+        result: { ok: true, cost, already: false },
+        kv: {
+          ...(cost > 0 ? bumpPay('bonedust', 'dustRev', -cost) : {}),
+          ...(paid.size > (s.paidlooks || []).length ? { paidlooks: () => [...paid] } : {}),
+          transmog: () => ({ ...tm, [slot]: artId }),
+        },
+      };
+    },
+  });
 }
 
 /* Drop ONE slot's override, in one transaction, for the reason applyTransmog

@@ -1452,23 +1452,30 @@ test('health: nativeSyncNow must forward every field the plugin returns', () => 
   assert.deepEqual(dropped, [],
     `nativeSyncNow drops plugin fields before ingestHealth ever sees them: ${dropped.join(', ')}`);
 });
-test('transmog: the paid-once credit must be persisted, not derived', () => {
-  // Regression. paidLooks() used to seed purely from the live transmog map, so a
-  // v221 player who cleared the slot lost the evidence and paid twice for a look
-  // they already owned. The seed must be written back to kv.
-  const src = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
-  const fn = src.match(/export async function paidLooks\(\)\s*\{[\s\S]*?\n\}/);
-  assert.ok(fn, 'paidLooks present');
-  /* EITHER WRITING PRIMITIVE. What this test is about is that the seed is
-     WRITTEN BACK rather than re-derived; it is not about which call does it.
-     Pinned to kvSet alone until 2026-09-02, when paidLooks moved to kvUpdate so
-     that a receipt markPaid banks during the transmogMap await is not dropped,
-     and this row went red on a strictly better version of the same behaviour. */
-  assert.ok(/kv(?:Set|Update)\('paidlooks'/.test(fn[0]), 'paidLooks persists the grandfathered seed');
-  // and re-confirming a look you are already wearing must bank it too
-  const ap = src.match(/export async function applyTransmog[\s\S]*?\n\}/);
-  assert.ok(/already: true/.test(ap[0]) && /markPaid[\s\S]*?already: true/.test(ap[0]),
-    'the already-worn early return banks the look before returning');
+test('transmog: paid credits survive clearing, and free re-taps never buy credit', async () => {
+  // 2026-09-08: execute the production ledger. The old regex accidentally
+  // matched a comment about markPaid and demanded the retired free-wear bug.
+  await import('./mem-idb.mjs');
+  const { kvSet, kvGet, useDbName } = await import('../js/db.js');
+  const loot = await import('../js/loot.js');
+  useDbName('unit-transmog-persisted-credit');
+  const hat = 'g-H10-1-gravecaller', look = 'H10-2';
+  await loot.grantGear(hat, 'unit');
+  await loot.grantGear('g-H10-2-ringmaster', 'unit');
+  await loot.equipGear('H', hat);
+  // CONTROL: grandfather a legacy paid look while its statted gear is worn.
+  await kvSet('transmog', { H: look });
+  assert((await loot.paidLooks()).has(`H:${look}`));
+  await loot.clearTransmog('H');
+  assert((await kvGet('paidlooks', [])).includes(`H:${look}`));
+  assert.equal(await loot.transmogPrice('H', look), 0);
+  await kvSet('paidlooks', []);
+  await loot.equipGear('H', null);
+  assert.equal((await loot.applyTransmog('H', look)).cost, 0);
+  assert.equal((await loot.applyTransmog('H', look)).already, true);
+  assert(!(await loot.paidLooks()).has(`H:${look}`), 'free re-tap must not bank a purchase');
+  await loot.equipGear('H', hat);
+  assert.equal(await loot.transmogPrice('H', look), loot.transmogCost(look));
 });
 test('collection: every locked piece must be indistinguishable', () => {
   // The Looks browser renders locked pieces from a single constant string with no
@@ -2700,7 +2707,8 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
      no receipt. The debit is a `bonedust:` kv callback inside that call rather
      than `await spendDust(`, so the pattern needs the third shape or this
      census goes blind on buyRackItem the same way it did on 2026-08-31. */
-  const DUST_SPEND = /boneDustAdd\(\s*-|await spendDust\(|\bbonedust:\s*\w+/g;
+  // 2026-09-08: include the transmog debit staged inside payAtomic.
+  const DUST_SPEND = /boneDustAdd\(\s*-|await spendDust\(|\bbonedust:\s*\w+|bumpPay\('bonedust',\s*'dustRev',\s*-/g;
   const spends = [...src.matchAll(DUST_SPEND)].map(m => ownerAt(m.index));
   assert.ok(spends.length >= 2, `found ${spends.length} dust spends; the lint is reading the wrong thing`);
   assert.deepEqual([...new Set(spends)].sort(), Object.keys(DECLARED).sort(),

@@ -18031,10 +18031,17 @@ async function renderCharacter(wrap, tab, opts = {}) {
       openHatchReveal(res, wrap);
     }));
     $$('[data-open]', content).forEach(b => b.addEventListener('click', async () => {
+      if (b.disabled) return;
       b.disabled = true;
-      const result = await openCrate(b.dataset.open);
-      await openCrateReveal(result);
-      renderCharacter(wrap, 'crates');
+      try {
+        const result = await openCrate(b.dataset.open);
+        await openCrateReveal(result);
+      } catch {
+        toast('Could not finish opening. Your Backpack has the saved result. Try again if the crate is still there.', 4000);
+      } finally {
+        b.disabled = false;
+        renderCharacter(wrap, 'crates');
+      }
     }));
     $$('[data-open-all]', content).forEach(b => b.addEventListener('click', async () => {
       b.disabled = true;
