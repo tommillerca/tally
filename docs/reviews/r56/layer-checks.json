@@ -1,0 +1,1306 @@
+[
+  {
+    "layer": "assets/bh/anim/catfish/bead.png",
+    "size": [
+      15,
+      25
+    ],
+    "bbox": [
+      2,
+      2,
+      15,
+      25
+    ],
+    "visible": 149,
+    "top_colours": [
+      {
+        "rgb": [
+          170,
+          247,
+          255
+        ],
+        "pixels": 20
+      },
+      {
+        "rgb": [
+          170,
+          246,
+          255
+        ],
+        "pixels": 13
+      },
+      {
+        "rgb": [
+          169,
+          246,
+          255
+        ],
+        "pixels": 11
+      },
+      {
+        "rgb": [
+          178,
+          255,
+          255
+        ],
+        "pixels": 5
+      },
+      {
+        "rgb": [
+          177,
+          255,
+          255
+        ],
+        "pixels": 4
+      },
+      {
+        "rgb": [
+          172,
+          249,
+          255
+        ],
+        "pixels": 3
+      }
+    ],
+    "unmodified_generator_frost_checks": {
+      "ink_identical": true,
+      "ink_px": 0,
+      "whites_identical": true,
+      "whites_px": 1,
+      "edge_partials": 11,
+      "unexplained": 17,
+      "no_pair": 0,
+      "islands_fixed": 2,
+      "islands_left": 0,
+      "visible": 157
+    }
+  },
+  {
+    "layer": "assets/bh/anim/catfish/body.png",
+    "size": [
+      225,
+      170
+    ],
+    "bbox": [
+      0,
+      19,
+      225,
+      143
+    ],
+    "visible": 14634,
+    "top_colours": [
+      {
+        "rgb": [
+          168,
+          166,
+          255
+        ],
+        "pixels": 2473
+      },
+      {
+        "rgb": [
+          102,
+          98,
+          255
+        ],
+        "pixels": 2078
+      },
+      {
+        "rgb": [
+          33,
+          33,
+          30
+        ],
+        "pixels": 334
+      },
+      {
+        "rgb": [
+          34,
+          34,
+          31
+        ],
+        "pixels": 212
+      },
+      {
+        "rgb": [
+          35,
+          35,
+          32
+        ],
+        "pixels": 160
+      },
+      {
+        "rgb": [
+          103,
+          99,
+          255
+        ],
+        "pixels": 151
+      }
+    ],
+    "unmodified_generator_frost_checks": {
+      "ink_identical": true,
+      "ink_px": 4382,
+      "whites_identical": true,
+      "whites_px": 494,
+      "edge_partials": 2240,
+      "unexplained": 134,
+      "no_pair": 0,
+      "islands_fixed": 2,
+      "islands_left": 0,
+      "visible": 15512
+    }
+  },
+  {
+    "layer": "assets/bh/anim/catfish/drop.png",
+    "size": [
+      16,
+      20
+    ],
+    "bbox": [
+      0,
+      0,
+      16,
+      20
+    ],
+    "visible": 103,
+    "top_colours": [
+      {
+        "rgb": [
+          170,
+          247,
+          255
+        ],
+        "pixels": 16
+      },
+      {
+        "rgb": [
+          170,
+          246,
+          255
+        ],
+        "pixels": 14
+      },
+      {
+        "rgb": [
+          169,
+          246,
+          255
+        ],
+        "pixels": 10
+      },
+      {
+        "rgb": [
+          180,
+          255,
+          255
+        ],
+        "pixels": 4
+      },
+      {
+        "rgb": [
+          172,
+          250,
+          255
+        ],
+        "pixels": 3
+      },
+      {
+        "rgb": [
+          169,
+          245,
+          255
+        ],
+        "pixels": 3
+      }
+    ],
+    "unmodified_generator_frost_checks": {
+      "ink_identical": true,
+      "ink_px": 0,
+      "whites_identical": true,
+      "whites_px": 0,
+      "edge_partials": 0,
+      "unexplained": 43,
+      "no_pair": 3,
+      "islands_fixed": 0,
+      "islands_left": 0,
+      "visible": 156
+    }
+  },
+  {
+    "layer": "assets/bh/anim/catfish/shadow.png",
+    "size": [
+      81,
+      26
+    ],
+    "bbox": [
+      0,
+      0,
+      81,
+      26
+    ],
+    "visible": 1298,
+    "top_colours": [
+      {
+        "rgb": [
+          33,
+          33,
+          30
+        ],
+        "pixels": 980
+      },
+      {
+        "rgb": [
+          34,
+          34,
+          31
+        ],
+        "pixels": 60
+      },
+      {
+        "rgb": [
+          32,
+          32,
+          29
+        ],
+        "pixels": 43
+      },
+      {
+        "rgb": [
+          35,
+          35,
+          32
+        ],
+        "pixels": 38
+      },
+      {
+        "rgb": [
+          32,
+          32,
+          30
+        ],
+        "pixels": 37
+      },
+      {
+        "rgb": [
+          33,
+          33,
+          29
+        ],
+        "pixels": 18
+      }
+    ],
+    "unmodified_generator_frost_checks": {
+      "ink_identical": true,
+      "ink_px": 1466,
+      "whites_identical": true,
+      "whites_px": 0,
+      "edge_partials": 0,
+      "unexplained": 7,
+      "no_pair": 0,
+      "islands_fixed": 0,
+      "islands_left": 0,
+      "visible": 1473
+    }
+  },
+  {
+    "layer": "assets/bh/anim/cloud/body-noeyes.png",
+    "size": [
+      186,
+      183
+    ],
+    "bbox": [
+      0,
+      0,
+      186,
+      183
+    ],
+    "visible": 17223,
+    "top_colours": [
+      {
+        "rgb": [
+          207,
+          251,
+          255
+        ],
+        "pixels": 6999
+      },
+      {
+        "rgb": [
+          33,
+          31,
+          29
+        ],
+        "pixels": 3235
+      },
+      {
+        "rgb": [
+          206,
+          251,
+          255
+        ],
+        "pixels": 1026
+      },
+      {
+        "rgb": [
+          205,
+          251,
+          255
+        ],
+        "pixels": 525
+      },
+      {
+        "rgb": [
+          255,
+          249,
+          221
+        ],
+        "pixels": 426
+      },
+      {
+        "rgb": [
+          33,
+          33,
+          30
+        ],
+        "pixels": 254
+      }
+    ],
+    "unmodified_generator_frost_checks": {
+      "ink_identical": true,
+      "ink_px": 5487,
+      "whites_identical": true,
+      "whites_px": 1053,
+      "edge_partials": 865,
+      "unexplained": 139,
+      "no_pair": 68,
+      "islands_fixed": 1,
+      "islands_left": 0,
+      "visible": 17967
+    }
+  },
+  {
+    "layer": "assets/bh/anim/cloud/closed.png",
+    "size": [
+      186,
+      183
+    ],
+    "bbox": [
+      76,
+      56,
+      140,
+      67
+    ],
+    "visible": 352,
+    "top_colours": [
+      {
+        "rgb": [
+          30,
+          29,
+          26
+        ],
+        "pixels": 352
+      }
+    ],
+    "unmodified_generator_frost_checks": {
+      "ink_identical": true,
+      "ink_px": 352,
+      "whites_identical": true,
+      "whites_px": 0,
+      "edge_partials": 0,
+      "unexplained": 0,
+      "no_pair": 0,
+      "islands_fixed": 0,
+      "islands_left": 0,
+      "visible": 352
+    }
+  },
+  {
+    "layer": "assets/bh/anim/cloud/drop.png",
+    "size": [
+      12,
+      24
+    ],
+    "bbox": [
+      0,
+      0,
+      12,
+      24
+    ],
+    "visible": 203,
+    "top_colours": [
+      {
+        "rgb": [
+          98,
+          230,
+          243
+        ],
+        "pixels": 60
+      },
+      {
+        "rgb": [
+          97,
+          229,
+          242
+        ],
+        "pixels": 18
+      },
+      {
+        "rgb": [
+          98,
+          229,
+          242
+        ],
+        "pixels": 12
+      },
+      {
+        "rgb": [
+          98,
+          230,
+          242
+        ],
+        "pixels": 5
+      },
+      {
+        "rgb": [
+          97,
+          230,
+          242
+        ],
+        "pixels": 5
+      },
+      {
+        "rgb": [
+          97,
+          228,
+          241
+        ],
+        "pixels": 4
+      }
+    ],
+    "unmodified_generator_frost_checks": {
+      "ink_identical": true,
+      "ink_px": 0,
+      "whites_identical": true,
+      "whites_px": 0,
+      "edge_partials": 0,
+      "unexplained": 29,
+      "no_pair": 0,
+      "islands_fixed": 0,
+      "islands_left": 0,
+      "visible": 203
+    }
+  },
+  {
+    "layer": "assets/bh/anim/cloud/eyes.png",
+    "size": [
+      186,
+      183
+    ],
+    "bbox": [
+      75,
+      31,
+      139,
+      90
+    ],
+    "visible": 2450,
+    "top_colours": [
+      {
+        "rgb": [
+          33,
+          33,
+          30
+        ],
+        "pixels": 235
+      },
+      {
+        "rgb": [
+          255,
+          249,
+          221
+        ],
+        "pixels": 176
+      },
+      {
+        "rgb": [
+          34,
+          34,
+          31
+        ],
+        "pixels": 53
+      },
+      {
+        "rgb": [
+          35,
+          35,
+          32
+        ],
+        "pixels": 39
+      },
+      {
+        "rgb": [
+          205,
+          249,
+          253
+        ],
+        "pixels": 39
+      },
+      {
+        "rgb": [
+          206,
+          250,
+          254
+        ],
+        "pixels": 39
+      }
+    ],
+    "unmodified_generator_frost_checks": {
+      "ink_identical": true,
+      "ink_px": 940,
+      "whites_identical": true,
+      "whites_px": 437,
+      "edge_partials": 531,
+      "unexplained": 13,
+      "no_pair": 0,
+      "islands_fixed": 1,
+      "islands_left": 0,
+      "visible": 2450
+    }
+  },
+  {
+    "layer": "assets/bh/anim/cloud/shadow.png",
+    "size": [
+      57,
+      15
+    ],
+    "bbox": [
+      0,
+      0,
+      57,
+      15
+    ],
+    "visible": 704,
+    "top_colours": [
+      {
+        "rgb": [
+          33,
+          33,
+          30
+        ],
+        "pixels": 477
+      },
+      {
+        "rgb": [
+          34,
+          34,
+          31
+        ],
+        "pixels": 50
+      },
+      {
+        "rgb": [
+          35,
+          35,
+          32
+        ],
+        "pixels": 32
+      },
+      {
+        "rgb": [
+          32,
+          32,
+          30
+        ],
+        "pixels": 31
+      },
+      {
+        "rgb": [
+          32,
+          32,
+          29
+        ],
+        "pixels": 29
+      },
+      {
+        "rgb": [
+          35,
+          35,
+          31
+        ],
+        "pixels": 14
+      }
+    ],
+    "unmodified_generator_frost_checks": {
+      "ink_identical": true,
+      "ink_px": 704,
+      "whites_identical": true,
+      "whites_px": 0,
+      "edge_partials": 0,
+      "unexplained": 0,
+      "no_pair": 0,
+      "islands_fixed": 0,
+      "islands_left": 0,
+      "visible": 704
+    }
+  },
+  {
+    "layer": "assets/bh/anim/lizard/base.png",
+    "size": [
+      225,
+      170
+    ],
+    "bbox": [
+      0,
+      0,
+      225,
+      170
+    ],
+    "visible": 22555,
+    "top_colours": [
+      {
+        "rgb": [
+          255,
+          249,
+          221
+        ],
+        "pixels": 3741
+      },
+      {
+        "rgb": [
+          255,
+          130,
+          69
+        ],
+        "pixels": 2636
+      },
+      {
+        "rgb": [
+          33,
+          33,
+          30
+        ],
+        "pixels": 716
+      },
+      {
+        "rgb": [
+          34,
+          34,
+          31
+        ],
+        "pixels": 327
+      },
+      {
+        "rgb": [
+          253,
+          129,
+          69
+        ],
+        "pixels": 324
+      },
+      {
+        "rgb": [
+          255,
+          131,
+          69
+        ],
+        "pixels": 291
+      }
+    ],
+    "unmodified_generator_frost_checks": {
+      "ink_identical": true,
+      "ink_px": 6920,
+      "whites_identical": true,
+      "whites_px": 824,
+      "edge_partials": 3662,
+      "unexplained": 129,
+      "no_pair": 0,
+      "islands_fixed": 155,
+      "islands_left": 0,
+      "visible": 23504
+    }
+  },
+  {
+    "layer": "assets/bh/anim/lizard/drool.png",
+    "size": [
+      225,
+      170
+    ],
+    "bbox": [
+      139,
+      49,
+      153,
+      84
+    ],
+    "visible": 126,
+    "top_colours": [
+      {
+        "rgb": [
+          181,
+          240,
+          232
+        ],
+        "pixels": 4
+      },
+      {
+        "rgb": [
+          180,
+          240,
+          232
+        ],
+        "pixels": 4
+      },
+      {
+        "rgb": [
+          184,
+          240,
+          232
+        ],
+        "pixels": 3
+      },
+      {
+        "rgb": [
+          179,
+          238,
+          230
+        ],
+        "pixels": 3
+      },
+      {
+        "rgb": [
+          179,
+          240,
+          233
+        ],
+        "pixels": 3
+      },
+      {
+        "rgb": [
+          200,
+          242,
+          229
+        ],
+        "pixels": 3
+      }
+    ],
+    "unmodified_generator_frost_checks": {
+      "ink_identical": true,
+      "ink_px": 0,
+      "whites_identical": true,
+      "whites_px": 73,
+      "edge_partials": 0,
+      "unexplained": 44,
+      "no_pair": 0,
+      "islands_fixed": 0,
+      "islands_left": 0,
+      "visible": 126
+    }
+  },
+  {
+    "layer": "assets/bh/anim/lizard/fly.png",
+    "size": [
+      225,
+      170
+    ],
+    "bbox": [
+      201,
+      3,
+      219,
+      18
+    ],
+    "visible": 194,
+    "top_colours": [
+      {
+        "rgb": [
+          33,
+          33,
+          30
+        ],
+        "pixels": 19
+      },
+      {
+        "rgb": [
+          34,
+          34,
+          31
+        ],
+        "pixels": 12
+      },
+      {
+        "rgb": [
+          35,
+          35,
+          32
+        ],
+        "pixels": 12
+      },
+      {
+        "rgb": [
+          32,
+          32,
+          30
+        ],
+        "pixels": 10
+      },
+      {
+        "rgb": [
+          36,
+          36,
+          33
+        ],
+        "pixels": 7
+      },
+      {
+        "rgb": [
+          33,
+          33,
+          29
+        ],
+        "pixels": 7
+      }
+    ],
+    "unmodified_generator_frost_checks": {
+      "ink_identical": true,
+      "ink_px": 152,
+      "whites_identical": true,
+      "whites_px": 13,
+      "edge_partials": 29,
+      "unexplained": 0,
+      "no_pair": 0,
+      "islands_fixed": 0,
+      "islands_left": 0,
+      "visible": 194
+    }
+  },
+  {
+    "layer": "assets/bh/anim/lizard/lid.png",
+    "size": [
+      225,
+      170
+    ],
+    "bbox": [
+      127,
+      22,
+      145,
+      40
+    ],
+    "visible": 240,
+    "top_colours": [
+      {
+        "rgb": [
+          255,
+          130,
+          69
+        ],
+        "pixels": 69
+      },
+      {
+        "rgb": [
+          30,
+          27,
+          23
+        ],
+        "pixels": 30
+      },
+      {
+        "rgb": [
+          15,
+          7,
+          3
+        ],
+        "pixels": 15
+      },
+      {
+        "rgb": [
+          242,
+          124,
+          66
+        ],
+        "pixels": 15
+      },
+      {
+        "rgb": [
+          43,
+          33,
+          26
+        ],
+        "pixels": 15
+      },
+      {
+        "rgb": [
+          227,
+          117,
+          63
+        ],
+        "pixels": 14
+      }
+    ],
+    "unmodified_generator_frost_checks": {
+      "ink_identical": true,
+      "ink_px": 102,
+      "whites_identical": true,
+      "whites_px": 0,
+      "edge_partials": 61,
+      "unexplained": 0,
+      "no_pair": 0,
+      "islands_fixed": 1,
+      "islands_left": 0,
+      "visible": 240
+    }
+  },
+  {
+    "layer": "assets/bh/anim/lizard/mouthline.png",
+    "size": [
+      225,
+      170
+    ],
+    "bbox": [
+      122,
+      44,
+      169,
+      86
+    ],
+    "visible": 452,
+    "top_colours": [
+      {
+        "rgb": [
+          255,
+          249,
+          221
+        ],
+        "pixels": 29
+      },
+      {
+        "rgb": [
+          255,
+          130,
+          69
+        ],
+        "pixels": 19
+      },
+      {
+        "rgb": [
+          253,
+          247,
+          219
+        ],
+        "pixels": 11
+      },
+      {
+        "rgb": [
+          254,
+          249,
+          221
+        ],
+        "pixels": 8
+      },
+      {
+        "rgb": [
+          255,
+          255,
+          231
+        ],
+        "pixels": 7
+      },
+      {
+        "rgb": [
+          255,
+          135,
+          71
+        ],
+        "pixels": 7
+      }
+    ],
+    "unmodified_generator_frost_checks": {
+      "ink_identical": true,
+      "ink_px": 109,
+      "whites_identical": true,
+      "whites_px": 174,
+      "edge_partials": 80,
+      "unexplained": 27,
+      "no_pair": 0,
+      "islands_fixed": 0,
+      "islands_left": 0,
+      "visible": 452
+    }
+  },
+  {
+    "layer": "assets/bh/anim/lizard/out.png",
+    "size": [
+      225,
+      170
+    ],
+    "bbox": [
+      122,
+      44,
+      169,
+      86
+    ],
+    "visible": 851,
+    "top_colours": [
+      {
+        "rgb": [
+          255,
+          249,
+          221
+        ],
+        "pixels": 29
+      },
+      {
+        "rgb": [
+          255,
+          130,
+          69
+        ],
+        "pixels": 19
+      },
+      {
+        "rgb": [
+          253,
+          247,
+          219
+        ],
+        "pixels": 11
+      },
+      {
+        "rgb": [
+          254,
+          249,
+          221
+        ],
+        "pixels": 8
+      },
+      {
+        "rgb": [
+          255,
+          135,
+          71
+        ],
+        "pixels": 7
+      },
+      {
+        "rgb": [
+          255,
+          255,
+          231
+        ],
+        "pixels": 7
+      }
+    ],
+    "unmodified_generator_frost_checks": {
+      "ink_identical": true,
+      "ink_px": 232,
+      "whites_identical": true,
+      "whites_px": 247,
+      "edge_partials": 204,
+      "unexplained": 121,
+      "no_pair": 0,
+      "islands_fixed": 0,
+      "islands_left": 0,
+      "visible": 851
+    }
+  },
+  {
+    "layer": "assets/bh/anim/lizard/tongue.png",
+    "size": [
+      225,
+      170
+    ],
+    "bbox": [
+      128,
+      44,
+      161,
+      76
+    ],
+    "visible": 273,
+    "top_colours": [
+      {
+        "rgb": [
+          255,
+          147,
+          143
+        ],
+        "pixels": 5
+      },
+      {
+        "rgb": [
+          255,
+          155,
+          151
+        ],
+        "pixels": 4
+      },
+      {
+        "rgb": [
+          31,
+          32,
+          29
+        ],
+        "pixels": 4
+      },
+      {
+        "rgb": [
+          255,
+          145,
+          141
+        ],
+        "pixels": 3
+      },
+      {
+        "rgb": [
+          255,
+          148,
+          144
+        ],
+        "pixels": 3
+      },
+      {
+        "rgb": [
+          35,
+          35,
+          32
+        ],
+        "pixels": 3
+      }
+    ],
+    "unmodified_generator_frost_checks": {
+      "ink_identical": true,
+      "ink_px": 123,
+      "whites_identical": true,
+      "whites_px": 0,
+      "edge_partials": 0,
+      "unexplained": 150,
+      "no_pair": 2,
+      "islands_fixed": 0,
+      "islands_left": 0,
+      "visible": 273
+    }
+  },
+  {
+    "layer": "assets/bh/anim/lizard-amethyst/base.png",
+    "size": [
+      225,
+      170
+    ],
+    "bbox": [
+      0,
+      0,
+      225,
+      170
+    ],
+    "visible": 22555,
+    "top_colours": [
+      {
+        "rgb": [
+          255,
+          249,
+          221
+        ],
+        "pixels": 3741
+      },
+      {
+        "rgb": [
+          171,
+          0,
+          255
+        ],
+        "pixels": 2728
+      },
+      {
+        "rgb": [
+          33,
+          33,
+          30
+        ],
+        "pixels": 716
+      },
+      {
+        "rgb": [
+          169,
+          0,
+          253
+        ],
+        "pixels": 331
+      },
+      {
+        "rgb": [
+          34,
+          34,
+          31
+        ],
+        "pixels": 327
+      },
+      {
+        "rgb": [
+          172,
+          0,
+          255
+        ],
+        "pixels": 312
+      }
+    ]
+  },
+  {
+    "layer": "assets/bh/anim/lizard-amethyst/lid.png",
+    "size": [
+      225,
+      170
+    ],
+    "bbox": [
+      127,
+      22,
+      145,
+      40
+    ],
+    "visible": 240,
+    "top_colours": [
+      {
+        "rgb": [
+          171,
+          0,
+          255
+        ],
+        "pixels": 69
+      },
+      {
+        "rgb": [
+          30,
+          27,
+          23
+        ],
+        "pixels": 30
+      },
+      {
+        "rgb": [
+          162,
+          0,
+          242
+        ],
+        "pixels": 15
+      },
+      {
+        "rgb": [
+          15,
+          6,
+          2
+        ],
+        "pixels": 15
+      },
+      {
+        "rgb": [
+          43,
+          33,
+          26
+        ],
+        "pixels": 15
+      },
+      {
+        "rgb": [
+          152,
+          0,
+          227
+        ],
+        "pixels": 14
+      }
+    ]
+  }
+]
