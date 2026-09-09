@@ -9,6 +9,10 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 540, date: '2026-09-09', title: 'The Boneyard scrolls again', items: [
+    'The Boneyard intro and location error screens now allow scrolling as text grows.',
+  ] },
+
   { n: 539, date: '2026-09-09', title: 'Every pet on the same footing', items: [
     'All pets now share the same base combat stats, raised without reducing existing stats. Shiny and breeding bonuses stay earned.',
     'Pet balance checks now use an equipped, fully specced player with an ordinary pet and compare every foe with the same player fighting without a pet.',

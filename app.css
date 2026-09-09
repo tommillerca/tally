@@ -4359,8 +4359,12 @@ body::before {
    used to live in: a flex column with no padding of its own. */
 /* no --sat here: the topbar (absolute inside .map-stage) already pads by --sat,
    and padding both counted the notch twice, ~60px of dead band on iPhone */
-.screen.screen--map { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
-.sheet-body.map-sheet { flex: 1; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+/* Keep #screen as the scroll owner for the intro and location/load errors, so
+   refresh() preserves its reading position. The wrapper must retain its content
+   height instead of shrinking and clipping it. An active map still fills the
+   available space; .map-stage owns clipping of the camera and its overlays. */
+.screen.screen--map { display: flex; flex-direction: column; padding: 0; overflow-y: auto; }
+.sheet-body.map-sheet { flex: 1 0 auto; padding: 0; overflow: visible; display: flex; flex-direction: column; }
 #mapBody { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .map-stage { position: relative; flex: 1; min-height: 0; border-radius: 16px 16px 0 0; overflow: hidden; }
 .map-canvas, .map-stage > .map-canvas.maplibregl-map { position: absolute; inset: 0; width: 100%; height: 100%; background: #0d0c12; }

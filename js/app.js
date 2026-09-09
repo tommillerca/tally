@@ -3664,7 +3664,7 @@ function route({ keepScroll = false } = {}) {
   else if (tab === 'settings') done = renderSettings(el);
   else if (tab === 'boneyard') done = renderBoneyard(el);
   else { isToday = true; done = renderToday(el); }
-  // the map fills the screen, so this route drops the usual padding and scroll
+  // The map fills the screen; its intro and error copy retain screen scrolling.
   el.classList.toggle('screen--map', tab === 'boneyard');
   /* Today carries the overscroll wordmark above the top of its scroller (app.css).
      Flagged by the branch that actually renders Today rather than by a second list
@@ -24526,7 +24526,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v539'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v540'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

@@ -384,6 +384,7 @@ PURE.push('reachable-density-audit.mjs'); // R4-21: guards the shared reachabili
 PURE.push('native-shell-comment-audit.mjs'); // R4-21: remote iOS shell cannot claim a wrapped web build; mutation controls.
 PURE.push('hand-registration-audit.mjs'); // R4: off-hand and right-hand registration census against the raised fist.
 const BROWSER = [
+  'boneyard-scroll-audit.mjs', // P1: rendered intro reachability at 100/150%, main-button hit tests, scroll preservation and dock exclusion.
   'today-dock-pixels-audit.mjs', // Dock exclusion: all-tab captures, row tap and lost-exclusion control, plus native bounce evidence. Pixel continuity remains manual/UNPROVEN; the former opaque-RGB predicate certified the black-line bug.
 
   'device-loss-browser-audit.mjs', // L3 recovery choice, known-save retry, file replacement and Settings restore reachability; local disposable origin only.
