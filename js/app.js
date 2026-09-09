@@ -7327,9 +7327,8 @@ function openDenSheet(den, { cleared = false, inRange = false, onFight = null } 
       <div class="hd">
         <h2>${den.roaming ? 'Roaming den' : 'Boss den'}</h2>
         <div class="sub">${den.roaming ? 'Here today, gone tomorrow'
-          /* his dens do not reroll, so do not tell people they do */
-          : den.theme && den.theme.art === 'mage' ? 'His, and he is not moving'
-          : 'Rerolls its boss every Monday'}</div>
+          : den.theme && den.theme.art === 'mage' ? 'His den moves every Monday; the boss stays'
+          : 'Moves and rerolls its boss every Monday'}</div>
       </div>
       <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Close">${ICONS.close(17)}</button></div>
     </div>
@@ -7346,11 +7345,11 @@ function openDenSheet(den, { cleared = false, inRange = false, onFight = null } 
       <div class="den-pays">
         ${pay.map(([ico, big, lab]) => `<div class="p"><span>${ico}</span><b>${esc(big)}</b><small>${lab}</small></div>`).join('')}
       </div>` : ''}
-      ${t1Sect('Gear drop')}
+      ${!den.roaming && !den.remote ? `${t1Sect('Gear drop')}
       <p class="note" style="margin-bottom:7px">Two pieces drop, you keep one. This den's odds:</p>
       <div class="den-odds">
         ${odds.map(o => `<span class="${o.rarity}"><i>${o.pct}%</i>${o.rarity.toUpperCase()}</span>`).join('')}
-      </div>
+      </div>` : ''}
       <div class="den-walk">
         <span class="ic">${badgePixHtml('badge-signpost', 20)}</span>
         <div><div class="d">${den.dist != null ? esc(fmtDist(den.dist)) : 'Nearby'}</div><small>${inRange ? 'You are close enough to fight' : `Get within ${DEN_RADIUS_M} m to start`}</small></div>
@@ -18303,7 +18302,13 @@ function wireLootChoice(scope, claimFn, onDone) {
   keep?.addEventListener('click', async () => {
     if (!sel || busy) return;
     busy = true;
-    const picked = await claimFn(sel);
+    let picked;
+    try { picked = await claimFn(sel); }
+    catch {
+      busy = false;
+      toast('Could not save your gear choice. Please try Keep again.', 3600);
+      return;
+    }
     if (!picked) { busy = false; return; }
     // the piece you KEPT stays bright + gets a "kept" ring; the one you left
     // behind greys out. (Previously inverted: it greyed the kept one.)

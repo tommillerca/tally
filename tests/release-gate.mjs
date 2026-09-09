@@ -340,6 +340,7 @@ PURE.push('response-bodies-audit.mjs'); // Parsed wrong-body refusal, unchanged 
 PURE.push('p1-merge-audit.mjs'); // P1: cloud merge preserves Kitchen earnings, diary maintenance and offline potions; Node only.
 PURE.push('quest-wheel-budget-audit.mjs'); // P1: real quest claims and wheel commit over mem-idb, abort/retry and concurrency; no sockets.
 PURE.push('kitchen-delivery-audit.mjs'); // p1-kitchen: transaction aborts, retries, overlapping Eats and actual cauldron callback; Node only.
+PURE.push('map-playtest-audit.mjs'); // Frozen map lane: abort/retry, production previews and actual handlers; Node only.
 PURE.push('p1-dens-audit.mjs'); // P1: den reward queue, Wanderer settle, charm charges and Pit setup atomicity; Node only.
 PURE.push('crew-yard-row-audit.mjs'); // Profile total, visit callback and absent portrait row; Node only.
 PURE.push('pet-rarity-audit.mjs'); // Frozen rarity-out: real pet markup, neutral tiles and retained gear rarity; Node only.
