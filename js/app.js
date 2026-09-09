@@ -14916,7 +14916,7 @@ async function renderSettings(el) {
   const restoreLine = !restore ? ''
     : restore.restorable ? 'Restore it on any device with your recovery code.'
       : restore.why === 'no-backup' ? 'Nothing has backed up yet.'
-        : restore.why === 'no-recovery' ? 'Reinstalling THIS device brings it back automatically; a new device needs a recovery code, which is not set.'
+        : restore.why === 'no-recovery' ? 'A recovery code is not set. Set one before relying on recovery on another device.'
           : 'The cloud could not be reached to confirm this.';
   const backupAge = backupAt ? (Date.now() - backupAt < 36e5 ? 'just now' : Math.round((Date.now() - backupAt) / 36e5) + 'h ago') : 'never';
   /* A FAILED PUSH USED TO READ EXACTLY LIKE A HEALTHY ONE. pushBackup returned a
@@ -14972,13 +14972,13 @@ async function renderSettings(el) {
       <div class="lab"><b>Cloud backup</b><span>${backupLabel}</span></div>
       <div class="seg" style="width:130px"><button id="cbOn" class="${backupOn ? 'on' : ''}">On</button><button id="cbOff" class="${backupOn ? '' : 'on'}">Off</button></div>
     </div>
-    <p class="note" style="margin:8px 0 0">Your whole save backs up automatically, end-to-end <b>encrypted</b> so only your phone can read it (the server can't). ${restoreLine} Share your friend code so friends can add you.</p>`
+    <p class="note" style="margin:8px 0 0">When cloud backup is on, your whole save backs up automatically, end-to-end <b>encrypted</b> so only your phone can read it (the server can't). ${restoreLine} Share your friend code so friends can add you.</p>`
     : `
     <p class="note" style="margin:0 0 10px">Go online to back up your progress (end-to-end encrypted, only your phone can read it) and join the Crew: friend codes, and soon trading and PvP.</p>
     <button class="btn" id="goOnlineBtn">Go Online</button>
     <button class="btn small ghost" id="restoreAcctBtn" style="margin-top:8px">I already have an account</button>`}
     ${me ? `<div class="settings-row" style="margin-top:10px">
-      <div class="lab"><b>Recovery code</b><span>${recoverySet ? (myRid ? `Set. Restore anywhere with <b>${esc(myRid)}</b> and your phrase.` : 'Set. Add a recovery ID so you do not need your friend code to restore.') : 'NOT SET. Delete the app and this account is gone for good.'}</span></div>
+      <div class="lab"><b>Recovery code</b><span>${recoverySet ? (myRid ? `Set. Restore anywhere with <b>${esc(myRid)}</b> and your phrase.` : 'Set. Add a recovery ID so you do not need your friend code to restore.') : 'NOT SET. Set a recovery code to restore on another device.'}</span></div>
       <button class="btn small ${recoverySet ? 'ghost' : ''}" id="recoveryBtn">${recoverySet ? 'Change' : 'Set it'}</button>
     </div>` : ''}
     ${vaultRowHtml(vault)}
@@ -15302,19 +15302,22 @@ async function renderSettings(el) {
   $('#hkGuide')?.addEventListener('click', openHealthGuide);
   $('#hkSyncNow')?.addEventListener('click', syncFromClipboard);
   $('#exportBtn').addEventListener('click', async () => {
-    // On the native shells the WebView can't save a blob download, so don't fake
-    // success - your progress is already safe via the auto cloud backup. The file
-    // export is a web-only convenience.
-    if (isNative()) { toast('Your progress is auto-saved to the cloud (end-to-end encrypted). A downloadable file export is available in the web version.', 4600); return; }
-    const data = await exportAll();
-    const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `tally-backup-${dateKey()}.json`;
-    a.click();
-    await kvSet('lastExportAt', Date.now());
-    toast('Backup exported');
-    refresh(); // the "Never backed up yet" / "Last backup" row reads lastExportAt
+    // The native WebView cannot download a blob. This says nothing about
+    // whether cloud backup is enabled or has delivered a save.
+    if (isNative()) { toast('A downloadable file export is available in the web version. Check Cloud backup in Settings for your backup status.', 4600); return; }
+    try {
+      const data = await exportAll();
+      const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `tally-backup-${dateKey()}.json`;
+      a.click();
+      await kvSet('lastExportAt', Date.now());
+      toast('Backup exported');
+      refresh(); // the export row reads lastExportAt
+    } catch {
+      toast('Could not finish exporting the backup. Try again and check that a file was downloaded.', 4600);
+    }
   });
   $('#importBtn').addEventListener('click', () => $('#importFile').click());
   $('#importFile').addEventListener('change', async e => {
@@ -15360,24 +15363,29 @@ async function renderSettings(el) {
     go.addEventListener('click', async () => {
       if (input.value.trim().toUpperCase() !== 'ERASE') return;   // belt and braces
       go.disabled = true; go.textContent = 'Erasing...';
-      await social.forgetIdentity();   // else the vault re-adopts this account on the next boot
-      /* EVERY store db.js defines, never a hand-copied list, and in ONE
-         transaction, and with every OTHER TAB stopped first.
-         The literal that used to sit here had six of the seven names: 'inv'
-         was missing, so an erase kept the entire inventory (crates, gear,
-         cosmetics, pets) and wiped only the kv flag recording that the welcome
-         kit had been paid. Inventory was strictly non-decreasing across an
-         erase and every erase-then-reonboard handed out another kit.
-         The seven-transaction loop that replaced it was still not true with the
-         app open twice: driven with a second tab writing, the erase finished
-         and left 30 inv rows, a kv row and 150 coins standing, and this tab
-         then reloaded onto a save it thought it had destroyed. db.js's
-         eraseAll() freezes the other tabs, waits for them to confirm it, clears
-         every store together, and tells them to reload. Measured against a
-         second tab writing continuously: zero rows in every store.
-         See js/db.js STORES and eraseAll. */
-      await eraseAll();
-      location.reload();
+      try {
+        await social.forgetIdentity();   // else the vault re-adopts this account on the next boot
+        /* EVERY store db.js defines, never a hand-copied list, and in ONE
+           transaction, and with every OTHER TAB stopped first.
+           The literal that used to sit here had six of the seven names: 'inv'
+           was missing, so an erase kept the entire inventory (crates, gear,
+           cosmetics, pets) and wiped only the kv flag recording that the welcome
+           kit had been paid. Inventory was strictly non-decreasing across an
+           erase and every erase-then-reonboard handed out another kit.
+           The seven-transaction loop that replaced it was still not true with the
+           app open twice: driven with a second tab writing, the erase finished
+           and left 30 inv rows, a kv row and 150 coins standing, and this tab
+           then reloaded onto a save it thought it had destroyed. db.js's
+           eraseAll() freezes the other tabs, waits for them to confirm it, clears
+           every store together, and tells them to reload. Measured against a
+           second tab writing continuously: zero rows in every store.
+           See js/db.js STORES and eraseAll. */
+        await eraseAll();
+        location.reload();
+      } catch {
+        go.disabled = false; go.textContent = 'Erase it all';
+        toast('Could not erase the local save. Try again.', 4200);
+      }
     });
   });
   /* Account deletion (App Store 5.1.1(v)). Same typed-confirm pattern as Erase.
@@ -15397,19 +15405,30 @@ async function renderSettings(el) {
       </div>
       <div class="t1-foot"><button class="btn danger-ish" id="daGo" disabled>Delete account</button></div>`, { cls: 't1', name: 'DeleteAccount' });
     const input = $('#daIn', wrap), go = $('#daGo', wrap);
+    let cloudDeleted = false;
     input.addEventListener('input', () => { go.disabled = input.value.trim().toUpperCase() !== 'DELETE'; });
     go.addEventListener('click', async () => {
       if (input.value.trim().toUpperCase() !== 'DELETE') return;   // belt and braces
       go.disabled = true; go.textContent = 'Deleting...';
-      const res = await social.deleteAccount();
-      if (!res.ok) {
+      try {
+        if (!cloudDeleted) {
+          const res = await social.deleteAccount();
+          if (!res.ok) {
+            go.disabled = false; go.textContent = 'Delete account';
+            toast('Could not confirm account deletion with the server. Your local save is unchanged. Try again when you are online.', 4600);
+            return;
+          }
+          cloudDeleted = true;
+        }
+        await social.forgetIdentity();   // clear the vault before wiping this device
+        await eraseAll();
+        location.reload();
+      } catch {
         go.disabled = false; go.textContent = 'Delete account';
-        toast('Could not reach the server. Nothing was deleted. Try again when you are online.', 3600);
-        return;
+        toast(cloudDeleted
+          ? 'Your cloud account was deleted, but this phone could not finish clearing its local save. Tap Delete account again to retry local cleanup.'
+          : 'Could not confirm account deletion. Your local save is unchanged. Try again.', 5600);
       }
-      await social.forgetIdentity();   // else the vault re-adopts the dead identity on the next boot
-      await eraseAll();                // the same everything-in-one-transaction wipe Erase uses
-      location.reload();
     });
   });
   // Force-fetch the latest build: drop the service worker + all caches, then

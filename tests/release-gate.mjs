@@ -348,6 +348,7 @@ PURE.push('stable-rooms-top-audit.mjs'); // Frozen room row: production template
 PURE.push('today-playtest-audit.mjs'); // 2026-09-08: Today handlers, rollover retries, protected streak copy and atomic milestone crates; Node only.
 PURE.push('crew-playtest-audit.mjs'); // Frozen Crew playtest: owed gifts, aborted opens and actual social controls; Node only.
 PURE.push('firstrun-audit.mjs'); // Frozen first-run: interrupted kit, onboarding handlers and day-one play; Node only.
+PURE.push('settings-safety-audit.mjs'); // Settings templates, export and destructive handlers with transaction abort/retry controls; Node only.
 const BROWSER = [
   'today-dock-pixels-audit.mjs', // v522: the Today dock band must not paint --hero-edge. Browser tier: it screenshots and samples real pixels, which is the only instrument that catches this class (the geometry measures correct either way). Its CONTROL-PIXELS row is deliberately UNPROVEN, see docs/CLAIMS.md v522.
 
