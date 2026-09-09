@@ -5,6 +5,7 @@
 // Pending train notes. The operator assigns a build number and moves these
 // into CHANGES when assembling the release. No version stamp is advanced here.
 export const NEXT_CHANGES = [
+  'The off-hand toothbrush and spade artwork is restored to its state before the rejected adjustment. The underlying hand misalignment remains open and unfixed.',
 ];
 
 export const CHANGES = [

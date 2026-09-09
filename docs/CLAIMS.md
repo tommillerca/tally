@@ -1,5 +1,431 @@
 # What each patch note claims, and what backs it
 
+
+## vNEXT
+
+Changelog item: The off-hand toothbrush and spade artwork is restored to its state before the rejected adjustment. The underlying hand misalignment remains open and unfixed.
+
+1. PROOF: `git hash-object` for all thirteen restored files equals the corresponding blobs from pre-v536 commit `60e772fb` (v535); both sides are printed in the validation receipt below. | REACH: PENDING-DEPLOY. This checkout contains a REVERT of v536, not a new alignment correction. The underlying misalignment Tom originally reported is still open and unfixed. No shipping-renderer measurement or live improvement is claimed.
+
+The four masters, their eight square thumbnails and `thumb/trim/IL/IL17-2.png`
+were restored directly from Git blobs without re-derivation. The original spade
+export dust is restored as expected. No version stamp is advanced.
+
+The hand-registration audit is retained as a source-only diagnostic. Its floor,
+controls, census and failure exit are unchanged. A source composite is not
+evidence of rendered registration. The requirement for every PURE audit to exit
+0 conflicts with restoring the brushes while preserving those assertions.
+Proposed deviation: report the expected red honestly and retain the guard for
+review. Proposed follow-up: remove it as a release guard and replace it with
+measurements of the final artifact in the shipping renderer.
+
+### Validation receipt
+
+- `node tests/unit.test.js`: exit 0, `384 passed, 0 failed`.
+- `node tests/release-gate.mjs --no-lock`: exit 1 before suites or lock handling;
+  local server bind denied with `listen EPERM: operation not permitted 127.0.0.1`.
+- Enumerated the actual `PURE` and `BROWSER` declarations, including every
+  `push` and `unshift`, from `tests/release-gate.mjs`. Asserted uniqueness and
+  refused a PURE count below 151. This tree has **155 PURE entries** and **123
+  FAST browser entries**, 278 total. Both lists match HEAD exactly. The gate
+  calls its `BROWSER` list FAST; there is no separate `FAST` array.
+- Because the gate could not bind, each enumerated entry was invoked sequentially
+  using the gate's `node --import tests/audit-lifecycle.mjs tests/<file>` form.
+  Browser entries received `http://127.0.0.1:9/` explicitly to prevent fallback
+  to a live origin; no server was available there. Self-serving audits attempted
+  their own listener. These are individual audit attempts, not a successful
+  integrated gate or shipping-renderer proof.
+- PURE with the gate's lifecycle preload: **152/155 exit 0**, two exit 1, one
+  exit 97. The hand diagnostic is expected red on the two restored brushes.
+  `m5-prove-red.mjs` reports its mutation controls passed, but the lifecycle
+  wrapper counts seven intentional child FAIL lines and forces exit 1.
+  `verify-tail-audit.mjs` successfully tests an intentionally hidden parser,
+  but the wrapper counts that child's UNPRV line and forces exit 97.
+  Direct follow-up commands `node tests/m5-prove-red.mjs` and
+  `node tests/verify-tail-audit.mjs` both exit 0. Those direct results do not
+  overwrite or turn the wrapper's complete census green. No unrelated guard
+  or lifecycle behavior was changed.
+- FAST browser list: **3/123 exit 0**, 119 exit 1, one exit 97. Of the 120
+  nonzero results, **118 are blocked** (23 socket denials, 94 browser-launch
+  failures, one missing victim browser). Two are unrelated static reds:
+  `precache-audit.mjs` reports `js/laboratory.js` missing from PRECACHE (5/6);
+  `gate-audit.mjs` reports `app.js:26894` takes `claimSpire()` into `r` without
+  reading `r.ok` nearby. Neither was fixed in this lane.
+  `a11y-audit.mjs` was attempted, exit 1, browser launch blocked. No rendered
+  accessibility result is claimed. The three exit-0 entries are static checks,
+  not evidence that a browser rendered successfully.
+- Audit thresholds, controls, inventory and failure exit logic match HEAD;
+  only the hand diagnostic's explanatory header and output labels changed.
+- Denied/blocked actions: local socket binding, browser launch, and process
+  inspection (`ps: operation not permitted`). No escalation was attempted.
+  No commit, push, publish, version bump, original-checkout edit, or edit to
+  `js/app.js`, `app.css`, Crew or Boneyard paths was performed.
+- Deviation: all-green PURE and FAST proof is unavailable for the reasons
+  above. The exact revert and unchanged assertions take precedence over making
+  the gate green. Keep the disclosed red diagnostic for review; propose replacing
+  it as a release guard in a separate shipping-renderer work order.
+- Full process output, extraction runner and machine-readable enumeration/results
+  are retained locally in `/tmp/offhand-revert-proof/`. The hashes and every
+  per-file exit result are also embedded here for independent review.
+
+Frozen plan SHA256:
+`479fb554d6fa3f3ecbae853e8f19426197327f101f150bd12f1dbeeb8db03feb`.
+
+Pre-v536 source: `60e772fb`, the direct parent of `b152fd86` (v536).
+For each file: restore `git show 60e772fb:<path>` bytes; compare
+`git rev-parse 60e772fb:<path>` with `git hash-object <path>`. All 13 match:
+
+```text
+assets/bh/IL/IL10-1.png
+  pre-v536 b923013499e1925e54d83c3a50227747f6b738f4
+  restored b923013499e1925e54d83c3a50227747f6b738f4 MATCH
+assets/bh/IL/IL10-2.png
+  pre-v536 74bdc88e43b4eec7ea9203009839e1182b5493be
+  restored 74bdc88e43b4eec7ea9203009839e1182b5493be MATCH
+assets/bh/IL/IL17-1.png
+  pre-v536 afe33fbae594cc35fab55259ff410b319f442308
+  restored afe33fbae594cc35fab55259ff410b319f442308 MATCH
+assets/bh/IL/IL17-2.png
+  pre-v536 7f33f65c6cdd20c671edaed5f211f1e7b432bad9
+  restored 7f33f65c6cdd20c671edaed5f211f1e7b432bad9 MATCH
+assets/bh/thumb/192/IL/IL10-1.png
+  pre-v536 8c23214aa0259ce4c2793185b9e796211d93d336
+  restored 8c23214aa0259ce4c2793185b9e796211d93d336 MATCH
+assets/bh/thumb/192/IL/IL10-2.png
+  pre-v536 ae20fb8590364fac4954fdd5f10f2b434fa681a7
+  restored ae20fb8590364fac4954fdd5f10f2b434fa681a7 MATCH
+assets/bh/thumb/192/IL/IL17-1.png
+  pre-v536 e28929c1e77539c2034175d08462744441b614e5
+  restored e28929c1e77539c2034175d08462744441b614e5 MATCH
+assets/bh/thumb/192/IL/IL17-2.png
+  pre-v536 d5fed7f4ee0cccc038768dc4626d121f52cbebb0
+  restored d5fed7f4ee0cccc038768dc4626d121f52cbebb0 MATCH
+assets/bh/thumb/384/IL/IL10-1.png
+  pre-v536 1ee2a7942e3764413e5e7ac008c7eb96918f407b
+  restored 1ee2a7942e3764413e5e7ac008c7eb96918f407b MATCH
+assets/bh/thumb/384/IL/IL10-2.png
+  pre-v536 b594dae6317606624371a54d4866be818f8eed8e
+  restored b594dae6317606624371a54d4866be818f8eed8e MATCH
+assets/bh/thumb/384/IL/IL17-1.png
+  pre-v536 9abd8493cc29d122d6308ea4876f4eea0a0f541e
+  restored 9abd8493cc29d122d6308ea4876f4eea0a0f541e MATCH
+assets/bh/thumb/384/IL/IL17-2.png
+  pre-v536 76c7eeb0bd1dd8925aceb3ab47b326da54043e24
+  restored 76c7eeb0bd1dd8925aceb3ab47b326da54043e24 MATCH
+assets/bh/thumb/trim/IL/IL17-2.png
+  pre-v536 064aa5497ee4caab13084f8ba38837252559a2f7
+  restored 064aa5497ee4caab13084f8ba38837252559a2f7 MATCH
+```
+
+Complete PURE census, using the gate's lifecycle preload:
+
+| Audit | Exit | Result |
+|---|---:|---|
+| `version-align-lint.mjs` | 0 | PASS |
+| `no-debug-markers-lint.mjs` | 0 | PASS |
+| `store-copy-lint.mjs` | 0 | PASS |
+| `migration-guard-audit.mjs` | 0 | PASS |
+| `sync-observability-audit.mjs` | 0 | PASS |
+| `sync-identity-audit.mjs` | 0 | PASS |
+| `sync-native-audit.mjs` | 0 | PASS |
+| `lab-density-audit.mjs` | 0 | PASS |
+| `crew-outfit-audit.mjs` | 0 | PASS |
+| `dock-line-audit.mjs` | 0 | PASS |
+| `whatsnew-boot-audit.mjs` | 0 | PASS |
+| `wardrobe-noise-audit.mjs` | 0 | PASS |
+| `sync-clientpath-audit.mjs` | 0 | PASS |
+| `sync-authpath-audit.mjs` | 0 | PASS |
+| `sync-path-audit.mjs` | 0 | PASS |
+| `wardrobe-playtest-audit.mjs` | 0 | PASS |
+| `lab-room2-audit.mjs` | 0 | PASS |
+| `stable-stale-disclosure-audit.mjs` | 0 | PASS |
+| `breed-last-colour-audit.mjs` | 0 | PASS |
+| `stable-loss-disclosure-audit.mjs` | 0 | PASS |
+| `lab-health-recovery-audit.mjs` | 0 | PASS |
+| `lab-integration-audit.mjs` | 0 | PASS |
+| `lab-ui-audit.mjs` | 0 | PASS |
+| `laboratory-audit.mjs` | 0 | PASS |
+| `lab-foundation-audit.mjs` | 0 | PASS |
+| `pet-stress-guard.mjs` | 0 | PASS |
+| `crew-pet-node-guard.mjs` | 0 | PASS |
+| `transmog-receipt-audit.mjs` | 0 | PASS |
+| `today-reads-lint.mjs` | 0 | PASS |
+| `kitchen-atomic-audit.mjs` | 0 | PASS |
+| `backup-encoder-audit.mjs` | 0 | PASS |
+| `backup-key-audit.mjs` | 0 | PASS |
+| `backup-version-audit.mjs` | 0 | PASS |
+| `backup-conflict-audit.mjs` | 0 | PASS |
+| `unit.test.js` | 0 | PASS |
+| `log-xp-farm-audit.mjs` | 0 | PASS |
+| `drip-badge-audit.mjs` | 0 | PASS |
+| `xp-key-provenance-lint.mjs` | 0 | PASS |
+| `facegate-audit.mjs` | 0 | PASS |
+| `garden-appetite-guard.mjs` | 0 | PASS |
+| `pit.test.js` | 0 | PASS |
+| `quest-daymore-audit.mjs` | 0 | PASS |
+| `quest-pick-audit.mjs` | 0 | PASS |
+| `first-fight-audit.mjs` | 0 | PASS |
+| `stat-source-audit.mjs` | 0 | PASS |
+| `bastions-rep-sim.mjs` | 0 | PASS |
+| `analytics-tag-audit.mjs` | 0 | PASS |
+| `icon-inventory-audit.mjs` | 0 | PASS |
+| `version-stamp-audit.mjs` | 0 | PASS |
+| `boneyard-supply-audit.mjs` | 0 | PASS |
+| `loot-fallback-audit.mjs` | 0 | PASS |
+| `guard-hygiene-lint.mjs` | 0 | PASS |
+| `guard-provenance-lint.mjs` | 0 | PASS |
+| `feedback-status-lint.mjs` | 0 | PASS |
+| `rack-theme-lint.mjs` | 0 | PASS |
+| `rack-rotate-audit.mjs` | 0 | PASS |
+| `pet-accessory-lint.mjs` | 0 | PASS |
+| `pet-pool-audit.mjs` | 0 | PASS |
+| `manifest-exports-audit.mjs` | 0 | PASS |
+| `xp-curve-audit.mjs` | 0 | PASS |
+| `live-api-register-lint.mjs` | 0 | PASS |
+| `claim-evidence-lint.mjs` | 0 | PASS |
+| `thumb-freshness-lint.mjs` | 0 | PASS |
+| `render-sink-lint.mjs` | 0 | PASS |
+| `lapse-witness-audit.mjs` | 0 | PASS |
+| `spawn-claim-atomic-audit.mjs` | 0 | PASS |
+| `wardrobe-family-audit.mjs` | 0 | PASS |
+| `football-kit-audit.mjs` | 0 | PASS |
+| `restore-latch-audit.mjs` | 0 | PASS |
+| `first-pet-audit.mjs` | 0 | PASS |
+| `shop-economy-audit.mjs` | 0 | PASS |
+| `recovery-status-audit.mjs` | 0 | PASS |
+| `currency-revision-lint.mjs` | 0 | PASS |
+| `inv-tombstone-audit.mjs` | 0 | PASS |
+| `take-and-pay-audit.mjs` | 0 | PASS |
+| `c6-price-audit.mjs` | 0 | PASS |
+| `pet-morph-animation-audit.mjs` | 0 | PASS |
+| `pet-palette-audit.mjs` | 0 | PASS |
+| `fontscale-audit.mjs` | 0 | PASS |
+| `wheel-look-audit.mjs` | 0 | PASS |
+| `wheel-easing-audit.mjs` | 0 | PASS |
+| `storage-boot-audit.mjs` | 0 | PASS |
+| `crate-cadence-audit.mjs` | 0 | PASS |
+| `r4-app-p1-audit.mjs` | 0 | PASS |
+| `water-retry-audit.mjs` | 0 | PASS |
+| `cloud-off-audit.mjs` | 0 | PASS |
+| `r4-silence-audit.mjs` | 0 | PASS |
+| `silence-disclosure-audit.mjs` | 0 | PASS |
+| `health-disclosure-audit.mjs` | 0 | PASS |
+| `paddock-pack-audit.mjs` | 0 | PASS |
+| `numbers-honesty-audit.mjs` | 0 | PASS |
+| `locale-numbers-audit.mjs` | 0 | PASS |
+| `audit-output-audit.mjs` | 0 | PASS |
+| `branch-graveyard-audit.mjs` | 0 | PASS |
+| `store-runtime-audit.mjs` | 0 | PASS |
+| `r47-rest-audit.mjs` | 0 | PASS |
+| `r47-economy-audit.mjs` | 0 | PASS |
+| `submission-build-audit.mjs` | 0 | PASS |
+| `harness-environment-audit.mjs` | 0 | PASS |
+| `guard-debts-audit.mjs` | 0 | PASS |
+| `submission-preflight-audit.mjs` | 0 | PASS |
+| `pet-state-audit.mjs` | 0 | PASS |
+| `pet-family-audit.mjs` | 0 | PASS |
+| `crew-pet-audit.mjs` | 0 | PASS |
+| `coins-merge-tie-audit.mjs` | 0 | PASS |
+| `routine-race-audit.mjs` | 0 | PASS |
+| `dayone-topup-audit.mjs` | 0 | PASS |
+| `dish-worth-audit.mjs` | 0 | PASS |
+| `pet-C-node-guard.mjs` | 0 | PASS |
+| `r48-state-audit.mjs` | 0 | PASS |
+| `r46-logging-audit.mjs` | 0 | PASS |
+| `r46-diary-audit.mjs` | 0 | PASS |
+| `zero-calorie-seam-audit.mjs` | 0 | PASS |
+| `audit-completion-audit.mjs` | 0 | PASS |
+| `machine-character-audit.mjs` | 0 | PASS |
+| `n3-deadpaths-audit.mjs` | 0 | PASS |
+| `m5-prove-red.mjs` | 1 | RED: lifecycle wrapper counts seven expected negative-control FAIL lines; direct exit 0 |
+| `lookup-guard-lint.mjs` | 0 | PASS |
+| `restore-state-audit.mjs` | 0 | PASS |
+| `restore-debt-edges-audit.mjs` | 0 | PASS |
+| `restore-debt-audit.mjs` | 0 | PASS |
+| `p1-r48-rest-audit.mjs` | 0 | PASS |
+| `pet-a11y-audit.mjs` | 0 | PASS |
+| `kennel-copy-audit.mjs` | 0 | PASS |
+| `breed-lock-audit.mjs` | 0 | PASS |
+| `device-loss-audit.mjs` | 0 | PASS |
+| `multidevice-earnings-audit.mjs` | 0 | PASS |
+| `response-bodies-audit.mjs` | 0 | PASS |
+| `p1-merge-audit.mjs` | 0 | PASS |
+| `quest-wheel-budget-audit.mjs` | 0 | PASS |
+| `kitchen-delivery-audit.mjs` | 0 | PASS |
+| `map-playtest-audit.mjs` | 0 | PASS |
+| `p1-dens-audit.mjs` | 0 | PASS |
+| `crew-yard-row-audit.mjs` | 0 | PASS |
+| `pet-rarity-audit.mjs` | 0 | PASS |
+| `stable-rooms-top-audit.mjs` | 0 | PASS |
+| `today-playtest-audit.mjs` | 0 | PASS |
+| `crew-playtest-audit.mjs` | 0 | PASS |
+| `firstrun-audit.mjs` | 0 | PASS |
+| `settings-safety-audit.mjs` | 0 | PASS |
+| `progress-playtest-audit.mjs` | 0 | PASS |
+| `leaderboard-honesty-audit.mjs` | 0 | PASS |
+| `breed-two-tap-audit.mjs` | 0 | PASS |
+| `after-await-event-lint.mjs` | 0 | PASS |
+| `boneyard-zoom-audit.mjs` | 0 | PASS |
+| `lab-conflict-audit.mjs` | 0 | PASS |
+| `lab-lock-recovery-audit.mjs` | 0 | PASS |
+| `r3-rest-audit.mjs` | 0 | PASS |
+| `pet-parity-guard.mjs` | 0 | PASS |
+| `verify-tail-audit.mjs` | 97 | UNPROVEN: lifecycle wrapper counts intentional missing-acorn control; direct exit 0 |
+| `cloud-optout-transport-audit.mjs` | 0 | PASS |
+| `r4-restore-audit.mjs` | 0 | PASS |
+| `reachable-density-audit.mjs` | 0 | PASS |
+| `native-shell-comment-audit.mjs` | 0 | PASS |
+| `hand-registration-audit.mjs` | 1 | EXPECTED RED: restored IL10-1 and IL10-2 each core=0, ring=0, floor=150 |
+
+Complete FAST browser census, using the same preload. Blocked results did not
+complete rendered acceptance. Exit 97 is unproven and is never counted green.
+
+| Audit | Exit | Result |
+|---|---:|---|
+| `boneyard-scroll-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `today-dock-pixels-audit.mjs` | 97 | BLOCKED: socket binding denied (EPERM) |
+| `device-loss-browser-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `multidevice-earnings-browser-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `paddock-pack-browser-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `kennel-copy-browser-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `pet-a11y-pixels-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `first-run-honesty-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `orientation-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `pet-C-browser-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `pack-sink-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `write-failure-seam-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `write-failure-toast-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `fight-tray-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `fight-exit-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `precache-audit.mjs` | 1 | RED: js/laboratory.js missing from PRECACHE (5/6 passed) |
+| `precache-assets-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `foods-delete-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `recovery-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `first-session-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `first-session-lifecycle-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `shell-watchdog-audit.mjs` | 0 | PASS |
+| `dead-shell-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `water-cache-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `harness-leak-audit.mjs` | 1 | BLOCKED: victim browser never launched; no browser to grade |
+| `boot-flash-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `route-flash-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `handover-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `nav-perf-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `news-banner-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `news-tab-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `locker-polish-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `art-register-audit.mjs` | 0 | PASS |
+| `mini-theme-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `remote-den-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `bestiary-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `kennel-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `pet-morph-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `pet-ownership-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `pet-wardrobe-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `hype-banner-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `today-container-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `wardrobe-reset-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `idle-perf-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `today-peek-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `top-strip-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `returning-boot-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `gwart-guide-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `mage-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `art-resolution-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `fight-layout-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `newsrow-return-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `batch-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `error-telemetry-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `contrast-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `year-readout-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `notif-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `notif-tier-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `petlevel-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `backup-roundtrip-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `race-profile.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `reveal-mannequin-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `wheel-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `den-ceiling-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `health-intake-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `redeem-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `redeem-dupe-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `weight-edit-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `gate-audit.mjs` | 1 | RED: app.js:26894 claimSpire() result r.ok not read nearby |
+| `selector-audit.mjs` | 0 | PASS |
+| `lb-memory-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `log-write-failure-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `add-double-tap-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `freeze-reveal-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `screen-sweep.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `crash-guard-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `crate-palette-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `xp-cap-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `purchase-firewall.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `admin-grant-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `reward-sop-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `claimed-row-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `garden-closed-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `merchant-retire-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `freeze-refund-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `garden-retire-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `a11y-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `football-render-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `football-rail-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `football-tile-crop-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `shop-lead-order-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `kitchen-welcome-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `pit-kitchen-hint-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `kitchen-day-one-strand-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `backup-lifecycle-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `sheet-doubletap-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `pit-exit-motion-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `crew-slime-leak-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `shop-door-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `tab-chip-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `tray-destination-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `dvh-fallback-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `hero-edge-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `talkbox-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `gwart-crate-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `tab-doubletap-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `wardrobe-restage-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `wardrobe-commit-reach-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `boneyard-icon-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `pet-hold-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `badge-centre-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `pixel-art-swap-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `nickname-private-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `cloud-optout-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `today-idle-cpu-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `outmatched-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `badges-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `small-fixes-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `v279-audit.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `newart-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `siege-client-audit.mjs` | 1 | BLOCKED: browser launch failed in sandbox |
+| `levelpaid-repro.mjs` | 1 | BLOCKED: socket binding denied (EPERM) |
+| `fx-audit.js` | 1 | BLOCKED: browser launch failed in sandbox |
+
+Files changed (17):
+
+- `assets/bh/IL/IL10-1.png`
+- `assets/bh/IL/IL10-2.png`
+- `assets/bh/IL/IL17-1.png`
+- `assets/bh/IL/IL17-2.png`
+- `assets/bh/thumb/192/IL/IL10-1.png`
+- `assets/bh/thumb/192/IL/IL10-2.png`
+- `assets/bh/thumb/192/IL/IL17-1.png`
+- `assets/bh/thumb/192/IL/IL17-2.png`
+- `assets/bh/thumb/384/IL/IL10-1.png`
+- `assets/bh/thumb/384/IL/IL10-2.png`
+- `assets/bh/thumb/384/IL/IL17-1.png`
+- `assets/bh/thumb/384/IL/IL17-2.png`
+- `assets/bh/thumb/trim/IL/IL17-2.png`
+- `docs/CLAIMS.md`
+- `js/changelog.js`
+- `tests/hand-registration-audit.mjs`
+- `tests/release-gate.mjs`
+
 ## v540 (2026-09-09)
 
 Changelog item: The Boneyard intro and location error screens now allow scrolling as text grows.
