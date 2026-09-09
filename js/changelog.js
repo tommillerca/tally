@@ -9,6 +9,12 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 539, date: '2026-09-09', title: 'Every pet on the same footing', items: [
+    'All pets now share the same base combat stats, raised without reducing existing stats. Shiny and breeding bonuses stay earned.',
+    'Pet balance checks now use an equipped, fully specced player with an ordinary pet and compare every foe with the same player fighting without a pet.',
+    'The cloud opt-out audit forbids uploads and pins the allowed reads, while checking that the app still reads Crew gifts.',
+  ] },
+
   { n: 538, date: '2026-09-09', title: 'Pinch to zoom, and honest numbers', items: [
     'Viewport metadata no longer disables pinch zoom.',
     'The shop price notes now acknowledge that 40 starting coins cannot buy the unchanged 300-coin anchor.',

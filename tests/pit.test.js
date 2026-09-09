@@ -1283,28 +1283,19 @@ test('escalateDen: a minion joins from the 5th win, captain eased below solo', (
     'paired captain is eased below the solo-equivalent mult (the pair is the threat)');
 });
 
-test('pet stats: rarity scales power, a legendary clearly beats a common', () => {
-  const c3 = petBattleStats('C3', 6, false); // common
-  const c2 = petBattleStats('C2', 6, false); // legendary
-  assert.equal(c3.rarity, 'common');
-  assert.equal(c2.rarity, 'legendary');
-  assert.ok(c2.power > c3.power, 'legendary hits harder');
-  assert.ok(c2.hp > c3.hp, 'legendary is tankier');
+test('pet stats: all species have equal combat stats while retaining catalogue rarity', () => {
+  for (const id of ['C1', 'C2', 'C3', 'C4', 'C5', 'CX', 'C6']) {
+    const { rarity, ...stats } = petBattleStats(id, 6);
+    const { rarity: referenceRarity, ...reference } = petBattleStats('C2', 6);
+    assert.deepEqual(stats, reference, id);
+  }
+  assert.equal(petBattleStats('C3', 6).rarity, 'common');
+  assert.equal(petBattleStats('C2', 6).rarity, 'legendary');
 });
 
-test('pet stats: same-family pets still differ (C4 glass cannon vs C3 balanced)', () => {
-  const c3 = petBattleStats('C3', 6); // balanced common hound
-  const c4 = petBattleStats('C4', 6); // glass-cannon common hound
-  assert.ok(c4.power > c3.power, 'C4 hits harder');
-  assert.ok(c4.hp < c3.hp, 'C4 is frailer');
-});
-
-test('pet stats: a common at level 1 preserves the pre-v124 generic floor', () => {
-  const c3 = petBattleStats('C3', 1, false);
-  // old generic line: power 10+4=14, hp 40+8=48, reflex 25+5=30 (C3 tilt is light)
-  assert.ok(Math.abs(c3.power - 14) <= 1, 'power ~= old floor');
-  assert.ok(Math.abs(c3.hp - 48) <= 1, 'hp ~= old floor');
-  assert.ok(Math.abs(c3.reflex - 30) <= 1, 'reflex ~= old floor');
+test('pet stats: level 1 common is raised above the old hatch floor', () => {
+  const c3 = petBattleStats('C3', 1);
+  assert.deepEqual([c3.power, c3.hp, c3.reflex], [21, 75, 46]);
 });
 
 test('pet stats: lineage (breeding) adds a stacking bump on top of everything', () => {
@@ -1313,8 +1304,8 @@ test('pet stats: lineage (breeding) adds a stacking bump on top of everything', 
   assert.equal(l0.lineage, 0);
   assert.equal(l3.lineage, 3);
   assert.ok(l3.power > l0.power && l3.hp > l0.hp, 'lineage lifts power + hp');
-  // +5%/tier: lineage 3 ~= +15%
-  assert.ok(Math.abs(l3.power / l0.power - 1.15) < 0.03, 'roughly +15% at lineage 3');
+  // Earned +5%/tier is retained, subject to the existing combined 1.5 cap.
+  assert.ok(Math.abs(l3.power / l0.power - 1.5 / 1.36) < 0.03, 'lineage 3 reaches the unchanged combined cap');
 });
 
 test('pet stats: shiny grants a real bump on every stat', () => {
@@ -1324,11 +1315,11 @@ test('pet stats: shiny grants a real bump on every stat', () => {
     'shiny lifts power, hp, and reflex');
 });
 
-test('makePetBody consumes the intrinsic stat line (legendary body > common body)', () => {
+test('makePetBody consumes identical intrinsic stat lines across rarities', () => {
   const owner = makeFighter({ name: 'O', stats: MID });
   const commonBody = makePetBody(buildBattlePet('C3', 6, []), owner);
   const legendaryBody = makePetBody(buildBattlePet('C2', 6, []), owner);
-  assert.ok(legendaryBody.d.maxHp > commonBody.d.maxHp, 'legendary pet body has more HP');
+  assert.equal(legendaryBody.d.maxHp, commonBody.d.maxHp, 'same pet body HP across rarity');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
