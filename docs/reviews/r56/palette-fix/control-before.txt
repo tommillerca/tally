@@ -1,0 +1,24 @@
+C1: 15 pairs, minimum base/frost 10.130837
+C2: 15 pairs, minimum ember/rose 11.070200
+C3: 15 pairs, minimum ember/rose 13.507828
+C4: 15 pairs, minimum ember/rose 9.620858
+C5: 15 pairs, minimum ember/rose 9.638374
+C6: 15 pairs, minimum ember/rose 13.161264
+FAIL C1 base/frost 10.130837 <= 20.00
+FAIL C1 ember/rose 12.606863 <= 20.00
+FAIL C2 base/ember 14.221891 <= 20.00
+FAIL C2 ember/rose 11.070200 <= 20.00
+FAIL C3 base/frost 17.278894 <= 20.00
+FAIL C3 ember/rose 13.507828 <= 20.00
+FAIL C4 base/ember 12.762106 <= 20.00
+FAIL C4 base/rose 18.450906 <= 20.00
+FAIL C4 ember/rose 9.620858 <= 20.00
+FAIL C5 base/ember 12.233108 <= 20.00
+FAIL C5 base/frost 14.754988 <= 20.00
+FAIL C5 base/toxic 15.170725 <= 20.00
+FAIL C5 base/rose 17.214425 <= 20.00
+FAIL C5 ember/rose 9.638374 <= 20.00
+FAIL C5 frost/toxic 17.136235 <= 20.00
+FAIL C6 base/toxic 13.252576 <= 20.00
+FAIL C6 ember/rose 13.161264 <= 20.00
+90 pairs checked; 17 below required > 20.00

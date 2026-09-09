@@ -1,0 +1,7 @@
+C1: 8739 visible previously invariant pixels byte-identical in all five morphs; alpha identical.
+C2: 8008 visible previously invariant pixels byte-identical in all five morphs; alpha identical.
+C3: 6620 visible previously invariant pixels byte-identical in all five morphs; alpha identical.
+C4: 8729 visible previously invariant pixels byte-identical in all five morphs; alpha identical.
+C5: 9326 visible previously invariant pixels byte-identical in all five morphs; alpha identical.
+C6: 1178659 visible previously invariant pixels byte-identical in all five morphs; alpha identical.
+14 changed morph masters; 42 thumbnail tiers regenerated using build-bh-thumbs.wanted.

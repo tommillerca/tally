@@ -261,6 +261,7 @@ const PURE = ['lab-integration-audit.mjs', 'lab-ui-audit.mjs', 'laboratory-audit
      shape the merge audit never drove. */
   'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs',
   'take-and-pay-audit.mjs'];   // L1/L5: transaction-boundary kills for inventory, Shop, Pit, meal XP retry (including midnight and overlapping opens), grants and Spire recovery; Node-only.
+PURE.push('pet-palette-audit.mjs'); // r56 B1: actual PNG pairs and shipped-art CONTROL; offline Python image reads.
 PURE.push('fontscale-audit.mjs'); // R60-2: rem type seam, root doubling and px geometry controls; no browser or sockets.
 PURE.push('wheel-easing-audit.mjs'); // w1: no overshooting control points, with pre-fix CONTROL; no browser or sockets.
 PURE.unshift('store-copy-lint.mjs');

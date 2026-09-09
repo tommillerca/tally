@@ -72,6 +72,11 @@ let passed = 0, failed = 0;
 const QUEUE = [];
 function test(name, fn) { QUEUE.push([name, fn]); }
 
+test('r56 B1 all species palettes separate and pre-fix frost fails CONTROL', async () => {
+  const { checkPetPalette } = await import('./pet-palette-audit.mjs');
+  checkPetPalette();
+});
+
 test('R52-9 locale formatter/parser round trips and ambiguity control', async () => {
   const { checkLocaleNumbers } = await import('./locale-numbers-audit.mjs');
   checkLocaleNumbers();
