@@ -83,6 +83,25 @@ const PRECACHE = [
      Same class as the #213 hero-edge blank. */
   './assets/bh/anim/cloud/body-noeyes.png',
   './assets/bh/anim/cloud/eyes.png',
+  // Complete morph stacks arrive with the shell, including shared blink/shadow.
+  './assets/bh/anim/cloud/closed.png',
+  './assets/bh/anim/cloud/shadow.png',
+  './assets/bh/anim/cloud/drop.png',
+  './assets/bh/anim/morph/C1/ember/body-noeyes.png',
+  './assets/bh/anim/morph/C1/ember/eyes.png',
+  './assets/bh/anim/morph/C1/ember/drop.png',
+  './assets/bh/anim/morph/C1/frost/body-noeyes.png',
+  './assets/bh/anim/morph/C1/frost/eyes.png',
+  './assets/bh/anim/morph/C1/frost/drop.png',
+  './assets/bh/anim/morph/C1/toxic/body-noeyes.png',
+  './assets/bh/anim/morph/C1/toxic/eyes.png',
+  './assets/bh/anim/morph/C1/toxic/drop.png',
+  './assets/bh/anim/morph/C1/midnight/body-noeyes.png',
+  './assets/bh/anim/morph/C1/midnight/eyes.png',
+  './assets/bh/anim/morph/C1/midnight/drop.png',
+  './assets/bh/anim/morph/C1/rose/body-noeyes.png',
+  './assets/bh/anim/morph/C1/rose/eyes.png',
+  './assets/bh/anim/morph/C1/rose/drop.png',
   './assets/gwart/gwart-stars.png',
   /* The common crate's 9 authored frames. The whole sequence runs inside a
      260ms window, so a cold fetch mid-open paints a blank frame. Precached

@@ -553,15 +553,21 @@ function eggTint(morph) { return (morph && morph !== 'base' && MORPH_SHELL[morph
    DESIGN.md keeps the accent scarce and meaning "go", not "collected". */
 function morphSwatch(morph) { return MORPH_SHELL[morph] || 'var(--text)'; }
 
-function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = undefined, thumb = null) {
+function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = undefined, thumb = null, spriteRest = false) {
   const src = srcOverride || bhAsset(BH_BY_ID[petId]);
   const c = PET_CROP[petId];
   const worn = petWornLayers(petId, wearOf(wear));
   const tints = petWornTints(petId, wearOf(wear));   // Football kit, 2026-09-04: per worn layer, or null
   if (!c) return `<span class="petcrop" style="width:${px}px;height:${px}px"><img src="${src}" style="width:${px}px;height:${px}px;object-fit:contain" alt=""></span>`;
-  const FILL = 0.82;                                   // match the animated pets' ~63px fill in a 76px box
-  const cw = c.x1 - c.x0, ch = c.y1 - c.y0;            // content size (fraction of the square)
-  const imgSize = (px * FILL) / Math.max(cw, ch);      // displayed size of the whole square image
+  const cw = c.x1 - c.x0, ch = c.y1 - c.y0;
+  // Neutral rest, visible body width (largest alpha > 8 component), within 1%.
+  // These species' 640px masters and native layers have equal body widths.
+  // Use the animation stage's pixels-per-CSS-pixel for the whole registered
+  // static canvas, including garments. Portraits keep their existing crop.
+  // Stage widths are checked against petanim.js and app.css by the PURE guard.
+  const restStage = spriteRest && { C1: 222, C3: 261, C4: 273, CX: 273 }[petId];
+  const FILL = 0.82;
+  const imgSize = restStage ? px * 640 / restStage : (px * FILL) / Math.max(cw, ch);      // displayed size of the whole square image
   const tx = (px - cw * imgSize) / 2 - c.x0 * imgSize; // center content horizontally
   const ty = ground ? (px - c.y1 * imgSize)            // seat content bottom on the floor
                      : ((px - ch * imgSize) / 2 - c.y0 * imgSize); // else center (hover)
@@ -818,7 +824,7 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
     // the creature tiny inside its box because the source art sits small in a 640²
     // canvas: a shiny lizard came out a fraction of the normal one.
     // No morph tint: shiny always forces base (rule 0.1/1.2).
-    return `<div class="pet-shiny-wrap">${croppedPetImg(petId, S2, ground, `assets/bh/C/shiny/${petId}.png`, wear, thumb)}<span class="shiny-spark">${sparkIco(14)}</span></div>`;
+    return `<div class="pet-shiny-wrap">${croppedPetImg(petId, S2, ground, `assets/bh/C/shiny/${petId}.png`, wear, thumb, true)}<span class="shiny-spark">${sparkIco(14)}</span></div>`;
   }
   /* Kennel palettes: shiny forces base (rule 0.1/1.2, redundant defense against
      any caller that somehow got here with isShiny true -- see the branches
@@ -826,18 +832,9 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
      way `shiny` falls back to S.shinyPets two lines up. */
   const petMorph = isShiny ? 'base' : (morph !== undefined ? morph : ((S.petMorphs && S.petMorphs[petId]) || 'base'));
   const morphSrc = morphAsset(petId, petMorph);
-  /* A MORPHED PET FORCES THE STATIC CANVAS, same trade as wearsFootball just
-     above (2026-09-04) and for the identical reason: scripts/build-pet-morphs-v2.py
-     recolors the flat master (assets/bh/C/<id>.png), not the animated species'
-     separate layer PNGs (body, eyes, drops, shadow), so there is no morphed art
-     for the animated stack to draw. Kennel Phase A's own CSS filter used to
-     paint the animated branch too, which is exactly how the reported bug
-     ("ember reads blue on the Beardie") reached C4's lizard: that filter is
-     gone (see js/pets.js morphAsset), so falling back to the animated layers
-     for a morphed pet would silently un-fix it. While morphed, the animated
-     species (cloud/catfish/lizard) stop moving; base morph animates exactly
-     as it always did. */
-  return (wearsFootball || morphSrc ? null : animatedPetHtml(petId, S2)) || croppedPetImg(petId, S2, ground, morphSrc || null, wear, thumb);
+  // Pass the colour through to the selective layer resolver. Football retains
+  // its registered static canvas; unsupported layer sets use the morph master.
+  return (wearsFootball ? null : animatedPetHtml(petId, S2, petMorph)) || croppedPetImg(petId, S2, ground, morphSrc || null, wear, thumb, true);
 }
 // PORTRAIT: always content-cropped + vertically CENTERED in its box (no animation,
 // no floor-seating), so a pet reads the same in a roster tile regardless of whether

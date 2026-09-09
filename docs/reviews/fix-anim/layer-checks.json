@@ -1,0 +1,52 @@
+{
+  "cloud": {
+    "body-noeyes": {
+      "transferred": 9970,
+      "ink_kept": 5487,
+      "repair_pixels": 2510,
+      "max_repair_residual": 6.322103815724915
+    },
+    "eyes": {
+      "transferred": 1510,
+      "ink_kept": 940,
+      "repair_pixels": 0,
+      "max_repair_residual": 0.0
+    },
+    "drop": {
+      "transferred": 203,
+      "ink_kept": 0,
+      "repair_pixels": 0,
+      "max_repair_residual": 0.0
+    }
+  },
+  "body_widths": {
+    "C1": {
+      "static": 181,
+      "animated": 181
+    },
+    "C3": {
+      "static": 221,
+      "animated": 221
+    },
+    "C4": {
+      "static": 221,
+      "animated": 221
+    },
+    "CX": {
+      "static": 221,
+      "animated": 221
+    }
+  },
+  "rejected_layer_models": {
+    "C3": {
+      "layer": "catfish/bead.png",
+      "unexplained": 17,
+      "required": 0
+    },
+    "C4": {
+      "layer": "lizard/tongue.png",
+      "unexplained": 150,
+      "required": 0
+    }
+  }
+}
