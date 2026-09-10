@@ -46,7 +46,13 @@ a real browser download. No native build was compiled; the native sources ship i
 one is.
 
 
-Changelog item: An early, unfinished Studio sits behind a plain text link in the Wardrobe. It is here to be tried, not finished: saving a picture needs a newer app build on phones.
+SILENT BUILD: no changelog entry, by Tom's instruction 2026-09-10, "dont publicize it in
+patch notes for now". v551 is declared in SILENT_BUILDS (js/changelog.js), so no player
+is told the Studio exists and the What's New dot does not move. This section is therefore
+the ONLY record of what shipped in v551, which is why claim-evidence-lint now requires a
+silent build to have one.
+
+What shipped: an early, unfinished Studio behind a plain text link in the Wardrobe.
 
 1. PROOF: studio-audit.mjs | REACH: The production Wardrobe entry expression and its click handler are executed and the `#/studio` route is asserted; the plain-text style contract rejects loud, missing and accent-filled entry mutations, so the entry cannot drift into a promoted button without going red. Backdrop precedes the preview and the exit is the same quiet text control beside the heading. Captions are a fixed select pool; there is no free-text field. Real 1080x1920 PNG composition, decoding, byte-for-byte determinism across repeated renders, layer order including both hands, shiny/base pixel difference, the safe-zone rejection of a flush-to-bottom layout, and the privacy boundary (health and profile fields rejected) all run against real catalogue art and a real PNG encoder. On save, a native bridge double WITHOUT the plugin proves the handler reports that this app build cannot save yet, keeps the preview and the draft, and makes no download request and no success claim; browsers request a PNG download without claiming a completed write. Not proven here: rendered prominence, touch reach, real Photos permission sheets, the Android picker, and any native build. The frame catalogue is empty by design and a forced frame export is rejected.
 

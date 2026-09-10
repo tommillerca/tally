@@ -74,6 +74,24 @@ const claims = readFileSync(claimsPath, 'utf8');
   ok('CLAIMS docs/CLAIMS.md carries no merge conflict markers', markers.length === 0,
     markers.length ? `${markers.length} marker(s) at line(s) ${markers.map(([, n]) => n).join(', ')}` : 'clean');
 }
+/* SILENT BUILDS STILL OWE EVIDENCE (2026-09-10). A build in SILENT_BUILDS
+   (js/changelog.js) ships with no CHANGES entry, so `newest` above is an OLDER
+   build and nothing here would ever look at the silent one. Not announcing a
+   build is not the same as not having to say what it did: the section in
+   docs/CLAIMS.md is the release record, and it is the ONLY record a silent
+   build has. Graded here so "silent" can never become "unrecorded". */
+{
+  const silentMatch = readFileSync(join(root, 'js/changelog.js'), 'utf8')
+    .match(/export const SILENT_BUILDS = \[([^\]]*)\]/);
+  const silent = silentMatch ? silentMatch[1].split(',').map(x => x.trim()).filter(Boolean).map(Number) : [];
+  const missing = silent.filter(n => !claims.split(/^##\s+/m).some(b => b.startsWith(`v${n}`)));
+  ok('CLAIMS every silent build still carries its own section in docs/CLAIMS.md',
+    missing.length === 0,
+    silent.length
+      ? (missing.length ? `missing: ${missing.map(n => `v${n}`).join(', ')}` : `${silent.length} silent build(s) recorded`)
+      : 'no silent builds declared');
+}
+
 const block = claims.split(/^##\s+/m).find(b => b.startsWith(`v${newest.n}`));
 ok(`CLAIMS docs/CLAIMS.md has a section for v${newest.n}`, !!block,
   block ? 'found' : `add "## v${newest.n}" with one line per item`);
