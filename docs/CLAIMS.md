@@ -1,6 +1,6 @@
 # What each patch note claims, and what backs it
 
-## vNEXT
+## v544 (2026-09-10)
 
 Changelog item: The off-hand brushes and spades are held properly now.
 
