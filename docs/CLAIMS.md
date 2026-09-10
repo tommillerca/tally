@@ -30,7 +30,7 @@ The operator's four rendered search rounds selected these offsets, superseding t
 
 Validation for this pending change: `node tests/unit.test.js` exits 0 with `384 passed, 0 failed`. All 159 PURE entries ran: 158 exit 0, `facegate-audit.mjs` exits 1 on the four requested offsets (brush overlap 28.53%/28.52%, spades 4.26%/4.44%, against 2%). All-PURE-green acceptance is unmet. Fresh renderer capture is blocked by `listen EPERM`; retain the exact offsets for independent review and reconcile the source facegate with rendered face visibility before assembly.
 
-## vNEXT
+## v545 (2026-09-10)
 
 Changelog item: Crew now says "Online now" for contacts under six minutes old, while older and unavailable sync times keep their existing wording.
 
