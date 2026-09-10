@@ -11998,7 +11998,9 @@ button.t3-price::before {
    them, not because two rules happen to agree. */
 .fit-chip.studio img, .fit-chip.studio svg { width: 22px; height: 22px; flex: none; }
 /* Studio uses the shipped chip, button and sheet vocabulary. */
-.studio-preview { position: relative; width: min(100%, 360px, calc((100dvh - 300px) * 9 / 16)); aspect-ratio: 9 / 16; margin: 12px auto; background: #F3EFE7; overflow: hidden; touch-action: none; }
+.studio-preview { position: relative; width: min(100%, 360px, calc((100dvh - 300px) * 9 / 16)); aspect-ratio: 9 / 16; margin: 12px auto; background: #F3EFE7; overflow: hidden; touch-action: pan-y; }
+/* Only while a sticker is selected: see updateSelection in js/studio-screen.js. */
+.studio-preview.grabbing { touch-action: none; }
 .studio-preview img { display: block; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
 .studio-screen [hidden] { display: none !important; }
 .studio-controls, .studio-sticker-grid { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
@@ -12009,7 +12011,16 @@ button.t3-price::before {
 .studio-screen > .primary, .studio-text-sticker { background: var(--coral); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh); font-family: var(--display); }
 .studio-text-sticker { font-size: var(--fs-5); }
 .studio-tray { position: fixed; left: 50%; transform: translateX(-50%); width: min(600px, calc(100% - 32px)); bottom: calc(80px + var(--sab)); z-index: 5; background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius); padding: 12px; box-shadow: var(--sh); margin-top: 16px; }
-#studioTrayToggle { width: 100%; touch-action: none; }
+/* THE HANDLE IS ALWAYS ABOVE THE TAB BAR. It used to sit in normal flow while
+   the tray was closed, which put it at y 821..877 on a 430x932 phone against a
+   tab bar starting at 852: overlapping the nav by 25px, below the fold, and the
+   only door into the stickers. Fixed like the open tray, so the one control the
+   screen exists for is never underneath the navigation. */
+#studioTrayToggle { width: 100%; touch-action: manipulation; }
+.studio-tray:not([data-open="true"]) {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(80px + var(--sab)); width: min(600px, calc(100% - 32px)); z-index: 5;
+}
 #studioTrayBody { max-height: 48dvh; overflow-y: auto; overscroll-behavior: contain; padding: 0 4px 12px; }
 .studio-screen summary { cursor: pointer; padding: 12px 0; font-family: var(--display); font-size: var(--fs-5); }
 #studioSelection { position: absolute; border: 2px dashed var(--ink); outline: 1px solid var(--coral); pointer-events: none; }

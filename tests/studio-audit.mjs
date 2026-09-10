@@ -336,7 +336,13 @@ export async function checkStudio() {
   const elements = new Map(); let markup;
   const el = { set innerHTML(html) {
     markup = html;
+    // classList: v557 made the stage claim the touch gesture only while a sticker
+    // is selected, so the real handler toggles a class here. Executing the
+    // production route needs the collaborator; the contract itself is graded in
+    // tests/studio-v3-audit.mjs, which proves it red against v556.
     for (const [, id] of html.matchAll(/id="([^"]+)"/g)) elements.set(id, { disabled: false, hidden: new RegExp(`id="${id}"[^>]*\\bhidden`).test(html), style: {}, attributes: {}, decode: async () => {},
+      classList: (() => { const c = new Set(); return { add: x => c.add(x), remove: x => c.delete(x), contains: x => c.has(x),
+        toggle: (x, on) => { const want = on === undefined ? !c.has(x) : !!on; want ? c.add(x) : c.delete(x); return want; } }; })(),
       setAttribute(k, v) { this.attributes[k] = v; }, getContext() { return (this.canvas ||= createCanvas(1080, 1920)).getContext('2d'); }, setPointerCapture() {}, focus() {},
       showModal() { this.open = true; }, close() { this.open = false; },
       getBoundingClientRect() { return { left: 0, top: 0, width: 1080, height: 1920 }; } });

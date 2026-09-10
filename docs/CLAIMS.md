@@ -1,5 +1,58 @@
 # What each patch note claims, and what backs it
 
+## v557 (2026-09-10)
+
+Tom, 2026-09-10: "the studio is unseable in it's current state it's actually bricked."
+
+He is right, and I shipped it in v556. Two independent causes, both mine, both found by
+measuring in a browser rather than by any guard:
+
+1. **The only door to the stickers was underneath the navigation.** `.studio-tray` became
+   `position: fixed` above the tab bar only when `[data-open="true"]`. Closed, the handle
+   sat in normal flow at the end of the content: measured at 430x932 it landed at
+   y 821..877 against a tab bar whose top is 852. It overlapped the navigation by 25px and
+   sat below the fold. On a phone with a home indicator, tapping there hits the nav and
+   navigates away.
+2. **The page could not be scrolled to reach it.** `.studio-preview` carried a blanket
+   `touch-action: none`, and it measures 398x708 inside a 430x932 viewport, so roughly
+   three quarters of the screen refused the scroll gesture.
+
+Either alone is bad. Together they are a dead end, which is exactly what "bricked" means.
+
+The fix separates the two needs rather than choosing between them. The closed handle is
+fixed above the tab bar with the same `calc(80px + var(--sab))` the open tray already used,
+so it clears the navigation AND the safe-area inset. `touch-action` is `pan-y` by default,
+so the page scrolls over the picture, and becomes `none` only while a sticker is actually
+selected, because pinch and twist do need the raw pointer stream. `updateSelection` toggles
+a `grabbing` class from the real selection state, so the block is never left on.
+
+Measured after the fix, same viewport: the handle sits at y 795..852 against a tab bar top
+of 852. `overlapsNav: false`, and it hit-tests to itself.
+
+Changelog item: The Studio was unusable: the button that opens the sticker tray sat underneath the bottom navigation, and the picture blocked scrolling, so there was no way to reach it. Both are fixed.
+
+1. PROOF: studio-v3-audit.mjs | REACH: two new rows guard the two causes separately, so
+   fixing one can never mask the other. The first requires `.studio-preview` to declare a
+   touch-action, to NOT be `none`, to be `pan-y`, requires `.studio-preview.grabbing` to be
+   `none`, and requires the production source to toggle that class from `selected >= 0`;
+   the handler test then executes the real pointer routes and asserts the class is on with
+   a sticker selected and off after tapping empty canvas, so the DOM double is a check
+   rather than a hole. The second requires the CLOSED tray to be `position: fixed` at
+   `calc(80px + var(--sab))`, which is the tab bar plus the safe-area inset.
+   **Both rows are proven RED against v556's real `app.css` and `js/studio-screen.js`,
+   taken from commit 79eadc5e**, not against a synthetic mutation. Not proven here:
+   anything about how it feels under a thumb, which stays the operator's.
+
+### Why no guard caught this
+
+Worth writing down. Every audit was green on v556 and the screen was unusable. The browser
+audit that grades reachability, `wardrobe-commit-reach-audit`, grades the DRESSING ROOM's
+commit bar and knows nothing about the Studio. Nothing in the tree asked "is the control
+this screen exists for actually reachable", which is the same question that audit was
+written to answer for a different screen. The two rows above are the Studio's version of
+it, and the pattern is worth repeating on any screen whose primary control is fixed.
+
+
 ## v555 (2026-09-10)
 
 ### The silent-build mechanism is removed, and why

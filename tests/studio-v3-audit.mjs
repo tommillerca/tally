@@ -20,6 +20,12 @@ const original = async (name, overrides = {}) => {
 };
 const frozen = await original('compositor');
 const baseline = !!process.env.STUDIO_V3_BASELINE;
+// Reachability rows read the shipped CSS and screen source directly; in baseline
+// mode they read the frozen screen source, so the rows go red against v556.
+const css = readFileSync(new URL('app.css', root), 'utf8');
+const app_screen = baseline
+  ? readFileSync(new URL('docs/reviews/studio-v3/baseline-screen.txt', root), 'utf8')
+  : readFileSync(new URL('js/studio-screen.js', root), 'utf8');
 const studio = baseline ? frozen.module : await import('../js/studio.js');
 const { mountStudio } = baseline ? (await original('screen', { './studio.js': frozen.url })).module : await import('../js/studio-screen.js');
 const { createCanvas, loadImage, GlobalFonts } = await importAuditPackage('@napi-rs/canvas');
@@ -166,7 +172,13 @@ await check('production pointer and keyboard routes change stored transforms and
     markup = html;
     for (const [, id] of html.matchAll(/id="([^"]+)"/g)) {
       const canvas = createCanvas(1080, 1920);
+      // classList: the real handler toggles `grabbing` on the stage so the canvas
+      // only claims the touch gesture while a sticker is selected (v557). Executing
+      // the production route needs the real collaborator; asserted below.
+      const classes = new Set();
       elements.set(id, { style: {}, hidden: new RegExp(`id="${id}"[^>]*\\bhidden`).test(html), disabled: false, attributes: {}, captures: new Set(),
+        classList: { add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c),
+          toggle: (c, on) => { const want = on === undefined ? !classes.has(c) : !!on; want ? classes.add(c) : classes.delete(c); return want; } },
         get width() { return canvas.width; }, set width(v) { canvas.width = v; }, get height() { return canvas.height; }, set height(v) { canvas.height = v; },
         canvas, getContext: () => canvas.getContext('2d'), setAttribute(k, v) { this.attributes[k] = v; }, decode: async () => {}, focus() {},
         setPointerCapture(id) { this.captures.add(id); }, hasPointerCapture(id) { return this.captures.has(id); }, releasePointerCapture(id) { this.captures.delete(id); },
@@ -216,13 +228,42 @@ await check('production pointer and keyboard routes change stored transforms and
     key(']'); await settle(); assert.ok(Math.abs(draft.stickers[0].rotation - 105) < 1e-6);
     key('-'); await settle(); assert.equal(draft.stickers[0].size, 560);
     key('ArrowLeft'); await settle();
+    assert.equal(stage.classList.contains('grabbing'), true, 'a selected sticker makes the canvas claim the gesture');
     stage.onpointerdown(event(4, 10, 10)); assert.equal(q('studioSelection').hidden, true, 'empty canvas deselects');
+    assert.equal(stage.classList.contains('grabbing'), false, 'deselecting gives the scroll gesture back to the page');
     [x, y] = hit(); stage.onpointerdown(event(5, x, y)); stage.onpointermove(event(5, 540, 1780));
     assert.equal(q('studioBin').attributes['data-active'], 'true'); stage.onpointerup(event(5, 540, 1780)); await settle();
     assert.equal(draft.stickers.length, 0, 'drag to bin deletes');
     q('studioText-feed').onclick(); await settle(); key('Delete'); await settle(); assert.equal(draft.stickers.length, 0);
     console.log('HANDLERS stored move, live pixels, pinch 400->600, twist 0->90, rebase, cancel, capture loss, bin, keyboard all exercised');
   } finally { dispose(); }
+});
+/* REACHABILITY, added 2026-09-10 after v556 shipped a Studio Tom called
+   "actually bricked". Two independent causes, both source-level, both guarded
+   here so neither can come back quietly:
+
+   1. `.studio-preview` carried a blanket `touch-action: none`. It fills 398x708
+      of a 430x932 phone, so three quarters of the screen refused to scroll.
+   2. The tray handle sat in normal flow while the tray was closed, landing at
+      y 821..877 against a tab bar that starts at 852. It overlapped the
+      navigation by 25px, below the fold, and it is the ONLY door to the
+      stickers. Between them the screen was a dead end.
+
+   These are CSS contracts, not rendered claims: the browser measurement that
+   found this lives with the operator. Both rows go red against v556. */
+await check('REACH the canvas leaves the scroll gesture alone unless a sticker is selected', () => {
+  const rule = css.match(/\.studio-preview \{([^}]*)\}/)?.[1] || '';
+  assert.ok(rule.includes('touch-action'), 'the preview must state a touch-action');
+  assert.doesNotMatch(rule, /touch-action:\s*none/, 'a blanket touch-action:none blocks the page scroll over most of the screen');
+  assert.match(rule, /touch-action:\s*pan-y/, 'vertical scrolling must survive over the picture');
+  const grab = css.match(/\.studio-preview\.grabbing \{([^}]*)\}/)?.[1] || '';
+  assert.match(grab, /touch-action:\s*none/, 'pinch and twist still need the raw stream while a sticker is selected');
+  assert.match(app_screen, /classList\.toggle\('grabbing', selected >= 0\)/, 'the class must follow the real selection state');
+});
+await check('REACH the tray handle is never underneath the tab bar', () => {
+  const closed = css.match(/\.studio-tray:not\(\[data-open="true"\]\) \{([^}]*)\}/)?.[1] || '';
+  assert.match(closed, /position:\s*fixed/, 'the closed handle must not sit in flow below the fold');
+  assert.match(closed, /bottom:\s*calc\(80px \+ var\(--sab\)\)/, 'it must clear the tab bar and the safe-area inset, the same way the open tray does');
 });
 console.log(`${passed} passed, ${failed} failed. Interaction feel is unproven and operator-owned.`);
 process.exitCode = failed ? 1 : 0;

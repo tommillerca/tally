@@ -168,6 +168,16 @@ export function mountStudio(el, { look, ownedBackdrops, crew = [], draft, onBack
   let liveBounds = null;
   const updateSelection = () => {
     q('studioStickerTools').hidden = selected < 0;
+    /* THE CANVAS ONLY CLAIMS THE GESTURE WHILE IT HAS SOMETHING TO MOVE.
+       Tom, 2026-09-10: "the studio is unseable in it's current state it's
+       actually bricked". `.studio-preview` shipped with a blanket
+       `touch-action: none`, and it fills 398x708 of a 430x932 phone, so
+       three quarters of the screen refused to scroll. The one control that
+       opens the sticker tray sits below the fold, so a player could neither
+       reach it nor scroll to it: the screen was a dead end. Pinch and twist
+       still need the raw stream, so the block is applied only while a sticker
+       is actually selected, and released the moment nothing is. */
+    q('studioStage').classList.toggle('grabbing', selected >= 0);
     const box = (liveBounds || result?.bounds)?.find(b => b.id === `sticker-${selected}`), node = q('studioSelection');
     node.hidden = !box;
     if (box) Object.assign(node.style, { left: `${box.x / 10.8}%`, top: `${box.y / 19.2}%`, width: `${box.width / 10.8}%`, height: `${box.height / 19.2}%` });
