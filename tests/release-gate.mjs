@@ -381,6 +381,7 @@ PURE.push('collection-cell-audit.mjs'); // R6-C1/C5: shared cell identity, hosti
 PURE.push('r6-merge-audit.mjs'); // R6-E2: both offline buyers, import directions/modes, two wallet sizes, refund replay and encrypted 409 recovery; no sockets.
 PURE.push('r6-guards-audit.mjs'); // CONTROL: missing finding coverage and scroll fixture state cannot disappear.
 PURE.push('r6-app-audit.mjs'); // R6: rendered Breed consent, durable room counts, cell names, incubator availability and interrupted invitations; Node services/DOM doubles.
+PURE.push('crew-presence-audit.mjs'); // Frozen Crew presence: six-minute boundary and unchanged stale/unknown clocks.
 PURE.push('crew-capture-node-audit.mjs'); // Fixture routing only; rendered Crew geometry belongs to BROWSER.
 PURE.push('pet-parity-guard.mjs'); // Every species reports an identical multiplier and tilt; red on the 1.00-1.36 spread.
 PURE.push('verify-tail-audit.mjs'); // Frozen tail: honest anchor comments and missing-acorn exit 97.
@@ -729,6 +730,7 @@ requireLabFindingCoverage(onDisk, PURE);
  * 1, in the gate itself. The complement cannot be computed AND have teeth. One line
  * per file is the price, and it puts each omission on the record as a decision. */
 const DECLARED = {
+  'crew-order-browser-audit.mjs': ['full', 'Operator CDP browser required: capture harness measures fan before notifications, rejects the old rendered order and captures reachable gift OPEN. No listener in sandbox.'],
   'hand-registration-audit.mjs': ['skip', 'a source DIAGNOSTIC, not a guard: it scores 640x640 master ink against B0-1 in SOURCE coordinates, which is not the shipping avatar renderer, so it cannot prove on-body alignment. v536 was derived from exactly this measure, passed it, and shipped art Tom reported as worse on the live build. Moved out of PURE during the v536 revert because the restored pre-v536 brushes fail its historical floor and a permanently red guard blocks every release. It still prints its census for reference. THE REAL GUARD IS OWED: it must grade RENDERED pixels from the avatar, and the off-hand misalignment stays OPEN until it exists.'],
   'reachable-density-model.mjs': ['skip', 'a balance MODEL, not a guard: the shipped route scores 0.568 spawns/fix against a floor of 1 (N=400). This is the finding rather than a failure; the spacing decision is deferred by the product owner, Tom. Reports the gap and synthetic controls, asserting nothing about the app. reachable-density-audit.mjs guards the shared meter in PURE.'],
   'serve-tree-identity-audit.mjs': ['full', 'R3: binds real Python/Node loopback sockets to prove wrong-tree refusal, read-only serving and child exit. Includes the server exit proof moved out of unit.test.js; cannot run in socket-denied PURE environments.'],
