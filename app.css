@@ -5118,7 +5118,14 @@ body::before {
 }
 .reveal-stamp.gold { color: var(--gold); }
 .reveal-sub { font-size: var(--fs-2); color: var(--text-3); text-align: center; margin-top: 5px; }
-.reveal-foot { margin-top: auto; width: 100%; }
+/* TWO BUTTONS, AND THE SECOND ONE ARRIVES LATE. Tom, 2026-09-10: "when you
+   hatch a pet the buttons for take home and open lab are way too close
+   together". The markup ships one button; js/app.js appends "Open Laboratory"
+   after the Laboratory snapshot resolves, so the pair only ever exists at
+   runtime and nothing here spaced them. Both are full-width .btn, so they
+   stacked flush. A grid with a gap spaces whatever ends up in it, one button
+   or two, rather than a margin on a button that is created in JS. */
+.reveal-foot { margin-top: auto; width: 100%; display: grid; gap: 9px; }
 .reveal-hint { text-align: center; font-size: var(--fs-1); color: var(--text-3); margin-top: 9px; }
 /* ---------------------------------------------------------------------------
    CRATE CRACK. The crate lands, strains, the lid blows off on an arc, light

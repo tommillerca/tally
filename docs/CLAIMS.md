@@ -1,5 +1,114 @@
 # What each patch note claims, and what backs it
 
+## v555 (2026-09-10)
+
+### The silent-build mechanism is removed, and why
+
+Tom, 2026-09-10: "i think whatever you did to post the studio stuff quietly fully removed
+patchnotes for other parts of the updates. you can just revert it back to how it was
+update with popup for the patch notes."
+
+He is right, and the fault is mine rather than the mechanism's. He asked for one thing to
+stay unlisted, the Studio. I marked four consecutive BUILDS silent instead, so real
+player-facing fixes that merely rode along with the Studio work went unannounced too: the
+confirm bar no longer sitting over the paper doll, the Dressing Room's next-step line, the
+looks counts, the Laboratory icon, the melt copy.
+
+The failure is structural, not a slip. `changelogLatest()` returns the newest `n` in
+CHANGES, `maybeShowWhatsNew` fires only when `changelogUnseen(changelogSeen) > 0`, and a
+silent build moves neither. So the escape hatch did not merely skip one note; it held the
+What's New popup shut for four builds. Making that consequence easy to reach was the
+mistake, so the hatch is gone rather than emptied:
+
+- `SILENT_BUILDS` is deleted from `js/changelog.js`.
+- `tests/version-stamp-audit.mjs` and `tests/claim-evidence-lint.mjs` are restored to
+  their pre-v551 form, taken from 93c2817d. version-stamp is back to its 4 checks and
+  once again requires the newest changelog entry to carry the build number, which is what
+  forces every future build to say something.
+
+`changelogLatest()` is 555, so the popup fires for anyone whose `changelogSeen` is 550.
+
+Everything from v551 through v554 that a player can see is announced in the v555 entry.
+
+Changelog item: <b>The Studio.</b> Open it from the Wardrobe: pose your Bonehead and your pet on a backdrop, give them a line in a speech bubble, and drop in monster stickers, your Crew, or a slogan. Move, resize and flip anything you place. Hide the controls and screenshot to save and share it.
+
+1. PROOF: studio-audit.mjs | REACH: shipped across v551 to v554 and recorded in this file
+   under each. The compositor is proved on real decoded 1080x1920 PNGs: deterministic
+   bytes, layer order, exact mirrored pixels, order-dependent output, transform bounds,
+   every placed sticker's output palette a subset of its input, and the mark's contrast
+   measured against the pixels behind it across 69 placement x backdrop pairs, proven RED
+   against the frozen v553 source. Operator renders at 430x932 measured 44.5% ink inside
+   STUDIO_SAFE and the wordmark at 12.40:1. Native Photos save and the Android picker
+   remain unproven; screenshot mode is the shipped path and it is what this note promises.
+
+Changelog item: The Wear it bar in the Dressing Room stays out of the way until you have actually chosen a look, instead of sitting over your Bonehead the whole time.
+
+2. PROOF: wardrobe-noise-audit.mjs | REACH: shipped in v552. The resting rule must be
+   `position: static` and must NOT be sticky; the `.armed` rule must be
+   `position: sticky; bottom: 0`. Both halves are asserted so neither can be lost fixing
+   the other, and the ARRIVAL and PREVIEW rows still execute the production renderer and
+   require the resting bar to be present, unarmed, disabled and carrying no commit action.
+   Operator render: static at y=1547 on a 932px viewport at rest, sticky at y=754 armed
+   with the control hit-tested.
+
+Changelog item: The Dressing Room says what the next step is before you pick, and free changes, the look you are wearing and looks you have already paid for now read differently.
+
+3. PROOF: transmog-reach-audit.mjs | REACH: shipped in v550. Executes the production
+   `mogBarHtml` before selection and requires the disabled control to carry no apply
+   action, and executes production `costTag` with each of the four zero-price reasons.
+   Real `transmogPrice` and `applyTransmog` run over in-memory IndexedDB.
+
+Changelog item: The Wardrobe counts the looks you have collected and how many others you could try, with links to the Backpack and the Shop.
+
+4. PROOF: transmog-reach-audit.mjs | REACH: shipped in v550. `wardrobeLookCounts` counts
+   collected catalogue ids rather than rendered colourway families, and its second count
+   uses the picker's own occupied-gear-slot baseline. The route handler invokes the
+   existing Backpack and Shop navigation for both buttons.
+
+Changelog item: The Laboratory has its own icon instead of borrowing a potion bottle.
+
+5. PROOF: stable-rooms-top-audit.mjs, icon-inventory-audit.mjs | REACH: shipped in v552.
+   The Stable rooms audit pins each tile's `src` across 18 rendered cases, so a silent
+   swap back to the shared `potion` vial goes red. Operator render: the three rooms serve
+   `badge-signpost.png`, `lab.png` and `paw.png` at 48x48.
+
+Changelog item: Melting a piece explains what it costs you and that its look stays yours, before you confirm.
+
+6. PROOF: studio-audit.mjs | REACH: shipped in v550. The disclosure is asserted to appear
+   in the gear inspection BEFORE its melt action and in the Salvage Bench before either
+   its empty or populated branch, and the Bone Dust explanation is unconditional. The real
+   melt service is executed and preserves the appearance while consuming the gear.
+
+### Also in this build: the hatch reveal's two buttons
+
+Tom: "when you hatch a pet the buttons for take home and open lab are way too close
+together". `.reveal-foot` was `{ margin-top: auto; width: 100% }` with no spacing at all.
+The markup ships ONE button; `js/app.js` appends "Open Laboratory" after the Laboratory
+snapshot resolves, so the pair only exists at runtime and nothing spaced them. Both are
+full-width `.btn`, so they stacked flush. Now a grid with a 9px gap, which spaces whatever
+ends up in it rather than putting a margin on a button that is created in JavaScript.
+
+### Asked and answered, no change needed: the toxic catfish
+
+Tom: "i just opened a toxic catfish is this because it was an old egg or do you have these
+being released in eggs still? we decided that the only way you get them moving forward is
+through the lab".
+
+It was an old egg. Traced rather than assumed, every path that can mint a pet:
+
+- `eggRow` (js/loot.js) stamps every new egg `morph: 'base', morphPolicy: 'lab-final-v1'`.
+- `hatchEgg` never rolls a morph. It reads `row.morph` off the egg, and shiny forces base.
+- `petInstancePay` defaults `morph = 'base'`, and the crate/grant path calls
+  `addPetInstance(pick.id, {})`, so it takes that default.
+
+So no live path mints a colour outside the Laboratory. An egg granted BEFORE that policy
+still carries the colour it was granted with, and `hatchEgg` deliberately honours it: the
+comment there says the Base-only grant policy never relabels existing rows, which is the
+"nothing a player earned is ever lost" rule. Tom's catfish is one of those in-flight eggs.
+No code change. Recorded here because the answer is a policy, not a coincidence, and the
+next person to ask deserves the trace rather than a second investigation.
+
+
 ## v554 (2026-09-10)
 
 SILENT BUILD. Fixes the invisible BONEHEADZ wordmark shipped knowingly in v553.

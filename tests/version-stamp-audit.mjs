@@ -21,20 +21,6 @@
  *   AGREE    sw.js VERSION, APP_BUILD, the newest changelog entry and
  *            version.json are the same number
  *
- * SILENT BUILDS, added 2026-09-10. A build can legitimately ship with nothing
- * to announce (the Studio half-build: Tom, "dont publicize it in patch notes
- * for now"). Requiring a CHANGES entry for every build turned this guard from
- * "the four stamps agree" into "every build is advertised", which was never its
- * job. A build listed in SILENT_BUILDS (js/changelog.js) is excused from having
- * a CHANGES entry and from NOTHING ELSE:
- *   - sw.js, APP_BUILD and version.json must still agree with each other, so
- *     the half-renumber this whole guard exists for still goes red;
- *   - a build that is NOT listed still needs its own CHANGES entry;
- *   - a listed build must be NEWER than the newest CHANGES entry, so the list
- *     cannot be used to excuse a changelog that has run AHEAD of the stamps,
- *     which is the other half of the v386 shape.
- * Each of those three is proven red below by construction rather than assumed.
- *
  * THE FOURTH STAMP, version.json, IS NOT COSMETIC. It is the service worker's
  * killswitch: sw.js fetches it with cache: 'no-store' on any same-origin GET
  * and, when it names a build other than the running one, calls registration
@@ -96,30 +82,11 @@ ok('REACH the changelog stamp read is the newest entry in the file, not just the
   allN.length > 1 && log && +log[1] === Math.max(...allN),
   `read n: ${log ? log[1] : 'none'}, newest of ${allN.length} entries is ${allN.length ? Math.max(...allN) : 'n/a'}`);
 
-/* The silent list is read out of the file, the same way every other stamp is,
-   so a rename or a delete cannot make this pass by finding nothing. */
-const silentMatch = read('js/changelog.js').match(/export const SILENT_BUILDS = \[([^\]]*)\]/);
-const SILENT = silentMatch ? silentMatch[1].split(',').map(x => x.trim()).filter(Boolean).map(Number) : [];
-
 if (sw && app && log && stamp) {
   const [a, b, c, d] = [sw[1], app[1], log[1], stamp[1]];
-  const silent = SILENT.includes(+a);
-  /* THE TWO HALVES ARE GRADED SEPARATELY. sw.js and APP_BUILD agreeing is the
-     half-renumber check and is never excused. The changelog agreeing is the
-     "was it announced" half, and only that half is excused by SILENT_BUILDS. */
-  ok('AGREE sw.js VERSION and APP_BUILD are the same build',
-    a === b, `sw.js tally-v${a}, APP_BUILD v${b}`);
-  ok(silent
-      ? `AGREE build ${a} is declared silent, so it needs no changelog entry`
-      : 'AGREE the newest changelog entry is this build',
-    silent ? true : b === c,
-    `sw.js tally-v${a}, APP_BUILD v${b}, changelog n: ${c}${silent ? ', SILENT' : ''}`);
-  /* A SILENT BUILD MUST BE AHEAD OF THE CHANGELOG, NEVER BEHIND IT. Listing an
-     OLD build number would otherwise excuse the mirror image of v386: stamps
-     left behind while the changelog moved on. Silent means "this build added no
-     note", which can only be true of a build newer than the last one that did. */
-  if (silent) ok('REACH a silent build is newer than the newest changelog entry, so the list cannot mask a changelog that ran ahead',
-    +a > +c, `build ${a}, newest changelog entry ${c}`);
+  ok('AGREE sw.js VERSION, APP_BUILD and the newest changelog entry are the same build',
+    a === b && b === c,
+    `sw.js tally-v${a}, APP_BUILD v${b}, changelog n: ${c}`);
   /* NAMED SEPARATELY FROM THE OTHER THREE, on purpose. A renumber that misses
      version.json and a renumber that misses app.js have the same shape but very
      different consequences (see the header), and a red that says "the stamps

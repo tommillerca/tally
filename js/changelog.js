@@ -5,37 +5,19 @@
 // Pending train notes. The operator assigns a build number and moves these
 // into CHANGES when assembling the release. No version stamp is advanced here.
 export const NEXT_CHANGES = [
-  // SILENT Studio round 2 pending review: warm-ink wordmark backing, measured contrast,
-  // artwork-aware placements. Keep UNLISTED; operator assigns the silent build.
-  // SILENT Studio v2 pending operator numbering. Keep unlisted in player patch notes.
-  // Larger figures, speech-bubble positions, placed monster/Crew/text stickers, screenshot mode.
 ];
 
-/* BUILDS THAT SHIP WITH NO PLAYER-FACING NOTE.
- *
- * Tom, 2026-09-10, on the Studio half-build: "dont publicize it in patch notes
- * for now a simple entry in wardrobe i can test would be great". A build can
- * legitimately have nothing to announce -- something behind a quiet entry, put
- * there to be tried -- and until now tests/version-stamp-audit.mjs forced one
- * anyway, because it required the newest CHANGES entry to carry the build
- * number. That turned "the four stamps agree" into "every build is advertised",
- * which was never the rule it exists to enforce.
- *
- * Listing a build here excuses it from having a CHANGES entry, and NOTHING
- * else. sw.js, APP_BUILD and version.json must still agree with each other, so
- * the half-renumber this guard was written for (v391, v386) still goes red;
- * a build NOT listed here still needs its entry; a listed build must still be
- * NEWER than the newest CHANGES entry, so this cannot be used to hide a
- * changelog that has run ahead of the stamps; and it must still carry its own
- * section in docs/CLAIMS.md, which tests/claim-evidence-lint.mjs enforces.
- * All four of those are proven red in the audits themselves.
- *
- * The dot: changelogLatest reads CHANGES, so a silent build moves no "new since
- * you last looked" dot. That is the point -- there is nothing for a player to
- * go and read. */
-export const SILENT_BUILDS = [551, 552, 553, 554];
 
 export const CHANGES = [
+
+  { n: 555, date: '2026-09-10', title: 'The Studio, and a Wardrobe that behaves', items: [
+    '<b>The Studio.</b> Open it from the Wardrobe: pose your Bonehead and your pet on a backdrop, give them a line in a speech bubble, and drop in monster stickers, your Crew, or a slogan. Move, resize and flip anything you place. Hide the controls and screenshot to save and share it.',
+    'The Wear it bar in the Dressing Room stays out of the way until you have actually chosen a look, instead of sitting over your Bonehead the whole time.',
+    'The Dressing Room says what the next step is before you pick, and free changes, the look you are wearing and looks you have already paid for now read differently.',
+    'The Wardrobe counts the looks you have collected and how many others you could try, with links to the Backpack and the Shop.',
+    'The Laboratory has its own icon instead of borrowing a potion bottle.',
+    'Melting a piece explains what it costs you and that its look stays yours, before you confirm.',
+  ] },
 
   { n: 550, date: '2026-09-10', title: 'A clearer Dressing Room', items: [
     'Wear it now shows the next step before you choose a look. Free changes, the look you are wearing, and paid looks have distinct labels.',
