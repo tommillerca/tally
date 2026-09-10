@@ -9,6 +9,71 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 📝 Step race: no progress bars, no rank line — BUG (confirmed on production, NOT fixed)
+
+Tom, 2026-09-10: "the progress in the step race isnt showing".
+
+**Root cause, measured on the live D1 board, not reasoned from code.** `js/app.js`
+hydrateRace computes
+
+```js
+const comparisonsFresh = (race.players || []).every(p => onlineLabel(p.seenAt).fresh);
+```
+
+`onlineLabel().fresh` is "last_seen within 24 hours". It is an ALL-OR-NOTHING gate over
+the whole board, and everything a player reads as progress hangs off it:
+
+- every lane's bar width is `comparisonsFresh && lead > 0 ? p.steps / lead * 100 : 0`,
+  so ONE stale racer forces **every** bar on the board to 0%;
+- the track becomes `.race-pending-track` for everyone;
+- the standing line becomes "Standings await recent updates." instead of "You are Nth,
+  N behind X";
+- every lane prints "Progress comparison awaits recent syncs.";
+- the `race-gap` line disappears entirely.
+
+The board query (`server/src/index.js`, GET /steps/week) keeps any non-test racer with
+`week_key = <this week>` and `week_steps > 0` for the WHOLE week. Anyone who walks on
+Monday and then stops is on the board until Sunday, and goes stale after 24 hours. So on
+any board with more than a handful of players this gate is false essentially always, and
+the failure is permanent rather than transient.
+
+**Production evidence, week 2026-09-04, read 2026-09-10 ~16:55 UTC (read-only D1):**
+
+| # | name | steps | age (h) | fresh |
+|---|---|---:|---:|---|
+| 1 | Massive Phalange | 47,654 | 2.1 | yes |
+| 2 | Chiseled Goblin | 34,533 | 0.1 | yes |
+| 3 | Massive Horn | 31,938 | 13.3 | yes |
+| 4 | Savage Coccyx | 17,265 | 20.9 | yes |
+| 5 | Feisty Fang | 12,488 | 11.8 | yes |
+| 6 | Bony Wrecker | 7,044 | 99.3 | **no** |
+| 7 | Withered Lich | 5,515 | 19.6 | yes |
+| 8 | (no name) | 5,312 | 119.8 | **no** |
+| 9 | Massive Coccyx | 2,861 | 16.5 | yes |
+| 10 | Chrome Horn #8 | 1,455 | 13.0 | yes |
+| 11 | Dusty Boneyard #24 | 245 | 145.9 | **no** |
+
+11 rows, 3 stale, so `every(fresh)` is false and every one of those 11 bars renders at 0%.
+Three idle accounts are blanking the board for eight active racers.
+
+The gate is not wrong to exist: it was written so a stale rival's bar cannot imply a live
+comparison. It is wrong in SCOPE. One racer's staleness is a fact about that racer.
+
+**Proposed fix, not built, needs Tom's call.** Move freshness from the board to the lane:
+
+1. Each lane's bar and per-lane note key off that lane's OWN `seenAt`. A fresh racer gets
+   a real bar; a stale one keeps the neutral pending rail and its own "awaiting sync" note,
+   so nothing claims a live number that is not one.
+2. The standing line and the `race-gap` line are about YOU, so gate them on your own row's
+   freshness (and, for the gap, the row directly above), not on the whole board.
+3. `snapshotNotice` already says "Showing last shared snapshots" for the card as a whole
+   and stays as it is; the digits beside each name are already drawn for stale rows today,
+   so drawing the same number as a bar is no less honest than printing it.
+
+Verification this needs before shipping: a guard that builds a board with one stale row and
+asserts the fresh lanes still render a non-zero bar, proven red against the current
+`every()` gate; plus a browser render of the card at 430x932 with a mixed-freshness board.
+
 ## 📝 QA round 34 P0, restore latch — PARTIAL, (a)+(b) SHIPPED, (c) FEATURE (not built)
 
 The bug: every fresh install restored its own cloud backup back over itself on
