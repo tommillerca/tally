@@ -75,7 +75,10 @@ function room() {
 function fits(fitList) {
   return vm.runInNewContext(cut('    const fitRail =', '\n    content.innerHTML =') + '\nfitRail;', {
     fitList, fitPrices: fitList.map(() => 0), fitThumbArt: () => null, S: {},
-    esc: String, MAX_FITS: 6, stripPlan: { slots: [], mogs: [] }, ICONS: {},
+    esc: String, MAX_FITS: 6, stripPlan: { slots: [], mogs: [] },
+    // 2026-09-10: the Studio entry moved into this rail, so executing the real
+    // renderer now needs the real collaborators. Asserted below, not just stubbed.
+    pixCur: () => '<img class="ico-pix" alt="">', ICONS: { camera: () => '<svg class="ico"></svg>' },
   });
 }
 const instruction = 'Tap a fit to wear it. A fit brings its gear back to empty slots and never bumps gear you are already wearing. Long-press a fit to rename or bin it.';
@@ -124,10 +127,23 @@ await test('PREVIEW arms and wires the dock bar, returns it to rest on revert/co
   r.ctx.dustBal = 20; await r.pick('other'); assert(r.button);
   assert.equal(r.rebuilds, 0, 'restaging the bar must not trigger a full room rebuild');
   assert.match(app, /\$\{mogBarHtml\(\)\}\s*<\/div>/);
-  assert.match(css, /\.mog-dock > \.look-bar\.mog-bar\s*\{[^}]*position:\s*sticky;\s*bottom:\s*0/);
+  /* IT FLOATS ONLY WHEN ARMED (2026-09-10). Tom: "when you go to the floating
+     wear it is back it's really annoying" -- v550 made the bar render at rest so
+     the second step could be seen at all, and left it sticky, so an inert
+     disabled bar hovered over the paper doll grid for the whole visit. Both
+     halves are asserted here so neither can be lost: at rest it sits in the flow,
+     and the ARMED bar is the one that comes to the thumb. */
+  const restRule = css.match(/\.mog-dock > \.look-bar\.mog-bar \{([^}]+)\}/)?.[1] || '';
+  assert.match(restRule, /position:\s*static/, 'the resting bar must not float over the grids');
+  assert.doesNotMatch(restRule, /position:\s*sticky/, 'the resting bar must not be sticky');
+  const armedRule = css.match(/\.mog-dock > \.look-bar\.mog-bar\.armed \{([^}]+)\}/)?.[1] || '';
+  assert.match(armedRule, /position:\s*sticky;\s*bottom:\s*0/, 'the armed bar must come to the thumb');
 });
 await test('FITS current-fit copy is verbatim inside closed house-style help', () => {
   const html = fits([{ id: 'new', name: 'New', gear: {} }]);
+  // The Studio entry lives in this rail now and must share its chip vocabulary.
+  assert.match(html, /<button class="fit-chip studio" id="wardrobeStudio"/, 'the Studio entry is a chip in the fit rail');
+  assert.ok(html.indexOf('data-fit-save') < html.indexOf('wardrobeStudio'), 'it sits after the save chip');
   help(html, [instruction]); assert(!html.includes(warning));
   assert(!fits([]).includes('<details'), 'no empty help without fits');
 });

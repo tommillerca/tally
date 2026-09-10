@@ -6077,9 +6077,24 @@ body::before {
    and inside the panel it could only float while the panel was already on
    screen, which is the bug. Opaque surface and a top shadow because it is drawn
    over the grids while it floats. */
+/* IT ONLY FLOATS ONCE THERE IS SOMETHING TO CONFIRM. Tom, 2026-09-10: "when you
+   go to the floating wear it is back it's really annoying". v550 made the bar
+   render at rest so the second step was visible at all (it used to appear only
+   after a choice, which is why nobody found it); rendering it at rest and ALSO
+   keeping it sticky meant an inert, disabled bar hovered over the paper doll
+   grid for the whole visit, covering the PANTS and SOCKS tiles while doing
+   nothing. Both notes are satisfied by splitting presence from floating: at
+   rest the bar sits in the flow at the end of the dock, below the look grid,
+   where it explains the next step without occluding anything; the moment a look
+   is chosen it becomes sticky and comes to the thumb, which is the whole reason
+   the sticky behaviour exists. Guarded both ways in tests/wardrobe-noise-audit.mjs. */
 .mog-dock > .look-bar.mog-bar {
-  position: sticky; bottom: 0; z-index: 4;
-  background: var(--surface); box-shadow: 0 -6px 18px rgba(0, 0, 0, .45);
+  position: static; z-index: 4;
+  background: var(--surface);
+}
+.mog-dock > .look-bar.mog-bar.armed {
+  position: sticky; bottom: 0;
+  box-shadow: 0 -6px 18px rgba(0, 0, 0, .45);
 }
 /* a disguised slot on the paper doll: the doll shows the LOOK, this says so.
    Sits bottom-left, clear of the .pd-gear stat strip pinned to the slot's top
@@ -11962,10 +11977,19 @@ button.t3-price::before {
 .studio-screen { max-width: 600px; margin: 0 auto; padding-bottom: 24px; }
 .studio-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .studio-header .page-h1 { margin: 0; }
+/* .studio-link is now ONLY the Studio's own "Back to Wardrobe" control. The
+   Wardrobe entry used to use it too, on its own right-aligned line; it is a
+   .fit-chip in the fit rail now (see below) so it stops being a separate
+   alignment to get wrong. Tom, 2026-09-10: "for now move the studio button
+   somewhere". */
 .studio-link { width: auto; min-height: 44px; padding: 8px; font: inherit; font-size: var(--fs-2); color: var(--text-2); background: transparent; border: 0; box-shadow: none; text-transform: none; letter-spacing: normal; text-decoration: underline; text-underline-offset: 3px; }
 .studio-link:hover { color: var(--text); }
 .studio-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.wardrobe-studio-entry { display: flex; justify-content: flex-end; }
+/* THE CHIP ADDS NOTHING BUT THE ICON'S SIZE. Everything that positions it, its
+   height, radius, border, font and gap, comes from .fit-chip, which is the point:
+   it lines up with "+ Save this fit" and "Take it all off" because it IS one of
+   them, not because two rules happen to agree. */
+.fit-chip.studio img, .fit-chip.studio svg { width: 22px; height: 22px; flex: none; }
 .studio-preview { width: min(100%, 270px); aspect-ratio: 9 / 16; margin: 16px auto; background: var(--bg-card, #eee8dd); border-radius: 12px; overflow: hidden; }
 .studio-preview img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .studio-preview img[hidden] { display: none; }

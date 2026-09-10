@@ -5309,11 +5309,19 @@ test('R23 F8: the fits cap is printed and the save chip stays, ghosted, with its
   const a = app.indexOf('const fitRail = `');
   const b = app.indexOf('\n    content.innerHTML = `', a);
   assert.ok(a > 0 && b > a, 'the fitRail template moved: re-anchor this slice');
-  const rail = n => new Function('fitList', 'fitPrices', 'S', 'fitThumbArt', 'esc', 'ICONS', 'MAX_FITS', 'stripPlan',
+  // 2026-09-10: the Studio entry moved into this rail, so the real renderer now
+  // reaches pixCur and ICONS.camera. Supplied, and asserted below rather than
+  // left as a silent stub.
+  const rail = n => new Function('fitList', 'fitPrices', 'S', 'fitThumbArt', 'esc', 'ICONS', 'MAX_FITS', 'stripPlan', 'pixCur',
     `${app.slice(a, b)}; return fitRail;`)(
     Array.from({ length: n }, (_, i) => ({ id: 'f' + i, name: 'Fit ' + i, gear: {} })), Array(n).fill(0),
-    { fitEdit: null }, () => null, String, { dust: () => '', close: () => '' }, MAX, { slots: [], mogs: [] });
+    { fitEdit: null }, () => null, String, { dust: () => '', close: () => '', camera: () => '<svg class="ico"></svg>' }, MAX, { slots: [], mogs: [] },
+    () => '<img class="ico-pix" alt="">');
   const five = rail(5), six = rail(6);
+  // The Studio entry shares this rail's chip vocabulary, which is the whole
+  // reason it was moved here off its own misaligned line.
+  assert.match(five, /<button class="fit-chip studio" id="wardrobeStudio" type="button">/, 'the Studio entry must be a chip in the fit rail');
+  assert.ok(five.indexOf('data-fit-save') < five.indexOf('wardrobeStudio'), 'the Studio chip sits after the save chip');
   const save = /<button class="fit-chip add" data-fit-save="1"([^>]*)>/;
   assert.match(five, save, 'at 5 fits the save chip is missing');
   assert.ok(!/aria-disabled/.test(five.match(save)[1]), 'at 5 fits the save chip must be enabled');

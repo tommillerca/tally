@@ -16723,7 +16723,6 @@ async function renderCharacter(wrap, tab, opts = {}) {
             Wardrobe, which is also where transmog lives. */''}
     </div>
     ${/* the LOOKS card lived here; it is in the Wardrobe now, see the note above */''}
-    ${tab === 'wardrobe' ? '<div class="wardrobe-studio-entry"><button class="studio-link" id="wardrobeStudio">The Studio</button></div>' : ''}
     <div id="chContent"></div>`;
 
   /* GWART TAKES THE WHOLE HEADER, AND ONLY ON THE SHOP TAB. The panel above
@@ -16790,7 +16789,6 @@ async function renderCharacter(wrap, tab, opts = {}) {
      covered path, not a new one: no second reveal, no per-screen animation, just
      the chips using the machinery that tally/CLAUDE.md says owns this. */
   $$('#chTabs .chip, .ward-looks', body).forEach(c => c.addEventListener('click', () => openCharacter(c.dataset.tab)));
-  $('#wardrobeStudio', body)?.addEventListener('click', () => { location.hash = '#/studio'; });
   const content = $('#chContent', body);
   if (curtains) requestAnimationFrame(() => requestAnimationFrame(() => $$('.curt', body).forEach(x => x.classList.add('open'))));
 
@@ -17120,6 +17118,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
               is supposed to toast the rule. "Replace which one" is design, not
               built here. */''}
         <button class="fit-chip add" data-fit-save="1"${fitList.length >= MAX_FITS ? ' aria-disabled="true"' : ''}>+ Save this fit</button>
+        ${/* THE STUDIO SITS IN THE ROW THAT ALREADY EXISTS. Tom, 2026-09-10: the
+              Wardrobe header is "a mess of misaligned buttons with different fonts
+              sizes placements etc obviously including your entry into the studio,
+              for now move the studio button somewhere". v551 hung it on its own
+              right-aligned line above this row as a bare underlined link, which is
+              one more alignment to get wrong. It is an action on your current look,
+              exactly like the two chips beside it, so it takes the same .fit-chip
+              and inherits their height, radius, font and spacing instead of
+              carrying its own. Camera icon is Tom's own 48px PixelLab art. */''}
+        <button class="fit-chip studio" id="wardrobeStudio" type="button">${pixCur('camera', 24) || ICONS.camera(18)}The Studio</button>
         ${/* A player asked for one tap that clears the doll so a new outfit starts
               from nothing, and Tom's call on 2026-08-22 is that it takes the
               STATTED GEAR too. It UNEQUIPS and nothing else: every piece and every
@@ -17417,6 +17425,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     }));
     // one string, said from both the ghosted chip and captureFit's own `full` (QA round 23 F8)
     const fitsFullMsg = `You can keep ${MAX_FITS} fits. Bin one first.`;
+    $('#wardrobeStudio', content)?.addEventListener('click', () => { location.hash = '#/studio'; });
     $('[data-fit-save]', content)?.addEventListener('click', async () => {
       if (fitList.length >= MAX_FITS) { toast(fitsFullMsg, 2800, { action: true }); return; }
       openTextSheet({ title: 'Name this fit', value: `Fit ${fitList.length + 1}`, cta: 'Save fit' }, async name => {
@@ -20613,7 +20622,11 @@ async function openStable(opts = {}) {
           <b>Paddock</b><small>${insts.length} pet${insts.length === 1 ? '' : 's'}</small>
         </button>
         <button class="stable-room" data-lab-open type="button">
-          <span class="stable-room-picture" aria-hidden="true">${pixCur('potion', 48) || t1Stroke(48, '<path d="M9 3h6M10 3v6L4 19q-1 2 2 2h12q3 0 2-2L14 9V3M7 15h10"/>')}</span>
+          ${/* Tom, 2026-09-10: "make the lab this other icon", his own 48px
+                PixelLab fusion chamber. It used to borrow `potion`, which is the
+                SHARED vial that two ectoplasm potions also point at, so the room
+                and a consumable drew the same picture. */''}
+          <span class="stable-room-picture" aria-hidden="true">${pixCur('lab', 48) || t1Stroke(48, '<path d="M9 3h6M10 3v6L4 19q-1 2 2 2h12q3 0 2-2L14 9V3M7 15h10"/>')}</span>
           <b>Laboratory</b><small aria-label="${labRoomLabel}">${labRoomCount}</small>
           ${labWaiting ? '<i class="new-dot" aria-hidden="true"></i>' : ''}
         </button>
@@ -24629,7 +24642,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v551'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v552'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
