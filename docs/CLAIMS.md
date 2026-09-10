@@ -1,6 +1,6 @@
 # What each patch note claims, and what backs it
 
-## vNEXT
+## v546
 
 ### Day-one grant: Round 2 advisory for independent review (2026-09-10)
 

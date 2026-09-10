@@ -5,10 +5,13 @@
 // Pending train notes. The operator assigns a build number and moves these
 // into CHANGES when assembling the release. No version stamp is advanced here.
 export const NEXT_CHANGES = [
-  'New players receive 340 welcome coins, enough for one 300-coin rack piece with 40 coins left.',
 ];
 
 export const CHANGES = [
+
+  { n: 546, date: '2026-09-10', title: 'A welcome you can spend', items: [
+    'New players receive 340 welcome coins, enough for one 300-coin rack piece with 40 coins left.',
+  ] },
 
   { n: 545, date: '2026-09-10', title: 'Online now, and your crew first', items: [
     'Crew now says "Online now" for contacts under six minutes old, while older and unavailable sync times keep their existing wording.',
