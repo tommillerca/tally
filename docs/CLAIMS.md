@@ -6,6 +6,21 @@
 
 ### Operator verification, 2026-09-10 (this is the release record)
 
+**The silent-build escape hatch, and why it is not a hole.** Tom chose to teach the guard
+about builds with nothing to announce rather than have me write a patch note he had just
+said not to write. `SILENT_BUILDS` (js/changelog.js) excuses a build from having a CHANGES
+entry and from nothing else. All four ways out are proven red on a throwaway tree:
+
+| Attempt | Result |
+|---|---|
+| Half-renumber: sw.js v551, APP_BUILD left at v550, 551 silent | RED, `AGREE sw.js VERSION and APP_BUILD are the same build` |
+| Build not declared silent and carrying no changelog entry | RED, `AGREE the newest changelog entry is this build` |
+| An OLD build listed silent to mask a changelog that ran ahead | RED, `REACH a silent build is newer than the newest changelog entry` |
+| A silent build with no docs/CLAIMS.md section | RED, `CLAIMS every silent build still carries its own section` |
+
+The v391 and v386 half-renumbers this guard was written for still go red unchanged.
+
+
 Rebased from the lane's v545 base onto v550 and restamped to v551. PURE **165/165, red=0**
 on node v22.22.2, after fixing one real red the lane owed: `icon-inventory-audit` requires
 every function in `js/` that draws a picture to be declared, and `mountStudio` was not.
