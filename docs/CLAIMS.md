@@ -1,5 +1,88 @@
 # What each patch note claims, and what backs it
 
+## v554 (2026-09-10)
+
+SILENT BUILD. Fixes the invisible BONEHEADZ wordmark shipped knowingly in v553.
+
+### The defect, and that it is actually gone
+
+v553: the mark was cream RGB(243,239,231) on a backdrop of RGB(243,239,231), **1.00:1**,
+sitting across the bunny slippers because the figure had grown to 86.3% of the safe
+rectangle without the mark's placement being re-derived.
+
+Measured on the decoded 1080x1920 export from the real app, not the audit fixture:
+
+| | v553 | v554 |
+|---|---:|---:|
+| Mark letters against what is behind them | **1.02:1** | **12.40:1** |
+| Mark backing against the page backdrop | n/a, no backing | **7.58:1** |
+| Ink inside the safe rectangle | 39.0% | 44.5% |
+| Everything inside STUDIO_SAFE | yes | yes |
+
+The mark now carries a warm-ink `#2A2D28` block with a cream rim and a hard offset
+shadow, and its placement searches integer-pixel positions for least artwork overlap
+before proximity to the requested preset. On this render both the mark and the speech
+bubble resolved onto clean backdrop, clear of the figure, which is what the search is
+for. Source pixels are uniformly scaled and not recoloured; `assets/brand/wordmark.png`
+is untouched.
+
+### A rebase silently dropped this fix, and only the render caught it
+
+Recorded because it nearly shipped as a no-op. `git apply --3way` reported
+"Applied patch to 'js/studio.js' cleanly" and applied **nothing**: main already contained
+v553, and the three-way merge resolved the file back to main. PURE stayed 165/165 and the
+version-stamp audit stayed green, because every guard passes on a tree where the fix is
+simply absent.
+
+The only thing that caught it: rendering the export and finding it **SHA256-identical to
+v553**, `5e0b309b411ca2ef...`, zero of 2,073,600 pixels different. The fix was taken from
+the lane's files directly after that, and the export then differed by 191,226 pixels.
+
+The lesson is the existing one, and it held: a green tier is not evidence that the change
+is in the tree. Assert the end of the chain.
+
+### The builder's own qualification, accepted
+
+A literal 4.5:1 at every nonzero-alpha pixel is not achievable: anti-aliased letter edges
+approach the backing colour as coverage approaches zero, so an all-pixel floor can only
+ever be met by removing anti-aliasing. The guard applies 4.5:1 to opaque letter cores and
+reports the all-pixel minimum separately rather than rounding it into a pass. That is the
+right call and it was flagged rather than hidden.
+
+1. PROOF: studio-audit.mjs | REACH: the guard decodes the final PNG and measures the
+   mark's minimum opaque-letter contrast against the pixels captured immediately before
+   the mark is drawn, across 69 placement x backdrop pairs, and reports the all-nonzero-
+   alpha minimum beside it. It is proven RED against the frozen v553 source, pinned by
+   SHA256 `2cc1a56aa345eeae...`, where it reports opaque cores 1.03831:1 and all-alpha
+   1.00:1: it rejects the real previous output rather than a synthetic flat swatch. It
+   also asserts the decoded figure/pet union is byte-identical to the previous compositor,
+   so buying clearance for the mark cannot silently shrink the figure. NOT proven by the
+   audit: rendered prominence and touch reach, which are the operator measurements above.
+
+
+## vNEXT
+
+Studio round 2, pending independent review and operator numbering. UNLISTED.
+The Wardrobe fit-rail entry and player inventory paths are unchanged.
+
+Wordmark source pixels are unchanged. A warm-ink backing with a hard offset
+shadow gives opaque letter cores 12.64:1 composited contrast across every shipped
+backdrop and offered mark preset. Exhaustive safe-position search minimizes
+artwork occupancy; the existing compact size is used when it provides clearance.
+Stickers draw before information so they cannot obscure the mark.
+
+PROOF: `tests/studio-audit.mjs` (already PURE), `node tests/unit.test.js`.
+Evidence and limitations: `docs/reviews/studio-r2/REPORT.md` and adjacent logs.
+The frozen v553 compositor fails the guard. Its all-pixel minimum is 1.00:1,
+its opaque-core minimum is 1.04:1. Current antialiased edges still approach 1:1;
+the 4.5:1 guard grades opaque cores, a proposed qualification to the work order, pending independent review.
+The audit fixture's decoded figure/pet union is byte-identical to v553:
+36.69% safe-area ink, 76.31% largest-component bounding box, 0px pet-ground minus
+feet, all bounds inside STUDIO_SAFE. It is not the operator's 39.0%/86.3% export.
+No rendered prominence, bubble-tail attachment, browser layout or touch-reach
+claim. Bubble placement uses its painted alpha mask; mark clearance includes its
+backing and shadow. See the report for remaining review requirements.
+
 ## v553 (2026-09-10)
 
 SILENT BUILD (`SILENT_BUILDS`, js/changelog.js). Studio v2: stickers, the speech bubble,

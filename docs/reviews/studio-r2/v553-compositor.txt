@@ -137,81 +137,6 @@ export function studioInk(canvas) {
   return { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
 }
 
-// Exhaustive integer-pixel search: overlap first, distance to the chosen preset
-// second. Integral alpha occupancy measures artwork, never backdrop colour.
-export function studioClearPosition(canvas, box, obstacles = [], shape = null) {
-  const w = canvas.width, h = canvas.height, stride = w + 1;
-  const pixels = canvas.getContext('2d').getImageData(0, 0, w, h).data;
-  const sums = new Uint32Array((w + 1) * (h + 1));
-  for (let y = 0; y < h; y++) {
-    let row = 0;
-    for (let x = 0; x < w; x++) {
-      row += pixels[(y * w + x) * 4 + 3] > 14 ? 1 : 0;
-      sums[(y + 1) * stride + x + 1] = sums[y * stride + x + 1] + row;
-    }
-  }
-  const width = Math.ceil(box.width), height = Math.ceil(box.height);
-  const runs = []; let area = width * height;
-  if (shape) {
-    const alpha = shape.canvas.getContext('2d').getImageData(0, 0, width, height).data;
-    area = 0;
-    for (let y = 0; y < height; y++) for (let x = 0; x < width;) {
-      if (alpha[(y * width + x) * 4 + 3] <= 14) { x++; continue; }
-      const start = x;
-      while (x < width && alpha[(y * width + x) * 4 + 3] > 14) x++;
-      runs.push([y, start, x]); area += x - start;
-    }
-  }
-  let best, score = Infinity, distance = Infinity;
-  for (let y = STUDIO_SAFE.top; y <= STUDIO_SAFE.bottom - height; y++) {
-    for (let x = STUDIO_SAFE.left; x <= STUDIO_SAFE.right - width; x++) {
-      if (obstacles.some(b => x < b.x + b.width && x + width > b.x && y < b.y + b.height && y + height > b.y)) continue;
-      if (shape?.accept && !shape.accept(x, y)) continue;
-      let n = sums[(y + height) * stride + x + width] - sums[y * stride + x + width]
-        - sums[(y + height) * stride + x] + sums[y * stride + x];
-      const d = (x - box.x) ** 2 + (y - box.y) ** 2;
-      if (shape && n) {
-        n = 0;
-        for (const [dy, left, right] of runs) {
-          const row = (y + dy) * stride;
-          n += sums[row + stride + x + right] - sums[row + x + right]
-            - sums[row + stride + x + left] + sums[row + x + left];
-          if (n > score || (n === score && d >= distance)) break;
-        }
-      }
-      if (n < score || (n === score && d < distance)) {
-        score = n; distance = d; best = { ...box, x, y, width, height, overlapPixels: n,
-          overlapPercent: 100 * n / area };
-      }
-    }
-  }
-  if (!best && !shape?.accept) fail('No safe Studio placement.');
-  return best;
-}
-
-// Compare final composited RGB with the immediate backing RGB at source-mask
-// samples. Opaque letter cores are graded; antialiased edges are reported too.
-export function studioMarkContrast(before, after, mask) {
-  const luminance = (p, i) => [0.2126, 0.7152, 0.0722].reduce((sum, k, c) => {
-    const v = p[i + c] / 255;
-    return sum + k * (v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4);
-  }, 0);
-  let minimum = Infinity, edgeMinimum = Infinity, samples = 0;
-  for (let i = 0; i < mask.length; i += 4) {
-    if (!mask[i + 3]) continue;
-    const a = luminance(before, i), b = luminance(after, i);
-    const ratio = (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
-    edgeMinimum = Math.min(edgeMinimum, ratio);
-    if (mask[i + 3] === 255) { minimum = Math.min(minimum, ratio); samples++; }
-  }
-  if (!samples) fail('No opaque Studio wordmark samples.');
-  return { minimum, edgeMinimum, samples };
-}
-export function assertStudioMarkContrast(measurement) {
-  if (!Number.isFinite(measurement.minimum) || measurement.minimum < 4.5)
-    fail(`Studio wordmark contrast ${measurement.minimum.toFixed(2)}:1 below 4.5:1.`);
-}
-
 let fontReady;
 export function studioBrowserRuntime() {
   return {
@@ -285,8 +210,6 @@ export async function composeStudio(look, options = {}, runtime = studioBrowserR
   const body = await stack('body'), pet = await stack('pet');
   if (!body) fail('No Bonehead art.');
   const ground = 1460, bounds = [], information = [];
-  const occupancy = runtime.createCanvas(1080, 1920), oc = occupancy.getContext('2d');
-  oc.imageSmoothingEnabled = false;
   ctx.imageSmoothingEnabled = false; // nearest-neighbour, no interpolated art colours
   const paint = (figure, box, flip = false) => {
     const b = figure.ink;
@@ -304,11 +227,70 @@ export async function composeStudio(look, options = {}, runtime = studioBrowserR
     const box = { id: 'pet', x: 1010 - pet.ink.width * scale, y: feetY - pet.ink.height * scale,
       width: pet.ink.width * scale, height: pet.ink.height * scale };
     paint(pet, box); bounds.push(box);
-    oc.drawImage(pet.canvas, pet.ink.x, pet.ink.y, pet.ink.width, pet.ink.height, box.x, box.y, box.width, box.height);
   }
   paint(body, bodyBox); bounds.push(bodyBox);
-  oc.drawImage(body.canvas, body.ink.x, body.ink.y, body.ink.width, body.ink.height, bodyBox.x, bodyBox.y, bodyBox.width, bodyBox.height);
 
+  // Port of talkBoxHtml's .talkbox + .hero-bubble at 3 export px per CSS px.
+  // app.css: size 11, line-height 1.55, tracking .02em, padding .88/.94em,
+  // border 2, radius 13, shadow 4/5; tail 10/7 at 42%/45%, 12 degrees.
+  const caption = plan.text.find(t => t.id === 'caption');
+  if (caption) {
+    const unit = 3, font = 33, padX = font * .94, padY = font * .88, lineH = font * 1.55;
+    ctx.font = `${font}px StudioDialogue`; ctx.letterSpacing = `${font * .02}px`;
+    const lines = []; let line = '';
+    for (const word of caption.text.split(' ')) {
+      const next = line ? line + ' ' + word : word;
+      if (line && ctx.measureText(next).width > 350) { lines.push(line); line = word; } else line = next;
+    }
+    lines.push(line);
+    const width = Math.max(...lines.map(l => ctx.measureText(l).width)) + padX * 2 + 12;
+    const height = lines.length * lineH + padY * 2 + 12;
+    const x = plan.bubblePosition === 'left' ? 95 : 985 - width, y = 440;
+    ctx.save();
+    ctx.translate(x + width / 2, y + height / 2);
+    ctx.rotate((plan.bubblePosition === 'left' ? -2 : 2) * Math.PI / 180);
+    ctx.translate(-x - width / 2, -y - height / 2);
+    const rounded = (dx, dy, fill, stroke) => {
+      const inset = stroke ? unit : 0;
+      ctx.beginPath(); ctx.roundRect(x + dx + inset, y + dy + inset, width - inset * 2, height - inset * 2, 13 * unit - inset);
+      ctx.fillStyle = fill; ctx.fill();
+      if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2 * unit; ctx.stroke(); }
+    };
+    rounded(4 * unit, 5 * unit, 'rgba(0,0,0,.55)');
+    rounded(0, 0, '#16151d', '#3b393d');
+    const tail = (radius, inset, fraction, fill) => {
+      const right = plan.bubblePosition === 'left';
+      ctx.save(); ctx.translate(right ? x + width - 6 + (inset - radius / 2) * unit : x + 6 - (inset - radius / 2) * unit, y + 6 + (height - 12) * fraction + radius * unit);
+      ctx.scale(right ? 1 : -1, 1); ctx.rotate(12 * Math.PI / 180);
+      ctx.beginPath(); ctx.moveTo(-radius * unit / 2, -radius * unit); ctx.lineTo(radius * unit / 2, 0); ctx.lineTo(-radius * unit / 2, radius * unit); ctx.closePath();
+      ctx.fillStyle = fill; ctx.fill(); ctx.restore();
+    };
+    tail(10, 14, .42, '#3b393d'); tail(7, 8, .45, '#16151d');
+    ctx.fillStyle = '#f2e9d7'; ctx.textBaseline = 'middle';
+    lines.forEach((l, i) => ctx.fillText(l, x + 6 + padX, y + 6 + padY + lineH * (i + .5)));
+    ctx.restore();
+    information.push({ id: 'caption', x: plan.bubblePosition === 'left' ? x - 12 : x - 57, y: y - 12, width: width + 84, height: height + 36 });
+    ctx.letterSpacing = '0px';
+  }
+  const markImg = await load('assets/brand/wordmark.png');
+  const markCanvas = runtime.createCanvas(markImg.width, markImg.height);
+  markCanvas.getContext('2d').drawImage(markImg, 0, 0);
+  const mark = { canvas: markCanvas, ink: studioInk(markCanvas) };
+  const markWidth = plan.markPosition === 'right' ? 340 : 480;
+  const markHeight = markWidth * mark.ink.height / mark.ink.width;
+  const markBox = { id: 'brand', x: plan.markPosition === 'right' ? 660 : 300,
+    y: plan.markPosition === 'bottom' ? 1475 - markHeight : plan.markPosition === 'top' ? 280 : 800,
+    width: markWidth, height: markHeight };
+  paint(mark, markBox); information.push(markBox);
+  for (const t of plan.text.filter(t => t.id === 'friend-code')) {
+    ctx.font = `${t.size}px StudioBangers`; ctx.textBaseline = 'alphabetic';
+    const m = ctx.measureText(t.text);
+    const box = { id: t.id, x: t.x - m.actualBoundingBoxLeft, y: t.baseline - m.actualBoundingBoxAscent,
+      width: m.actualBoundingBoxLeft + m.actualBoundingBoxRight, height: m.actualBoundingBoxAscent + m.actualBoundingBoxDescent };
+    ctx.fillStyle = '#F3EFE7'; ctx.fillRect(box.x - 6, box.y - 6, box.width + 12, box.height + 12);
+    ctx.fillStyle = '#2A2D28'; ctx.fillText(t.text, t.x, t.baseline);
+    information.push({ ...box, x: box.x - 6, y: box.y - 6, width: box.width + 12, height: box.height + 12 });
+  }
   for (const [index, sticker] of plan.stickers.entries()) {
     let figure;
     if (sticker.kind === 'text') {
@@ -327,118 +309,10 @@ export async function composeStudio(look, options = {}, runtime = studioBrowserR
     const box = { id: `sticker-${index}`, ...studioStickerBox(figure.ink, sticker) };
     paint(figure, box, sticker.flip); bounds.push(box);
   }
-  // Port of talkBoxHtml's .talkbox + .hero-bubble at 3 export px per CSS px.
-  // app.css: size 11, line-height 1.55, tracking .02em, padding .88/.94em,
-  // border 2, radius 13, shadow 4/5; tail 10/7 at 42%/45%, 12 degrees.
-  const caption = plan.text.find(t => t.id === 'caption');
-  if (caption) {
-    const unit = 3, font = 33, padX = font * .94, padY = font * .88, lineH = font * 1.55;
-    ctx.font = `${font}px StudioDialogue`; ctx.letterSpacing = `${font * .02}px`;
-    const lines = []; let line = '';
-    for (const word of caption.text.split(' ')) {
-      const next = line ? line + ' ' + word : word;
-      if (line && ctx.measureText(next).width > 350) { lines.push(line); line = word; } else line = next;
-    }
-    lines.push(line);
-    const width = Math.max(...lines.map(l => ctx.measureText(l).width)) + padX * 2 + 12;
-    const height = lines.length * lineH + padY * 2 + 12;
-    const skull = await stack('body', plan.layers.filter(l => l.slot === 'SK'));
-    const skullX = skull ? bodyBox.x + ((skull.ink.x + skull.ink.width / 2) * body.canvas.width / skull.canvas.width - body.ink.x) * bodyScale
-      : bodyBox.x + bodyBox.width / 2;
-    const drawBubble = (ctx, x, y, facesRight) => {
-      ctx.font = `${font}px StudioDialogue`; ctx.letterSpacing = `${font * .02}px`;
-      ctx.save();
-      ctx.translate(x + width / 2, y + height / 2);
-      ctx.rotate((facesRight ? -2 : 2) * Math.PI / 180);
-      ctx.translate(-x - width / 2, -y - height / 2);
-      const rounded = (dx, dy, fill, stroke) => {
-        const inset = stroke ? unit : 0;
-        ctx.beginPath(); ctx.roundRect(x + dx + inset, y + dy + inset, width - inset * 2, height - inset * 2, 13 * unit - inset);
-        ctx.fillStyle = fill; ctx.fill();
-        if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2 * unit; ctx.stroke(); }
-      };
-      rounded(4 * unit, 5 * unit, 'rgba(0,0,0,.55)');
-      rounded(0, 0, '#16151d', '#3b393d');
-      const tail = (radius, inset, fraction, fill) => {
-        const right = facesRight;
-        ctx.save(); ctx.translate(right ? x + width - 6 + (inset - radius / 2) * unit : x + 6 - (inset - radius / 2) * unit, y + 6 + (height - 12) * fraction + radius * unit);
-        ctx.scale(right ? 1 : -1, 1); ctx.rotate(12 * Math.PI / 180);
-        ctx.beginPath(); ctx.moveTo(-radius * unit / 2, -radius * unit); ctx.lineTo(radius * unit / 2, 0); ctx.lineTo(-radius * unit / 2, radius * unit); ctx.closePath();
-        ctx.fillStyle = fill; ctx.fill(); ctx.restore();
-      };
-      tail(10, 14, .42, '#3b393d'); tail(7, 8, .45, '#16151d');
-      ctx.fillStyle = '#f2e9d7'; ctx.textBaseline = 'middle';
-      lines.forEach((l, i) => ctx.fillText(l, x + 6 + padX, y + 6 + padY + lineH * (i + .5)));
-      ctx.restore();
-    };
-    const preferred = { id: 'caption', x: plan.bubblePosition === 'left' ? 83 : 928 - width,
-      y: 428, width: Math.ceil(width + 84), height: Math.ceil(height + 36) };
-    const candidates = [];
-    for (const facesRight of [true, false]) {
-      const bubble = runtime.createCanvas(preferred.width, preferred.height);
-      drawBubble(bubble.getContext('2d'), facesRight ? 12 : 57, 12, facesRight);
-      const box = studioClearPosition(occupancy, preferred, [], { canvas: bubble,
-        accept: x => (x + preferred.width / 2 < skullX) === facesRight });
-      if (box) candidates.push({ box, bubble });
-    }
-    candidates.sort((a, b) => a.box.overlapPixels - b.box.overlapPixels
-      || ((a.box.x - preferred.x) ** 2 + (a.box.y - preferred.y) ** 2)
-        - ((b.box.x - preferred.x) ** 2 + (b.box.y - preferred.y) ** 2));
-    if (!candidates.length) fail('No safe Studio bubble placement.');
-    const { box: captionBox, bubble } = candidates[0];
-    ctx.drawImage(bubble, captionBox.x, captionBox.y);
-    information.push(captionBox);
-    ctx.letterSpacing = '0px';
-  }
-  const markImg = await load('assets/brand/wordmark.png');
-  const markCanvas = runtime.createCanvas(markImg.width, markImg.height);
-  markCanvas.getContext('2d').drawImage(markImg, 0, 0);
-  const mark = { canvas: markCanvas, ink: studioInk(markCanvas) };
-  let markWidth = plan.markPosition === 'right' ? 340 : 480;
-  let markHeight = markWidth * mark.ink.height / mark.ink.width;
-  const preferredMark = { id: 'brand', x: plan.markPosition === 'right' ? 660 : 300,
-    y: plan.markPosition === 'bottom' ? 1475 - markHeight : plan.markPosition === 'top' ? 280 : 800,
-    width: markWidth, height: markHeight };
-  const obstacles = [...information,
-    ...plan.text.filter(t => t.id === 'friend-code').map(() => ({ x: 65, y: 1470, width: 600, height: 70 }))];
-  let plate = studioClearPosition(occupancy, { ...preferredMark,
-    width: markWidth + 32, height: markHeight + 36 }, obstacles);
-  // The existing compact offering is equally valid when it can leave the art
-  // clear. Keep the larger mark only when shrinking cannot buy clearance.
-  if (plate.overlapPixels && markWidth > 340) {
-    const compactHeight = 340 * mark.ink.height / mark.ink.width;
-    const compact = studioClearPosition(occupancy, { ...preferredMark,
-      width: 372, height: compactHeight + 36 }, obstacles);
-    if (!compact.overlapPixels) { plate = compact; markWidth = 340; markHeight = compactHeight; }
-  }
-  const markBox = { ...preferredMark, x: plate.x + 12, y: plate.y + 12,
-    width: markWidth, height: markHeight };
-  ctx.fillStyle = '#2A2D28'; ctx.fillRect(plate.x + 8, plate.y + 10, plate.width - 8, plate.height - 10);
-  ctx.fillStyle = '#F3EFE7'; ctx.fillRect(plate.x, plate.y, plate.width - 8, plate.height - 10);
-  ctx.fillStyle = '#2A2D28'; ctx.fillRect(plate.x + 3, plate.y + 3, plate.width - 14, plate.height - 16);
-  const before = ctx.getImageData(0, 0, 1080, 1920).data;
-  paint(mark, markBox);
-  const maskCanvas = runtime.createCanvas(1080, 1920), mc = maskCanvas.getContext('2d');
-  mc.imageSmoothingEnabled = false;
-  mc.drawImage(mark.canvas, mark.ink.x, mark.ink.y, mark.ink.width, mark.ink.height,
-    markBox.x, markBox.y, markBox.width, markBox.height);
-  const markContrast = studioMarkContrast(before, ctx.getImageData(0, 0, 1080, 1920).data,
-    mc.getImageData(0, 0, 1080, 1920).data);
-  assertStudioMarkContrast(markContrast);
-  information.push(plate);
-  for (const t of plan.text.filter(t => t.id === 'friend-code')) {
-    ctx.font = `${t.size}px StudioBangers`; ctx.textBaseline = 'alphabetic';
-    const m = ctx.measureText(t.text);
-    const box = { id: t.id, x: t.x - m.actualBoundingBoxLeft, y: t.baseline - m.actualBoundingBoxAscent,
-      width: m.actualBoundingBoxLeft + m.actualBoundingBoxRight, height: m.actualBoundingBoxAscent + m.actualBoundingBoxDescent };
-    ctx.fillStyle = '#F3EFE7'; ctx.fillRect(box.x - 6, box.y - 6, box.width + 12, box.height + 12);
-    ctx.fillStyle = '#2A2D28'; ctx.fillText(t.text, t.x, t.baseline);
-    information.push({ ...box, x: box.x - 6, y: box.y - 6, width: box.width + 12, height: box.height + 12 });
-  }
   assertStudioSafe([...bounds, ...information]);
   const blob = await runtime.encode(canvas);
   await assertStudioPng(blob);
-  return { blob, plan, information, bounds, feetY, markContrast };
+  return { blob, plan, information, bounds, feetY };
 }
 
 export async function assertStudioPng(blob) {
