@@ -10,6 +10,12 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 556, date: '2026-09-10', title: 'The Studio builds like a story', items: [
+  'The Studio works like a story: tap a sticker to place it, drag to move, pinch and twist to resize and rotate, and drop it in the bin to remove it. Keyboard and screen-reader controls are still available.',
+  'The Wanderer, The Mimic, The Glutton and Gwart are in the sticker tray, alongside your Crew and slogans.',
+  'Studio stickers now have a cut-out ink outline and a hard shadow that follow their shape.',
+  ] },
+
   { n: 555, date: '2026-09-10', title: 'The Studio, and a Wardrobe that behaves', items: [
     '<b>The Studio.</b> Open it from the Wardrobe: pose your Bonehead and your pet on a backdrop, give them a line in a speech bubble, and drop in monster stickers, your Crew, or a slogan. Move, resize and flip anything you place. Hide the controls and screenshot to save and share it.',
     'The Wear it bar in the Dressing Room stays out of the way until you have actually chosen a look, instead of sitting over your Bonehead the whole time.',

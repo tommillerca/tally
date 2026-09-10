@@ -262,7 +262,7 @@ export async function checkStudio() {
     assert.throws(() => studioPlan(look, { stickers: [{ ...sticker, [key]: 100 }] }), /Unsupported/);
     assert.throws(() => studioPlan(look, { stickers: [{ ...sticker, outfit: { ...outfit, [key]: 100 } }] }), /Unsupported/);
   }
-  for (const transform of [{ size: 179 }, { size: 651 }, { size: NaN }, { x: Infinity }, { flip: 1 }, { rotation: 15 }, { scaleX: 2 }, { tint: '#FF0000' }]) {
+  for (const transform of [{ size: 179 }, { size: 651 }, { size: NaN }, { x: Infinity }, { flip: 1 }, { rotation: NaN }, { scaleX: 2 }, { tint: '#FF0000' }]) {
     assert.throws(() => studioPlan(look, { stickers: [{ ...sticker, ...transform }] }), /Invalid|Unsupported/);
   }
   assert.throws(() => studioPlan(look, { stickers: Array(13).fill(sticker) }), /12 stickers/);
@@ -274,7 +274,7 @@ export async function checkStudio() {
   };
   for (const entry of [sticker, ...STUDIO_MONSTERS.map(id => ({ kind: 'monster', id, x: 540, y: 900, size: 180, flip: false }))]) {
     const r = await measureComposition(composeStudio, look, { stickers: [entry] });
-    const last = r.measured.at(-3), inputColours = colourSet(last.input), outputColours = colourSet(last.decoded);
+    const last = r.measured.at(-3), inputColours = colourSet(r.result.figures[0].canvas), outputColours = colourSet(last.decoded);
     assert.equal(last.smoothing, false, 'nearest-neighbour art sampling');
     assert.ok(outputColours.size <= inputColours.size, 'downsample introduces no colour-count inflation');
     assert.ok([...outputColours].every(c => inputColours.has(c)), 'nearest-neighbour output palette is a subset of the stacked input');
@@ -289,9 +289,10 @@ export async function checkStudio() {
   const flipped = await measureComposition(composeStudio, look, { stickers: [{ ...aSticker, flip: true }] });
   const unflipLayer = unflipped.measured.at(-3).decoded, flipLayer = flipped.measured.at(-3).decoded;
   assert.notEqual(digest(await bytes(unflipped.result.blob)), digest(await bytes(flipped.result.blob)), 'flip changes actual PNG');
-  const mirror = createCanvas(1080, 1920), mx = mirror.getContext('2d');
-  mx.translate(1000, 0); mx.scale(-1, 1); mx.drawImage(unflipLayer, 0, 0);
-  assert.deepEqual(mx.getImageData(0, 0, 1080, 1920).data, flipLayer.getContext('2d').getImageData(0, 0, 1080, 1920).data, 'horizontal flip mirrors the real pixels exactly');
+  const raw = unflipped.result.figures[0].raster.art, flippedRaw = flipped.result.figures[0].raster.art;
+  const mirror = createCanvas(raw.width, raw.height), mx = mirror.getContext('2d');
+  mx.translate(raw.width - 8, 0); mx.scale(-1, 1); mx.drawImage(raw, 0, 0);
+  assert.deepEqual(mx.getImageData(0, 0, raw.width, raw.height).data, flippedRaw.getContext('2d').getImageData(0, 0, raw.width, raw.height).data, 'horizontal flip mirrors artwork exactly; hard shadow stays down/right');
   for (const size of [180, 650]) for (const [x,y] of [[0,0],[1080,1920]]) {
     const r = await composeStudio(look, { stickers: [{ ...aSticker, x, y, size }] }, runtime);
     assertStudioSafe(r.bounds);
@@ -336,13 +337,13 @@ export async function checkStudio() {
   const el = { set innerHTML(html) {
     markup = html;
     for (const [, id] of html.matchAll(/id="([^"]+)"/g)) elements.set(id, { disabled: false, hidden: new RegExp(`id="${id}"[^>]*\\bhidden`).test(html), style: {}, attributes: {}, decode: async () => {},
-      setAttribute(k, v) { this.attributes[k] = v; }, setPointerCapture() {}, focus() {},
+      setAttribute(k, v) { this.attributes[k] = v; }, getContext() { return (this.canvas ||= createCanvas(1080, 1920)).getContext('2d'); }, setPointerCapture() {}, focus() {},
       showModal() { this.open = true; }, close() { this.open = false; },
       getBoundingClientRect() { return { left: 0, top: 0, width: 1080, height: 1920 }; } });
   }, querySelector: selector => elements.get(selector.slice(1)) };
   const q = id => elements.get(id), draft = { includeFriendCode: true };
   const jobs = []; let shown, savedBlob, back = false;
-  const mount = () => mountStudio(el, { look, crew, ownedBackdrops: new Set([bg.id]), draft, onBack: () => { back = true; },
+  const mount = () => mountStudio(el, { look, crew, thumbnailRuntime: runtime, ownedBackdrops: new Set([bg.id]), draft, onBack: () => { back = true; },
     compose(l, o) { const job = composeStudio(l, o, runtime).then(r => { shown = r; return r; }); jobs.push(job); return job; },
     async save(blob) { savedBlob = blob; return { status: 'saved' }; } });
   const settle = async () => { for (let i = 0; i < 20; i++) { await Promise.all(jobs); await new Promise(r => setImmediate(r)); if (!q('studioSave').disabled) return; } throw Error('Studio did not finish rendering'); };
@@ -370,11 +371,15 @@ export async function checkStudio() {
   q('studioFlip').onclick(); await settle(); assert.equal(draft.stickers[0].flip, true);
   q('studioSmaller').onclick(); await settle(); assert.equal(draft.stickers[0].size, 360);
   q('studioLarger').onclick(); await settle(); assert.equal(draft.stickers[0].size, 400);
-  q('studioLeft').onclick(); await settle(); assert.equal(draft.stickers[0].x, 510);
+  q('studioLeft').onclick(); await settle(); assert.ok(Math.abs(draft.stickers[0].x - 510) <= .5);
   const box = shown.bounds.find(b => b.id === 'sticker-0');
-  q('studioStage').onpointerdown({ clientX: box.x + box.width / 2, clientY: box.y + box.height / 2, pointerId: 2 });
-  q('studioStage').onpointermove({ clientX: 700, clientY: 1000 }); q('studioStage').onpointerup(); await settle();
-  assert.equal(draft.stickers[0].x, 700); assert.equal(draft.stickers[0].y, 1000);
+  const hit = shown.figures[0].raster.decoration.getContext('2d').getImageData(0, 0, box.width, box.height).data;
+  let hitIndex = Math.floor(box.height / 2) * box.width + Math.floor(box.width / 2);
+  while (!hit[hitIndex * 4 + 3]) hitIndex++;
+  const hitX = box.x + hitIndex % box.width, hitY = box.y + Math.floor(hitIndex / box.width);
+  q('studioStage').onpointerdown({ clientX: hitX, clientY: hitY, pointerId: 2 });
+  q('studioStage').onpointermove({ clientX: 700 + hitX - (box.x + box.width / 2), clientY: 1000 + hitY - (box.y + box.height / 2), pointerId: 2 }); q('studioStage').onpointerup({pointerId: 2}); await settle();
+  assert.ok(Math.abs(draft.stickers[0].x - 700) <= .5); assert.ok(Math.abs(draft.stickers[0].y - 1000) <= .5);
   q('studioRemove').onclick(); await settle(); assert.equal(draft.stickers.length, 0);
   q('studioCrew-0').onclick(); await settle();
   assert.deepEqual(Object.keys(draft.stickers[0]).sort(), ['flip', 'kind', 'outfit', 'size', 'x', 'y']);

@@ -169,28 +169,83 @@ right call and it was flagged rather than hidden.
    audit: rendered prominence and touch reach, which are the operator measurements above.
 
 
-## vNEXT
+## v556 (2026-09-10)
 
-Studio round 2, pending independent review and operator numbering. UNLISTED.
-The Wardrobe fit-rail entry and player inventory paths are unchanged.
+### Operator verification, rendered at 430x932
 
-Wordmark source pixels are unchanged. A warm-ink backing with a hard offset
-shadow gives opaque letter cores 12.64:1 composited contrast across every shipped
-backdrop and offered mark preset. Exhaustive safe-position search minimizes
-artwork occupancy; the existing compact size is used when it provides clearance.
-Stickers draw before information so they cannot obscure the mark.
+Rebased by COPYING the lane's files, not `git apply --3way`, because the lane's base was
+byte-identical to `origin/main` and a 3-way merge silently applied nothing in v554. Every
+changed file confirmed byte-identical to the lane before anything else ran.
 
-PROOF: `tests/studio-audit.mjs` (already PURE), `node tests/unit.test.js`.
-Evidence and limitations: `docs/reviews/studio-r2/REPORT.md` and adjacent logs.
-The frozen v553 compositor fails the guard. Its all-pixel minimum is 1.00:1,
-its opaque-core minimum is 1.04:1. Current antialiased edges still approach 1:1;
-the 4.5:1 guard grades opaque cores, a proposed qualification to the work order, pending independent review.
-The audit fixture's decoded figure/pet union is byte-identical to v553:
-36.69% safe-area ink, 76.31% largest-component bounding box, 0px pet-ground minus
-feet, all bounds inside STUDIO_SAFE. It is not the operator's 39.0%/86.3% export.
-No rendered prominence, bubble-tail attachment, browser layout or touch-reach
-claim. Bubble placement uses its painted alpha mask; mark clearance includes its
-backing and shadow. See the report for remaining review requirements.
+Driven in a real browser, which the builder cannot do at all:
+
+- The tray carries **The Wanderer, The Mimic, The Glutton and Gwart** with real artwork
+  thumbnails, not the `Object.keys(LOOKS)` outfit presets (Rattles, Knuckles, The
+  Gravekeeper) that v554 called monsters.
+- **One tap places and closes the tray.** Tapping "Place The Wanderer" put it on the
+  canvas, closed the tray, and produced a selection with a Flip affordance attached to the
+  sticker itself. No confirm step.
+- The picture is a real 1080x1920 composite throughout.
+
+**The die-cut outline is real, measured on the decoded export rather than taken on trust.**
+Sampling every horizontal transition from plain backdrop into ink at the sticker's left
+edge, n=163: median run **21px**, 10th percentile 17, 90th 38. The second most common
+colour in the sticker's region is **RGB(42,45,40)**, which is `#2A2D28`. That matches the
+builder's claim of a 12px dilation plus a hard 8x10px offset shadow, and it follows the
+Wanderer's silhouette rather than a bounding box.
+
+### Judgement calls, recorded rather than buried
+
+- **Rotation ships.** The builder surveyed every integer angle 0-89 at both size endpoints
+  and both mirror states: the worst additional colour reduction from twisting is **3.99%**
+  (The Wanderer at 26 degrees), against much larger loss from scaling down. Quarter-turn
+  snapping is the standing fallback if Tom judges the texture loss unacceptable on a phone.
+  That is a taste call and it is his, not mine.
+- **A 0.135% size cap at the rotated boundary.** A 650px square at 45 degrees needs 952px
+  with its border and shadow, against 950px of safe width, so an overflowing transform is
+  uniformly fitted. Worst case 649.124px. Named creatures still accept 650px in their
+  surveyed poses.
+- **Decoration is graded separately from artwork.** A generated ink outline cannot be
+  inside a source PNG's palette. Artwork palettes are still asserted as subsets of their
+  source; the outline and shadow are graded on their own. Disclosed before implementation,
+  and correct.
+- **The keyboard control row survives** (Left/Right/Up/Down/Smaller/Larger/Rotate/Flip/
+  Remove). Direct manipulation is the primary route now and those are the accessible
+  fallback the order required. Flagged because Tom's complaint was that buttons WERE the
+  interface: if they still read as clutter on the phone, they are the next thing to move.
+
+Unproven and operator-owned on a device: drag latency, real gesture recognition, touch
+reach, and how any of it feels under a thumb. Node proves the handlers are wired and that
+the pixels change; it cannot prove a gesture.
+
+
+Studio v3, pending independent review and operator numbering. These are real
+player-facing NEXT_CHANGES notes. The prior round 2 pending record is superseded;
+its historical evidence remains in docs/reviews/studio-r2/REPORT.md.
+
+Changelog item: The Studio works like a story: tap a sticker to place it, drag to move, pinch and twist to resize and rotate, and drop it in the bin to remove it. Keyboard and screen-reader controls are still available.
+
+1. PROOF: studio-v3-audit.mjs, studio-audit.mjs | REACH: Wardrobe fit rail, Studio. production mountStudio handlers run on Canvas-backed Node element doubles. One-tap placement closes the tray, pointermove updates stored position and actual live pixels before release, a two-pointer sequence maps 400px to 600px and 0 to 90 degrees, and release pixels match the decoded export. Cancellation, lost capture, bin deletion and keyboard paths are exercised. Gesture feel, recognition on devices, latency, touch reach and browser layout remain UNPROVEN and operator-owned.
+
+Changelog item: The Wanderer, The Mimic, The Glutton and Gwart are in the sticker tray, alongside your Crew and slogans.
+
+2. PROOF: studio-v3-audit.mjs, studio-audit.mjs | REACH: Wardrobe fit rail, Studio. the monster list is exactly the four named creatures and each resolves to its original static PNG. The tray uses the same figure and raster functions as placed stickers. Crew appearance remains whitelisted; no inventory or earned data writer changed. Mage and Wretched Goblin are proposed only, not included.
+
+Changelog item: Studio stickers now have a cut-out ink outline and a hard shadow that follow their shape.
+
+3. PROOF: studio-v3-audit.mjs, studio-audit.mjs | REACH: Wardrobe fit rail, Studio. decoded artwork palettes are subsets of input palettes through scale, mirror and rotation. A separate 12-export-pixel disk dilation of nonzero alpha generates the warm-ink border and an 8px/right, 10px/down hard shadow. An independent brute-force alpha oracle rejects a rectangle. Sizes 180 and 650 are checked. The new audit is registered in PURE and fails on the frozen input sources. Complete fixture, rotation and proof measurements are in docs/reviews/studio-v3/REPORT.md.
+
+The controlled no-sticker decoded export remains byte-identical to the input
+compositor. The operator's original outfit/export was not supplied. Its 44.5%
+ink, 86.3% component box, 12.40:1 letter contrast and 7.58:1 backing contrast
+are not represented as remeasured here. Proposed proof substitution: controlled
+before/after decoded parity plus separately labelled Node fixture measurements.
+A rotated square at the upper size bound is uniformly capped to 649.124025px
+when its outline and shadow would otherwise exceed the safe width. This proposed
+0.875975px maximum size deviation is documented and tested in the review report.
+Palette preservation grades the artwork layer separately from the added border,
+shadow and page blending. These new decoration colours cannot literally be a
+subset of every source PNG palette. No browser or native save proof is claimed.
 
 ## v553 (2026-09-10)
 

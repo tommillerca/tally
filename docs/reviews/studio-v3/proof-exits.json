@@ -1,0 +1,11 @@
+{
+  "unit": 0,
+  "studio": 0,
+  "studioV3": 0,
+  "baselineRed": 1,
+  "coverage": 0,
+  "guardHygiene": 0,
+  "pureInitial": 1,
+  "pureFinal": 0,
+  "designDetector": 2
+}
