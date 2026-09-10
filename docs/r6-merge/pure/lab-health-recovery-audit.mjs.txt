@@ -1,0 +1,2 @@
+PASS CONTROL: pending and credited health changes recover, fence late dispatch, and allow exactly one fresh experiment
+PASS CONTROL: missing input is never restored or destroyed again; remaining pairs are usable

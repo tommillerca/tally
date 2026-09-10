@@ -1,0 +1,1094 @@
+[
+  {
+    "file": "version-align-lint.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "no-debug-markers-lint.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "store-copy-lint.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "migration-guard-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "sync-observability-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "sync-identity-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "sync-native-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "lab-density-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "crew-outfit-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "dock-line-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "whatsnew-boot-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "wardrobe-noise-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "sync-clientpath-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "sync-authpath-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "sync-path-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "wardrobe-playtest-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "lab-room2-audit.mjs",
+    "code": 1,
+    "signal": null,
+    "proof": "targeted final rerun",
+    "initialCode": 1
+  },
+  {
+    "file": "stable-stale-disclosure-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "breed-last-colour-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "stable-loss-disclosure-audit.mjs",
+    "code": 1,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 1
+  },
+  {
+    "file": "lab-health-recovery-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "lab-integration-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "lab-ui-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "laboratory-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "lab-foundation-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "pet-stress-guard.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "crew-pet-node-guard.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "transmog-receipt-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "today-reads-lint.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "kitchen-atomic-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "backup-encoder-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "backup-key-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "backup-version-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "backup-conflict-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "unit.test.js",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "log-xp-farm-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "drip-badge-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "xp-key-provenance-lint.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "facegate-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "garden-appetite-guard.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "pit.test.js",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "quest-daymore-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "quest-pick-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "first-fight-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "stat-source-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "bastions-rep-sim.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "analytics-tag-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "icon-inventory-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "version-stamp-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "boneyard-supply-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "loot-fallback-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "guard-hygiene-lint.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "targeted final rerun",
+    "initialCode": 1
+  },
+  {
+    "file": "guard-provenance-lint.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "feedback-status-lint.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "rack-theme-lint.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "rack-rotate-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "pet-accessory-lint.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "pet-pool-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "manifest-exports-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "xp-curve-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "live-api-register-lint.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "claim-evidence-lint.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "thumb-freshness-lint.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "render-sink-lint.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "lapse-witness-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "spawn-claim-atomic-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "wardrobe-family-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "football-kit-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "restore-latch-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "first-pet-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "shop-economy-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "recovery-status-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "currency-revision-lint.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "inv-tombstone-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "take-and-pay-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "c6-price-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "pet-morph-animation-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "pet-palette-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "fontscale-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "wheel-look-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "wheel-easing-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "storage-boot-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "crate-cadence-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "r4-app-p1-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "water-retry-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "cloud-off-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "r4-silence-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "silence-disclosure-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "health-disclosure-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "paddock-pack-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "numbers-honesty-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "locale-numbers-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "audit-output-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "branch-graveyard-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "store-runtime-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "r47-rest-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "r47-economy-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "submission-build-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "harness-environment-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "guard-debts-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "submission-preflight-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "pet-state-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "pet-family-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "crew-pet-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "coins-merge-tie-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "routine-race-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "dayone-topup-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "dish-worth-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "pet-C-node-guard.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "r48-state-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "r46-logging-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "r46-diary-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "zero-calorie-seam-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "audit-completion-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "machine-character-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "n3-deadpaths-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "m5-prove-red.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "lookup-guard-lint.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "restore-state-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "restore-debt-edges-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "restore-debt-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "p1-r48-rest-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "pet-a11y-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "kennel-copy-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "breed-lock-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "device-loss-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "multidevice-earnings-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "response-bodies-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "p1-merge-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "quest-wheel-budget-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "kitchen-delivery-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "map-playtest-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "p1-dens-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "crew-yard-row-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "pet-rarity-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "stable-rooms-top-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "today-playtest-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "crew-playtest-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "firstrun-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "settings-safety-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "progress-playtest-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "leaderboard-honesty-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "breed-two-tap-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "after-await-event-lint.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "boneyard-zoom-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "lab-conflict-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "r6-guards-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "targeted final rerun",
+    "initialCode": 0
+  },
+  {
+    "file": "lab-lock-recovery-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "r3-rest-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "pet-parity-guard.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "verify-tail-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "cloud-optout-transport-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "r4-restore-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "reachable-density-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "native-shell-comment-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  },
+  {
+    "file": "hand-registration-audit.mjs",
+    "code": 0,
+    "signal": null,
+    "proof": "complete census",
+    "initialCode": 0
+  }
+]

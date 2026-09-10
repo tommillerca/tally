@@ -347,8 +347,19 @@ const MORPH_SPECIES = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
 
 // The (species, morph) pairs a player already owns, as a Set of "sp|morph" keys.
 // Pure: takes the instance list (js/loot.js petInstances()), never reads it itself.
+const petPairKey = p => `${p.sp}|${p.shiny ? 'base' : p.morph || 'base'}`;
+// A shiny holds its species' Base cell regardless of its saved morph. This
+// preserves earned Kennel ownership even for an unsupported legacy colour.
+// Collection identity does not grant Laboratory ingredient eligibility.
+export function petCellKey(p) {
+  if (!p || !MORPH_SPECIES.includes(p.sp)) return null;
+  const key = petPairKey(p);
+  return MORPHS.some(m => key === `${p.sp}|${m}`) ? key : null;
+}
 export function ownedPairs(instances) {
-  return new Set((instances || []).map(x => `${x.sp}|${x.shiny ? 'base' : x.morph || 'base'}`));
+  // Keep the historical off-grid pairs (including CX) for callers that use
+  // this as an ownership list. ownedCellCount excludes those from the grid.
+  return new Set((instances || []).map(x => petCellKey(x) || petPairKey(x)));
 }
 // R39-10 (2026-09-06): how many of those pairs have a CELL in the Kennel grid.
 // owned.size counts CX (exempt, no cell) too: "37 / 36" with a full set.

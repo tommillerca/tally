@@ -1,0 +1,14 @@
+PASS W1 transmog interruption after debit preserves receipt and appearance
+PASS W1 aborted appearance write rolls back dust and receipt
+PASS CONTROL concurrent transmog taps with exactly one purchase worth of dust both succeed once
+PASS W2 melting legacy gear keeps its collected look forever
+PASS W2 concurrent collected looks survive after inventory copies are melted
+PASS W3 aborted melt preserves worn stats, item and dust
+PASS CONTROL melting one copy concurrently pays exactly once and retains other slots
+PASS W4 single crate click recovers from an aborted take and allows retry
+PASS CONTROL crate rewards persist and double-open pays once
+PASS CONTROL real crate odds template reports production percentages
+PASS CONTROL plain cosmetic equip, hide, clear and strip conserve ownership
+PASS CONTROL paid saved fit survives strip and restores owned gear without another charge
+PASS CONTROL transmog refuses missing ownership, wrong slot and insufficient dust without changing state
+WARDROBE PLAYTEST: 13 passed, 0 failed (Node only, no pixel claim)

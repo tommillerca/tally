@@ -1,0 +1,7 @@
+PASS R46-7 zero-calorie row counts: 6/7 logged, streak 9; deletion gives 5/7 and 5
+PASS R46-8 Add and Today both show 1668 left after 872 displayed kcal
+PASS R46-9 copy chip and callback agree on source date, 723 kcal and stored meal
+PASS R46-10 copy chip and callback agree on source date, 723 kcal and stored meal
+PASS R46-11 past empty meals and sign-offs never speak as today, across every speech choice
+PASS R46-12 actual back-arrow callback stops at creation and marks its button disabled
+6/6 guards passed

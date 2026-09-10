@@ -1,0 +1,23 @@
+PASS ahead/diverged without proof stays uncertain
+PASS reachable head is shipped
+PASS source head in merged release train is shipped
+PASS reused name or branch advanced after merge is uncertain
+PASS PR merged outside this main cannot establish shipping
+PASS private/public evidence never crosses repositories
+PASS non-main PR is uncertain
+PASS missing commit evidence is uncertain
+PASS direct main extension includes concrete loss summary
+PASS stale main cannot establish genuinely unmerged work
+PASS empty extension never becomes a genuine loss
+PASS dry run lists exact remote/ref/head/reason and protects main
+PASS stale inventories have zero deletion candidates
+PASS empty sample and duplicate refs fail closed
+PASS CLI refuses --dry-run
+PASS CLI refuses --acknowledge-deletion-plan
+PASS CLI refuses --execute
+PASS CLI refuses --delete
+PASS CONTROL captured reachable head is shipped and appears in the same classified rows
+PASS real captured divergent branch is not a phantom unmerged item
+PASS all captured branches reproduce the checked-in report exactly
+PASS acknowledged CLI preview matches pure plan
+Branch graveyard audit: 22/22 passed.

@@ -1,6 +1,84 @@
 # What each patch note claims, and what backs it
 
 
+## v542 (2026-09-09)
+
+Changelog item: Shiny pets now hold the same Base collection cell in the Kennel and Stable loss warnings, even with an unsupported saved colour.
+
+1. PROOF: collection-cell-audit.mjs | REACH: Stable Destroy and Breed disclosures execute production handlers with real destruction quotes over in-memory IndexedDB. C2 shinies cover null, unsupported sparkle and all six supported morphs; the player-facing collection-cell warning and unchanged roster before consent are asserted. Every ordinary species is checked against an independent cell counter. Shinies retain Base ownership because that is the existing Kennel meaning, including unsupported saved morphs; Laboratory ingredient eligibility and recipe policy are unchanged.
+
+Changelog item: Destroying a plain Base pet no longer says it is your last colour copy when a shiny pet still holds that cell. Losing a shiny appearance still gets its own warning.
+
+2. PROOF: collection-cell-audit.mjs | REACH: Stable Destroy, with a C6 Base and shiny keeper, checks the actual disclosure string and safe two-tap removal. Null, unsupported sparkle and every supported shiny morph are covered. The reverse selection retains the last-shiny appearance warning without falsely claiming cell loss.
+
+Scope and evidence limits: the guard was RED before implementation (105 passed, 17 failed). The hostile roster's independent count, Stable door text and aria-label, Kennel heading and seven filled dots passed before the fix and remain seven. These are production-template and handler checks with DOM doubles, not browser layout proof. The original handoff's exact rows were unavailable in this checkout, so the guard reconstructs its listed traits (CX, sparkle, null, shiny Ember and duplicate iid) with the required seven-cell total; exact fixture identity is unverified. R6-C4 is deferred to `petDestructionHtml` in `js/app.js:21508`. R6-C2 naming and R6-C3 Breed gate changes remain with the app lane. No version stamp is advanced.
+
+Validation: `node tests/unit.test.js` exited 0 with `384 passed, 0 failed`. `node tests/collection-cell-audit.mjs` exited 0 with `122 passed, 0 failed`; the final guard also exited 1 against disposable pre-fix sources with `105 passed, 17 failed`. All 156 PURE entries, enumerated from the declaration and registrations in `tests/release-gate.mjs`, ran in separate Node processes and exited 0. `node tests/release-gate.mjs --coverage-only` exited 0. Off-grid `ownedPairs` keys, including CX, retain their historical API behavior; the agreement assertion compares actual grid cells, as the Kennel counter does.
+
+Changelog item: Backups can reconcile duplicate offline incubator purchases, keep both purchase receipts, refund the duplicate price once, and continue backing up other progress.
+
+1. PROOF: r6-merge-audit.mjs | REACH: real production purchase, import, export, encryption and cloud CAS functions over the existing in-memory IndexedDB harness and simulated transport. Registered in PURE, including both 100,000 and 25,000 coin opening wallets. The pre-fix baseline at 3a403423999f542ee08cb4758d619f946e3c9c6f fails all four import arms (both directions, replace false/true), omits unrelated incoming rows, and cannot push after a 409. The existing product fix preserves incoming rows in every store, both immutable purchase receipts and exactly one full refund; both original device databases recover without erase. Additive imports also retain local-only rows. Cloud push and pull preserve every unrelated test row. Replay, stale backups, spending the refund, a third independent buyer, separately earned slot 3 and injected transaction aborts are exercised. Historical evidence: [before](r6-merge/before.txt), [after](r6-merge/after.txt), [small wallet](r6-merge/low-wallet.txt). No browser or production-network claim. The notice is returned and persisted, but visible disclosure and R6-E3/R6-E4 remain BLOCKED by the frozen app/loot ownership boundary. This is not complete acceptance of the work order.
+
+The corrected work order matches SHA256 `860e00ed815f37f64c9bb797d2fc970371b9e4406e4916b0384d4dfc941b7a80`. This continuation registers the existing guard and retains the product fix. The earlier [advisory report](r6-merge/REPORT.md) describes round 1; its test-registration blocker is resolved here. No version stamp changes.
+
+Purchase policy: keep both immutable paid receipts, retain one active copy of the numbered incubator, and refund the other purchase's full 20,000 coins exactly once. This explicitly differs from keeping both purchases active: the existing slots and capacity stay intact, while the refund preserves all earned coin value. `replace: true` retains its existing replacement semantics for unrelated local-only rows. R6-E1 experiment reconciliation is unchanged.
+
+Remaining ownership blockers: visible E2 disclosure needs the file-import result handler in `js/app.js:22245` and the cloud notice UI; R6-E3 needs `js/app.js:22184` to reuse the honest Settings copy; R6-E4 needs `js/loot.js:1687` and `js/app.js:21338`/`21544` to distinguish a known concurrent action from an uncertain save. The correction still forbids the loot edit and assigns app.js to another lane. Those fixes are proposed for their owning lanes, not claimed here.
+
+Changelog item: The breeding scroll audit now distinguishes an unselected fixture from a missing loss warning; browser proof is pending.
+
+1. PROOF: breed-sheet-scroll-audit.mjs, r6-guards-audit.mjs | REACH: R6-A4. Node DOM-model control reproduces picked=0 with the old child-dot selector and picked=2 with the current button selector. Actual warning, gutter, touch and cover assertions are UNPROVEN: the browser audit is in DECLARED full and loopback listen is denied. Operator command: node tests/breed-sheet-scroll-audit.mjs.
+
+Changelog item: The Stable stale-quote audit now enters quick confirmation and checks nickname changes and equipped-only pending health credit.
+
+2. PROOF: stable-stale-disclosure-audit.mjs | REACH: R6-G1. The first quick tap must arm a and open zero sheets. A new nickname stales consent, preserves the pet and requires typed approval. A separate 1,000-step pending health row belongs to equipped b and does not block unequipped a.
+
+Changelog item: The Breed loss audit now runs the breed handler and exposes the known missing-investment disclosure.
+
+3. PROOF: stable-loss-disclosure-audit.mjs | REACH: R6-G2. The registered PURE audit now invokes breed mode. Expected RED R6-S3: same-cell Breed confirmation omits banked steps, nickname loss, bond, talent choices and lineage loss. App lane owns the fix; no assertion is weakened.
+
+Changelog item: The Laboratory room audit now counts all 16 declared findings, including equipped replacement and shiny collection disclosure.
+
+4. PROOF: lab-room2-audit.mjs, r6-guards-audit.mjs | REACH: R6-G3 and R6-A2. Denominator is the declared 5 to 20 range. Missing-key controls report 14/16. All 16 guards execute: finding 6 passes; finding 15 remains expected RED for ambiguous ordinary-appearance versus preserved collection disclosure, owned by the app lane.
+
+Changelog item: The Laboratory recovery checks now require the health-writing audit for finding 1.
+
+5. PROOF: lab-lock-recovery-audit.mjs, lab-health-recovery-audit.mjs, r6-guards-audit.mjs | REACH: R6-G4. Release coverage requires the health guard on disk and exactly once in PURE. Direct lock audit imports and executes health scenarios. Deletion and deregistration controls fail even when lock recovery remains registered.
+
+Changelog item: The Laboratory evidence now labels its current capture separately from the historical pre-fix observations.
+
+6. PROOF: r6-guards-audit.mjs, lab-room2-audit.mjs | REACH: R6-A3. Evidence metadata labels the post-fix recapture, source hashes and Node limitations. PLAYTEST-LAB labels the ranked narrative as historical and gives current dispositions. No original pre-fix JSON capture is invented.
+
+Changelog item: Breeding refuses changed loss disclosures and asks you to review the current training steps again.
+
+1. PROOF: r6-app-audit.mjs | REACH: R6-S3: Stable Breed panel shows 100 steps, real creditEquippedPetSteps lands 20,000, first tap refuses and re-renders 20,100 without arming or spending. A further credit during typed review is refused inside the real breed service; consent clears before a successful retry. Node services and DOM doubles only; browser acceptance remains unproven.
+
+Changelog item: The Stable Laboratory door counts saved waiting operations, including experiments still in flight.
+
+2. PROOF: r6-app-audit.mjs | REACH: R6-R1: Stable door reads labIntents plus unseen labExperiments, deduplicated by operation ID and excluding labSeen. Empty and deliberately inflated render lists both display the same durable count; ready and unknown empty controls are checked. Node services and DOM doubles only; browser acceptance remains unproven.
+
+Changelog item: Feeding an invested pet into breeding requires typing DESTROY, matching the Laboratory review.
+
+3. PROOF: r6-app-audit.mjs | REACH: R6-C3: Stable Breed on a named, bonded, trained pet with lineage and talent remains unspent after two taps and wrong text; DESTROY succeeds. Ordinary surplus still succeeds on two taps. Node services and DOM doubles only; browser acceptance remains unproven.
+
+Changelog item: Destruction warnings name the collection cell a shiny pet holds as Base.
+
+4. PROOF: r6-app-audit.mjs | REACH: R6-C2: A real destruction quote for the last shiny Base cell renders Your last Base, with an Ember naming control. Cell ownership code is unchanged in this lane. Node services and DOM doubles only; browser acceptance remains unproven.
+
+Changelog item: Incubator purchases are disabled when they would add no experiment uses today.
+
+5. PROOF: r6-app-audit.mjs | REACH: R6-R2: An affordable 20,000-coin incubator with remaining uses 0 to 0 is disabled; 0 to 1 is enabled, and insufficient coins remain disabled. Node services and DOM doubles only; browser acceptance remains unproven.
+
+Changelog item: Interrupted experiments keep the Today and post-hatch invitations into the Laboratory available.
+
+6. PROOF: r6-app-audit.mjs | REACH: R6-A1: A valid saved intent makes the real presentation-only snapshot unknown with zero remaining. Production Today markup and the post-hatch callback retain Open Laboratory. Explicit Today hiding is respected. Node services and DOM doubles only; browser acceptance remains unproven.
+
+The six guards pass on the inherited round 1 product fixes. Each fails against the pre-fix `js/app.js` from `3a403423` using `R6_APP_SOURCE` and otherwise the same checkout modules. This is historical RED proof, because the initial checkout already contained the product fixes. No product fix or version stamp was rewritten. Full PURE acceptance and browser verification are reported separately; these rows do not assert a green release gate.
+
+Validation: `node tests/unit.test.js` exits 0 with 384 passed, 0 failed. `node tests/r6-app-audit.mjs` exits 0 with six passed. Coverage registration passes. The complete final PURE census has 156 entries: 149 exit 0, six exit 1, one exit 97 using the gate lifecycle preload. Nonzero entries are breed-last-colour-audit.mjs, breed-two-tap-audit.mjs, lab-ui-audit.mjs, kennel-copy-audit.mjs, stable-rooms-top-audit.mjs, m5-prove-red.mjs and verify-tail-audit.mjs. Existing test-context/expectation conflicts and lifecycle parsing of expected child failures require changes outside this lane. No audit was removed to obtain green.
+
+Browser acceptance remains unrun under the stated listener restriction. The current BROWSER tier contains 123 audits. Run `node tests/release-gate.mjs --all` from this checkout on the operator machine, including the destructive-action and layout coverage in kennel-copy-browser-audit.mjs, breed-sheet-scroll-audit.mjs and sheet-action-reachable-audit.mjs. Node proof does not establish browser reachability or pixel layout.
+
 ## v541 (2026-09-09)
 
 Changelog item: The off-hand brushes and spades are back to how they looked before the last change.

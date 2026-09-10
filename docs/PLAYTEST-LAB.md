@@ -1,12 +1,43 @@
-**Laboratory and Stable playtest. Advisory findings, 2026-09-08.**
+**Laboratory and Stable playtest. Historical pre-fix advisory observations, 2026-09-08.**
 
 Twenty ranked findings: 15 certain in the exercised state, five suspicions explicitly identified below. The largest risks are a persistent recovery lock and incomplete Stable destruction reviews. No application fixes were made. This report is evidence for independent review, not release approval.
 
-**Scope and reproducibility**
+**Evidence phases and current disposition (R6, 2026-09-09)**
+
+The ranked findings and original controls below preserve the **historical pre-fix narrative**. Their present-tense wording describes that original observation, not the current checkout. The original raw pre-fix JSON is not available here and has not been reconstructed. The prior unlabelled evidence file had already been regenerated after fixes, so it could not support treating all twenty findings as current defects.
+
+[evidence.json](playtest-lab/evidence.json) is now explicitly a **post-fix recapture**. Its metadata records capture time, source hashes and Node-only limitations. It supports the current dispositions below. A `ready, ready, ready` result for finding 1 means recovery succeeded in that capture; it is not evidence of the historical lock. Synthetic negative controls and preserved historical observations in [lab-room2-before.json](../tests/fixtures/lab-room2-before.json) have separate provenance.
+
+| Historical finding | Current capture and guard disposition |
+| --- | --- |
+| 1 | `intent-health-lock`: ready three times. The required health audit tests both pending and credited health interruptions. |
+| 2 | `stable-stale-training`: the stale commit preserves the pet. Dedicated Stable audit grades refreshed review and fresh consent. |
+| 3 | `breed-last-colour`: last-cell flow opens review. The exploratory probe does not submit that review; dedicated breed-last-colour audit grades it. |
+| 4 | `stable-named-bonded`, `stable-talents`: Destroy review names the losses. Separate R6-S3 remains RED for the same-cell Breed confirmation path. |
+| 5 | `breed-investment`, `breed-low-training`: the Breed bar lists investment. This bar capture does not prove the separate confirmation toast is complete. R6-S3 remains RED. |
+| 6 | `stable-equipped`: review names the equipped pet and replacement; the remaining pet becomes equipped. Guard passes. |
+| 7 | `legacy-shiny-colour`: Laboratory and collection agree on Base; guard passes. |
+| 8 | `excluded-metadata`: excluded rows retain real investment; guard passes. |
+| 9 | `excluded-metadata`: unsupported colour and recovery explanation are explicit; guard passes. |
+| 10 | `completionist`: completion copy identifies risky pairs; guard passes. |
+| 11 | `one-spare`: legal risky pair and hatch option are identified; guard passes. |
+| 12 | `terminal-input`: Midnight is disabled with its terminal-recipe explanation; guard passes. |
+| 13 | `incubator-hidden`: incubator entry remains in the bench markup; guard passes. |
+| 14 | `purchase-cap-control`: exhausted slots disable and reset hint is shown; guard passes. |
+| 15 | `stable-shiny-last-copy`: shiny preserves Base, but the review still says last copy of this colour without distinguishing ordinary appearance. New guard is RED, app lane. |
+| 16 | `old-receipt`: birth facts are labelled At creation; guard passes. |
+| 17 | `help-callback`: real callback updates the in-memory snapshot. The intentionally stale `help-stale-snapshot` control is not the live callback result. |
+| 18 | `clock-callback`: day and timezone changes trigger reads and close clears timers; Node guard passes, browser scheduling unproven. |
+| 19 | `ingredient-callback`: focus changes clear and restore the note; Node guard passes, browser carousel unproven. |
+| 20 | `purchase-callback`: purchase repaints capacity and next slot; Node guard passes. |
+
+Full R6 validation and limitations are in [the advisory report](r6-guards/REPORT.md).
+
+**Original scope and reproducibility**
 
 The supplied plan file's SHA256 matched `6816c65f6e1d8b28b08a1b635920b3e21516ba49a7c82e80b213312ae8eadae7`. All source paths below refer to this checkout. No original checkout was edited.
 
-Run `node docs/playtest-lab/run.mjs` from the checkout root. The [probe](playtest-lab/run.mjs) imports the existing `tests/mem-idb.mjs` harness and the real `js/db.js`, `js/laboratory.js`, `js/loot.js` and `js/pets.js`. It evaluates the unmodified Laboratory renderer region extracted from `js/app.js`, as the existing audits do. It also extracts and executes the Stable Destroy handler, Breed bar template and Breed click handler against real services. [evidence.json](playtest-lab/evidence.json) contains the resulting HTML, snapshots, outcomes and disclosure text, indexed by the evidence IDs below.
+Run `node docs/playtest-lab/run.mjs` from the checkout root. The [probe](playtest-lab/run.mjs) imports the existing `tests/mem-idb.mjs` harness and the real `js/db.js`, `js/laboratory.js`, `js/loot.js` and `js/pets.js`. It evaluates the unmodified Laboratory renderer region extracted from `js/app.js`, as the existing audits do. It also extracts and executes the Stable Destroy handler, Breed bar template and Breed click handler against real services. [evidence.json](playtest-lab/evidence.json) now contains a labelled post-fix recapture, with HTML, snapshots, outcomes and disclosure text under `groups`, indexed by the evidence IDs below. Running this command captures the current checkout, never the historical pre-fix state.
 
 The probe stubs image markup, icons, DOM endpoints and timer callbacks. The Breed bar's combat-gain text is explicitly replaced with a placeholder; no finding assesses that text. It does not import or boot the entire app, render pixels, emulate a full DOM, connect to a server, bind a socket or drive a browser. Click-handler tests invoke the captured callback with synthetic event objects. IndexedDB is in memory, not the user's live database. Simulated aborts establish transaction behavior within this harness, not OS process-kill durability.
 
@@ -14,7 +45,7 @@ Unless a scenario says otherwise, pets are distinct C1 Drizzle instances, non-sh
 
 The eight problems Tom previously found were not enumerated in the frozen order. These are twenty candidates for independent triage, not a claim that all twenty are distinct from his unpublished list. The known grey picker and Frost palette complaint are not counted as new findings.
 
-**Ranked findings**
+**Historical ranked findings (pre-fix observations)**
 
 1. **An undispatched experiment can leave the Laboratory locked after a normal health sync. Certain. High impact.**
 

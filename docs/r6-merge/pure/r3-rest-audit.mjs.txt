@@ -1,0 +1,14 @@
+R3-8 witness: hasCloudBackup=null; erase copy=The cloud backup could not be verified, so no vault copy can be confirmed. Treat this as the only copy.
+PASS R3-8 bare ok body cannot reassure before erase
+PASS R3-8 CONTROL: valid encrypted save, malformed body, unreadable save and HTTP outcomes
+R3-4 witness: Restore blocked: this backup is missing or conflicts with Laboratory experiments or incubator purchases on this device. This protects pets and purchases from being undone or duplicated. Your current save is unchanged. Choose a newer backup that includes those records.
+PASS R3-4 refused replacement explains protection and next step without changing save
+PASS R3-5 nickname alone requires typed destruction
+PASS R3-5 bond alone requires typed destruction
+PASS R3-5 talents alone requires typed destruction
+PASS R3-5 equipped alone requires typed destruction
+PASS R3-5 CONTROL: uninvested duplicate keeps two-tap confirmation
+PASS R3-6 remove unreachable Stable guard; authority still filters unsupported rows
+PASS R3-6 morph accounting comment matches six morphs and 36 pairs
+PASS R3-6 CONTROL: retained friend payload actually reaches paddock renderer
+R3 rest: 11 passed, 0 failed

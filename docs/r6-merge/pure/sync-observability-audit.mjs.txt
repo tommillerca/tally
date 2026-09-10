@@ -1,0 +1,81 @@
+PASS autoSync offline-gate: persisted outcome
+PASS autoSync offline-gate: correct hop and network evidence
+PASS offline-gate: only an accepted profile can advance the throttle
+PASS autoSync offline-gate: real Settings row reports outcome
+PASS autoSync null-snapshot: persisted outcome
+PASS autoSync null-snapshot: correct hop and network evidence
+PASS null-snapshot: only an accepted profile can advance the throttle
+PASS autoSync null-snapshot: real Settings row reports outcome
+PASS autoSync snapshot-failed: persisted outcome
+PASS autoSync snapshot-failed: correct hop and network evidence
+PASS snapshot-failed: only an accepted profile can advance the throttle
+PASS autoSync snapshot-failed: real Settings row reports outcome
+PASS autoSync request-failed: persisted outcome
+PASS autoSync request-failed: correct hop and network evidence
+PASS request-failed: only an accepted profile can advance the throttle
+PASS autoSync request-failed: real Settings row reports outcome
+PASS autoSync non-2xx: persisted outcome
+PASS autoSync non-2xx: correct hop and network evidence
+PASS non-2xx: only an accepted profile can advance the throttle
+PASS autoSync non-2xx: real Settings row reports outcome
+PASS autoSync grants-failed: persisted outcome
+PASS autoSync grants-failed: correct hop and network evidence
+PASS grants-failed: only an accepted profile can advance the throttle
+PASS autoSync grants-failed: real Settings row reports outcome
+PASS autoSync grants-throw: persisted outcome
+PASS autoSync grants-throw: correct hop and network evidence
+PASS grants-throw: only an accepted profile can advance the throttle
+PASS autoSync grants-throw: real Settings row reports outcome
+PASS autoSync grants-body: persisted outcome
+PASS autoSync grants-body: correct hop and network evidence
+PASS grants-body: only an accepted profile can advance the throttle
+PASS autoSync grants-body: real Settings row reports outcome
+PASS autoSync success: persisted outcome
+PASS autoSync success: correct hop and network evidence
+PASS CONTROL autoSync: real transport accepts the built profile
+PASS success: only an accepted profile can advance the throttle
+PASS autoSync success: real Settings row reports outcome
+PASS pushProfileSoon offline-gate: persisted outcome
+PASS pushProfileSoon offline-gate: correct hop and network evidence
+PASS pushProfileSoon offline-gate: real Settings row reports outcome
+PASS pushProfileSoon null-snapshot: persisted outcome
+PASS pushProfileSoon null-snapshot: correct hop and network evidence
+PASS pushProfileSoon null-snapshot: real Settings row reports outcome
+PASS pushProfileSoon snapshot-failed: persisted outcome
+PASS pushProfileSoon snapshot-failed: correct hop and network evidence
+PASS pushProfileSoon snapshot-failed: real Settings row reports outcome
+PASS pushProfileSoon request-failed: persisted outcome
+PASS pushProfileSoon request-failed: correct hop and network evidence
+PASS pushProfileSoon request-failed: real Settings row reports outcome
+PASS pushProfileSoon non-2xx: persisted outcome
+PASS pushProfileSoon non-2xx: correct hop and network evidence
+PASS pushProfileSoon non-2xx: real Settings row reports outcome
+PASS pushProfileSoon success: persisted outcome
+PASS pushProfileSoon success: correct hop and network evidence
+PASS CONTROL pushProfileSoon: real transport accepts the built profile
+PASS pushProfileSoon success: real Settings row reports outcome
+PASS autoSync: signing failure is recorded before fetch
+PASS pushProfileSoon: signing failure is recorded before fetch
+PASS real request deadline records TimeoutError and no server reply
+PASS direct syncProfile success
+PASS direct syncProfile non-2xx
+PASS direct syncProfile request-failed
+PASS brief failures stay quiet
+PASS three failures across an hour give one calm notice
+PASS a continuing three-day outage does not repeat the notice
+PASS bounded history retains last accepted time and failure window
+PASS success resets the episode so a later sustained failure can notify
+PASS cloud opt-out has no failure episode or warning
+PASS opting back in starts a fresh episode
+PASS throttle skips are recorded but never count as failures or hide the reason
+PASS diagnostics are excluded from every save export and cloud backup
+PASS file replacement preview preserves local diagnostics just like import
+PASS import replace=true preserves device diagnostics and rejects foreign diagnostics
+PASS import replace=false preserves device diagnostics and rejects foreign diagnostics
+PASS diagnostics survive module reload
+PASS overlapping attempts append atomically
+PASS actual app callback presents a non-blocking toast
+PASS recovery before the delayed toast suppresses stale warnings
+PASS both swallowing boundaries record failures and cannot regain a bare catch
+PASS Settings, toast and offline cache are wired into the app
+80/80 checks passed

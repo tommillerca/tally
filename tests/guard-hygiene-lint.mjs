@@ -182,6 +182,9 @@ ok('PARSES every audit is something Node will actually execute',
    FIXED ONE? Delete its line. The row fails on a stale entry too, so the
    inventory cannot quietly rot into a list nobody maintains. */
 const SEAM_ONLY_KNOWN = [
+  // Frozen capture work order: this PURE audit proves the fixture hooks themselves.
+  // Browser reachability/geometry remain in crew-*-browser-audit, never claimed here.
+  'crew-capture-node-audit.mjs',
   /* 2026-09-09: the boot audit executes the production gate without forcing
      it. It mentions the force flag only to delete the claim in a red control.
      Automatic patch notes have no initiating click; browser proof is owed. */

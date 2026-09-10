@@ -1,0 +1,2 @@
+PASS CONTROL: typed Destroy identifies BISCUIT and names the nickname and bond it removes
+PASS CONTROL: typed Destroy retains training and lineage warnings and names talent, nickname and bond losses

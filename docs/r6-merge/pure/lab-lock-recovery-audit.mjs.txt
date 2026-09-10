@@ -1,0 +1,15 @@
+KILL intent: SIGKILL, intents=1, receipts=0, pets=3
+OBSERVED CONTROL: snapshots=ready,ready,ready, quotes=9/9 accepted, refusals=none
+PASS CONTROL
+OBSERVED NICKNAME FIRST: snapshots=ready,ready,ready, quotes=9/9 accepted, refusals=none
+PASS NICKNAME FIRST
+OBSERVED BOOT AUTO-EQUIP: snapshots=ready,ready,ready, quotes=9/9 accepted, refusals=none
+PASS BOOT AUTO-EQUIP
+OBSERVED HATCH FIRST: snapshots=ready,ready,ready, quotes=9/9 accepted, refusals=none
+PASS HATCH FIRST
+PASS orphan and malformed intents heal without returning spent pets
+KILL spend: SIGKILL, intents=0, receipts=1, pets=2
+PASS production boot recovers before Today, even after auto-equip
+PASS durable receipt corruption still refuses recovery without changing pets
+PASS committed result delivered once, spent result never resurrected
+LAB LOCK RECOVERY: 8 passed, 0 failed

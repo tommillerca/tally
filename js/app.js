@@ -1,4 +1,5 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
+import { labEqual } from './laboratory.js';
 import { db, kvGet, kvSet, kvUpdate, payAtomic, newId, exportAll, importAll, STORES, useDbName, storageStatus, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG, dayIsUnwitnessed } from './db.js';
 import { validateImport, fileReplacementPreview, readFileSave, sameSaveRows, saveFileRestorePoint, fileRestorePoints, restoreFileSave } from './db.js';
 import { takeSaveInterruption, interruptionCopy, writeFailureCopy, ERASED_COPY, stepSyncStatus, healthSyncInfo, healthSyncCopy } from './save-disclosure.js';
@@ -16430,7 +16431,7 @@ function openHatchReveal(res, charWrap) {
       </div>
     </div>`, { cls: 'takeover', onClose: () => setFxLayer() });
   if (laboratoryEngine()) laboratoryEngine().snapshot({ presentationOnly: true }).then(s => {
-    if (!wrap2.isConnected || s.status !== 'ready' || s.remaining <= 0 || !s.hasSafeUsefulPair || s.collectionCount === labTotal()) return;
+    if (!wrap2.isConnected || (s.status !== 'unknown' && (s.status !== 'ready' || s.remaining <= 0 || !s.hasSafeUsefulPair || s.collectionCount === labTotal()))) return;
     const link = document.createElement('button'); link.className = 'btn ghost'; link.textContent = 'Open Laboratory';
     link.addEventListener('click', () => openLaboratory());
     $('.reveal-foot', wrap2)?.appendChild(link);
@@ -20205,6 +20206,7 @@ async function openStable(opts = {}) {
     const [insts, bank, st, eqOwn, nicks, ownedCos, bonds, talentPicks] = await Promise.all([petInstances(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds(), kvGet('petBonds', {}), kvGet('pettalents', {})]);
     // petInstances() already excludes unsupported rows and preserves them in storage.
     const labStock = laboratoryEngine() ? await laboratoryEngine().snapshot({ presentationOnly: true }).catch(() => null) : null;
+    if (labStock) labStock.waiting = await labWaitingCount().catch(() => null);
     /* OUT WITH YOU means the C slot holds her. A petEquipped that the worn outfit
        does not agree with is a pet the Stable must still offer EQUIP for, or the
        player has no control anywhere that can put her on Today (R39-1). */
@@ -20264,16 +20266,19 @@ async function openStable(opts = {}) {
     const saved = (S.settings || {}).stableBreed || {};
     if (JSON.stringify(saved.iids || []) !== JSON.stringify(sel) || (saved.keep || null) !== offSp) saveBreed();
     const keeper = pair ? (offSp === b.iid ? b : a) : null;
-    const spare = pair ? (offSp === b.iid ? a : b) : null;
+    let spare = pair ? (offSp === b.iid ? a : b) : null;
+    // The panel and every confirmation refer to this same atomic loss quote.
+    const breedQuote = spare ? (await quotePetDestruction(spare.iid, keeper.iid)).quote : null;
+    if (breedQuote) { spare = breedQuote.inst; bank[spare.iid] = breedQuote.bankedSteps; }
     const offLineage = keeper ? (keeper.lineage || 0) + 1 : 0;
     const spareLvl = spare ? petLevel(bank[spare.iid] || 0) : 0;
     // "maybe you shouldn't": a shiny, a bred bloodline or a levelled pet is a
     // real loss, and the player has to be told BEFORE they commit.
-    const spareLoss = spare ? breedInvestmentCopy(spare, bank, nicks, bonds, talentPicks) : '';
+    const spareLoss = breedQuote ? breedInvestmentCopy(spare, bank, { [spare.iid]: breedQuote.nickname }, { [spare.iid]: breedQuote.bond }, { [spare.iid]: breedQuote.talents }) : '';
     const spareIsPrecious = !!spare && (spare.shiny || !!spareLoss);
     /* No dust check: breeding is gated by the 6,000-step cooldown alone since
        2026-08-27, so the pair and the cooldown are the whole of it. */
-    const canBreedNow = pair && st.ready;
+    const canBreedNow = pair && st.ready && !!breedQuote;
 
     /* THE COVERFLOW ROSTER (v317). Tom sent the shadcn coverflow component and
        asked how it would look in the app, then "build the stable cover flow".
@@ -20516,14 +20521,14 @@ async function openStable(opts = {}) {
     const kennelOwned = ownedPairs(insts);
     const kennelFound = ownedCellCount(kennelOwned, KENNEL_SPECIES.map(x => x.id));
     rememberKin(body);
-    const labWaiting = labStock?.unseen?.length || 0;
+    const labWaiting = labStock?.waiting;
     // A missing snapshot cannot honestly supply a remaining-experiments count.
     const labRoomCount = labWaiting ? `${labWaiting} waiting`
       : labStock?.status === 'ready' ? `${labStock.remaining} today`
-      : labStock ? `${labWaiting} waiting` : 'Unavailable';
-    const labRoomLabel = labWaiting ? `${labWaiting} results waiting`
+      : labStock ? 'Check status' : 'Unavailable';
+    const labRoomLabel = labWaiting ? `${labWaiting} operations waiting`
       : labStock?.status === 'ready' ? `${labStock.remaining} experiments left today`
-      : labStock ? `${labWaiting} results waiting. Open Laboratory to check availability.` : 'Laboratory availability unavailable';
+      : labStock ? 'Open Laboratory to check availability.' : 'Laboratory availability unavailable';
     const breedLockNote = st.ready ? '' : `<p class="note" data-breed-lock>Breeding is locked. Walk ${st.cooldownLeft.toLocaleString()} more ${st.cooldownLeft === 1 ? 'step' : 'steps'} to unlock it.</p>`;
     const bodyScroll = body.scrollTop;
     body.innerHTML = `
@@ -20604,7 +20609,7 @@ async function openStable(opts = {}) {
           <ul class="breed-facts">
             <li>You keep <b>${esc(petInstanceName(keeper, bank[keeper.iid] || 0))}</b>. Same pet, same name, <b>same level and look</b>.</li>
             <li>It reaches <b>lineage ${offLineage}</b>: ${esc(petBreedGainText(keeper.sp, petLevel(bank[keeper.iid] || 0), keeper.shiny, offLineage))} ${esc(petStatBonusText(keeper.sp, keeper.shiny, offLineage))}</li>
-            <li><b>${esc(petInstanceName(spare, bank[spare.iid] || 0))} is destroyed</b> and does not come back.${petLastColourLoss(spare, insts) ? ` This is your last ${esc(petColourName(spare))} of this species. Its collection cell will become empty.` : ''}</li>
+            <li><b>${esc(petInstanceName(spare, bank[spare.iid] || 0))} is destroyed</b> and does not come back.${petLastColourLoss(spare, insts) ? ` This is your last ${esc(spare.shiny || !spare.morph || spare.morph === 'base' ? 'Base' : petColourName(spare))} of this species. Its collection cell will become empty.` : ''}</li>
           </ul>
           ${spareIsPrecious ? `<div class="breed-warn">
             ${ICONS.warn(17)}
@@ -21209,8 +21214,15 @@ async function openStable(opts = {}) {
     $('#doBreed', body)?.addEventListener('click', async e => {
       const keepIid = offSp, feedIid = sel.find(x => x !== offSp);
       const btn = e.currentTarget;
+      if (!btn.isConnected || btn.disabled) return;
       const fresh = await quotePetDestruction(feedIid, keepIid);
-      if (!fresh.ok) { toast('Could not review that pet.'); return; }
+      if (!btn.isConnected) return;
+      if (!fresh.ok || !breedQuote || !labEqual(breedQuote, fresh.quote)) {
+        btn.dataset.armed = '0'; delete btn.destructionQuote;
+        await render();
+        toast('This pet changed. Review its losses again before breeding.');
+        return;
+      }
       const reviewFor = q => ({
         title: `Feed ${petDestructionName(q)} in?`,
         html: `${petDestructionHtml(q)}<p>Your keeper gains a lineage rank. ${q.inst.shiny ? 'Shinies are about a 1 in 30 hatch and its colour will NOT carry over. ' : ''}${q.inst.lineage ? 'Its bloodline is lost; lineage does not transfer. ' : ''}Feed a plain spare in instead unless you are sure.</p>`,
@@ -21235,9 +21247,9 @@ async function openStable(opts = {}) {
         else toast(result.message);
         return;
       }
-      const q = fresh.quote, spareInst = q.inst, spareName = petDestructionName(q);
-      if (q.lastCell) { openPetDestructionReview(reviewFor(q)); return; }
-      // Every other breed retains its two taps and its existing shiny warning.
+      const q = breedQuote, spareInst = q.inst, spareName = petDestructionName(q);
+      if (q.lastCell || labInvested({ ...q, level: petLevel(q.bankedSteps), lineage: q.inst.lineage })) { openPetDestructionReview(reviewFor(q)); return; }
+      // Uninvested spare copies retain two taps and the existing shiny warning.
       btn.dataset.armed = '1'; btn.destructionQuote = q;
       const t = btn.textContent;
       btn.textContent = spareInst.shiny ? `Destroy the SHINY ${spareName}?` : `Destroy ${spareName}?`;
@@ -21293,6 +21305,16 @@ async function recoverLaboratoryAtBoot() {
   } catch {
     toast(labStateCopy({ status: 'unknown' }), 8000, { error: true });
   }
+}
+
+// Count durable work, including an intent that has no renderable receipt yet.
+async function labWaitingCount() {
+  return payAtomic({ snapshot: { keys: ['labIntents', 'labExperiments', 'labSeen'] }, decide: s => {
+    const seen = new Set(s.labSeen || []);
+    const waiting = new Set(Object.keys(s.labIntents || {}));
+    for (const id of Object.keys(s.labExperiments || {})) if (!seen.has(id)) waiting.add(id);
+    return { result: waiting.size };
+  } });
 }
 
 // LAB UI PURE BEGIN: these renderers consume the engine's coherent snapshot.
@@ -21428,9 +21450,10 @@ function labRevealHtml(r) {
   return `<div class="lab-reveal ${certain ? 'lab-direct' : 'lab-surprise'}" data-outcomes="${r.distribution.length}"><div data-lab-result-art>${petSpriteHtml(r.species, 144, false, { morph: r.result.morph, shiny: false, wear: null, thumb: true })}</div><h3>${esc(labColour(r.result.morph))} ${esc(labSpecies(r.species))}</h3><p role="status">${b.gained.length ? `Added to your collection. ${b.afterCount}/${labTotal()}.` : `Another copy. ${b.neededFor ? `Needed for ${esc(b.neededFor)}.` : 'Optional extra copy.'}`}</p><p>${certain ? r.recipe === 'toxic-rose' ? 'Midnight was guaranteed by this recipe.' : 'This saved experiment had a guaranteed result.' : 'Your experiment is saved.'}</p><p>At creation: Level 1. 0 banked steps. Lineage 0. Non-shiny. No inherited name, bond or talents. This receipt records the experiment, not later training or naming.</p><p>${Number.isInteger(r.remaining) ? `${r.remaining} experiment${r.remaining === 1 ? '' : 's'} available today.` : 'Back to Laboratory to check remaining experiments.'}</p>${r.reconciliation ? '<p>This outcome was kept when overlapping offline experiments were reconciled. Reviewing it does not consume pets again.</p>' : ''}${r.resultPresent === false ? '<p>This saved pet has since left your Stable. Reviewing this receipt does not recreate it.</p>' : ''}</div>`;
 }
 function labTodayVisible(s, { current, priorDay, hidden }) {
-  return current && priorDay && !hidden && s.status === 'ready' && s.remaining > 0 && s.hasSafeUsefulPair === true && s.collectionCount < labTotal();
+  return current && !hidden && (s.status === 'unknown' || (priorDay && s.status === 'ready' && s.remaining > 0 && s.hasSafeUsefulPair === true && s.collectionCount < labTotal()));
 }
 function labTodayHtml(s, context) {
+  if (labTodayVisible(s, context) && s.status === 'unknown') return '<section class="lab-today"><b>The Laboratory</b><p>An experiment needs a status check. Open the Laboratory to review interrupted work.</p><button class="btn ghost" data-lab-open>Open Laboratory</button><button class="link" data-lab-hide>Hide this</button></section>';
   return labTodayVisible(s, context) ? `<section class="lab-today"><b>The Laboratory</b><p>Build your collection with a missing colour or needed ingredient. Two matching spare pets are consumed. ${s.remaining} experiments available today.</p><button class="btn ghost" data-lab-open>Open Laboratory</button><button class="link" data-lab-hide>Hide this</button></section>` : '';
 }
 function labIncubatorHtml(s) {
@@ -21438,7 +21461,9 @@ function labIncubatorHtml(s) {
   if (n > 3) return '<p>All three incubators are available. Back to bench to choose your pets.</p>';
   if (!s.hasExperiment) return '<p>Try the free daily experiment before adding an incubator. It supplies no pets. Back to bench to see the recipes.</p>';
   const afford = s.coins >= price;
-  return `<p>Incubator ${n}: ${price.toLocaleString()} coins. Adds one experiment each day. It supplies no pets and does not change the odds.</p><p>Capacity: ${s.capacity} to ${n}. Today's remaining uses: ${s.remaining} to ${Math.max(0, n - s.used)}.</p>${afford ? '' : `<p>Incubator ${n} costs ${price.toLocaleString()} coins. You have ${s.coins.toLocaleString()}; ${(price - s.coins).toLocaleString()} more needed. Earn coins from your daily activities, or use the bench with your current capacity.</p>`}<p>${s.used === 0 ? 'Your free daily experiment is available.' : 'Your free daily experiment has been used. It returns at the next experiment reset.'}</p><button class="btn" data-lab-buy="${n}" ${afford && s.status === 'ready' ? '' : 'disabled'}>Review incubator purchase</button>`;
+  const remainingAfter = Math.max(0, n - s.used);
+  const addsUseToday = remainingAfter > s.remaining;
+  return `<p>Incubator ${n}: ${price.toLocaleString()} coins. Adds one experiment each day. It supplies no pets and does not change the odds.</p><p>Capacity: ${s.capacity} to ${n}. Today's remaining uses: ${s.remaining} to ${remainingAfter}.</p>${addsUseToday ? '' : '<p>This incubator adds no uses today. Review it after the next experiment reset.</p>'}${afford ? '' : `<p>Incubator ${n} costs ${price.toLocaleString()} coins. You have ${s.coins.toLocaleString()}; ${(price - s.coins).toLocaleString()} more needed. Earn coins from your daily activities, or use the bench with your current capacity.</p>`}<p>${s.used === 0 ? 'Your free daily experiment is available.' : 'Your free daily experiment has been used. It returns at the next experiment reset.'}</p><button class="btn" data-lab-buy="${n}" ${afford && addsUseToday && s.status === 'ready' ? '' : 'disabled'}>Review incubator purchase</button>`;
 }
 function labPickerHtml(s, selected, slot, sp = '', colour = '') {
   const other = s.pets.find(p => p.iid === selected[1 - slot]);
@@ -21504,7 +21529,8 @@ function petDestructionLosses(q) {
   ].filter(Boolean).join(' ');
 }
 function petDestructionHtml(q) {
-  const colour = MORPH_LABEL[q.inst.shiny ? 'base' : q.inst.morph || 'base'] || petColourName(q.inst);
+  const morph = q.inst.shiny ? 'base' : q.inst.morph || 'base';
+  const colour = morph === 'base' ? 'Base' : MORPH_LABEL[morph] || petColourName(q.inst);
   return `<p>${q.lastColour ? 'This is your last copy of this colour. ' : ''}${q.lastCell ? `Your last ${esc(colour)} ${(esc(BH_BY_ID[q.inst.sp]?.name || q.inst.sp))} will be lost. Its collection cell will become empty. ` : ''}<b>${esc(petDestructionName(q))}</b> is destroyed and does not come back.</p><p>${esc(petDestructionLosses(q))}</p>${q.keepIid ? '' : `<p>Destroying it pays <b>${q.dust} Bone Dust</b>.</p>`}`;
 }
 // PET DESTRUCTION UI PURE END
@@ -24526,7 +24552,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v541'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v542'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

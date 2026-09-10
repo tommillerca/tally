@@ -1,4 +1,4 @@
-import { validateLabSave, mergeLabSave } from './laboratory.js';
+import { validateLabSave, mergeLabSave, labCapacity, labEqual } from './laboratory.js';
 // Minimal promise wrapper over IndexedDB. Stores: foods, log, weights, kv, xp, health, inv.
 // IMPORTANT: upgrades must stay strictly ADDITIVE (create-if-missing only).
 // Existing user data must survive every version bump.
@@ -1579,7 +1579,12 @@ export function validateImport(data) {
      whole rule. A file with no version at all is treated as old. */
   const fileVersion = Number(data.version) || 0;
   if (fileVersion > DB_VERSION) throw new Error(`that backup was made by a newer version of the app (v${fileVersion}; this app reads v${DB_VERSION}). Update the app, then import it again. Your old data is unchanged.`);
-  if (Array.isArray(data.kv)) { validateRestoreKv(data.kv); validateLabSave(Object.fromEntries(data.kv.map(r=>[r.k,r.v]))); }
+  if (Array.isArray(data.kv)) {
+    validateRestoreKv(data.kv);
+    const state = Object.fromEntries(data.kv.map(r=>[r.k,r.v]));
+    validateLabSave(state);
+    incubatorPurchases(state);
+  }
   if ((data.inv || []).some(r => r.kind === 'egg' && r.morphPolicy === 'lab-final-v1' && r.morph !== 'base')) throw new Error('inconsistent Laboratory egg policy');
   if (Array.isArray(data.kv)) {
     const rows = new Map(data.kv.map(r => [r.k, r.v]));
@@ -1611,6 +1616,72 @@ export function fileReplacementPreview(current, data) {
   return next;
 }
 
+// Keep immutable paid receipts outside the slot projection. The smallest opId
+// owns each slot; every other purchase is refunded in full with a stable receipt.
+// Reconcile before currency union, which would otherwise reject two legitimate
+// offline debits that together exceed their shared opening wallet.
+function incubatorPurchases(state) {
+  const archive = state.labIncubatorPurchases || {};
+  if (typeof archive !== 'object' || Array.isArray(archive)) throw new Error('invalid-incubator-purchases');
+  const receipts = new Map();
+  for (const [id, receipt] of [...Object.entries(archive), ...Object.values(state.labIncubators || {}).map(r => [r.opId, r])]) {
+    if (id !== receipt?.opId) throw new Error('invalid-incubator-purchases');
+    // Slot 3 validation also requires its prerequisite, already checked by
+    // validateLabSave for this original save. Do not rewrite either receipt.
+    labCapacity({ ...state.labIncubators, [receipt.slot]: receipt });
+    if (state.coinsHistory?.ops?.[receipt.currencyReceipt] !== -receipt.price) throw new Error('incomplete-purchase');
+    if (receipts.has(id) && !labEqual(receipts.get(id), receipt)) throw new Error('laboratory-restore-conflict');
+    receipts.set(id, receipt);
+  }
+  return receipts;
+}
+
+function reconcileIncubatorPurchases(localRows, fileRows) {
+  const local = Object.fromEntries(localRows.map(r => [r.k, r.v]));
+  const file = Object.fromEntries((fileRows || []).map(r => [r.k, r.v]));
+  validateLabSave(local); validateLabSave(file);
+  const purchases = incubatorPurchases(local);
+  for (const [id, receipt] of incubatorPurchases(file)) {
+    if (purchases.has(id) && !labEqual(purchases.get(id), receipt)) throw new Error('laboratory-restore-conflict');
+    purchases.set(id, receipt);
+  }
+  const ordered = [...purchases].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+  const owners = {}, refunds = [];
+  for (const [, receipt] of ordered) {
+    if (owners[receipt.slot]) refunds.push(receipt);
+    else owners[receipt.slot] = receipt;
+  }
+  if (!refunds.length) return { localRows, fileRows, notices: [] };
+  const notices = refunds.map(r => ({ code: 'duplicate-incubator-purchase', slot: r.slot,
+    opId: r.opId, keptOpId: owners[r.slot].opId, refund: r.price,
+    message: `Incubator ${r.slot} purchase ${r.opId} could not become a second copy of the same slot. Both purchase receipts were kept; its full price of ${r.price.toLocaleString('en-US')} coins was refunded once. Incubator ${r.slot} remains available.` }));
+  const normalize = (rows, state) => {
+    if (!state.labIncubators || !Object.keys(state.labIncubators).length) return rows;
+    const history = state.coinsHistory;
+    if (!currencyHistory(history) || currencyTotal(history) !== state.coins) throw new Error('incomplete-purchase');
+    const ops = { ...history.ops };
+    const record = (id, amount) => {
+      if (Object.hasOwn(ops, id) && ops[id] !== amount) throw new Error('laboratory-restore-conflict');
+      ops[id] = amount;
+    };
+    // Normalize only slots this side already owns. Copying another slot's
+    // debit here could exhaust this side's wallet before the ordinary currency
+    // union has brought over the earnings that funded that separate purchase.
+    const own = r => Object.hasOwn(state.labIncubators, r.slot);
+    for (const [, r] of ordered) if (own(r)) record(r.currencyReceipt, -r.price);
+    for (const r of refunds) if (own(r)) record(`lab-incubator-refund:${r.opId}:coins`, r.price);
+    const next = { ...history, ops };
+    if (!currencyHistory(next)) throw new Error('incomplete-purchase');
+    const patch = { coinsHistory: next, coins: currencyTotal(next),
+      coinsRev: (state.coinsRev || 0) + Object.entries(ops).reduce((n, [id, amount]) => n + (Object.hasOwn(history.ops, id) ? 0 : Math.abs(amount)), 0),
+      labIncubatorPurchases: Object.fromEntries(ordered.filter(([, r]) => own(r))), labIncubatorRecovery: notices,
+      labIncubators: Object.fromEntries(Object.keys(state.labIncubators).map(slot => [slot, owners[slot]])) };
+    return [...rows.filter(r => !Object.hasOwn(patch, r.k)), ...Object.entries(patch).map(([k, v]) => ({ k, v }))];
+  };
+  return { localRows: normalize(localRows, local), fileRows: normalize(fileRows, file), notices,
+    archive: Object.fromEntries(ordered) };
+}
+
 export async function importAll(data, { replace = true, expectedFileState = null } = {}) {
   if (frozen) throw frozenError();
   validateImport(data);
@@ -1623,11 +1694,12 @@ export async function importAll(data, { replace = true, expectedFileState = null
   // payout queued during import must never disappear behind a stale pre-read.
   let keptKv = [];
   let kvRows = data.kv;
+  let notices = [];
   return new Promise((resolve, reject) => {
     let t, mergeError;
     try { t = idb.transaction(STORES, 'readwrite'); }
     catch { reject(new Error('the restore could not open storage. Your old data is unchanged. Try again.')); return; }
-    t.oncomplete = () => resolve({ foods: (data.foods || []).length, log: (data.log || []).length, weights: (data.weights || []).length, skipped });
+    t.oncomplete = () => resolve({ foods: (data.foods || []).length, log: (data.log || []).length, weights: (data.weights || []).length, skipped, ...(notices.length ? { notices } : {}) });
     t.onerror = t.onabort = () => reject(mergeError || new Error('the restore did not finish. Your old data is unchanged. Try again.'));
     // File imports alone carry a reviewed state. Check every store under the
     // replacement's write lock, before any clear/put, including queued payouts.
@@ -1640,7 +1712,11 @@ export async function importAll(data, { replace = true, expectedFileState = null
         if (reviewedReads && reviewedReads.some(([s, r]) => !sameSaveRows(r.result, expectedFileState[s]))) {
           throw new Error('Your save changed after the review. Nothing was replaced. Pick the file again to review the latest progress.');
         }
-        const localKv = read.result;
+        const reconciled = reconcileIncubatorPurchases(read.result, data.kv);
+        const localKv = reconciled.localRows;
+        notices = reconciled.notices;
+        if (data.kv) data = { ...data, kv: reconciled.fileRows };
+        kvRows = data.kv;
         if (!replace) validateMergeHistory(localKv, localLogRead.result);
         if (replace && !declared.has('kv')) {
           for (const row of localKv) if (row.k.startsWith(`${MERGE_PREFIX}log:`)) t.objectStore('kv').delete(row.k);
@@ -1822,6 +1898,7 @@ export async function importAll(data, { replace = true, expectedFileState = null
         const finalLab = Object.fromEntries([...(replace && declared.has('kv') ? [] : localKv), ...(kvRows||[]), ...keptKv].map(r=>[r.k,r.v]));
         const labMerge = mergeLabSave(localLab, fileLab, finalLab, replace);
         keptKv.push(...Object.entries(labMerge).map(([k,v])=>({k,v})));
+        if (reconciled.archive) keptKv.push({ k: 'labIncubatorPurchases', v: reconciled.archive });
         for (const s of STORES) {
           const os = t.objectStore(s);
           /* Clear and puts in one transaction, so they land together or not

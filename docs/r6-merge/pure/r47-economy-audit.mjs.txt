@@ -1,0 +1,11 @@
+PASS takeover removes measured 90 coins / 12 Bone Dust and Boon
+PASS offline re-fight stays pending, reconnect cannot mint a rival tower
+PASS stale file restore and advanced grant cursor cannot resurrect 90 / 12 income
+PASS empty successful snapshot differs from offline and skew is reported
+PASS tending a tower requires a real owner transition
+PASS 48 hour siege uses server clock and stops paying at zero
+PASS grant transaction abort leaves neither receipt nor unpaid reward
+PASS concurrent delivery pays all payload shapes exactly once and retains presentation
+PASS cold delivery waits for visible app, then acknowledges presentation
+PASS reachable siege banner and offline fight payout gates remain wired
+10 passed, 0 failed

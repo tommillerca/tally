@@ -1,0 +1,6 @@
+{"label":"empty","pass":true,"snapshotError":null,"requests":["PUT /profile","GET /grants"]}
+{"label":"pet","pass":true,"snapshotError":null,"requests":["PUT /profile","GET /grants"]}
+{"label":"backup-due","pass":true,"snapshotError":null,"requests":["PUT /backup","PUT /profile","GET /grants"]}
+{"label":"boot","pass":true,"requests":["PUT /profile","GET /grants"]}
+{"label":"resume","pass":true,"requests":["PUT /profile","GET /grants"]}
+PASS CONTROL: thrown snapshot produces no profile request and no throttle stamp

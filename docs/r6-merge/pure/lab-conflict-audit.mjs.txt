@@ -1,0 +1,17 @@
+same-pair: {"pushes":[true,true,true],"backupAt":1788997390871,"pull":true,"daily":false,"copy":null}
+PASS same-pair: losing device recovers and records a backup
+PASS same-pair: immutable receipts, results and unrelated progress survive
+PASS same-pair: both devices converge and consumed pets stay absent after reconnect
+PASS same-pair: recovery is disclosed and a stale daily replacement cannot erase it
+PASS same-pair: replay, stale merge and later result consumption cannot duplicate pets
+PASS same-pair: abort rolls reconciliation back and invalid receipts still refuse
+different-pairs: {"pushes":[true,true,true],"backupAt":1788997391171,"pull":true,"daily":false,"copy":null}
+PASS different-pairs: losing device recovers and records a backup
+PASS different-pairs: immutable receipts, results and unrelated progress survive
+PASS different-pairs: both devices converge and consumed pets stay absent after reconnect
+PASS different-pairs: recovery is disclosed and a stale daily replacement cannot erase it
+PASS different-pairs: replay, stale merge and later result consumption cannot duplicate pets
+PASS different-pairs: abort rolls reconciliation back and invalid receipts still refuse
+PASS permanent conflict copy gives action without a safety or retry promise
+LIMITATION: disconnected devices can still attempt the same pets. This audit proves reconciliation and ownership refusal after reconnect, not immediate offline exclusion.
+0 failed

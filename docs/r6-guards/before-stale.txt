@@ -1,0 +1,2 @@
+PASS CONTROL: stale review refuses, re-presents 1,100 steps, clears consent, then destroys exactly once
+PASS CONTROL: quick confirmation also rejects newly arrived, uncredited health steps

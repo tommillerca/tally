@@ -1,0 +1,15 @@
+PASS unmarked/invalid mode unset refuses before side effects (exit 2)
+PASS unmarked/invalid mode "" refuses before side effects (exit 2)
+PASS unmarked/invalid mode "true" refuses before side effects (exit 2)
+PASS unmarked/invalid mode "2" refuses before side effects (exit 2)
+PASS missing export options refuses internal before side effects
+PASS missing export options refuses submission before side effects
+PASS explicit internal build remains remote and uses internal artifacts
+PASS CONTROL marked submission validates copied resources and archive, then exports its own IPA
+PASS CONTROL sync-copy refused before archive; config restored
+PASS CONTROL archive-copy refused before export/upload; config restored
+PASS CONTROL archive-server refused before export/upload; config restored
+PASS CONTROL archive-unmarked refused before export/upload; config restored
+PASS CONTROL sync-fail restores config and stops upload
+PASS CONTROL archive-fail restores config and stops upload
+ok submission build: explicit modes, separate artifacts, copied and archived content guarded (fixture tools only)

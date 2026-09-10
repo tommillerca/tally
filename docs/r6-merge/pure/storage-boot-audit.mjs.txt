@@ -1,0 +1,5 @@
+PASS THROW: disclosed, revealed, booted, reload works, no setup
+PASS MISSING: unavailable IndexedDB is disclosed
+PASS ASYNC: open request failure is disclosed
+PASS CONTROL: normal boot renders without storage disclosure
+4 passed, 0 failed. Browser and socket checks unrun.

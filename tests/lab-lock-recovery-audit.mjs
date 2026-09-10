@@ -1,6 +1,10 @@
 // R3-2: kill the real adapter between commits, then boot from committed rows.
 // Node IndexedDB double only. This does not claim an iOS/device kill test.
 import assert from 'node:assert/strict';
+// Finding 1 requires the separate health-writing scenarios, even in a direct
+// lock audit invocation. Deleting that audit now prevents a green lock run.
+import './lab-health-recovery-audit.mjs';
+
 import {mkdtempSync, readFileSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -153,5 +157,6 @@ try {
     assert.equal((await L.laboratory.snapshot()).used,1);
   });
 } finally {rmSync(auditOutputPath(temp),{recursive:true,force:true});}
+console.log('COVERAGE finding 1: lab-health-recovery-audit.mjs executed; lock-only scenarios do not cover health');
 console.log(`LAB LOCK RECOVERY: ${passed} passed, ${failed} failed`);
 process.exitCode=failed?1:0;

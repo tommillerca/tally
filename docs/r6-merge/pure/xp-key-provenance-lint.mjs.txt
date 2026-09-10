@@ -1,0 +1,14 @@
+ok   SELF the L1 shape (key <- param <- call site <- object literal <- newId()) is TAINTED  game.js:2 entry.id -> param entry of onFoodLogged() <- call site -> app.js:4 copy.id -> app.js:4 copy.id -> app.js:2 newId() -> source in: newId()
+ok   SELF a date read off the same parameter is not tainted  UNRESOLVED
+ok   SELF a for-counter in the key is CLEAN  CLEAN
+ok   SELF G2: a callback parameter iterating store rows, keyed on .id, is TAINTED  .id of a store row is newId() at its write site (db.all('log'))
+ok   SELF G2: a bare callback parameter over a dates list is CLEAN  e.date: date-shaped read off an anonymous callback parameter (collection unresolved: property .date of a store row (db.all('log')))
+ok   SELF G2: a .date read off a row callback parameter is CLEAN  w.date: date-shaped read off an anonymous callback parameter (collection unresolved: property .date of a store row (db.all('weights')))
+ok   SEED js/db.js newId() is built from a clock or a random source (so treating it as one is derived, not asserted)  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8
+ok   REACH the scanner found award call sites to grade  105 call sites across 53 module(s), 72 identifier chains in their keys
+ok   REACH the tracer resolves most chains (a broken regex reads as everything UNRESOLVED)  47 clean, 2 tainted, 23 unresolved
+ok   PROVENANCE no award key resolves to a clock or a random source  72 chains traced
+ok   ALLOWED game.js:708 `scan-${entry.date}-${entry.foodId || 'nofood'}` reaches a clock through a persisted entity id  per date per food; a custom food id is minted once per food the player creates; last hop: source in: existing ? existing.id : 'c-' + newId()
+ok   ALLOWED game.js:709 `label-${entry.foodId || 'nofood'}` reaches a clock through a persisted entity id  once per food ever; a custom food id is minted once per food the player creates; last hop: source in: existing ? existing.id : 'c-' + newId()
+
+all green, 12 checks

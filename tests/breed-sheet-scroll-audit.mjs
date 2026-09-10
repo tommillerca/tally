@@ -42,7 +42,8 @@ await sleep(400);
 await page.evaluate(async () => {
   const l = await import('./js/loot.js');
   const { kvSet } = await import('./js/db.js');
-  for (const sp of ['C1', 'C4', 'CX']) if ((await l.petInstances()).length < 3) await l.addPetInstance(sp, {});
+  // Guarantee distinct carousel species even when boot already seeded 3 pets.
+  for (const sp of ['C1', 'C4', 'CX']) await l.addPetInstance(sp, {});
   const list = await l.petInstances();
   await kvSet('petInst', list.map(x => ({ ...x, shiny: true, lineage: 0 })));
   await kvSet('petLvlSteps', Object.fromEntries(list.map(x => [x.iid, 500000])));
@@ -52,26 +53,29 @@ await page.evaluate(() => { location.hash = '#/today'; });
 await sleep(1500);
 await page.evaluate(() => document.getElementById('stableBtn')?.click());
 await sleep(2200);
+// Reset a persisted selection before exercising the picker.
+await page.evaluate(() => document.getElementById('breedCancel')?.click());
+await settle(page);
 const picked = await page.evaluate(async () => {
   const wait = ms => new Promise(r => setTimeout(r, ms));
   const flag = () => document.querySelector('[data-breedsel]')?.click();
   const spin = () => {
-    const dots = [...document.querySelectorAll('.cf-dots i')];
+    const dots = [...document.querySelectorAll('[data-cfdot]')];
     const on = dots.findIndex(d => d.classList.contains('on'));
-    dots[(on + 1) % Math.max(1, dots.length)]?.click();
+    if (on < 0 || dots.length < 2) throw new Error('FIXTURE: need an active carousel button and two species');
+    dots[(on + 1) % dots.length].click();
   };
   if (document.querySelectorAll('.cf-card').length < 2) return 0;
   flag(); await wait(700); spin(); await wait(800); flag(); await wait(1100);
   return document.querySelectorAll('.cf-card.picked').length;
 });
 await settle(page);
+// Fixture failure must not masquerade as a missing product warning.
+ok('FIXTURE SETUP two distinct breeding pets were selected', picked === 2, JSON.stringify({ picked }));
+if (picked !== 2) { await browser.close(); srv.close?.(); process.exit(1); }
 const warn = await page.evaluate(() => !!document.querySelector('.breed-warn'));
-
-/* AN EMPTY SAMPLE IS A FAILURE: if the pair and the warning are not there, every
-   row below would be measuring a sheet that never reached the state under test. */
-ok('SAMPLE the breeding pair is flagged and the warning is mounted (the state the report describes)',
-  picked === 2 && warn, JSON.stringify({ picked, warn }));
-if (picked !== 2 || !warn) { await browser.close(); srv.close?.(); process.exit(1); }
+ok('WARNING the selected precious pair mounts its loss warning', warn, JSON.stringify({ picked, warn }));
+if (!warn) { await browser.close(); srv.close?.(); process.exit(1); }
 
 /* ---- GUTTER: no scrollable emptiness parked after the sticky bar ---- */
 const gut = await page.evaluate(() => {
