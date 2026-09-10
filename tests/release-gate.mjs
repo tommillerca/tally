@@ -253,6 +253,7 @@ const coverageOnly = process.argv.includes('--coverage-only');
    the evidence in the failure line. */
 // Frozen loss-prevention work order, 2026-09-08: real UI and service controls, Node only.
 const PURE = [
+  'r8-shop-css-audit.mjs', // Frozen R8 CSS source contracts and mutation controls; no rendered claims.
   'migration-guard-audit.mjs', // Source contract and real Worker health over SQLite; D1 socket proof: server/test/migration-guard-local.mjs.
   'sync-observability-audit.mjs', // Local sync outcomes, Settings and sustained-failure notice, over mem-idb.
   'sync-identity-audit.mjs', // Missing registration recovery with the existing signing key, over mem-idb.
@@ -392,6 +393,7 @@ PURE.push('r4-restore-audit.mjs'); // R4-7/R4-9: quota-bounded history, exact un
 PURE.push('reachable-density-audit.mjs'); // R4-21: guards the shared reachability METER with dense/sparse controls; shipped spacing is a deferred MODEL finding.
 PURE.push('native-shell-comment-audit.mjs'); // R4-21: remote iOS shell cannot claim a wrapped web build; mutation controls.
 const BROWSER = [
+  'r8-shop-css-browser-audit.mjs', // Operator proof: screenshot-sampled price contrast, wallet emphasis and disabled ghosts.
   'steprace-live-browser-audit.mjs', // Operator-only degraded race: painted avatars, track geometry and honest zero fill; no listener or launch.
   'crew-bars-browser-audit.mjs', // Operator browser and approved baseline required; no auto-launch.
   'crew-pets-browser-audit.mjs', // Operator browser and approved baseline required; no auto-launch.

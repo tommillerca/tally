@@ -600,7 +600,7 @@ svg { display: block; }
   font-size: var(--fs-body); font-weight: 800; letter-spacing: -0.01em;
 }
 .btn:active { transform: scale(0.985); }
-.btn:disabled { background: var(--surface-2); color: var(--text-3); box-shadow: var(--sh-sm); opacity: 1; }
+.btn:disabled, .btn.ghost:disabled { background: var(--surface-2); color: var(--text-3); box-shadow: var(--sh-sm); opacity: 1; }
 .btn.ghost { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); }
 .btn.danger { background: transparent; color: var(--danger); border: 1px solid rgba(255, 122, 110, 0.35); }
 .btn.small { width: auto; padding: 9px 14px; font-size: var(--fs-2); border-radius: 11px; }
@@ -10482,25 +10482,25 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 /* The 44px floor is for CONTROLS, not for the word between them. Scoping this
    to `> *` made the "or" a 44px-tall element, which added 49px to every tile
    and made the runner report it as a tap target. */
-.rk-buy > button, .rk-buy > /* The aura's wear/take-off control. Same footprint as a price pill so the tile
-   does not jump when it flips, and it reads as a state rather than a purchase:
-   nothing here spends. */
-.rk-aura-toggle { width: 100%; min-height: 44px; border-radius: 11px; background: none;
-  border: 1.5px solid var(--line-strong); color: var(--text-2); font-weight: 800;
+.rk-buy > button, .rk-buy > .rk-aura-toggle {
+  width: 100%; min-height: 44px; border-radius: 11px; font-weight: 800;
   font-size: var(--fs-2); letter-spacing: .02em; display: inline-flex; align-items: center;
   justify-content: center; gap: 6px; }
+/* The aura's wear/take-off control shares the price footprint. Its hollow
+   state colors belong here, so affordable coin and dust prices keep their
+   currency fill and ink digits from .t3-price. */
+.rk-aura-toggle { background: none; border: 1.5px solid var(--line-strong); color: var(--text-2); }
 .rk-aura-toggle.on { border-color: rgba(125, 200, 255, .7); color: #7dc8ff; }
 .rk-owned { justify-content: center; padding: 4px 6px; font-size: var(--fs-3); min-height: 44px; }
 
-/* OUT OF REACH IS STILL A PRICE. The shipped [disabled] grey-out was rejected:
-   with 380 coins and no dust every price on this rack is out of reach, and 16
-   dead controls read as a broken screen instead of an expensive one. So the
-   pill keeps its size, its border, its icon and its digits, and loses only the
-   FILL, which is the part that says "press me". Contrast does not drop:
-   measured off the render, the hollow pill's digits read 10.4:1 against their
-   own ground and the filled pill's 10.1:1. What falls is ink weight, mean
-   saturation x value over the pill: 0.10 hollow against 0.50 filled. */
-.rk-buy .t3-price.cant { background: transparent; box-shadow: none;
+/* OUT OF REACH IS STILL A PRICE. Keep the target size, icon and digits readable
+   and tappable so a refusal can explain the shortfall. Affordable prices retain
+   their currency fill and ink digits. Short wallets get a hollow pill with
+   currency-colored digits, a subdued border and no shadow; pet prices use
+   data-short for the same state. Rendered contrast and emphasis are guarded by
+   r8-shop-css-browser-audit.mjs. The former numeric claims here did not describe
+   the shipped cascade. */
+.rk-buy .t3-price.cant, .t3-price[data-short="1"] { background: transparent; box-shadow: none;
   color: var(--gold); border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
 .rk-buy .t3-price.dust.cant { color: var(--violet); border-color: color-mix(in srgb, var(--violet) 45%, transparent); }
 
