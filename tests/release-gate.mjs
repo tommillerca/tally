@@ -389,6 +389,7 @@ PURE.push('r4-restore-audit.mjs'); // R4-7/R4-9: quota-bounded history, exact un
 PURE.push('reachable-density-audit.mjs'); // R4-21: guards the shared reachability METER with dense/sparse controls; shipped spacing is a deferred MODEL finding.
 PURE.push('native-shell-comment-audit.mjs'); // R4-21: remote iOS shell cannot claim a wrapped web build; mutation controls.
 const BROWSER = [
+  'steprace-live-browser-audit.mjs', // Operator-only degraded race: painted avatars, track geometry and honest zero fill; no listener or launch.
   'crew-bars-browser-audit.mjs', // Operator browser and approved baseline required; no auto-launch.
   'crew-pets-browser-audit.mjs', // Operator browser and approved baseline required; no auto-launch.
   'crew-icons-browser-audit.mjs', // Operator browser required; rendered size, ink, opacity and occlusion.

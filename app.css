@@ -3476,11 +3476,12 @@ body::before {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .race-lane .nm .st { margin-left: auto; font-size: var(--fs-1); color: var(--text-2); font-variant-numeric: tabular-nums; }
-.race-lane .track {
+.race-lane .track, .race-lane .race-pending-track {
   position: relative; height: 14px; background: var(--surface-3);
   border: 2px solid var(--ink); border-radius: 999px;
 }
-.race-lane .track > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--text-3); }
+.race-lane .track > i, .race-lane .race-pending-track > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--text-3); }
+.race-lane .race-pending-track { border-style: dashed; margin-bottom: 12px; }
 .race-lane.r1 .track > i { background: var(--gold); }
 /* TOM, 2026-08-14: "2nd place's silver bar reads LOUDER than the winner's gold.
    The hero must win that contest outright."

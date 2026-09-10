@@ -13594,7 +13594,13 @@ async function renderFriends(el) {
           <span>Last race <b>${esc(race.champion.name)}</b> took it with ${race.champion.steps.toLocaleString()} steps.</span></div>` : ''}
         ${rows.length ? `<div class="race-lanes">
           ${rows.map(p => {
-            const pct = lead > 0 ? Math.max(6, Math.round(p.steps / lead * 100)) : 6;
+            // A neutral rail keeps the figure visible while comparisons await
+            // recent snapshots. Never give zero steps a decorative minimum.
+            const pct = comparisonsFresh && lead > 0 ? Math.max(0, Math.min(100, p.steps / lead * 100)) : 0;
+            const fit = { ...(p.outfit || {}) };
+            const placeholder = !BH_BY_ID[fit.B] || !BH_BY_ID[fit.SK];
+            if (!BH_BY_ID[fit.B]) fit.B = 'B0-1';
+            if (!BH_BY_ID[fit.SK]) fit.SK = 'SK0-1';
             /* A LANE IS A DOOR. Tom: "we should make it so when you are on the
                step challenge leader board you can click the players you see and
                then go to their player page and add them if you want."
@@ -13617,9 +13623,10 @@ async function renderFriends(el) {
               <span class="rk" aria-label="Recorded rank ${p.rank}">${p.rank}</span>
               <div class="bd">
                 <div class="nm"><b>${esc(p.name)}</b>${raceFreshHtml(p, !(race.players || []).includes(p))}<span class="st">${p.steps.toLocaleString()}</span></div>
-                ${comparisonsFresh ? `<div class="track"><i style="width:${pct}%"></i>
-                  <span class="run" style="left:${pct}%">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG', 'C'], foreign: true })}</span>
-                </div>` : ''}
+                <div class="${comparisonsFresh ? 'track' : 'race-pending-track'}" aria-label="${comparisonsFresh ? `${p.steps.toLocaleString()} recorded steps` : 'Progress comparison unavailable until recent syncs'}"><i style="width:${pct}%"></i>
+                  <span class="run" style="left:clamp(14px, ${pct}%, calc(100% - 14px))"${placeholder ? ' role="img" aria-label="Placeholder figure: outfit not shared"' : ''}>${avatarLayersHtml(fit, { noYard: true, skip: ['BG', 'C'], foreign: true })}</span>
+                </div>
+                ${!comparisonsFresh ? '<span class="race-fresh">Progress comparison awaits recent syncs.</span>' : ''}
               </div>
             </${tag}>`;
           }).join('')}

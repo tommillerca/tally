@@ -6,7 +6,8 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { crewFixture, assertDemoPage } from './lib/crew-capture.mjs';
 import { raceStanding, raceClockLabel } from '../js/social.js';
-const app = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+const source = process.argv.find(a => a.startsWith('--source='));
+const app = readFileSync(source ? source.slice(9) : new URL('../js/app.js', import.meta.url), 'utf8');
 const fn = name => {
   const code = app.match(new RegExp(`^(?:async )?function ${name}\\([^]*?^}`, 'm'))?.[0];
   assert.ok(code, `Missing production function ${name}`); return code;
@@ -47,7 +48,8 @@ async function harness(scenario, webdriver = true) {
     URL, location: { href: 'http://localhost:8765/?demo' }, indexedDB: { databases: async () => [{ name: 'tally-demo' }] }, document: { querySelector: () => ({}) },
     $: node, $$: () => [], esc: String, nameWithAlias: f => f.alias || f.name,
     ICONS: new Proxy({}, { get: () => () => '<i></i>' }), badgePixHtml: () => '<i></i>',
-    avatarLayersHtml: () => '<span class="bh-anim"><img src="control.png"></span>', lbHeadInner: () => '',
+    BH_BY_ID: { 'B0-1': {}, 'SK0-1': {} },
+    avatarLayersHtml: eq => eq?.B && eq?.SK ? '<span class="bh-anim"><img src="control.png"></span>' : '', lbHeadInner: () => '',
     social: { listFriends: fallback, leaderboard: fallback, fetchStepRace: fallback, raceStanding, raceClockLabel, displayName: async () => fixture.me.name },
     apiConfigured: false, kvGet: async (k, d) => k === 'racePushAt' ? now : k === 'raceDebutWk' ? '2020-01-01' : d,
     kvSet: async () => {}, setCrewBadgeFrom: async () => {}, friendSinceYesterdayMap: async () => ({}),
@@ -76,7 +78,7 @@ async function harness(scenario, webdriver = true) {
     };`, ctx);
   return { ctx, node, fixture, calls: () => socialCalls };
 }
-for (const scenario of ['fresh', 'one-stale', 'all-stale', 'unknown']) await check(`CONTROL ${scenario}: installed hooks reach real paint, paintFan, openLeaderboard and hydrateRace`, async () => {
+for (const scenario of ['degraded', 'fresh', 'one-stale', 'all-stale', 'unknown']) await check(`CONTROL ${scenario}: installed hooks reach real paint, paintFan, openLeaderboard and hydrateRace`, async () => {
   const h = await harness(scenario);
   const me = await vm.runInContext('run()', h.ctx);
   assert.equal(me.playerId, 'capture-self');
@@ -87,13 +89,43 @@ for (const scenario of ['fresh', 'one-stale', 'all-stale', 'unknown']) await che
   const race = h.node('#raceCard').innerHTML;
   assert.equal((race.match(/class="race-lane /g) || []).length, 5);
   assert.match(race, /race-lane r3 you/);
-  assert.equal((race.match(/class="run"/g) || []).length, scenario === 'fresh' ? 5 : 0);
+  assert.equal((race.match(/class="run"/g) || []).length, 5, 'Every row retains its figure container, including stale rows');
+  assert.equal((race.match(/class="(?:track|race-pending-track)"/g) || []).length, 5, 'Every row retains a track');
+  if (scenario === 'degraded') {
+    assert.equal(h.fixture.data.friends[6].profile, null);
+    assert.ok(!h.fixture.race.players.some(p => p.playerId === 'capture-6'), 'Never-synced friend is absent from the server race');
+    assert.match(race, /Placeholder figure: outfit not shared/);
+    assert.match(race, /Progress comparison awaits recent syncs/);
+    assert.equal((race.match(/width:0%/g) || []).length, 5, 'Unavailable comparisons have no invented fill');
+    assert.match(race, /24,000/);
+  }
   assert.equal(h.calls(), 0);
 });
 await check('CONTROL missing __testFriends hits the real social fallback', async () => {
   const h = await harness('fresh'); delete h.ctx.window.__testFriends;
   await assert.rejects(vm.runInContext('run()', h.ctx), /reached server fallback/);
   assert.equal(h.calls(), 1);
+});
+await check('CONTROL fresh partial outfits get drawable placeholder layers', async () => {
+  const h = await harness('fresh');
+  h.fixture.race.players[0].outfit = {};
+  h.fixture.race.players[1].outfit = null;
+  await vm.runInContext('run()', h.ctx);
+  const race = h.node('#raceCard').innerHTML;
+  assert.equal((race.match(/class="bh-anim"/g) || []).length, 6, 'Summary plus all five figures receive body and skull');
+  assert.equal((race.match(/Placeholder figure: outfit not shared/g) || []).length, 2);
+});
+await check('CONTROL defensive zero and tiny counts never receive a minimum fill', async () => {
+  const h = await harness('fresh');
+  // Remote /steps/week excludes zero. This is a defensive renderer boundary,
+  // not a claim that the server emits zero-step or never-synced racers.
+  h.fixture.race.players[3].steps = 1;
+  h.fixture.race.players[4].steps = 0;
+  await vm.runInContext('run()', h.ctx);
+  const race = h.node('#raceCard').innerHTML;
+  assert.match(race, /width:0%/);
+  assert.ok(race.includes(`width:${1 / 24000 * 100}%`));
+  assert.match(race, /0 recorded steps/);
 });
 await check('CONTROL hooks cannot route without webdriver', async () => {
   await assert.rejects(vm.runInContext('run()', (await harness('fresh', false)).ctx), /No fixture identity/);

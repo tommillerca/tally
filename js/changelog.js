@@ -5,6 +5,7 @@
 // Pending train notes. The operator assigns a build number and moves these
 // into CHANGES when assembling the release. No version stamp is advanced here.
 export const NEXT_CHANGES = [
+  'The step race keeps player figures and a neutral track visible while syncs are delayed, uses a placeholder for missing outfits, and gives zero steps zero progress.',
 ];
 
 export const CHANGES = [

@@ -6,7 +6,7 @@ export const SURFACES = {
 };
 
 export function crewFixture({ scenario = 'fresh', now = Date.now() } = {}) {
-  if (!['fresh', 'one-stale', 'all-stale', 'unknown'].includes(scenario)) throw new Error(`Unknown scenario: ${scenario}`);
+  if (!['fresh', 'one-stale', 'all-stale', 'unknown', 'degraded'].includes(scenario)) throw new Error(`Unknown scenario: ${scenario}`);
   const names = ['Marrow Max', 'Bone Jovi', 'Grave Mint', 'Swole Phantom', 'Rib Tickler', 'Grim Wich', 'Dusty Lulu'];
   const friends = names.map((name, i) => ({
     playerId: `capture-${i}`, name, alias: i === 2 ? 'A deliberately long Crew nickname' : null,
@@ -17,10 +17,27 @@ export function crewFixture({ scenario = 'fresh', now = Date.now() } = {}) {
       pet: { id: ['C3', 'C1', 'C2', 'C5', 'C4', 'C6', 'C3'][i], level: 4, shiny: false },
       yard: { n: 1, pets: [{ sp: ['C3', 'C1', 'C2', 'C5', 'C4', 'C6', 'C3'][i] }] }, badges: 2, gearCount: 8 },
   }));
+  if (scenario === 'degraded') {
+    // A partial, previously synced profile can race. A never-synced friend
+    // cannot: /leaderboard and /steps/week both exclude profile IS NULL.
+    const epoch = Date.parse('2026-08-07T00:00:00Z'), period = 7 * 86400000;
+    const weekKey = new Date(epoch + Math.max(0, Math.floor((now - epoch) / period)) * period).toISOString().slice(0, 10);
+    friends[0].profile = { level: 1, outfit: {}, weekKey, weekSteps: 24000, raceV: 2 };
+    friends[0].lastSeen = now - 2 * 86400000;
+    friends[1].profile.outfit = null;
+    friends[6].profile = null;
+    // Registration writes last_seen even before a first profile upload.
+  }
   const players = friends.slice(0, 4).map(f => ({ ...f.profile, playerId: f.playerId, name: f.name, addToken: f.addToken, lastSeen: f.lastSeen }));
   players.splice(2, 0, { ...players[0], playerId: 'capture-self', name: 'Capture Player', you: true });
   const racers = players.map((p, i) => ({ ...p, rank: i + 1, steps: 24000 - i * 3000,
     seenAt: scenario === 'unknown' ? null : now - ((scenario === 'all-stale' || scenario === 'one-stale' && i === 0) ? 2 * 86400000 : 60000) }));
+  if (scenario === 'degraded') {
+    // Own outfit remains complete. Only remote partial rows lose their art.
+    players[2].outfit = { B: 'B0-1', SK: 'SK0-1', T: 'T2' };
+    racers[2].outfit = players[2].outfit;
+    racers[0].seenAt = friends[0].lastSeen;
+  }
   return { scenario, now, me: { playerId: 'capture-self', name: 'Capture Player', handle: 'capture', friendCode: 'BONE-0000' },
     data: { friends, incoming: [], outgoing: [], truncated: { friends: false, incoming: false, outgoing: false }, reached: true },
     leaderboard: players, race: { players: racers, yourRank: 3, podium: [] } };
@@ -75,7 +92,7 @@ export async function prepareCrew(page, options = {}) {
       await new Promise((resolve, reject) => {
         const tx = db.transaction('kv', 'readwrite');
         for (const [k, v] of Object.entries({ racePushAt: Date.now(), crewFaves: [],
-          friendSnaps: Object.fromEntries(fixture.data.friends.map(f => [f.playerId, { level: f.profile.level, gear: f.profile.gearCount, badges: f.profile.badges, spires: f.spires }])) }))
+          friendSnaps: Object.fromEntries(fixture.data.friends.map(f => [f.playerId, { level: f.profile?.level, gear: f.profile?.gearCount, badges: f.profile?.badges, spires: f.spires }])) }))
           tx.objectStore('kv').put({ k, v });
         tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error || new Error('Demo seed aborted'));
       });
