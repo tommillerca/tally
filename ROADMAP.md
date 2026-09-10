@@ -9,7 +9,7 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
-## 📝 Step race: no progress bars, no rank line — BUG (confirmed on production, NOT fixed)
+## ✅ Step race: no progress bars, no rank line — FIXED in v558, byte-verified live
 
 Tom, 2026-09-10: "the progress in the step race isnt showing".
 
@@ -59,7 +59,7 @@ Three idle accounts are blanking the board for eight active racers.
 The gate is not wrong to exist: it was written so a stale rival's bar cannot imply a live
 comparison. It is wrong in SCOPE. One racer's staleness is a fact about that racer.
 
-**Proposed fix, not built, needs Tom's call.** Move freshness from the board to the lane:
+**Shipped in v558 (`714a72a0`, PR #476), live and byte-verified.** Freshness moved from the board to the lane:
 
 1. Each lane's bar and per-lane note key off that lane's OWN `seenAt`. A fresh racer gets
    a real bar; a stale one keeps the neutral pending rail and its own "awaiting sync" note,
@@ -70,9 +70,11 @@ comparison. It is wrong in SCOPE. One racer's staleness is a fact about that rac
    and stays as it is; the digits beside each name are already drawn for stale rows today,
    so drawing the same number as a bar is no less honest than printing it.
 
-Verification this needs before shipping: a guard that builds a board with one stale row and
-asserts the fresh lanes still render a non-zero bar, proven red against the current
-`every()` gate; plus a browser render of the card at 430x932 with a mixed-freshness board.
+**Verified.** The real production board above was replayed through the real `onlineLabel`
+and the real lane-width expression: bars drawn went **0/11 to 7/11** (the 3 stale rows and
+the leader's own full-width lane account for the rest). The guard was proven RED against
+v557's `every()` gate before it went green on v558. Live `sw.js` served `tally-v559` when
+last read, so v558 is deployed.
 
 ## 📝 QA round 34 P0, restore latch — PARTIAL, (a)+(b) SHIPPED, (c) FEATURE (not built)
 
