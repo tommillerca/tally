@@ -1,5 +1,74 @@
 # What each patch note claims, and what backs it
 
+## v559 (2026-09-10)
+
+### Operator verification, rendered at 430x932
+
+Rebased by copying the lane's files (base byte-identical to `origin/main`); every changed
+file confirmed identical before anything ran. v557's two reachability rows re-run green
+first, so the unbrick is not regressed.
+
+**The sharpness.** Tom: "the art looks like it's been made overly sharp". That was my
+spec's fault: round 3 was told to use "a pixel-preserving filter" on the false premise that
+Boneheadz art is pixel art. Measured on the shipped files, it is not:
+`wanderer.png` carries 2,625 opaque colours and 5,671 anti-aliased edge pixels (3.9% of
+its opaque area), `gwart.png` 7,221 and 4,160, `B0-1.png` 2,996 and 2,983 (6.6%). Smooth
+illustration with soft outlines, and nearest-neighbour throws those pixels away.
+
+Measured on the decoded export, sampling the sticker's outer silhouette against the plain
+page across 120 scanlines: **mean transition width 1.33px -> 1.67px, +25%**, and the two
+exports are not byte-identical. The edges are demonstrably softer. My instrument is
+coarser than the guard's, which counts fractional alpha on isolated artwork surfaces and
+requires at least 10% more coverage than the frozen nearest-neighbour output at both size
+endpoints; the two agree in direction and the guard is the better one.
+
+`assets/icons-pix/**` is untouched and keeps its pixelated rendering. That art genuinely
+IS pixel art, authored at 48px; the change is scoped to the character and creature
+surfaces only.
+
+**One tray.** 12 sticker buttons in a single flat grid, and no sticker group headings: the
+"Monsters" and "Your Crew" disclosures are gone. The headings that remain are functional
+sections, not sticker groupings.
+
+**Depth.** Send back, Send forward and Flip appear beside the canvas on selection. The
+audit executes both real depth handlers and proves it on decoded pixels: the figure covers
+a sticker sent behind it, and the sticker covers the figure when brought forward, with the
+information overlays opaque above both arrangements. Order survives a serialise and
+reconstruct.
+
+### The deviation I accepted, and why
+
+Smooth staging shifts the fixture pet's alpha-derived height by **1.90px, 0.55%**, under a
+1% geometry guard. Historical whole-image byte equality is simply incompatible with
+changing how the art is sampled, so demanding it would have meant keeping the jagged
+sampling. Foot grounding and body sizing policy are unchanged.
+
+The palette-subset assertion from round 2 is **retired**, with the reason recorded: smooth
+resampling necessarily blends colours, so demanding a subset IS demanding
+nearest-neighbour. It is replaced by an edge-softness guard, which measures the thing that
+actually matters here. The transform whitelist still rejects tint, recolour and
+non-uniform scale, and no asset on disk was touched.
+
+Unproven and operator-owned: how any of it feels under a thumb.
+
+
+Changelog item: Studio artwork scales smoothly, keeping the soft edges of the original illustrations.
+
+1. PROOF: studio-v4-audit.mjs, studio-v3-audit.mjs, studio-audit.mjs | REACH: Wardrobe fit rail, The Studio. High-quality Canvas sampling for character, creature and Crew artwork. Decoded partial-alpha counts at 180 and 650px and a diagonal coverage guard replace the retired artwork palette-subset assertion. Smooth resampling necessarily blends colours. Pixel icons retain their rendering.
+
+Changelog item: All your Studio stickers share one tray. Tap the artwork to place it.
+
+2. PROOF: studio-v4-audit.mjs, studio-v3-audit.mjs | REACH: Wardrobe fit rail, The Studio, Add stickers. One flat artwork grid without sticker group headings or repeated visible names. Production handlers retain one-tap placement and tray closure. The v557 scroll and tray-clearance contracts remain guarded.
+
+Changelog item: Select a sticker and send it forward or back, including behind your Bonehead and pet. Your draft remembers the order.
+
+3. PROOF: studio-v4-audit.mjs, studio-v3-audit.mjs | REACH: Wardrobe fit rail, The Studio, select a placed sticker. Send back and Send forward traverse the same deterministic stack as the pet and figure. Decoded composition and live surfaces match; serialized draft order survives reconstruction. Information is composited last.
+
+Review evidence: docs/reviews/studio-v4/REPORT.md. The three new regression guards were run RED against frozen current sources before implementation. Browser renders, screenshots, touch latency, reach and aesthetic judgement remain UNPROVEN and operator-owned. No local socket is used.
+
+The source deck resolves to docs/brand/boneheadz-brand-deck.html in this checkout.
+The operator's original outfit/export was not supplied, so decoded Node fixture measurements are reported separately rather than represented as a repeat of the operator's exact export. Smooth alpha bounds change the fixture pet height by approximately 1.9 export pixels (0.55%); the body sizing policy is unchanged. Proposed deviation: accept this sampling-derived bound change with a 1% geometry guard instead of requiring pixel-identical nearest-neighbour geometry. The existing rotated-square uniform size cap remains.
+
 ## v558 (2026-09-10)
 
 ### Operator verification: replayed against the real production board

@@ -1,0 +1,47 @@
+FAIL CONTROL smooth resampling preserves edge softness AssertionError [ERR_ASSERTION]: scaled diagonal must have partially covered edge pixels
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v4/tests/studio-v4-audit.mjs:46:10
+    at async check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v4/tests/studio-v4-audit.mjs:39:40)
+    at async file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v4/tests/studio-v4-audit.mjs:40:1
+FAIL one flat sticker list without group headings AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+3 !== 1
+
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v4/tests/studio-v4-audit.mjs:55:10
+    at check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v4/tests/studio-v4-audit.mjs:39:46)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v4/tests/studio-v4-audit.mjs:54:7
+FAIL depth steps include figure and pet; decoded overlays remain on top AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ 'undefined'
+- 'function'
+
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v4/tests/studio-v4-audit.mjs:60:10
+    at check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v4/tests/studio-v4-audit.mjs:39:46)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v4/tests/studio-v4-audit.mjs:59:7
+EDGES {"id":"The Wanderer","size":180,"source":14103,"decoded":1450,"sourceBoundary":7899,"decodedBoundary":1135}
+EDGES {"id":"The Wanderer","size":650,"source":14103,"decoded":19004,"sourceBoundary":7899,"decodedBoundary":9783}
+EDGES {"id":"The Mimic","size":180,"source":12624,"decoded":996,"sourceBoundary":7767,"decodedBoundary":838}
+EDGES {"id":"The Mimic","size":650,"source":12624,"decoded":13026,"sourceBoundary":7767,"decodedBoundary":7936}
+EDGES {"id":"The Glutton","size":180,"source":4547,"decoded":907,"sourceBoundary":2039,"decodedBoundary":695}
+EDGES {"id":"The Glutton","size":650,"source":4547,"decoded":11896,"sourceBoundary":2039,"decodedBoundary":3326}
+EDGES {"id":"Gwart","size":180,"source":12745,"decoded":645,"sourceBoundary":7485,"decodedBoundary":559}
+EDGES {"id":"Gwart","size":650,"source":12745,"decoded":8468,"sourceBoundary":7485,"decodedBoundary":4948}
+FAIL decoded creature edge measurements at both offered endpoints AssertionError [ERR_ASSERTION]: each size must retain more fractional edge coverage than frozen nearest-neighbour
++ actual - expected
+
++ [
++   'The Wanderer 180px lacks coverage improvement',
++   'The Wanderer 650px lacks coverage improvement',
++   'The Mimic 180px lacks coverage improvement',
++   'The Mimic 650px lacks coverage improvement',
++   'The Glutton 180px lacks coverage improvement',
++   'The Glutton 650px lacks coverage improvement',
++   'Gwart 180px lacks coverage improvement',
++   'Gwart 650px lacks coverage improvement'
++ ]
+- []
+
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v4/tests/studio-v4-audit.mjs:121:10
+    at async check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v4/tests/studio-v4-audit.mjs:39:40)
+    at async file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v4/tests/studio-v4-audit.mjs:105:1
+0 passed, 4 failed. Browser appearance and gesture feel UNPROVEN.

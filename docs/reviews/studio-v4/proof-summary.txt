@@ -1,0 +1,16 @@
+node tests/unit.test.js
+exit 0
+385 passed, 0 failed
+
+Full PURE: 167/167 green after targeted reruns.
+Initial full pass: 164/167, preserved in pure-proof.txt and pure-initial-summary.json.
+Final per-check provenance: pure-summary.json.
+
+node tests/studio-v3-audit.mjs: exit 0, 7 passed, 0 failed
+node tests/studio-v4-audit.mjs: exit 0, 4 passed, 0 failed
+STUDIO_V4_BASELINE=1 node tests/studio-v4-audit.mjs: exit 1, 0 passed, 4 failed (expected RED)
+node tests/guard-hygiene-lint.mjs: exit 0, clean
+node tests/claim-evidence-lint.mjs: exit 0, clean
+git diff --check: exit 0
+
+Browser rendering, screenshots and gesture feel: UNPROVEN, operator-owned.

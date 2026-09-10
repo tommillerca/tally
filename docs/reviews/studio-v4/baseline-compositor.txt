@@ -13,7 +13,7 @@ export const STUDIO_CAPTIONS = Object.freeze({
   home: 'I live here now.',
 });
 export const STUDIO_DEFAULTS = Object.freeze({ backdrop: null, includePet: true,
-  caption: 'notes', bubblePosition: 'left', markPosition: 'bottom', stickers: Object.freeze([]), includeFriendCode: false, frame: null, layerOrder: Object.freeze([]) });
+  caption: 'notes', bubblePosition: 'left', markPosition: 'bottom', stickers: Object.freeze([]), includeFriendCode: false, frame: null });
 export const STUDIO_POSITIONS = Object.freeze(['left', 'right']);
 export const STUDIO_MARK_POSITIONS = Object.freeze(['top', 'bottom', 'right']);
 export const STUDIO_TEXT_STICKERS = Object.freeze({ gym: 'BONEHEADZ GYM.', feed: 'FEED THE BONES.', home: 'I LIVE HERE NOW.' });
@@ -58,21 +58,28 @@ export function studioStickerBox(ink, sticker) {
     artWidth, artHeight, fittedSize };
 }
 
-// Smooth illustration sampling. Canvas high quality blends coverage at scaled edges.
+// Inverse-map output pixel centres directly to source pixels. Canvas transforms
+// can antialias rotated edges even with smoothing disabled. Copying RGBA avoids
+// that backend-dependent interpolation, including at arbitrary twist angles.
 export function studioRasterSticker(figure, sticker, runtime) {
   const box = studioStickerBox(figure.ink, sticker);
   const key = [sticker.size, sticker.rotation || 0, sticker.flip].join(':');
   if (figure.raster?.key === key) return { ...figure.raster, box };
   const { width, height, artWidth, artHeight } = box, pad = STUDIO_OUTLINE;
   const art = runtime.createCanvas(width, height), ac = art.getContext('2d');
+  const pixels = ac.createImageData(width, height);
+  const src = figure.pixels ||= figure.canvas.getContext('2d').getImageData(0, 0, figure.canvas.width, figure.canvas.height).data;
   const b = figure.ink, scale = box.fittedSize / Math.max(b.width, b.height);
-  ac.imageSmoothingEnabled = true; ac.imageSmoothingQuality = 'high';
-  ac.save(); ac.translate(pad + artWidth / 2, pad + artHeight / 2);
-  ac.rotate((sticker.rotation || 0) * Math.PI / 180);
-  ac.scale(scale * (sticker.flip ? -1 : 1), scale);
-  ac.drawImage(figure.canvas, b.x, b.y, b.width, b.height, -b.width / 2, -b.height / 2, b.width, b.height);
-  ac.restore();
-  const pixels = ac.getImageData(0, 0, width, height);
+  const angle = (sticker.rotation || 0) * Math.PI / 180, co = Math.cos(angle), si = Math.sin(angle);
+  for (let y = 0; y < artHeight; y++) for (let x = 0; x < artWidth; x++) {
+    const dx = x + .5 - artWidth / 2, dy = y + .5 - artHeight / 2;
+    const sx = Math.floor(b.x + b.width / 2 + (dx * co + dy * si) / scale * (sticker.flip ? -1 : 1));
+    const sy = Math.floor(b.y + b.height / 2 + (-dx * si + dy * co) / scale);
+    if (sx < b.x || sy < b.y || sx >= b.x + b.width || sy >= b.y + b.height) continue;
+    const from = (sy * figure.canvas.width + sx) * 4, to = ((y + pad) * width + x + pad) * 4;
+    pixels.data.set(src.subarray(from, from + 4), to);
+  }
+  ac.putImageData(pixels, 0, 0);
   // Exact integer disk dilation of nonzero alpha. Sliding row windows keep it
   // O(radius * pixels), rather than painting one disk per opaque pixel.
   const mask = new Uint8Array(width * height), dilated = new Uint8Array(mask.length);
@@ -112,26 +119,6 @@ function itemFor(id, slot) {
   const item = BH_BY_ID[id];
   if (!item || item.slot !== slot) fail(`Unknown ${slot} art: ${id}.`);
   return item;
-}
-
-// Draft indices are stable through re-renders. Removal explicitly remaps them.
-export function studioLayerStack(options) {
-  const available = ['pet', 'body', ...(options.stickers || []).map((_, i) => `sticker-${i}`)];
-  const saved = Array.isArray(options.layerOrder) ? options.layerOrder : [];
-  return [...new Set([...saved.filter(id => available.includes(id)), ...available])];
-}
-export function studioMoveLayer(options, index, direction) {
-  const order = studioLayerStack(options), from = order.indexOf(`sticker-${index}`);
-  const to = from + Math.sign(direction);
-  if (from >= 0 && to >= 0 && to < order.length) [order[from], order[to]] = [order[to], order[from]];
-  options.layerOrder = order;
-}
-export function studioRemoveSticker(options, index) {
-  options.layerOrder = studioLayerStack(options).filter(id => id !== `sticker-${index}`).map(id => {
-    if (!id.startsWith('sticker-')) return id;
-    const i = Number(id.slice(8)); return `sticker-${i > index ? i - 1 : i}`;
-  });
-  options.stickers.splice(index, 1);
 }
 
 export function studioPlan(look, options = {}) {
@@ -348,9 +335,9 @@ export async function studioStickerFigure(sticker, runtime = studioBrowserRuntim
     return { canvas: c, ink: studioInk(c) };
   }
   const size = Math.max(...images.map(i => Math.max(i.width, i.height)));
-  const c = runtime.createCanvas(size, size), cc = c.getContext('2d'); cc.imageSmoothingEnabled = true; cc.imageSmoothingQuality = 'high';
+  const c = runtime.createCanvas(size, size), cc = c.getContext('2d'); cc.imageSmoothingEnabled = false;
   for (let i = 0; i < images.length; i++) {
-    const layer = runtime.createCanvas(size, size), lc = layer.getContext('2d'); lc.imageSmoothingEnabled = true; lc.imageSmoothingQuality = 'high';
+    const layer = runtime.createCanvas(size, size), lc = layer.getContext('2d'); lc.imageSmoothingEnabled = false;
     lc.drawImage(images[i], 0, 0, size, size);
     if (s.layers[i].mask) { lc.globalCompositeOperation = 'destination-in'; lc.drawImage(await load(s.layers[i].mask), 0, 0, size, size); }
     cc.drawImage(layer, 0, 0);
@@ -378,18 +365,15 @@ export async function composeStudio(look, options = {}, runtime = studioBrowserR
     const img = await load(bg.src), scale = Math.max(1080 / img.width, 1920 / img.height);
     ctx.drawImage(img, (1080 - img.width * scale) / 2, (1920 - img.height * scale) / 2, img.width * scale, img.height * scale);
   }
-  const background = runtime.createCanvas(1080, 1920);
-  background.getContext('2d').drawImage(canvas, 0, 0);
-  const sceneLayers = {};
   const stack = async (group, input = plan.layers) => {
     const layers = input.filter(l => l.group === group);
     if (!layers.length) return null;
     const size = Math.max(...(await Promise.all(layers.map(l => load(l.src)))).map(i => Math.max(i.width, i.height)));
     const c = runtime.createCanvas(size, size), cctx = c.getContext('2d');
-    cctx.imageSmoothingEnabled = true; cctx.imageSmoothingQuality = 'high';
+    cctx.imageSmoothingEnabled = false;
     for (const l of layers) {
       const layer = runtime.createCanvas(size, size), lc = layer.getContext('2d');
-      lc.imageSmoothingEnabled = true; lc.imageSmoothingQuality = 'high';
+      lc.imageSmoothingEnabled = false;
       lc.drawImage(await load(l.src), 0, 0, size, size);
       if (l.mask) { lc.globalCompositeOperation = 'destination-in'; lc.drawImage(await load(l.mask), 0, 0, size, size); lc.globalCompositeOperation = 'source-over'; }
       // Existing catalogue colour overlays only, identical to the wardrobe's
@@ -408,18 +392,12 @@ export async function composeStudio(look, options = {}, runtime = studioBrowserR
   if (!body) fail('No Bonehead art.');
   const ground = 1460, bounds = [], information = [];
   const occupancy = runtime.createCanvas(1080, 1920), oc = occupancy.getContext('2d');
-  oc.imageSmoothingEnabled = true; oc.imageSmoothingQuality = 'high';
-  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  oc.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = false; // nearest-neighbour, no interpolated art colours
   const paint = (figure, box, flip = false) => {
     const b = figure.ink;
     ctx.save(); ctx.translate(box.x + (flip ? box.width : 0), box.y); ctx.scale(flip ? -1 : 1, 1);
     ctx.drawImage(figure.canvas, b.x, b.y, b.width, b.height, 0, 0, box.width, box.height); ctx.restore();
-    if (box.id === 'body' || box.id === 'pet') {
-      const surface = runtime.createCanvas(1080, 1920), sc = surface.getContext('2d');
-      sc.imageSmoothingEnabled = true; sc.imageSmoothingQuality = 'high';
-      sc.drawImage(figure.canvas, b.x, b.y, b.width, b.height, box.x, box.y, box.width, box.height);
-      sceneLayers[box.id] = surface;
-    }
   };
   const bodyScale = Math.min(850 / body.ink.width, 1120 / body.ink.height);
   const bodyBox = { id: 'body', x: 65, y: ground - body.ink.height * bodyScale,
@@ -437,19 +415,16 @@ export async function composeStudio(look, options = {}, runtime = studioBrowserR
   paint(body, bodyBox); bounds.push(bodyBox);
   oc.drawImage(body.canvas, body.ink.x, body.ink.y, body.ink.width, body.ink.height, bodyBox.x, bodyBox.y, bodyBox.width, bodyBox.height);
 
+  const baseCanvas = runtime.createCanvas(1080, 1920);
+  baseCanvas.getContext('2d').drawImage(canvas, 0, 0);
   const figures = [];
   for (const [index, sticker] of plan.stickers.entries()) {
     const figure = await studioStickerFigure(options.stickers[index], runtime, load);
     figures.push(figure);
     const raster = studioRasterSticker(figure, sticker, runtime), box = { id: `sticker-${index}`, ...raster.box };
-    const surface = runtime.createCanvas(1080, 1920), sc = surface.getContext('2d');
-    sc.drawImage(raster.decoration, box.x, box.y); sc.drawImage(raster.art, box.x, box.y);
-    sceneLayers[box.id] = surface; bounds.push(box);
+    ctx.drawImage(raster.decoration, box.x, box.y);
+    ctx.drawImage(raster.art, box.x, box.y); bounds.push(box);
   }
-  const layerOrder = studioLayerStack(options);
-  ctx.clearRect(0, 0, 1080, 1920); ctx.drawImage(background, 0, 0);
-  for (const id of layerOrder) if (sceneLayers[id]) ctx.drawImage(sceneLayers[id], 0, 0);
-  bounds.sort((a, b) => layerOrder.indexOf(a.id) - layerOrder.indexOf(b.id));
   // Record the information layer while painting the final export. Live gestures
   // reuse these decoded surfaces without loading, encoding or running placement.
   const foreground = runtime.createCanvas(1080, 1920), fc = foreground.getContext('2d'), main = ctx;
@@ -462,7 +437,7 @@ export async function composeStudio(look, options = {}, runtime = studioBrowserR
     },
     set(target, key, value) { target[key] = value; fc[key] = value; return true; },
   });
-  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.imageSmoothingEnabled = false;
   // Port of talkBoxHtml's .talkbox + .hero-bubble at 3 export px per CSS px.
   // app.css: size 11, line-height 1.55, tracking .02em, padding .88/.94em,
   // border 2, radius 13, shadow 4/5; tail 10/7 at 42%/45%, 12 degrees.
@@ -555,10 +530,10 @@ export async function composeStudio(look, options = {}, runtime = studioBrowserR
   const before = ctx.getImageData(0, 0, 1080, 1920).data;
   paint(mark, markBox);
   const maskCanvas = runtime.createCanvas(1080, 1920), mc = maskCanvas.getContext('2d');
-  mc.imageSmoothingEnabled = true; mc.imageSmoothingQuality = 'high';
+  mc.imageSmoothingEnabled = false;
   mc.drawImage(mark.canvas, mark.ink.x, mark.ink.y, mark.ink.width, mark.ink.height,
     markBox.x, markBox.y, markBox.width, markBox.height);
-  let markContrast = studioMarkContrast(before, ctx.getImageData(0, 0, 1080, 1920).data,
+  const markContrast = studioMarkContrast(before, ctx.getImageData(0, 0, 1080, 1920).data,
     mc.getImageData(0, 0, 1080, 1920).data);
   assertStudioMarkContrast(markContrast);
   information.push(plate);
@@ -572,32 +547,21 @@ export async function composeStudio(look, options = {}, runtime = studioBrowserR
     information.push({ ...box, x: box.x - 6, y: box.y - 6, width: box.width + 12, height: box.height + 12 });
   }
   assertStudioSafe([...bounds, ...information]);
-  // Flatten the information once, identically for the export and live gestures.
-  main.imageSmoothingQuality = 'low'; // Exact-size surface copies do not need resampling.
-  main.clearRect(0, 0, 1080, 1920); main.drawImage(background, 0, 0);
-  for (const id of layerOrder) if (sceneLayers[id]) main.drawImage(sceneLayers[id], 0, 0);
-  main.drawImage(foreground, 0, 0);
-  markContrast = studioMarkContrast(before, main.getImageData(0, 0, 1080, 1920).data,
-    mc.getImageData(0, 0, 1080, 1920).data);
-  assertStudioMarkContrast(markContrast);
   const blob = await runtime.encode(canvas);
   await assertStudioPng(blob);
   const renderLive = (target, stickers) => {
-    const cx = target.getContext('2d'); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'low';
-    cx.clearRect(0, 0, 1080, 1920); cx.drawImage(background, 0, 0);
+    const cx = target.getContext('2d'); cx.imageSmoothingEnabled = false;
+    cx.clearRect(0, 0, 1080, 1920); cx.drawImage(baseCanvas, 0, 0);
     const liveBounds = bounds.filter(b => !b.id.startsWith('sticker-'));
-    for (const id of layerOrder) {
-      if (!id.startsWith('sticker-')) { if (sceneLayers[id]) cx.drawImage(sceneLayers[id], 0, 0); continue; }
-      const index = Number(id.slice(8)), sticker = stickers[index];
-      if (!figures[index] || !sticker) continue;
-      const r = studioRasterSticker(figures[index], sticker, runtime), b = { id, ...r.box };
+    stickers.forEach((sticker, index) => {
+      if (!figures[index]) return;
+      const r = studioRasterSticker(figures[index], sticker, runtime), b = { id: `sticker-${index}`, ...r.box };
       cx.drawImage(r.decoration, b.x, b.y); cx.drawImage(r.art, b.x, b.y); liveBounds.push(b);
-    }
-    liveBounds.sort((a, b) => layerOrder.indexOf(a.id) - layerOrder.indexOf(b.id));
+    });
     cx.drawImage(foreground, 0, 0);
     return liveBounds;
   };
-  return { blob, plan, information, bounds, feetY, markContrast, renderLive, figures, layerOrder, background, sceneLayers, foreground };
+  return { blob, plan, information, bounds, feetY, markContrast, renderLive, figures };
 }
 
 export async function assertStudioPng(blob) {

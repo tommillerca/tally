@@ -10,6 +10,12 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 559, date: '2026-09-10', title: 'The Studio, softer and deeper', items: [
+  'Studio artwork scales smoothly, keeping the soft edges of the original illustrations.',
+  'All your Studio stickers share one tray. Tap the artwork to place it.',
+  'Select a sticker and send it forward or back, including behind your Bonehead and pet. Your draft remembers the order.',
+  ] },
+
   { n: 558, date: '2026-09-10', title: 'The step race shows progress again', items: [
   'The Step Race now shows progress for racers with recent syncs even when someone else is awaiting a sync. Your standing stays visible when your own sync is recent, and step gaps appear when both you and the racer above have recent syncs.',
   ] },
