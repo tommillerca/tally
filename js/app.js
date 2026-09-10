@@ -22,7 +22,7 @@ import {
   retireMerchantIfNeeded,
   boneDust, boneDustAdd, disenchantGear, salvagePet, gearDustValue, petDustValue, slimedGearIds,
   shinyPetIds,
-  transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
+  transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice, transmogZeroLabel, wardrobeLookCounts,
   newCosmeticIds, newSlotCodes, clearNewInSlot,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
   stripAll, stripAllPlan,
@@ -6131,9 +6131,9 @@ const GUIDE_ENTRIES = [
      inventory row. */
   { id: 'transmog', title: 'The Dressing Room', body: [
     'The Dressing Room is where you change how a piece LOOKS without changing what it is. Wearing one thing and showing another. The numbers are whatever the piece really is; only the picture changes.',
-    'Nothing is destroyed and nothing comes off. The piece stays on him, keeps its stats, and stays in the Backpack where you left it.',
-    'It costs dust, and only the first time. That look in that slot is free forever after, so try things.',
-    'A look you have not paid for is priced on the tile before you commit. Nothing is taken until you say so twice.',
+    'Your gear stays equipped with the same stats. Only its appearance changes.',
+    'Trying a look is free. Wearing it over statted gear costs dust once per look in that slot. Reusing a paid look, hiding the slot, and returning to its own look are free. Without statted gear, changing the picture is free too.',
+    'Choose a look, then use Wear it. A priced look asks you to confirm the dust cost before spending. Collect more looks from earned crates or the cosmetic Shop.',
   ] },
   { id: 'fits', title: 'Saved fits', body: [
     'A saved fit is a photograph of what he has on. Six of them, and taking one costs nothing.',
@@ -16639,14 +16639,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
   const looksHave = await collectedLooks();
   // the fits cap, printed like every other cap in the app (QA round 23 F8)
   const fitCount = tab === 'wardrobe' ? (await fits()).length : 0;
-  // TILES, NOT PIECES (2026-09-05). The Collection this door opens draws one
-  // tile per bhFamilyKey, not one per owned piece, so a piece count on the
-  // door promised more than the screen behind it showed (looks-door-audit's
-  // COUNT row). bhFamilyKey folds in slot, so grouping across all of looksAll
-  // in one call is safe -- no cross-slot collisions.
-  const looksPieces = looksAll.filter(i => looksHave.has(i.id)).length;
-  const looksFamHave = bhFamilies(looksAll.filter(i => looksHave.has(i.id))).size;
-  const looksFamAll = bhFamilies(looksAll).size;
+  // Count stored collection ids, not the family tiles used to draw them.
+  const lookCounts = wardrobeLookCounts(looksHave, await equipped({ raw: true }), await gearLoadout());
 
   const curtains = false; // dressing-room curtains retired (Tom's call)
   body.innerHTML = `
@@ -16666,7 +16660,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             it. Same .bh-pill as the wallet chips beside it, so it costs no new
             layout; it is a <button> with an accent edge so it reads as tappable
             rather than as one more read-only tally. */''}
-      <button class="bh-pill ward-looks" data-tab="looks">${sparkIco(13)} ${looksFamHave}/${looksFamAll} looks &middot; ${looksPieces} pieces</button>
+      <button class="bh-pill ward-looks" data-tab="looks">${sparkIco(13)} ${lookCounts.collected}/${lookCounts.total} collected looks &middot; ${lookCounts.alternatives} other looks to try</button>
       ${/* THE FITS CAP, STATED (QA round 23 F8). At 6 fits the save chip used to
             vanish with no copy and no total, the only storage cap in the app
             with none (the yard prints 24, favourites 6, recents 8, and the looks
@@ -16939,7 +16933,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             <span class="mog-arrow" aria-hidden="true">${ICONS.chev(18)}</span>
             <figure class="${changed ? 'after' : 'same'}"><span class="mog-cap">${changed ? 'After' : 'Pick one below'}</span>${figure(previewEq())}</figure>`;
     };
-    const costTag = id => lookPriceMap[id] ? `<span class="look-cost dust">${lookPriceMap[id]}${dustIco}</span>` : '<span class="look-cost paid">owned</span>';
+    const costTag = id => lookPriceMap[id] ? `<span class="look-cost dust">${lookPriceMap[id]}${dustIco}</span>` : `<span class="look-cost paid">${transmogZeroLabel(id, tm[slot], !!wornGear)}</span>`;
     /* THE BAR IS A CHILD OF .mog-dock, NOT OF .mog-panel (QA round 23 F3). It is
        `position: sticky; bottom: 0`, and sticky is clamped by its containing
        block: inside the panel it could only float while the panel was on screen,
@@ -16953,11 +16947,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
     const mogBarHtml = () => {
       if (!mogOn) return '';
       const { sel, cost, afford, changed } = mogState();
-      if (!changed) return '';
       return `<div class="look-bar mog-bar${changed ? ' armed' : ''}">
             <div class="mog-lines">
               <span><i>You keep</i><b>${wornGear ? gearLabel(wornGear) : 'every piece you own'}</b></span>
-              <span><i>You get</i><b>${esc(nameOf(sel))}</b></span>
+              <span><i>You get</i><b>${changed ? esc(nameOf(sel)) : 'Choose a look below'}</b></span>
               <span class="pay"><i>You pay</i><b>${cost ? `${cost} Bone Dust` : 'nothing'}</b>${cost ? `<em>${dustIco} you have ${dustBal}</em>` : ''}</span>
             </div>
             ${changed
@@ -17130,7 +17123,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       </div>
       <div class="pd-bottom">${BOTTOM.map(pdSlot).join('')}</div>
       <div class="pd-stats">${STAT_META.map(statChip).join('')}</div>
-      <div class="sect-h" style="margin-top:10px">${esc(GEAR_SLOTS.includes(slot) ? GEAR_SLOT_LABELS[slot] : slotMeta.label)} · pick your fit</div>
+      <div class="sect-h" style="margin-top:10px">${esc(GEAR_SLOTS.includes(slot) ? GEAR_SLOT_LABELS[slot] : slotMeta.label)} · pick your piece</div>
       <div class="ward-grid" data-wslot="${slot}">
         ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">${eq[slot] ? 'Take off' : 'None'}</button>`}
         ${fams.map(fam => {
@@ -17188,6 +17181,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             <span class="gi-stats">${gearLabel(ig)}</span>
             ${ig.talent ? `<span class="gi-talent">${ICONS.boltIco(12)} ${esc(ig.talentName)}</span><small class="gi-desc">${esc(TALENT_DESC[ig.talent] || 'a special ability')}</small>` : '<small class="gi-desc">No special ability. Pure stats.</small>'}
             <span class="rar-chip" style="color:${rar.color}">${rar.label} · ${GEAR_SLOT_LABELS[ig.slot]}${ig.minLevel > 1 ? ` · Lv ${ig.minLevel}` : ''}</span>
+            <small class="gi-desc">Melting consumes the gear and its stats. Its look is yours forever.</small>
           </div>
           <div class="gi-actions">
             <button class="btn gi-equip ${isEq ? 'ghost' : ''}" data-equipgear-commit="${ig.id}" ${isEq || locked ? 'disabled' : ''}>${isEq ? 'Equipped' : locked ? `Locked · Lv ${ig.minLevel}` : 'Equip this'}</button>
@@ -17236,8 +17230,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
            the tile paints the colourway it stands for. bhFamilies keeps first-
            member order, so grouping the rarity-sorted list keeps the sort. */
         const lookArt = i => `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14"${fbTintAttr(i)} role="img" aria-label="${esc(i.name)}, ${esc(i.rarity)}"></canvas>`;
-        const lookTilesHtml = arts => `${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"${fbTintAttr(ownArt)}></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
-            ${cell(TRANSMOG_HIDE, `<span class="look-hide">${ICONS.hidden(22)}</span><span class="look-tag">Hide</span>`, 'Show nothing in this slot')}
+        const lookTilesHtml = arts => `${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"${fbTintAttr(ownArt)}></canvas><span class="look-tag">Reset · Free</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
+            ${cell(TRANSMOG_HIDE, `<span class="look-hide">${ICONS.hidden(22)}</span><span class="look-tag">Hide · Free</span>`, 'Show nothing in this slot')}
             ${[...bhFamilies([...arts].sort((a, b) => RAR_ORDER.indexOf(b.rarity) - RAR_ORDER.indexOf(a.rarity))).values()]
               .map(fam => {
                 /* the tile shows the colourway being tried, else the one worn, else the family's best (first after the sort) */
@@ -17311,14 +17305,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
           <div class="ward-grid look-grid">
             ${lookTilesHtml(arts)}
           </div>
-          <p class="note mog-safe">Nothing is destroyed. The piece stays on, keeps its stats and stays in your Backpack.${arts.length ? '' : ' No other looks collected for this slot yet, keep hunting.'}</p>
+          <p class="note mog-safe">Your equipped piece keeps its stats.${arts.length ? '' : ' No other looks collected for this slot yet. Open earned crates in the Backpack, or collect cosmetic pieces from the Shop.'}</p>
         </div>`;
         }
         return `
         <div class="sect-h" style="margin-top:14px">${esc(GEAR_SLOT_LABELS[slot])} · pick your look</div>
         <div class="ward-grid look-grid">
-          ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
-          ${cell(TRANSMOG_HIDE, '<span class="look-hide">🚫</span><span class="look-tag">Hide</span>', 'Show nothing in this slot')}
+          ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">Reset · Free</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
+          ${cell(TRANSMOG_HIDE, `<span class="look-hide">🚫</span><span class="look-tag">Hide · Free</span>`, 'Show nothing in this slot')}
           ${/* costTag, not a bare number: the price carries the dust unit the same
                 way as the v2 panel's tiles (QA round 22 W13b) */''}
           ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${costTag(i.id)}`, i.name)).join('')}
@@ -17334,12 +17328,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
         </div>` : ''}
         <p class="note" style="text-align:center;margin-top:8px">${wornGear
           ? `Your ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} keeps <b>${gearLabel(wornGear)}</b> whatever it looks like. Trying one on is free, you only spend Bone Dust when you wear it. You have <b><span class="dust-ico">${ICONS.dust(12)}</span> ${dustBal}</b>.`
-          : `Nothing with stats in this ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} slot, so a look here is only a look: <b>switching is free</b>.`}${arts.length ? '' : ' No other looks collected for this slot yet, keep hunting.'}</p>`;
+          : `Nothing with stats in this ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} slot, so a look here is only a look: <b>switching is free</b>.`}${arts.length ? '' : ' No other looks collected for this slot yet. Open earned crates in the Backpack, or collect cosmetic pieces from the Shop.'}</p>`;
       })()}
+      ${GEAR_SLOTS.includes(slot) ? `<p class="note">More looks: <button class="link" data-look-source="crates">Open Backpack</button> · <button class="link" data-look-source="shop">Cosmetic Shop</button></p>` : ''}
       ${mogBarHtml()}
       </div>
       ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; pieces marked with a bolt grant a talent. Rarer rolls hit harder. Melting a piece keeps its look forever.</p>' : ''}
       ${lockedCount ? `<p class="note" style="text-align:center;margin-top:10px">More ${slotMeta.label.toLowerCase()} pieces are out there. Keep hunting.</p>` : ''}`;
+    $$('[data-look-source]', content).forEach(btn => btn.addEventListener('click', () => openCharacter(btn.dataset.lookSource)));
     // --- saved fits: tap to wear, long-press for rename / bin ---
     $$('[data-fit]', content).forEach(chip => {
       let held = false, t = null;
@@ -17742,8 +17738,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
         const tag = $('.look-cost', c);
         if (tag && lookPriceMap[c.dataset.look] !== undefined) tag.outerHTML = costTag(c.dataset.look);
       }
-      // No bar on arrival or after reverting/committing. Insert it directly in
-      // the dock on the first choice, preserving the sticky travel and the doll.
+      // Keep the disabled second step on arrival and after reverting/committing.
+      // Replace it in the same dock, preserving the sticky travel and the doll.
       const bar = $('.mog-dock > .mog-bar', content);
       if (bar) bar.outerHTML = mogBarHtml();
       else dock.insertAdjacentHTML('beforeend', mogBarHtml());
@@ -17845,12 +17841,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
     $$('[data-melt-gear]', content).forEach(btn => {
       const g = GEAR_BY_ID[btn.dataset.meltGear];
       const worn = !!g && gearLo[g.slot] === g.id;
-      armToConfirm(btn, worn ? `Tap again: melts ${g.name} and takes it off` : 'Tap again to melt', async () => {
+      armToConfirm(btn, worn ? `Tap again: melts ${g.name} and takes it off; its look stays yours` : 'Tap again to melt', async () => {
         const res = await disenchantGear(btn.dataset.meltGear);
         if (!res.ok) { toast('Could not melt that piece.'); return; }
         S.wardrobePreview = null; S.lookPreview = null;
         popSound(S.sounds);
-        toast(`${res.name} melted into ${res.dust} Bone Dust. Its look is yours forever.`, 3200);
+        toast(`${res.name} melted into ${res.dust} Bone Dust.`, 3200);
         renderCharacter(wrap, 'wardrobe', { instant: true });
       });
     });
@@ -18078,6 +18074,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <button class="btn ghost small" id="bpKitchen" style="margin-top:8px">Open the Kitchen to cook</button>
       <div class="t3-sect"><b>Salvage Bench · nothing wasted</b><i></i></div>
       <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">${ICONS.dust(13)}</span> ${dust.toLocaleString()}</b></div>
+      <p class="note">Every piece pays Bone Dust. Use dust for looks in the Dressing Room and the weekly Rack. Melting consumes the gear and its stats. Its look is yours forever.</p>
       ${/* THE BENCH STOPS PROMISING A LIST THAT IS NOT THERE. On a new account the
            gear list below is EMPTY, and this paragraph said "melt gear straight
            from the list below" over nothing, leaving "Open the Stable" as the
@@ -18088,7 +18085,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
            at a list. Guarded by the EMPTY row in tests/melt-ui-audit.mjs. */''}
       ${(invAll.filter(r => r.kind === 'gear' && GEAR_BY_ID[r.gearId]).length)
         ? `<p class="note" style="margin:0 2px 8px">Melt gear you don't wear straight from the list below. Manage, breed, and destroy pets in the <b>Stable</b>. Bad drops and dupes still pay off.</p>`
-        : `<p class="note" style="margin:0 2px 8px">Nothing to melt yet. Gear you don't want ends up here: crates, the Boneyard and the Pit all drop it.<br>Every piece pays Bone Dust, and dust is what changes how your Bonehead looks.</p>`}
+        : `<p class="note" style="margin:0 2px 8px">Nothing to melt yet. Gear you don't want ends up here: crates, the Boneyard and the Pit all drop it.</p>`}
       ${pCountTotal ? `<button class="btn small" id="openStableFromBp">Open the Stable (${pCountTotal} ${pCountTotal === 1 ? 'pet' : 'pets'})</button>` : ''}
       ${(() => {
         const rows = invAll.filter(r => r.kind === 'gear' && GEAR_BY_ID[r.gearId]).map(r => GEAR_BY_ID[r.gearId])
@@ -24604,7 +24601,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v549'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v550'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

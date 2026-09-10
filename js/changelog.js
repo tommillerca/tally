@@ -9,6 +9,12 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 550, date: '2026-09-10', title: 'A clearer Dressing Room', items: [
+    'Wear it now shows the next step before you choose a look. Free changes, the look you are wearing, and paid looks have distinct labels.',
+    'The Wardrobe counts collected looks and other looks to try, with links to the Backpack and cosmetic Shop.',
+    'Melting explains what is consumed and that its look stays yours before you confirm.',
+  ] },
+
   { n: 549, date: '2026-09-10', title: 'Actually held', items: [
     'The off-hand shovel, spade and toothbrush sit in his hand properly.',
     'Wardrobe tiles that need two taps show it with a dashed edge instead of a printed label.',

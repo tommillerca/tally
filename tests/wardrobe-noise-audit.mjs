@@ -2,6 +2,16 @@
  * refresh/click wiring with Node DOM doubles. No sockets or pixel claim.
  * CONTROL: every row fails against the original app.js. PREVIEW includes
  * returning to the current look, since merely arming already worked before.
+ *
+ * R9, 2026-09-10. ARRIVAL and PREVIEW originally required the bar to be ABSENT
+ * whenever nothing was selected. Absence was the wrong proxy for quiet: it also
+ * hid the second step, so a player could not see that a chosen look still had to
+ * be worn (Tom: "transmog is unreachable, and one early return hides the second
+ * step"). The quiet contract this audit exists to protect is unchanged and is
+ * now asserted directly: at rest the bar carries no `armed` class, its control
+ * is disabled and it exposes no commit action, so nothing is clickable and
+ * nothing is spent. The rows still go red against the pre-R9 app, which renders
+ * nothing at rest.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -80,31 +90,39 @@ function help(html, expected) {
   assert.doesNotMatch(html.replace(disclosure[0], ''), /class="note fit-note"/);
   assert.match(css, /#chContent \.stable-help summary/);
 }
+// At rest the bar is present but inert: unarmed, disabled, no commit action.
+function idle(html, why) {
+  assert.match(html, /class="look-bar mog-bar"/, `${why}: the resting bar must render unarmed`);
+  assert.match(html, /<button[^>]* disabled>Wear it<\/button>/, `${why}: the resting control must be disabled`);
+  assert.doesNotMatch(html, /data-look-apply=/, `${why}: the resting bar must expose no commit action`);
+}
 let failed = 0;
 async function test(name, fn) {
   try { await fn(); console.log(`PASS ${name}`); }
   catch (error) { failed++; console.log(`FAIL ${name}: ${error.message}`); }
 }
-await test('ARRIVAL selected slot has no confirm bar, including an existing transmog', () => {
-  const r = room(); assert.equal(r.html, '');
-  r.ctx.tm.H = 'other'; assert.equal(vm.runInContext('mogBarHtml()', r.ctx), '');
-  r.ctx.S.lookPreview = 'other'; assert.equal(vm.runInContext('mogBarHtml()', r.ctx), '');
+await test('ARRIVAL shows the second step at rest, inert, including an existing transmog', () => {
+  const r = room(); idle(r.html, 'arrival');
+  r.ctx.tm.H = 'other'; idle(vm.runInContext('mogBarHtml()', r.ctx), 'arrival with an existing transmog');
+  // lookPreview equal to the existing transmog is not a change: still at rest.
+  r.ctx.S.lookPreview = 'other'; idle(vm.runInContext('mogBarHtml()', r.ctx), 'arrival on the worn look');
 });
-await test('PREVIEW inserts and wires an armed dock bar, clears on revert/commit, and reappears without rebuilding', async () => {
+await test('PREVIEW arms and wires the dock bar, returns it to rest on revert/commit, and rearms without rebuilding', async () => {
   const r = room(); await r.pick('other');
   assert.match(r.html, /class="look-bar mog-bar armed"/);
   assert.equal(r.button?.dataset.lookApply, 'other');
   assert.equal(r.button?.confirmLabel, 'Spend 6 dust?');
   r.button.click(); assert.equal(r.applies, 1);
-  await r.pick(''); assert.equal(r.html, '', 'returning to the current look removes the bar');
+  await r.pick(''); idle(r.html, 'returning to the current look');
+  assert.equal(r.button, null, 'the reverted bar carries no commit action');
   await r.pick('__hide__'); assert.equal(r.button?.dataset.lookPrice, '0');
   r.button.click(); assert.equal(r.applies, 2, 'free action has a live click handler');
   r.ctx.tm.H = '__hide__'; r.ctx.S.lookPreview = null; await r.commit();
-  assert.equal(r.html, '', 'commit removes the bar');
+  idle(r.html, 'after commit');
   r.ctx.dustBal = 0; await r.pick('other');
   assert.match(r.html, /disabled>Need 6 more dust/); assert.equal(r.button, null);
   r.ctx.dustBal = 20; await r.pick('other'); assert(r.button);
-  assert.equal(r.rebuilds, 0, 'an absent bar must not trigger a full room rebuild');
+  assert.equal(r.rebuilds, 0, 'restaging the bar must not trigger a full room rebuild');
   assert.match(app, /\$\{mogBarHtml\(\)\}\s*<\/div>/);
   assert.match(css, /\.mog-dock > \.look-bar\.mog-bar\s*\{[^}]*position:\s*sticky;\s*bottom:\s*0/);
 });
