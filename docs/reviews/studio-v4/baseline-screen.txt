@@ -1,6 +1,6 @@
 import { LOOKS as legacyLooks } from './bosses.js';
 import { BH_ITEMS } from '../data/boneheadz.js';
-import { studioLayerStack, studioMoveLayer, studioRemoveSticker, STUDIO_CAPTIONS, STUDIO_DEFAULTS, STUDIO_POSITIONS, STUDIO_MARK_POSITIONS, STUDIO_TEXT_STICKERS, STUDIO_MONSTERS, STUDIO_STICKER_MIN, STUDIO_STICKER_MAX, STUDIO_SAFE, studioStickerFigure, studioRasterSticker, studioBrowserRuntime, composeStudio } from './studio.js';
+import { STUDIO_CAPTIONS, STUDIO_DEFAULTS, STUDIO_POSITIONS, STUDIO_MARK_POSITIONS, STUDIO_TEXT_STICKERS, STUDIO_MONSTERS, STUDIO_STICKER_MIN, STUDIO_STICKER_MAX, STUDIO_SAFE, studioStickerFigure, studioRasterSticker, studioBrowserRuntime, composeStudio } from './studio.js';
 import { saveStudioImage, studioSaveMode } from './studio-save.js';
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -25,12 +25,9 @@ export function mountStudio(el, { look, ownedBackdrops, crew = [], draft, onBack
       <h1 class="page-h1">The Studio</h1>
       <button class="studio-link" id="studioBack">Back to Wardrobe</button>
     </header>
-    <div class="studio-preview" id="studioStage" tabindex="0" role="group" aria-label="Sticker canvas" aria-describedby="studioGestureHelp studioKeyboardHelp"><img id="studioPreview" alt="Your Studio image preview" hidden draggable="false"><canvas id="studioLive" width="1080" height="1920" hidden aria-hidden="true"></canvas><div id="studioSelection" hidden></div><div id="studioBin" hidden>Drop to delete</div></div>
-    <div id="studioSelectionTools" class="studio-selection-tools" hidden aria-label="Selected sticker actions">
-      <button id="studioBackLayer">Send back</button><button id="studioForward">Send forward</button><button id="studioFlip" aria-label="Flip selected sticker">Flip</button>
-    </div>
+    <div class="studio-preview" id="studioStage" tabindex="0" role="group" aria-label="Sticker canvas" aria-describedby="studioGestureHelp studioKeyboardHelp"><img id="studioPreview" alt="Your Studio image preview" hidden draggable="false"><canvas id="studioLive" width="1080" height="1920" hidden aria-hidden="true"></canvas><div id="studioSelection" hidden><button id="studioFlip" aria-label="Flip selected sticker">Flip</button></div><div id="studioBin" hidden>Drop to delete</div></div>
     <aside class="studio-tray" id="studioTray">
-      <button class="btn" id="studioTrayToggle" aria-expanded="false" aria-controls="studioTrayBody">Add stickers</button>
+      <button class="btn" id="studioTrayToggle" aria-expanded="false" aria-controls="studioTrayBody">Stickers &amp; scene</button>
       <div id="studioTrayBody" hidden>
         <details><summary>Scene settings</summary><div class="studio-controls">
           <button class="chip" id="studioBackdrop"></button>
@@ -41,8 +38,12 @@ export function mountStudio(el, { look, ownedBackdrops, crew = [], draft, onBack
           <button class="chip" id="studioCode" aria-pressed="false"${look.friendCode ? '' : ' disabled'}>Include my friend code</button>
         </div>
         <p class="note" id="studioCodeValue">Your code stays off unless you turn it on.</p>
-        </details>
-        <div class="studio-sticker-grid studio-art-grid">${STUDIO_MONSTERS.map((name, i) => `<button class="studio-pick" id="studioMonster-${i}" aria-label="Place ${esc(name)}"><canvas id="studioMonsterThumb-${i}" aria-hidden="true"></canvas></button>`).join('')}${crew.map((f, i) => `<button class="studio-pick" id="studioCrew-${i}" aria-label="Place ${esc(f.label)}"><canvas id="studioCrewThumb-${i}" aria-hidden="true"></canvas></button>`).join('')}${Object.entries(STUDIO_TEXT_STICKERS).map(([id, text]) => `<button class="studio-pick" id="studioText-${id}" aria-label="Place ${esc(text)}"><canvas id="studioTextThumb-${id}" aria-hidden="true"></canvas></button>`).join('')}</div>
+        </details><h2 class="sect-h">Monsters</h2>
+        <div class="studio-sticker-grid studio-art-grid">${STUDIO_MONSTERS.map((name, i) => `<button class="studio-pick" id="studioMonster-${i}" aria-label="Place ${esc(name)}"><canvas id="studioMonsterThumb-${i}" aria-hidden="true"></canvas><span>${esc(name)}</span></button>`).join('')}</div>
+        <h2 class="sect-h">Your Crew</h2>
+        <div class="studio-sticker-grid studio-art-grid">${crew.map((f, i) => `<button class="studio-pick" id="studioCrew-${i}" aria-label="Place ${esc(f.label)}"><canvas id="studioCrewThumb-${i}" aria-hidden="true"></canvas><span>${esc(f.label)}</span></button>`).join('')}</div>${crew.length ? '' : '<p class="note">Open the Crew screen first to load your friends, then come back here.</p>'}
+        <h2 class="sect-h">Say it with bones</h2>
+        <div class="studio-sticker-grid studio-art-grid">${Object.entries(STUDIO_TEXT_STICKERS).map(([id, text]) => `<button class="studio-pick" id="studioText-${id}" aria-label="Place ${esc(text)}"><canvas id="studioTextThumb-${id}" aria-hidden="true"></canvas><span>${esc(text)}</span></button>`).join('')}</div>
         <p id="studioTrayStatus" class="note" role="status"></p>
         <details id="studioAccessible"><summary>Sticker controls (keyboard and screen reader)</summary><h2 class="sect-h">On your picture</h2><div id="studioPlaced" class="studio-sticker-grid"></div>
         <p class="note" id="studioKeyboardHelp">Keyboard: Enter selects a sticker, arrows move, + and - resize, [ and ] rotate, F flips, Delete removes, Escape deselects.</p>
@@ -53,7 +54,7 @@ export function mountStudio(el, { look, ownedBackdrops, crew = [], draft, onBack
         </details><button class="btn ghost" id="studioRetry">Retry preview</button>
       </div>
     </aside>
-    <p class="note" id="studioGestureHelp">Tap a sticker to edit. Drag to move, pinch to resize, twist to rotate.</p>
+    <p class="note" id="studioGestureHelp">Drag to move. Pinch and twist with two fingers. Drag down to the bin to delete.</p>
     <p id="studioStatus" class="note" role="status" aria-live="polite">Preparing your image...</p>
     <button class="btn primary" id="studioClean" disabled>Ready for screenshot</button>
     <p class="note">Save for now: hide the controls, then take a screenshot. Tap the picture or press Escape to return.</p>
@@ -91,7 +92,7 @@ export function mountStudio(el, { look, ownedBackdrops, crew = [], draft, onBack
         for (const box of next.bounds) if (box.id.startsWith('sticker-') && box.fittedSize !== undefined)
           options.stickers[Number(box.id.slice(8))].size = box.fittedSize;
         updateSelection();
-        status('Picture ready.');
+        status('Picture ready. Hide controls and take a screenshot to save.');
       } catch (error) {
         if (disposed) break;
         if (version !== revision) continue;
@@ -139,7 +140,7 @@ export function mountStudio(el, { look, ownedBackdrops, crew = [], draft, onBack
         if (disposed) break;
         const raster = studioRasterSticker(figure, sticker, thumbnailRuntime), c = q(id);
         c.width = raster.art.width; c.height = raster.art.height;
-        const cx = c.getContext('2d'); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+        const cx = c.getContext('2d'); cx.imageSmoothingEnabled = false;
         cx.drawImage(raster.decoration, 0, 0); cx.drawImage(raster.art, 0, 0);
       }
       thumbnailsReady = true;
@@ -152,7 +153,7 @@ export function mountStudio(el, { look, ownedBackdrops, crew = [], draft, onBack
     if (open) void thumbnails();
     q('studioTray').setAttribute('data-open', String(open));
     q('studioTrayBody').hidden = !open; q('studioTrayToggle').setAttribute('aria-expanded', String(open));
-    q('studioTrayToggle').textContent = open ? 'Close stickers' : 'Add stickers';
+    q('studioTrayToggle').textContent = open ? 'Collapse stickers & scene' : 'Stickers & scene';
   };
   q('studioTrayToggle').onclick = () => tray(q('studioTrayBody').hidden);
   let swipeY;
@@ -167,10 +168,6 @@ export function mountStudio(el, { look, ownedBackdrops, crew = [], draft, onBack
   let liveBounds = null;
   const updateSelection = () => {
     q('studioStickerTools').hidden = selected < 0;
-    q('studioSelectionTools').hidden = selected < 0;
-    const order = studioLayerStack(options), depth = order.indexOf(`sticker-${selected}`);
-    q('studioBackLayer').disabled = selected < 0 || depth === 0;
-    q('studioForward').disabled = selected < 0 || depth === order.length - 1;
     /* THE CANVAS ONLY CLAIMS THE GESTURE WHILE IT HAS SOMETHING TO MOVE.
        Tom, 2026-09-10: "the studio is unseable in it's current state it's
        actually bricked". `.studio-preview` shipped with a blanket
@@ -192,7 +189,7 @@ export function mountStudio(el, { look, ownedBackdrops, crew = [], draft, onBack
   q('studioPlaced').onclick = e => { const button = e.target.closest('[data-studio-index]'); if (button) { selected = Number(button.dataset.studioIndex); placed(); } };
   const add = sticker => {
     if (options.stickers.length >= 12) { status('Your sheet has 12 stickers. Remove one to add another.'); return; }
-    options.stickers.push({ ...sticker, x: 540, y: 950, size: 400, flip: false }); selected = options.stickers.length - 1; tray(false); q('studioStage').focus(); placed(); void draw(true);
+    options.stickers.push({ ...sticker, x: 540, y: 950, size: 400, flip: false }); selected = options.stickers.length - 1; tray(false); q('studioStage').focus(); placed(); void draw();
   };
   for (const id of Object.keys(STUDIO_TEXT_STICKERS)) q(`studioText-${id}`).onclick = () => add({ kind: 'text', id });
   STUDIO_MONSTERS.forEach((id, i) => { q(`studioMonster-${i}`).onclick = () => add({ kind: 'monster', id }); });
@@ -201,20 +198,18 @@ export function mountStudio(el, { look, ownedBackdrops, crew = [], draft, onBack
     const s = options.stickers[selected]; if (!s || pointers.size) return;
     const box = result?.bounds.find(b => b.id === `sticker-${selected}`);
     if (box) { s.x = box.x + box.width / 2; s.y = box.y + box.height / 2; }
-    action(s); placed(); void draw(true);
+    action(s); placed(); void draw();
   };
   for (const [name, dx, dy] of [['Left', -30, 0], ['Right', 30, 0], ['Up', 0, -30], ['Down', 0, 30]]) q(`studio${name}`).onclick = () => change(s => { s.x += dx; s.y += dy; });
   q('studioSmaller').onclick = () => change(s => { s.size = Math.max(STUDIO_STICKER_MIN, s.size - 40); });
   q('studioLarger').onclick = () => change(s => { s.size = Math.min(STUDIO_STICKER_MAX, s.size + 40); });
   q('studioFlip').onclick = e => { e?.stopPropagation?.(); change(s => { s.flip = !s.flip; }); };
-  q('studioBackLayer').onclick = () => change(() => studioMoveLayer(options, selected, -1));
-  q('studioForward').onclick = () => change(() => studioMoveLayer(options, selected, 1));
   q('studioFlipAccessible').onclick = q('studioFlip').onclick;
   q('studioFlip').onpointerdown = e => e.stopPropagation();
   q('studioRotateLeft').onclick = () => change(s => { s.rotation = ((s.rotation || 0) - 15 + 360) % 360; });
   q('studioRotateRight').onclick = () => change(s => { s.rotation = ((s.rotation || 0) + 15) % 360; });
   q('studioDeselect').onclick = () => { selected = -1; placed(); q('studioStage').focus(); };
-  q('studioRemove').onclick = () => change(() => { studioRemoveSticker(options, selected); selected = -1; });
+  q('studioRemove').onclick = () => change(() => { options.stickers.splice(selected, 1); selected = -1; });
   // A gesture retains the render's decoded layers. Its positions and pixels
   // update in the pointer handler; PNG export is rebuilt only when it ends.
   const pointers = new Map();
@@ -280,7 +275,7 @@ export function mountStudio(el, { look, ownedBackdrops, crew = [], draft, onBack
       pointers.delete(e.pointerId);
       if (stage.hasPointerCapture?.(e.pointerId)) stage.releasePointerCapture(e.pointerId);
       if (pointers.size) { overBin = false; rebase(); return; }
-      if (overBin) { studioRemoveSticker(options, selected); selected = -1; status('Sticker removed.'); }
+      if (overBin) { options.stickers.splice(selected, 1); selected = -1; status('Sticker removed.'); }
       gesture = null;
     }
     origin = null; overBin = false; q('studioBin').hidden = true; liveBounds = null; placed(); void draw(true);

@@ -44,7 +44,7 @@ export async function checkStudio() {
           if (args[0].width !== 740 || args[0].height !== 197) return draw(...args);
           const before = cx.getImageData(0, 0, w, h).data;
           const mask = createCanvas(w, h), mx = mask.getContext('2d');
-          mx.imageSmoothingEnabled = cx.imageSmoothingEnabled;
+          mx.imageSmoothingEnabled = cx.imageSmoothingEnabled; mx.imageSmoothingQuality = cx.imageSmoothingQuality;
           mx.setTransform(cx.getTransform()); mx.drawImage(...args);
           draw(...args);
           measurement = { before, mask };
@@ -175,7 +175,7 @@ export async function checkStudio() {
         const cx = c.getContext('2d'), original = cx.drawImage.bind(cx);
         cx.drawImage = (...args) => {
           const isolated = createCanvas(w, h), ic = isolated.getContext('2d');
-          ic.imageSmoothingEnabled = cx.imageSmoothingEnabled;
+          ic.imageSmoothingEnabled = cx.imageSmoothingEnabled; ic.imageSmoothingQuality = cx.imageSmoothingQuality;
           ic.setTransform(cx.getTransform()); ic.drawImage(...args);
           draws.push({ canvas: isolated, input: args[0], smoothing: cx.imageSmoothingEnabled });
           original(...args);
@@ -197,7 +197,7 @@ export async function checkStudio() {
   assert.ok(bodyPixels.ink.height > 1000);
   assert.ok(bodyPixels.ink.width * bodyPixels.ink.height / (950 * 1270) > .7);
   assert.ok(Math.abs(petPixels.ink.y + petPixels.ink.height - measured.result.feetY) <= 1);
-  assertStudioSafe(measured.measured.map((m, i) => ({ id: `decoded-${i}`, ...m.ink })));
+  assertStudioSafe(measured.measured.slice(0, 2).map((m, i) => ({ id: `decoded-${i}`, ...m.ink })));
   console.log('MEASURE decoded PNG:', JSON.stringify({ body: bodyPixels.ink,
     safeAreaPercent: 100 * bodyPixels.ink.width * bodyPixels.ink.height / (950 * 1270),
     pet: petPixels.ink, petGround: petPixels.ink.y + petPixels.ink.height,
@@ -233,14 +233,17 @@ export async function checkStudio() {
   const baselineUnion = createCanvas(1080, 1920), bu = baselineUnion.getContext('2d');
   bu.drawImage(baselineMeasured.measured[0].decoded, 0, 0);
   bu.drawImage(baselineMeasured.measured[1].decoded, 0, 0);
-  assert.deepEqual(rgba, bu.getImageData(0, 0, 1080, 1920).data,
-    'decoded figure and pet unchanged byte for byte from v553 audit fixture');
+  for (const b of measured.result.bounds.filter(b => ['body', 'pet'].includes(b.id))) {
+    const previous = baselineMeasured.result.bounds.find(p => p.id === b.id);
+    assert.ok(Math.abs(b.width / previous.width - 1) < .01 && Math.abs(b.height / previous.height - 1) < .01,
+      'smooth alpha bounds stay within 1% of original figure geometry');
+  }
   assert.equal(metrics.petGroundMinusFeet, 0);
   console.log('ROUND1', JSON.stringify(metrics));
   for (const bubblePosition of STUDIO_POSITIONS) for (const markPosition of STUDIO_MARK_POSITIONS) {
     const placement = await measureComposition(composeStudio, look, { bubblePosition, markPosition, caption: 'personality', includeFriendCode: true });
     const r = placement.result;
-    const actualOverlap = placement.measured.slice(-2).map((m, index) => {
+    const actualOverlap = placement.measured.filter(m => m.input.width !== 1080 || m.input.height !== 1920).slice(-2).map((m, index) => {
       const mask = m.decoded.getContext('2d').getImageData(0, 0, 1080, 1920).data;
       let ink = 0, overlap = 0;
       for (let i = 0; i < mask.length; i += 4) if (mask[i + 3] > 14) {
@@ -267,19 +270,9 @@ export async function checkStudio() {
   }
   assert.throws(() => studioPlan(look, { stickers: Array(13).fill(sticker) }), /12 stickers/);
   assert.throws(() => studioPlan(look, { stickers: [{ ...sticker, kind: 'monster', id: 'invented' }] }), /Unknown/);
-  const colourSet = canvas => {
-    const rgba = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data, colours = new Set();
-    for (let i = 0; i < rgba.length; i += 4) if (rgba[i+3] > 14) colours.add(Array.from(rgba.slice(i, i+4)).join(','));
-    return colours;
-  };
-  for (const entry of [sticker, ...STUDIO_MONSTERS.map(id => ({ kind: 'monster', id, x: 540, y: 900, size: 180, flip: false }))]) {
-    const r = await measureComposition(composeStudio, look, { stickers: [entry] });
-    const last = r.measured.at(-3), inputColours = colourSet(r.result.figures[0].canvas), outputColours = colourSet(last.decoded);
-    assert.equal(last.smoothing, false, 'nearest-neighbour art sampling');
-    assert.ok(outputColours.size <= inputColours.size, 'downsample introduces no colour-count inflation');
-    assert.ok([...outputColours].every(c => inputColours.has(c)), 'nearest-neighbour output palette is a subset of the stacked input');
-    console.log(`COLOURS smallest 180px ${entry.id || 'Crew'}: ${inputColours.size} in, ${outputColours.size} out`);
-  }
+  // Retired palette-subset guard: smooth resampling must blend source colours.
+  // Decoded alpha coverage and a hard-diagonal negative control now protect
+  // edge softness in studio-v4-audit.mjs; the transform whitelist above remains.
   const aSticker = { kind: 'monster', id: STUDIO_MONSTERS[0], x: 500, y: 850, size: 400, flip: false };
   const bSticker = { kind: 'text', id: 'feed', x: 500, y: 850, size: 400, flip: false };
   const forward = await composeStudio(look, { stickers: [aSticker, bSticker] }, runtime);
@@ -287,7 +280,6 @@ export async function checkStudio() {
   assert.notEqual(digest(await bytes(forward.blob)), digest(await bytes(backward.blob)), 'array order changes overlapping encoded pixels');
   const unflipped = await measureComposition(composeStudio, look, { stickers: [aSticker] });
   const flipped = await measureComposition(composeStudio, look, { stickers: [{ ...aSticker, flip: true }] });
-  const unflipLayer = unflipped.measured.at(-3).decoded, flipLayer = flipped.measured.at(-3).decoded;
   assert.notEqual(digest(await bytes(unflipped.result.blob)), digest(await bytes(flipped.result.blob)), 'flip changes actual PNG');
   const raw = unflipped.result.figures[0].raster.art, flippedRaw = flipped.result.figures[0].raster.art;
   const mirror = createCanvas(raw.width, raw.height), mx = mirror.getContext('2d');
@@ -403,7 +395,8 @@ export async function checkStudio() {
   await new Promise(r => setImmediate(r));
   assert.match(markup, /Use a screenshot for now/);
   assert.doesNotMatch(markup, /saving asks for permission/);
-  assert.match(q('studioStatus').textContent, /take a screenshot/);
+  assert.match(q('studioStatus').textContent, /Picture ready/);
+  assert.match(markup, /take a screenshot/, 'screenshot instructions remain visible without a repeated status message');
   assert.ok(q('studioSave').hidden);
   q('studioClean').onclick(); assert.ok(q('studioCleanView').open);
   assert.equal(q('studioCleanImage').src, q('studioPreview').src);

@@ -383,6 +383,7 @@ PURE.push('boneyard-zoom-audit.mjs'); // Real view boot/teardown and scoped came
 PURE.push('lab-conflict-audit.mjs'); // Offline pet/slot collisions, encrypted reconnect, retained receipts and honest recovery copy; Node only.
 PURE.push('lab-lock-recovery-audit.mjs'); // Lab fence recovers after a mid-transaction crash, incl. nickname-first and auto-equip.
 PURE.push('r3-rest-audit.mjs'); // R3-8 backup body, R3-4 refusal copy, R3-5 destroy gate, R3-6 dead guard.
+PURE.push('studio-v4-audit.mjs');
 PURE.push('studio-v3-audit.mjs'); // Studio direct manipulation and alpha-derived sticker pixels, Node only.
 PURE.push('studio-audit.mjs'); // Studio compositor: real PNG compose/decode, layer order, safe zone, privacy rejection.
 PURE.push('collection-cell-audit.mjs'); // R6-C1/C5: shared cell identity, hostile seven-cell roster and real Stable warning strings.
