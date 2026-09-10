@@ -180,10 +180,10 @@ export async function buyDropItem(itemId) {
  * commons and almost nothing else. Hold the anchor and the light player's whole
  * year is byte-identical to today's, while the committed player's spend per
  * piece doubles. So the doubling lands entirely on the players it was aimed at.
- * The real grant is DAYONE_TOPUP = 40. A 40-coin starting wallet
- * cannot afford the 300-coin anchor. Starting-wallet affordability therefore
- * does not justify this exemption; that rationale no longer holds. The 300
- * price stays unchanged pending a product-owner decision.
+ * The real welcome grant is DAYONE_TOPUP = 340 from initLootIfNeeded().
+ * A 340-coin starting wallet can afford the 300-coin anchor once, with 40 left.
+ * This is the player's grant, not seedDemo()'s wallet or its 14 cosmetics.
+ * Tom chose to raise the grant and retain the 300-coin anchor.
  *
  * WHAT THIS DOES NOT DO, and it must be said beside the numbers rather than in
  * a report nobody re-reads: IT DOES NOT MAKE THE CATALOGUE LAST A YEAR. Same
@@ -212,11 +212,10 @@ export const RACK_POOLS = [
   [2000, ['FW6-3', 'FW7-6', 'FW8-3']],    // rare kicks               feet
   [1800, ['P5-1', 'P5-2', 'P6-3']],       // epic swim trunks         hips
   [1400, ['S4-1', 'S5', 'S8']],           // uncommon socks           ankle
-  /* THE ANCHOR, retained at 300 pending a product-owner price decision.
-     DAYONE_TOPUP = 40: a 40-coin starting wallet
-     cannot afford the 300-coin anchor (260 coins short). This rung does not
-     provide an affordable starting purchase. The old starting-wallet rationale
-     no longer holds; changing the price is a separate product decision. */
+  /* THE ANCHOR, retained at 300 by Tom's day-one grant ruling.
+     The real welcome grant is DAYONE_TOPUP = 340 from initLootIfNeeded().
+     A 340-coin starting wallet can afford the 300-coin anchor once, with 40 left.
+     This is the player's grant, not the demo fixture. */
   [300, ['U2', 'U4', 'U7']],              // common briefs            waist
 ];
 /* DUST IS THE CERTAINTY PREMIUM: coins buy whatever the rack happens to offer,

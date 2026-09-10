@@ -319,11 +319,12 @@ PURE.push('routine-race-audit.mjs');
 PURE.unshift('version-align-lint.mjs');
 /* dayone-topup-audit is PURE for the same reason spawn-claim-atomic-audit is:
    mem-idb under the real js/db.js, js/game.js and js/loot.js, no browser, ~2s.
-   It owns the day-one coin floor (master handoff B4, 2026-09-07): the welcome
-   kit's one-time 40-coin grant is paid exactly once and survives a /register
-   that answers 429, and a PERFECT first day driven through the shipped payout
-   functions over twelve seeds clears the 300 rack floor at the median (304 with
-   the grant, 264 without). Proved red by deleting the grant: 6 rows, exit 1. */
+   It guards the welcome kit's one-time DAYONE_TOPUP payment and its survival
+   of a /register that answers 429. The original 40-coin ruling was superseded
+   by Tom's day-one grant ruling: 340 coins buys the unchanged 300 rack anchor.
+   A PERFECT first day over twelve seeds must still clear that floor and stay
+   below the existing 900-coin ceiling. Historical 40-coin measurements remain
+   in the audit; current measurements are printed on every run. */
 PURE.push('dayone-topup-audit.mjs');
 /* dish-worth-audit is PURE for the same reason xp-curve-audit is: it imports
    js/pit.js through tests/fight-sim.mjs, no browser and no database, ~3s. It
@@ -368,6 +369,7 @@ PURE.push('stable-rooms-top-audit.mjs'); // Frozen room row: production template
 PURE.push('today-playtest-audit.mjs'); // 2026-09-08: Today handlers, rollover retries, protected streak copy and atomic milestone crates; Node only.
 PURE.push('crew-playtest-audit.mjs'); // Frozen Crew playtest: owed gifts, aborted opens and actual social controls; Node only.
 PURE.push('firstrun-audit.mjs'); // Frozen first-run: interrupted kit, onboarding handlers and day-one play; Node only.
+PURE.push('dayone-affordability-audit.mjs'); // Frozen grant: real welcome wallet buys one rack piece; empty/funded and legacy controls, Node only.
 PURE.push('settings-safety-audit.mjs'); // Settings/file-import loss review, durable undo, quota refusal, stale review and transaction abort/retry; Node only.
 PURE.push('progress-playtest-audit.mjs'); // Frozen Progress lane: badge abort/retry, real charts, sleep and detail handlers; no sockets.
 PURE.push('leaderboard-honesty-audit.mjs'); // Staleness copy across crew, leaderboard, podium and race; Node only.
