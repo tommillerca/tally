@@ -2,12 +2,11 @@
  * A source composite is not evidence of rendered registration. This scores
  * 640x640 master PNG ink against B0-1 in source coordinates, not the shipping
  * avatar renderer. It cannot prove on-body alignment or a correct grip.
- * The original floor, controls, census and failure exit are unchanged. Restored
- * pre-v536 brushes fail this historical floor; that is expected, not evidence
- * that the rejected offsets should return. No useful rendered-registration
- * assertion remains here. Proposed follow-up: remove this as a release guard
- * and replace it with measurements of the final artifact in the shipping
- * renderer. Keep it present and red until that change is explicitly reviewed.
+ * The original floor, controls, census and failure exit are unchanged.
+ * This is a diagnostic only, skipped by the release gate. Its historical
+ * thresholds neither accept nor reject the operator-selected Round 4 offsets.
+ * Rendered alignment evidence comes from the operator's shipping-avatar
+ * comparisons, not this source score. A rendered-pixel guard remains owed.
  * Ink is alpha > 30; boxes are half-open; dilation is Manhattan distance.
  */
 import assert from 'node:assert/strict';

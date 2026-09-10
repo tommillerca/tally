@@ -1,0 +1,45 @@
+Enumerated 159 PURE entries from tests/release-gate.mjs
+Full streams: /var/folders/k7/gh5s55k16q17nlm_hj_3g3bm0000gp/T/offhand-round4-pure-GpKZqu
+PASS version-align-lint.mjs exit=0
+PASS no-debug-markers-lint.mjs exit=0
+PASS store-copy-lint.mjs exit=0
+PASS sync-native-audit.mjs exit=0
+PASS lab-density-audit.mjs exit=0
+PASS sync-identity-audit.mjs exit=0
+PASS crew-outfit-audit.mjs exit=0
+PASS whatsnew-boot-audit.mjs exit=0
+PASS dock-line-audit.mjs exit=0
+PASS wardrobe-noise-audit.mjs exit=0
+PASS migration-guard-audit.mjs exit=0
+PASS sync-path-audit.mjs exit=0
+PASS sync-authpath-audit.mjs exit=0
+PASS wardrobe-playtest-audit.mjs exit=0
+PASS sync-clientpath-audit.mjs exit=0
+PASS stable-stale-disclosure-audit.mjs exit=0
+PASS breed-last-colour-audit.mjs exit=0
+PASS stable-loss-disclosure-audit.mjs exit=0
+PASS lab-health-recovery-audit.mjs exit=0
+PASS lab-ui-audit.mjs exit=0
+PASS lab-integration-audit.mjs exit=0
+PASS lab-foundation-audit.mjs exit=0
+PASS laboratory-audit.mjs exit=0
+PASS crew-pet-node-guard.mjs exit=0
+PASS transmog-receipt-audit.mjs exit=0
+PASS pet-stress-guard.mjs exit=0
+PASS kitchen-atomic-audit.mjs exit=0
+PASS today-reads-lint.mjs exit=0
+PASS backup-key-audit.mjs exit=0
+PASS backup-version-audit.mjs exit=0
+PASS backup-encoder-audit.mjs exit=0
+file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/offhand-fix-real/docs/offhand/round4-run-pure.mjs:24
+    if(!/384 passed, 0 failed/.test(output)) throw new Error('Agreed unit proof missing');
+                                                   ^
+
+Error: Agreed unit proof missing
+    at run (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/offhand-fix-real/docs/offhand/round4-run-pure.mjs:24:52)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/offhand-fix-real/docs/offhand/round4-run-pure.mjs:43:103
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async Promise.all (index 3)
+    at async file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/offhand-fix-real/docs/offhand/round4-run-pure.mjs:43:1
+
+Node.js v22.22.2
