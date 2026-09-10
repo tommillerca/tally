@@ -1,5 +1,5 @@
 import { mountStudio } from './studio-screen.js';
-import { STUDIO_DEFAULTS } from './studio.js';
+import { STUDIO_DEFAULTS, studioCrewAppearance } from './studio.js';
 // Tally: app orchestrator. Screens, sheets, and flows.
 import { labEqual } from './laboratory.js';
 import { db, kvGet, kvSet, kvUpdate, payAtomic, newId, exportAll, importAll, STORES, useDbName, storageStatus, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG, dayIsUnwitnessed } from './db.js';
@@ -13249,6 +13249,7 @@ async function renderFriends(el) {
   const paint = async () => {
     // webdriver-gated fixture hook: see __testMe above
     data = (navigator.webdriver && window.__testFriends) || await social.listFriends();
+    if (data.reached !== false) { studioCrew = studioCrewAppearance(data.friends || []); studioCrewOwner = me.friendCode; }
     paintFan();
     const list = $('#friendsList', el);
     if (list) list.innerHTML = requestRowsHtml(data);
@@ -16345,6 +16346,7 @@ function bindBadgeTaps(wrap) {
 // so every old caller lands in the right place.
 // Studio only exports this player's appearance. Explicitly project the instance
 // fields rather than passing state, an outfit's pseudo-shiny, or a full profile.
+let studioCrew = [], studioCrewOwner = null;
 const studioDraft = { ...STUDIO_DEFAULTS };
 async function renderStudio(el) {
   const [outfit, instance, wear, me, owned] = await Promise.all([
@@ -16362,7 +16364,7 @@ async function renderStudio(el) {
   }
   screenCleanup = mountStudio(el, {
     look: { outfit, pet, friendCode: me?.friendCode || null }, // studio-instance
-    ownedBackdrops: owned, draft: studioDraft, onBack: () => openCharacter('wardrobe'),
+    crew: me?.friendCode === studioCrewOwner ? studioCrew : [], ownedBackdrops: owned, draft: studioDraft, onBack: () => openCharacter('wardrobe'),
   });
 }
 
@@ -24642,7 +24644,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v552'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v553'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

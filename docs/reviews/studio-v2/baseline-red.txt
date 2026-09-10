@@ -1,0 +1,17 @@
+BEFORE same audit fixture decoded PNG: {"pet":{"x":710,"y":973,"width":280,"height":277},"body":{"x":136,"y":340,"width":668,"height":910},"safeAreaPercent":50.38375466224617}
+RED proof on unchanged original js/studio.js:
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: V2 figure must grow materially inside the unchanged safe band
+    at file:///private/tmp/studio-before-proof.mjs:19:8 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v22.22.2

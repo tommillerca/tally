@@ -1,5 +1,73 @@
 # What each patch note claims, and what backs it
 
+## v553 (2026-09-10)
+
+SILENT BUILD (`SILENT_BUILDS`, js/changelog.js). Studio v2: stickers, the speech bubble,
+monsters, Crew friends, the tray, screenshot-to-share. Built by Codex, verified here.
+
+### Operator verification, rendered and measured
+
+Rendered at 430x932 in the real app, and the 1080x1920 export decoded and measured.
+`STUDIO_SAFE` is x 65..1015, y 270..1540, area 1,206,500.
+
+| Measured on the decoded export | v551 | v553 |
+|---|---:|---:|
+| Ink inside the safe rectangle | 26.6% | **39.0%** |
+| Largest component bounding box, as % of safe | 51.9% | **86.3%** |
+| Ink bounds | x 89..989, y 340..1450 | x 65..1009, y 340..1459 |
+| Everything inside STUDIO_SAFE | yes | **yes** |
+| Pet ground contact vs figure feet | 43px above | **merged into one component** |
+
+The figure and pet are now one connected mass rather than two, which is the feet-alignment
+landing. Nothing crosses the reserved bands.
+
+The controls: **0 `<select>` and 0 `<input type=checkbox>` remain on the screen.** Tom,
+2026-09-10: "the UI and buttons all look really bad". They are chips and buttons now.
+The tray is present and COLLAPSED on arrival; opening it reveals 25 stickers under
+"Monsters" and "Your Crew", plus the text stickers "BONEHEADZ GYM.", "FEED THE BONES."
+and "I LIVE HERE NOW." Bubble and BONEHEADZ each have a placement toggle. The clean
+screenshot mode is reachable from "Ready for screenshot".
+
+The speech bubble is the shipped talkbox, ported to Canvas: tail pointing at the skull,
+sitting on the backdrop clear of the head art. Inspected at 2x. Good.
+
+### DEFECT SHIPPED KNOWINGLY: the BONEHEADZ wordmark is invisible
+
+Tom asked for the mark to be MORE prominent. Measured, it is the opposite.
+
+The wordmark is painted in cream **RGB(243, 239, 231)**. The backdrop is
+**RGB(243, 239, 231)**. That is not "low contrast", it is the same colour:
+**contrast 1.00:1**. Where it happens to cross darker artwork it reaches 3.45:1, which is
+why it reads as a smudge over the bunny slippers rather than as a wordmark. 68.1% of its
+band (y 1230..1340, x 200..900) sits over artwork rather than backdrop.
+
+This is the same class as v547's 1.23:1 shop prices. Root cause: v553 grew the figure from
+51.9% to 86.3% of the safe rectangle without re-deriving the mark's placement, so a mark
+that previously sat on clean backdrop below the feet is now on top of the figure, in a
+colour that only ever worked against the figure's dark ink.
+
+Shipped anyway, deliberately: this is a SILENT build no player can see, everything else in
+it is a large improvement, and Tom wants to try the stickers now. It is back with Codex as
+round 2 with the numbers above. It is recorded here so it cannot be quietly forgotten.
+
+Also still unproven: native Photos save on iOS, the Android document picker, and touch
+reach on a real device.
+
+1. PROOF: studio-audit.mjs, crew-capture-node-audit.mjs | REACH: the audit intercepts the
+   real composition draw calls and their real transforms, encodes each on a transparent
+   1080x1920 PNG, decodes it and measures alpha>14 ink, then encodes and decodes the
+   complete final PNG and checks the bytes are deterministic. It proves position presets,
+   exact mirrored pixels, order-dependent output, transform bounds, and that every placed
+   sticker's output palette is a SUBSET of its input palette (nearest-neighbour sampling,
+   22,979 colours in and 3,749 out at the smallest 180px offering), which rules out
+   interpolation mush. Privacy: only whitelisted catalogue outfit ids reach the compositor
+   from a Crew friend, with nested health payloads rejected; the safe-zone guard still
+   rejects a flush-to-bottom layout. Proven RED against the original compositor on the new
+   material-size assertion (`baseline-red.txt`). NOT proven by any of this: rendered
+   prominence, colour contrast, touch reach or any browser layout, which is why the
+   wordmark defect above was found by the operator render and not by the audit.
+
+
 ## v552 (2026-09-10)
 
 SILENT BUILD, declared in `SILENT_BUILDS` (js/changelog.js). The Studio stays unlisted at
@@ -100,6 +168,32 @@ treatments at four different alignments. Only the Studio entry was moved.
 
 
 
+
+## vNEXT
+
+SILENT BUILD requested. Studio stays unlisted in player patch notes. The operator assigns
+all version stamps and the SILENT_BUILDS entry; this checkout advances none.
+
+1. PROOF: studio-audit.mjs | REACH: Wardrobe > The Studio. The picture leads a collapsed sticker tray. Pick fixed captions and bubble positions, wordmark positions, shipped monster art, fixed text stickers or a friend from the Crew response already loaded this session. Placed stickers move, uniformly scale from 180 to 650 export pixels on their longest side, and flip horizontally. Array order is back to front, newest on top. Crew stickers carry only outfit IDs. The screenshot action opens the exact preview in a control-free dialog; tap the picture or press Escape to return. No screenshot success is claimed. No frame selector ships and forced frames still fail.
+
+Final proof: `node tests/unit.test.js` exits 0, **385 passed, 0 failed**. The full PURE
+list is **165/165 green** after targeted reruns of Studio and the Crew harness whose
+new dependency binding was missing. `--coverage-only` and `git diff --check` exit 0.
+
+Node proof encodes and decodes real PNGs. The size assertion was red against the original
+compositor before implementation. Existing privacy and safe-zone rejection controls remain;
+added controls reject sticker health/profile fields, rotation, nonuniform scaling, tint,
+nonfinite coordinates and sizes outside bounds. See [advisory report](reviews/studio-v2/report.md)
+and [Studio proof output](reviews/studio-v2/studio-audit.txt) for measured geometry and colour
+counts. Visual prominence, touch reach, browser layout, screenshots and native save remain
+operator proof, not claims from these Node checks.
+
+Recorded changes to stale assertions: the 1250 ground ceiling becomes STUDIO_SAFE plus
+pet-to-feet alignment; backdrop-before-picture and native select assertions become
+picture-first, collapsed-tray and fixed-choice buttons; old-shell help now explains
+screenshots and hides unavailable Save. Its unavailable-save guard still rejects a direct
+call and retains the preview. The synthetic z-order test now loads the real wordmark so
+its newly added art does not become an unrelated opaque square over the probe pixel.
 
 ## v551 (2026-09-10)
 

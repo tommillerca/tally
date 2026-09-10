@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { crewFixture, assertDemoPage } from './lib/crew-capture.mjs';
+import { studioCrewAppearance } from '../js/studio.js';
 import { raceStanding, raceClockLabel } from '../js/social.js';
 const source = process.argv.find(a => a.startsWith('--source='));
 const app = readFileSync(source ? source.slice(9) : new URL('../js/app.js', import.meta.url), 'utf8');
@@ -44,7 +45,7 @@ async function harness(scenario, webdriver = true) {
   };
   let socialCalls = 0;
   const fallback = async () => { socialCalls++; throw new Error('CONTROL reached server fallback'); };
-  const ctx = vm.createContext({ console, Date, fixture, window: {}, navigator: { webdriver: true }, el: {},
+  const ctx = vm.createContext({ studioCrewAppearance, studioCrew: [], studioCrewOwner: null, me: fixture.me, console, Date, fixture, window: {}, navigator: { webdriver: true }, el: {},
     URL, location: { href: 'http://localhost:8765/?demo' }, indexedDB: { databases: async () => [{ name: 'tally-demo' }] }, document: { querySelector: () => ({}) },
     $: node, $$: () => [], esc: String, nameWithAlias: f => f.alias || f.name,
     ICONS: new Proxy({}, { get: () => () => '<i></i>' }), badgePixHtml: () => '<i></i>',
