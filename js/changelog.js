@@ -5,12 +5,15 @@
 // Pending train notes. The operator assigns a build number and moves these
 // into CHANGES when assembling the release. No version stamp is advanced here.
 export const NEXT_CHANGES = [
-  'Shop prices you can afford keep their filled coin or dust colors and dark digits; prices beyond your wallet are hollow.',
-  'Bumbleseal and her accessories show hollow prices when you are short of coins.',
-  'Disabled ghost buttons keep their muted text and subdued shadow.',
 ];
 
 export const CHANGES = [
+
+  { n: 547, date: '2026-09-10', title: 'A price you can read', items: [
+    'Shop prices you can afford keep their filled coin or dust colors and dark digits; prices beyond your wallet are hollow.',
+    'Bumbleseal and her accessories show hollow prices when you are short of coins.',
+    'Disabled ghost buttons keep their muted text and subdued shadow.',
+  ] },
 
   { n: 546, date: '2026-09-10', title: 'A welcome you can spend', items: [
     'New players receive 340 welcome coins, enough for one 300-coin rack piece with 40 coins left.',

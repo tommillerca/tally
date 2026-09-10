@@ -264,7 +264,7 @@ Raw before/after logs, the extracted census, the runner, initial results and the
 </details>
 
 
-## vNEXT
+## v547
 
 Frozen R8 Shop CSS work order. Pending notes match `NEXT_CHANGES` in `js/changelog.js`; no version stamp is advanced. Source proof does not certify rendered appearance.
 
