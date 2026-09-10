@@ -220,13 +220,22 @@ try {
     await page.evaluate(async id => (await import('./js/loot.js')).equipGear('H', id), fixture.gear.id);
     await wardrobe('H');
     const sel = '[data-equip="H10-1"]';
-    const cue = await page.$eval(sel, el => ({ label: el.getAttribute('aria-label'), text: el.querySelector('.ward-arm-cue')?.textContent }));
+    /* WHAT THIS ROW GUARDS is that a two-tap tile LOOKS different from an
+       ordinary one before you touch it, and that a screen reader is told why.
+       v548 satisfied that with a printed "2 taps" label on every such tile, and
+       this row asserted that exact string. Tom, 2026-09-10: "wardobe saying '2
+       taps' everywhere is such a useless and confusing text in the wardrobe.
+       what was the point of that". The label went; the contract did not. So the
+       row now measures the CONTRACT: strip the marker class, and the tile must
+       change on screen. Pinning the label meant this row would have gone red on
+       any restyling of a thing it was never really about. */
+    const cue = await page.$eval(sel, el => ({ label: el.getAttribute('aria-label'), marked: el.classList.contains('ward-two-tap') }));
     const visible = await shot(sel);
-    await page.$eval(sel, el => { const cue = el.querySelector('.ward-arm-cue'); if (cue) cue.style.visibility = 'hidden'; });
+    await page.$eval(sel, el => el.classList.remove('ward-two-tap'));
     const hidden = await shot(sel);
-    await page.$eval(sel, el => { const cue = el.querySelector('.ward-arm-cue'); if (cue) cue.style.visibility = ''; });
+    await page.$eval(sel, el => el.classList.add('ward-two-tap'));
     const cuePixels = await diff(visible, hidden);
-    ok('M11 visible contract before tap', cue.text === '2 taps' && /Tap again/.test(cue.label || '') && cuePixels > 10, `pixels=${cuePixels}, ${JSON.stringify(cue)}`);
+    ok('M11 visible contract before tap', cue.marked && /Tap again/.test(cue.label || '') && cuePixels > 10, `pixels=${cuePixels}, ${JSON.stringify(cue)}`);
     await backlog(); await resetFeedback(); await click(sel);
     await sleep(300);
     const early = await feedback();

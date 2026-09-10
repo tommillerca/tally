@@ -9,6 +9,11 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 549, date: '2026-09-10', title: 'Actually held', items: [
+    'The off-hand shovel, spade and toothbrush sit in his hand properly.',
+    'Wardrobe tiles that need two taps show it with a dashed edge instead of a printed label.',
+  ] },
+
   { n: 548, date: '2026-09-10', title: 'The Wardrobe answers', items: [
     'Putting a piece on updates its slot picture and says it is on. Taking it off says it is off.',
     'Tiles that take off statted gear show that they need two taps, and the first tap tells you what will come off.',

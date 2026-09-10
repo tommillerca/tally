@@ -1,5 +1,40 @@
 # What each patch note claims, and what backs it
 
+## v549
+
+Off-hand registration, sixth attempt and the first one measured against the right
+target. Verified in the real app renderer at 430x932 before shipping, not from a
+source composite.
+
+Changelog item: The off-hand shovel, spade and toothbrush sit in his hand properly.
+
+1. PROOF: offhand-anchor-audit.mjs, facegate-audit.mjs | REACH: the off-hand items are drawn with an INTENTIONAL GAP in the handle, two disconnected alpha components, and the hand belongs IN that gap. Every previous measurement scored item ink NEAR the hand, the opposite of the target, so v536 and v544 each pushed the art further away. Measured against the five held items that were already correct (IL7-1/2/3 katana, IL16-1/2/3 banners), the grip anchor is dx +17.1, dy -7.7 with a spread of 3.5px in x and 2px in y. Cam's original art was already correct in Y at dy -8; the error was only ever horizontal. The four masters are restored from 8c2d961d and translated by IL17-1 (-29,+1), IL17-2 (-31,+2), IL10-1 (-69,+1), IL10-2 (-67,0). Each is a lossless whole-image integer translate: the visible RGBA multiset is byte-identical to Cam's original, 15043, 15034, 18575 and 18542 pixels respectively, nothing redrawn, recoloured, rotated or rescaled. All four now sit inside the verified cluster. The new guard is proven red on the exact v544 art this replaces, off by 53,31 on the spade and 91,85 on the brush against a 4px tolerance.
+
+Changelog item: Wardrobe tiles that need two taps show it with a dashed edge instead of a printed label.
+
+2. PROOF: wardrobe-feedback-audit.mjs | REACH: v548 printed "2 taps" on every arming tile. Tom, 2026-09-10: "wardobe saying '2 taps' everywhere is such a useless and confusing text in the wardrobe. what was the point of that". The words stated what the control wanted rather than what happens to the player, repeated across a grid. The contract still reads before the first tap, as a dashed gold edge, and the first tap still names exactly what would come off; the screen reader label keeps the full sentence. The audit row that asserted the literal string was rewritten to measure the contract instead: strip the marker class and the tile must change on screen. 49/49 COMPLETE, exit 0.
+
+### The face limit moved, and why that is not tuning
+
+facegate-audit blocked the correct registration for three rounds at 22.6% against
+a 2% limit. The 2% was never measured against anything: it was chosen when every
+held item happened to sit clear of the face. BH_SLOTS puts IL at z65 and SK at
+z70, so the SKULL PAINTS OVER a held item, and rendering the original IL9 shows
+the face fully readable with the banner ENGULFING the head on both sides. The
+bug was legibility, not occlusion. Measured coverage separates the two cases by
+a factor of three: IL9 as it shipped 73.53%, correctly registered spades 14.10%
+and 15.76%, brushes 22.64% and 20.96%, every other held item 0.00% to 1.62%. The
+limit is now 35%, which leaves the brush 12 points of margin and fails IL9 by 38.
+A new CONTROL row inside facegate builds a face-covering item and requires the
+audit to reject it, so the limit provably can still fail.
+
+### Not fixed here, and measured
+
+IL9 (the "flag" Tom named alongside the shovel and brush) sits at +47.7,+86.7,
+IL5 at +44.7, IL8-1 at -10.8, IL14 at -21.3 in y. They are outside the verified
+cluster and none has been checked in the render, so none is pinned or corrected.
+The right-hand slot has its own anchor near -301,+151 and is not covered.
+
 ## v546
 
 ### Day-one grant: Round 2 advisory for independent review (2026-09-10)
