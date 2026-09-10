@@ -72,7 +72,7 @@ try {
       grade(current[id]);passed++;
       console.log(`PASS CONTROL finding ${id}: ${id===6||id===15?'synthetic negative control':'pre-fix observation'} rejected; production scenario passes`);
     } catch(error) {
-      failed++;console.log(`FAIL finding ${id}${id===15?' (known app-lane disclosure defect; expected red)':''}: ${error.message}`);
+      failed++;console.log(`FAIL finding ${id}: ${error.message}`);
     }
   }
   console.log(`${passed}/${ROOM2_FINDINGS.length} room 2 guards passed; ${failed} failed; ${missing.length} missing`);

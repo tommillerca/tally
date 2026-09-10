@@ -85,12 +85,16 @@ for(const morph of [null,'sparkle',...colours]) {
     await seed([base,shiny]);
     const quote=await L.quotePetDestruction(base.iid);
     assert.equal(quote.ok,true);assert.equal(quote.quote.lastCell,false);
+    assert.equal(quote.quote.lastAppearance,true);
     const html=vm.runInNewContext(block(app,'// PET DESTRUCTION UI PURE BEGIN','// PET DESTRUCTION UI PURE END')+
       ';petDestructionHtml(q)',{...P,...L,BH_BY_ID,esc:String,q:quote.quote});
     assert.doesNotMatch(html,/last copy of this colour|collection cell will become empty/);
+    assert.match(html,/last ordinary Base appearance/);assert.match(html,/shiny pet still preserves the Base collection cell/);
     assert.match(html,/is destroyed and does not come back/,'CONTROL actual production disclosure reached');
     const ui=await stable([base,shiny]);await ui.click();await ui.click();
     assert.doesNotMatch(ui.disclosure,/last copy of this colour|collection cell will become empty/);
+    assert.match(ui.disclosure,/last ordinary Base appearance/);
+    assert.match(ui.disclosure,/shiny pet still preserves the Base collection cell/);
     assert.equal(ui.sheets.length,0,'safe uninvested Base retains the two-tap path');
     assert.deepEqual((await D.kvGet('petInst')).map(p=>p.iid),['shiny']);
     await seed([base,shiny]);
@@ -99,7 +103,22 @@ for(const morph of [null,'sparkle',...colours]) {
     assert.match(risky.disclosure,/last copy of this colour/,'last shiny appearance is still disclosed');
     assert.doesNotMatch(risky.disclosure,/collection cell will become empty/);
     risky.cancel();
+    await seed([shiny,base]);
+    const breed=await stable([shiny,base],'breed');await breed.click();
+    assert.equal(breed.sheets.length,0);assert.equal(breed.button.dataset.armed,'1');
+    assert.match(breed.disclosure,/last ordinary Base appearance/);
+    assert.match(breed.disclosure,/shiny pet still preserves the Base collection cell/);
+    await breed.click();assert.deepEqual((await D.kvGet('petInst')).map(p=>p.iid),['shiny']);
   });
 }
+await check('CONTROL appearance preservation is limited to collection pets and the last ordinary copy',async()=>{
+  for(const roster of [[pet('founder','base',{sp:'CX'}),pet('other')],[pet('a'),pet('b')]]) {
+    await seed(roster);const q=(await L.quotePetDestruction(roster[0].iid)).quote;
+    assert.equal(q.lastAppearance,false);
+    const html=vm.runInNewContext(block(app,'// PET DESTRUCTION UI PURE BEGIN','// PET DESTRUCTION UI PURE END')+
+      ';petDestructionHtml(q)',{...P,...L,BH_BY_ID,esc:String,q});
+    assert.doesNotMatch(html,/last ordinary Base appearance|shiny pet still preserves/);
+  }
+});
 console.log(`Collection cell audit: ${passed} passed, ${failed} failed`);
 process.exitCode=failed?1:0;

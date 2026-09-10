@@ -21,8 +21,8 @@ typed.cancel();assert.equal((await D.kvGet('pettalents')).a[0],talent.id);
 console.log('PASS CONTROL: typed Destroy retains training and lineage warnings and names talent, nickname and bond losses');
 
 // R6-G2: same-colour keeper preserves the cell, so this exercises the Breed
-// quick confirmation. The warning must still name every investment consumed.
-// Known R6-S3 belongs to the app lane. Keep this assertion red until fixed.
+// typed confirmation. The warning must still name every investment consumed.
+// The shared harness renders the app lane's real loss quote before clicking.
 roster=[pet('keeper'),pet('feed','base',{lineage:2})];
 await seed(roster,{petEquipped:'keeper',equipped:{C:'C1'},petLvlSteps:{keeper:0,feed:50000},
   pettalents:{__iidV:2,feed:[talent.id]},petNick:{feed:'BISCUIT'},petBonds:{feed:4}});
@@ -36,5 +36,5 @@ const lossChecks=[
 ];
 const missing=lossChecks.filter(([,pattern])=>!pattern.test(breed.disclosure)).map(([name])=>name);
 console.log(`OBSERVED R6-S3 breed confirmation: ${breed.disclosure}`);
-console.log(`${missing.length?'FAIL':'PASS'} R6-S3 Breed discloses every consumed investment: missing=${missing.join(', ')||'none'}${missing.length?' (expected red, app lane)':''}`);
-assert.deepEqual(missing,[],'R6-S3: Breed confirmation must disclose all consumed investment; known app-lane defect');
+console.log(`${missing.length?'FAIL':'PASS'} R6-S3 Breed discloses every consumed investment: missing=${missing.join(', ')||'none'}`);
+assert.deepEqual(missing,[],'R6-S3: Breed confirmation must disclose all consumed investment');

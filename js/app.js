@@ -21256,7 +21256,7 @@ async function openStable(opts = {}) {
       btn.classList.add('danger-ish');
       toast(spareInst.shiny
         ? `${spareName} is SHINY, roughly a 1 in 30 hatch, and its colour will not carry over. Destroying it is permanent. Tap again only if you are sure.`
-        : `${spareName} is destroyed for good and your keeper gains a lineage rank. Tap again to confirm.`, 5200);
+        : `${spareName} is destroyed for good and your keeper gains a lineage rank. ${petDestructionLosses(q)} Tap again to confirm.`, 5200);
       setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; delete btn.destructionQuote; btn.textContent = t; btn.classList.remove('danger-ish'); } }, 5200);
     });
     $$('[data-petpick2]', body).forEach(btn => btn.addEventListener('click', async () => {
@@ -21525,6 +21525,8 @@ function petDestructionLosses(q) {
     q.bond ? `Bond ${q.bond}/5 is lost.` : '',
     talents.length ? `Chosen talents are lost: ${talents.join(', ')}.` : '',
     q.inst.shiny ? 'Its shiny appearance is lost.' : '',
+    q.lastAppearance && !q.lastCell && !q.inst.shiny && petColourName(q.inst) === 'Base'
+      ? 'This is your last ordinary Base appearance. A shiny pet still preserves the Base collection cell.' : '',
     q.equipped ? (q.replacement ? `It is equipped. ${q.replacement.name} will take its place.` : 'It is equipped. No pet will remain equipped.') : '',
   ].filter(Boolean).join(' ');
 }

@@ -11,7 +11,8 @@ export const L = await moduleAt('js/loot.js');
 export const P = await moduleAt('js/pets.js');
 export const {dateKey} = await moduleAt('js/nutrition.js');
 const {BH_BY_ID} = await moduleAt('data/boneheadz.js');
-const app = readFileSync(`${root}/js/app.js`, 'utf8');
+const app = readFileSync(process.env.R6_APP_SOURCE || `${root}/js/app.js`, 'utf8');
+const {labEqual} = await moduleAt('js/laboratory.js');
 let seq = 0;
 export const pet = (iid, morph='base', extra={}) => ({iid, sp:'C1', morph, shiny:false, lineage:0, hatchedAtSteps:0, ...extra});
 export async function seed(roster, extra={}) {
@@ -30,9 +31,9 @@ export async function stable(roster, mode='destroy') {
     classList:{add(){},remove(){}}, focus(){}, addEventListener(k,fn){this.events[k]=fn;}});
   const button=el();button.dataset={destroy:roster[0].iid,dust:'60'};
   let current;
-  const context=vm.createContext({...P,...L,BH_BY_ID,esc,insts:roster,bank:await D.kvGet('petLvlSteps'),body:{},S:{},
+  const context=vm.createContext({...P,...L,labEqual,BH_BY_ID,esc,insts:roster,bank:await D.kvGet('petLvlSteps'),body:{},S:{},
     ICONS:{dust:()=>'',chev:()=>'',warn:()=>''},setTimeout:()=>0,queueMicrotask,popSound(){},render:async()=>{},
-    toast:x=>messages.push(x),sel:roster.map(p=>p.iid),offSp:roster[0].iid,BREED_ERR:{},saveBreed(){},
+    toast:x=>messages.push(x),sel:roster.slice(0,2).map(p=>p.iid),offSp:roster[0].iid,BREED_ERR:{},saveBreed(){},
     openPetBreedResult:x=>results.push(x),
     $$:()=>[button], $:(selector,wrap)=>wrap?.nodes?.[selector] || (selector==='#doBreed'?button:null),
     openSheet:(html,opts)=>{
@@ -52,8 +53,27 @@ export async function stable(roster, mode='destroy') {
   vm.runInContext(app.slice(app.indexOf('function openPetDestructionReview('),app.indexOf('\nfunction wireLabLinks(')),context);
   const start=app.indexOf(mode==='destroy'?"    $$('[data-destroy]', body).forEach":"    $('#doBreed', body)?.addEventListener", app.indexOf('async function openStable'));
   const end=app.indexOf(mode==='destroy'?"    $$('[data-offsp]', body).forEach":"    $$('[data-petpick2]', body).forEach", start);
-  vm.runInContext(app.slice(start,end),context);
-  return {messages,sheets,results,button,
+  const begin = app.indexOf('    const keeper = pair ?', app.indexOf('async function openStable'));
+  const finish = app.indexOf('    /* THE COVERFLOW ROSTER', begin);
+  const ba = app.indexOf('${pair ? `<div class="breed-bar');
+  const bb = app.indexOf("</div>` : ''}`;", ba) + "</div>` : ''}`;".length;
+  const pureLab = app.split('// LAB UI PURE BEGIN:')[1].split('\n').slice(1).join('\n').split('// LAB UI PURE END')[0];
+  vm.runInContext(pureLab,context);
+  let panel='', renders=0;
+  const render = async () => {
+    button.dataset={}; button.events={};
+    const live=await D.kvGet('petInst',[]);
+    const a=live.find(p=>p.iid===context.sel[0]),b=live.find(p=>p.iid===context.sel[1]);
+    Object.assign(context,{a,b,insts:live,pair:!!(a&&b),st:{ready:true},
+      bank:await D.kvGet('petLvlSteps'),nicks:await D.kvGet('petNick',{}),
+      bonds:await D.kvGet('petBonds',{}),talentPicks:await D.kvGet('pettalents',{}),
+      petPortraitHtml:()=>'',petBreedGainText:()=>'',petStatBonusText:()=>'',spChips:'',breedLockNote:'',
+      capture:html=>{panel=html;renders++;}});
+    await vm.runInContext('(async()=>{'+app.slice(begin,finish)+'\ncapture('+app.slice(ba+2,bb-3)+');\n'+app.slice(start,end)+'})()',context);
+  };
+  context.render=render;
+  if(mode==='breed') await render(); else vm.runInContext(app.slice(start,end),context);
+  return {messages,sheets,results,button, get panel(){return panel;}, get renders(){return renders;},
     click:()=>{
       const event={currentTarget:button,target:button};
       // DOM dispatch does not await listeners. currentTarget is cleared before
@@ -67,6 +87,7 @@ export async function stable(roster, mode='destroy') {
     submit:()=>current.nodes['#pdGo'].events.click(),
     cancel(){current.isConnected=false;current.opts.onClose?.();},
     bar(){
+      if(mode==='breed')return panel;
       Object.assign(context,{keeper:roster[0],spare:roster[1],pair:true,offLineage:1,spareLvl:1,spareIsPrecious:false,
         petPortraitHtml:()=>'',petBreedGainText:()=>'',petStatBonusText:()=>'',spChips:'',breedLockNote:'',canBreedNow:true});
       const a=app.indexOf('${pair ? `<div class="breed-bar'), b=app.indexOf("</div>` : ''}`;",a)+"</div>` : ''}`;".length;

@@ -79,6 +79,14 @@ Validation: `node tests/unit.test.js` exits 0 with 384 passed, 0 failed. `node t
 
 Browser acceptance remains unrun under the stated listener restriction. The current BROWSER tier contains 123 audits. Run `node tests/release-gate.mjs --all` from this checkout on the operator machine, including the destructive-action and layout coverage in kennel-copy-browser-audit.mjs, breed-sheet-scroll-audit.mjs and sheet-action-reachable-audit.mjs. Node proof does not establish browser reachability or pixel layout.
 
+Integration addendum for v542 (existing rows above retained as lane history):
+
+| Updated claim | PROOF | REACH |
+| --- | --- | --- |
+| Ordinary Base appearance loss is distinguished from the Base cell retained by a shiny. Breed investment disclosure and required health-guard coverage now pass after assembly. | lab-room2-audit.mjs, collection-cell-audit.mjs, stable-loss-disclosure-audit.mjs, r6-guards-audit.mjs | Stable Destroy and Breed disclose the lost ordinary appearance on the quick path while preserving shiny Base ownership. Typed reviews retain investment losses. The release gate invokes the finding-coverage requirement. This supersedes the expected-red status of findings 15 and R6-S3 above. Node services and DOM doubles only; no browser or deployment claim. |
+
+See [the integration advisory](train542-integration/REPORT.md) for the per-audit diagnosis, complete PURE census and red-control evidence.
+
 ## v541 (2026-09-09)
 
 Changelog item: The off-hand brushes and spades are back to how they looked before the last change.

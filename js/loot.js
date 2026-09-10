@@ -2055,6 +2055,7 @@ function petDestructionQuote(s, rows, iid, keepIid = null) {
     // included. A shiny's own appearance still deserves its separate warning.
     lastColour:inst.shiny || !labCellKey(inst)
       ? roster.filter(p => p.sp === inst.sp && petColourName(p) === petColourName(inst)).length === 1 : lastCell,
+    lastAppearance:!!labCellKey(inst) && roster.filter(p => p.sp === inst.sp && petColourName(p) === petColourName(inst)).length === 1,
     lastCell,
     dust:petDustValue(BH_BY_ID[inst.sp] || {}) + (inst.shiny ? 15 : 0) + (inst.lineage || 0) * 8};
 }

@@ -1,3 +1,4 @@
+import { requireLabFindingCoverage } from './lib/lab-finding-coverage.mjs';
 import { auditOutputPath } from './lib/audit-output.mjs';
 /* THE RELEASE GATE.
  *
@@ -699,6 +700,7 @@ const HELPERS = new Set([
 const onDisk = (await readdir(here))
   .filter(f => /\.(mjs|js)$/.test(f) && !HELPERS.has(f))
   .sort();
+requireLabFindingCoverage(onDisk, PURE);
 /* TWO TIERS, BECAUSE THE ALTERNATIVE IS THEATRE EITHER WAY.
    The hand-written list above was the only thing the gate ran, and 43 other
    audits sat in tests/ never executed: guards against a dust exploit, a Glutton

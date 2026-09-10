@@ -1,0 +1,1284 @@
+{
+  "planSha256": "cefcaf029f5e107a8c10f96932c085b91d13fd8461ad6321a8eafba8a478a556",
+  "baselineCommit": "b48f2e2c81218b2a75405e65109dc4636ac7bb96",
+  "node": "v22.22.2",
+  "unit": {
+    "command": "node tests/unit.test.js",
+    "exit": 0,
+    "output": "\n384 passed, 0 failed\n"
+  },
+  "pure": {
+    "command": "node docs/train542-integration/run-pure.mjs /tmp/train542-proof/final-pure",
+    "exit": 0,
+    "minimum": 156,
+    "count": 159,
+    "output": "Full streams: /tmp/train542-proof/final-pure\nEnumerated 159 unique PURE entries from tests/release-gate.mjs\nPASS version-align-lint.mjs exit=0\nPASS no-debug-markers-lint.mjs exit=0\nPASS store-copy-lint.mjs exit=0\nPASS sync-native-audit.mjs exit=0\nPASS lab-density-audit.mjs exit=0\nPASS sync-identity-audit.mjs exit=0\nPASS crew-outfit-audit.mjs exit=0\nPASS whatsnew-boot-audit.mjs exit=0\nPASS dock-line-audit.mjs exit=0\nPASS wardrobe-noise-audit.mjs exit=0\nPASS migration-guard-audit.mjs exit=0\nPASS sync-path-audit.mjs exit=0\nPASS sync-authpath-audit.mjs exit=0\nPASS wardrobe-playtest-audit.mjs exit=0\nPASS sync-clientpath-audit.mjs exit=0\nPASS stable-stale-disclosure-audit.mjs exit=0\nPASS breed-last-colour-audit.mjs exit=0\nPASS stable-loss-disclosure-audit.mjs exit=0\nPASS lab-health-recovery-audit.mjs exit=0\nPASS lab-ui-audit.mjs exit=0\nPASS lab-integration-audit.mjs exit=0\nPASS lab-foundation-audit.mjs exit=0\nPASS laboratory-audit.mjs exit=0\nPASS crew-pet-node-guard.mjs exit=0\nPASS transmog-receipt-audit.mjs exit=0\nPASS pet-stress-guard.mjs exit=0\nPASS kitchen-atomic-audit.mjs exit=0\nPASS today-reads-lint.mjs exit=0\nPASS backup-key-audit.mjs exit=0\nPASS backup-version-audit.mjs exit=0\nPASS backup-conflict-audit.mjs exit=0\nPASS backup-encoder-audit.mjs exit=0\nPASS lab-room2-audit.mjs exit=0\nPASS drip-badge-audit.mjs exit=0\nPASS xp-key-provenance-lint.mjs exit=0\nPASS log-xp-farm-audit.mjs exit=0\nPASS garden-appetite-guard.mjs exit=0\nPASS facegate-audit.mjs exit=0\nPASS quest-daymore-audit.mjs exit=0\nPASS pit.test.js exit=0\nPASS quest-pick-audit.mjs exit=0\nPASS first-fight-audit.mjs exit=0\nPASS stat-source-audit.mjs exit=0\nPASS bastions-rep-sim.mjs exit=0\nPASS analytics-tag-audit.mjs exit=0\nPASS version-stamp-audit.mjs exit=0\nPASS boneyard-supply-audit.mjs exit=0\nPASS icon-inventory-audit.mjs exit=0\nPASS sync-observability-audit.mjs exit=0\nPASS guard-provenance-lint.mjs exit=0\nPASS feedback-status-lint.mjs exit=0\nPASS rack-theme-lint.mjs exit=0\nPASS rack-rotate-audit.mjs exit=0\nPASS pet-accessory-lint.mjs exit=0\nPASS loot-fallback-audit.mjs exit=0\nPASS manifest-exports-audit.mjs exit=0\nPASS xp-curve-audit.mjs exit=0\nPASS live-api-register-lint.mjs exit=0\nPASS claim-evidence-lint.mjs exit=0\nPASS pet-pool-audit.mjs exit=0\nPASS render-sink-lint.mjs exit=0\nPASS lapse-witness-audit.mjs exit=0\nPASS spawn-claim-atomic-audit.mjs exit=0\nPASS wardrobe-family-audit.mjs exit=0\nPASS football-kit-audit.mjs exit=0\nPASS thumb-freshness-lint.mjs exit=0\nPASS restore-latch-audit.mjs exit=0\nPASS first-pet-audit.mjs exit=0\nPASS recovery-status-audit.mjs exit=0\nPASS currency-revision-lint.mjs exit=0\nPASS shop-economy-audit.mjs exit=0\nPASS guard-hygiene-lint.mjs exit=0\nPASS c6-price-audit.mjs exit=0\nPASS pet-morph-animation-audit.mjs exit=0\nPASS take-and-pay-audit.mjs exit=0\nPASS fontscale-audit.mjs exit=0\nPASS wheel-look-audit.mjs exit=0\nPASS wheel-easing-audit.mjs exit=0\nPASS storage-boot-audit.mjs exit=0\nPASS crate-cadence-audit.mjs exit=0\nPASS inv-tombstone-audit.mjs exit=0\nPASS water-retry-audit.mjs exit=0\nPASS cloud-off-audit.mjs exit=0\nPASS r4-app-p1-audit.mjs exit=0\nPASS silence-disclosure-audit.mjs exit=0\nPASS health-disclosure-audit.mjs exit=0\nPASS paddock-pack-audit.mjs exit=0\nPASS r4-silence-audit.mjs exit=0\nPASS locale-numbers-audit.mjs exit=0\nPASS numbers-honesty-audit.mjs exit=0\nPASS audit-output-audit.mjs exit=0\nPASS branch-graveyard-audit.mjs exit=0\nPASS r47-rest-audit.mjs exit=0\nPASS r47-economy-audit.mjs exit=0\nPASS pet-palette-audit.mjs exit=0\nPASS harness-environment-audit.mjs exit=0\nPASS guard-debts-audit.mjs exit=0\nPASS submission-preflight-audit.mjs exit=0\nPASS pet-state-audit.mjs exit=0\nPASS store-runtime-audit.mjs exit=0\nPASS crew-pet-audit.mjs exit=0\nPASS pet-family-audit.mjs exit=0\nPASS routine-race-audit.mjs exit=0\nPASS coins-merge-tie-audit.mjs exit=0\nPASS unit.test.js exit=0\nPASS pet-C-node-guard.mjs exit=0\nPASS dayone-topup-audit.mjs exit=0\nPASS r46-logging-audit.mjs exit=0\nPASS r46-diary-audit.mjs exit=0\nPASS r48-state-audit.mjs exit=0\nPASS dish-worth-audit.mjs exit=0\nPASS audit-completion-audit.mjs exit=0\nPASS n3-deadpaths-audit.mjs exit=0\nPASS zero-calorie-seam-audit.mjs exit=0\nPASS m5-prove-red.mjs exit=0\nPASS lookup-guard-lint.mjs exit=0\nPASS machine-character-audit.mjs exit=0\nPASS restore-debt-audit.mjs exit=0\nPASS p1-r48-rest-audit.mjs exit=0\nPASS restore-state-audit.mjs exit=0\nPASS restore-debt-edges-audit.mjs exit=0\nPASS pet-a11y-audit.mjs exit=0\nPASS breed-lock-audit.mjs exit=0\nPASS kennel-copy-audit.mjs exit=0\nPASS submission-build-audit.mjs exit=0\nPASS p1-merge-audit.mjs exit=0\nPASS multidevice-earnings-audit.mjs exit=0\nPASS quest-wheel-budget-audit.mjs exit=0\nPASS kitchen-delivery-audit.mjs exit=0\nPASS response-bodies-audit.mjs exit=0\nPASS crew-yard-row-audit.mjs exit=0\nPASS map-playtest-audit.mjs exit=0\nPASS stable-rooms-top-audit.mjs exit=0\nPASS device-loss-audit.mjs exit=0\nPASS pet-rarity-audit.mjs exit=0\nPASS p1-dens-audit.mjs exit=0\nPASS today-playtest-audit.mjs exit=0\nPASS settings-safety-audit.mjs exit=0\nPASS progress-playtest-audit.mjs exit=0\nPASS crew-playtest-audit.mjs exit=0\nPASS firstrun-audit.mjs exit=0\nPASS breed-two-tap-audit.mjs exit=0\nPASS leaderboard-honesty-audit.mjs exit=0\nPASS boneyard-zoom-audit.mjs exit=0\nPASS after-await-event-lint.mjs exit=0\nPASS r3-rest-audit.mjs exit=0\nPASS lab-conflict-audit.mjs exit=0\nPASS r6-guards-audit.mjs exit=0\nPASS r6-app-audit.mjs exit=0\nPASS crew-capture-node-audit.mjs exit=0\nPASS pet-parity-guard.mjs exit=0\nPASS verify-tail-audit.mjs exit=0\nPASS r6-merge-audit.mjs exit=0\nPASS cloud-optout-transport-audit.mjs exit=0\nPASS reachable-density-audit.mjs exit=0\nPASS native-shell-comment-audit.mjs exit=0\nPASS r4-restore-audit.mjs exit=0\nPASS lab-lock-recovery-audit.mjs exit=0\nPASS collection-cell-audit.mjs exit=0\n159/159 PURE entries exit 0\n",
+    "entries": [
+      {
+        "file": "version-align-lint.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/version-align-lint.mjs.txt",
+        "outputSha256": "16c682069275c0437b5aeb0fac6bf16c734e6d6509a387c35c72c4eebc87ad3e"
+      },
+      {
+        "file": "no-debug-markers-lint.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/no-debug-markers-lint.mjs.txt",
+        "outputSha256": "6c58e52d505f79d211c96b6682c4c35f54c7172632dafe92c22c43ba02a5d28c"
+      },
+      {
+        "file": "store-copy-lint.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/store-copy-lint.mjs.txt",
+        "outputSha256": "7673e23bc0385f452e210766bd565a8c75e68adee0bbf04de87a272037241c80"
+      },
+      {
+        "file": "migration-guard-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/migration-guard-audit.mjs.txt",
+        "outputSha256": "133dce32930023f9e693daebee3c5df0fd7ed3d10f9ca247d132d2d8679f1c97"
+      },
+      {
+        "file": "sync-observability-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/sync-observability-audit.mjs.txt",
+        "outputSha256": "745cfa9e37438ec1555e0094f5068e9f4b327ed3f40a0b2ad35f5d059924ae32"
+      },
+      {
+        "file": "sync-identity-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/sync-identity-audit.mjs.txt",
+        "outputSha256": "5b05cc41eec6d1df31f71fe5dd1e1ccb0fbebcd4fc24f4af29f6e395be02d19d"
+      },
+      {
+        "file": "sync-native-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/sync-native-audit.mjs.txt",
+        "outputSha256": "04f422bda77ea3ed64c2bdb53c6b544d89a728558d6802c944e6bbe49aa867f6"
+      },
+      {
+        "file": "lab-density-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/lab-density-audit.mjs.txt",
+        "outputSha256": "15ee846b7b5f887bfd5ad94b9a0b6a553b4eb80fc7961ea477515cbe009a1701"
+      },
+      {
+        "file": "crew-outfit-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/crew-outfit-audit.mjs.txt",
+        "outputSha256": "c82d871408d5648c04eecbdbbf60c5c5c1364f6402e7a3d79446974e95a219eb"
+      },
+      {
+        "file": "dock-line-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/dock-line-audit.mjs.txt",
+        "outputSha256": "a454fca8f466fcdf5d85349fdb13904a164c40eff851d4813f74bd3f42e44d36"
+      },
+      {
+        "file": "whatsnew-boot-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/whatsnew-boot-audit.mjs.txt",
+        "outputSha256": "53db716e5202457ec1f52385225a5380ca79389c60a7044aa5ea2c0c9165f4e8"
+      },
+      {
+        "file": "wardrobe-noise-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/wardrobe-noise-audit.mjs.txt",
+        "outputSha256": "6ada11f0571eda93251482ea02e3fc3264318769a60da155e3f8990005f76a98"
+      },
+      {
+        "file": "sync-clientpath-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/sync-clientpath-audit.mjs.txt",
+        "outputSha256": "65a99d6c8f0963c5fedf505b7e5804ec9c8e15d44d6b12c7910584b9d22a79ad"
+      },
+      {
+        "file": "sync-authpath-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/sync-authpath-audit.mjs.txt",
+        "outputSha256": "837a5f3b80601bbad9e8da13487f4e48d25b20232dae76dfc54764c654124a37"
+      },
+      {
+        "file": "sync-path-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/sync-path-audit.mjs.txt",
+        "outputSha256": "de96fb413983aa13247dca2fc107ee7d4742052b3b1a4453f3b465e6b3e47351"
+      },
+      {
+        "file": "wardrobe-playtest-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/wardrobe-playtest-audit.mjs.txt",
+        "outputSha256": "3452222792851ae7b6fe4cb8c8da2f281e0a2e254073a23d062dfeadf423ccbd"
+      },
+      {
+        "file": "lab-room2-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/lab-room2-audit.mjs.txt",
+        "outputSha256": "a05e2e4ba17256e8df97355a5ab2f3516a602ecd08dd1113a13fff97e0265d87"
+      },
+      {
+        "file": "stable-stale-disclosure-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/stable-stale-disclosure-audit.mjs.txt",
+        "outputSha256": "5e0685aaca26a2209d161d45c3160580e42de03eea7c36dff2e90937e1e3e3e2"
+      },
+      {
+        "file": "breed-last-colour-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/breed-last-colour-audit.mjs.txt",
+        "outputSha256": "d00c1ee97452f2e8327f641e3911a11fac5b7d4b4c35ba3bba3c8ecfd649ff41"
+      },
+      {
+        "file": "stable-loss-disclosure-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/stable-loss-disclosure-audit.mjs.txt",
+        "outputSha256": "197ba744dd2ebd39a7f3b0cb9c5dd924349147eb73152f38654688500d6777e7"
+      },
+      {
+        "file": "lab-health-recovery-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/lab-health-recovery-audit.mjs.txt",
+        "outputSha256": "240ce6549fa81da57ca20f8e4c6c59a00faf040e2def8a2daf800696aef440e4"
+      },
+      {
+        "file": "lab-integration-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/lab-integration-audit.mjs.txt",
+        "outputSha256": "8e823bceced29055e76151954c8557c374514fd26dd9782acc2822dbc1d97c9c"
+      },
+      {
+        "file": "lab-ui-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/lab-ui-audit.mjs.txt",
+        "outputSha256": "f0d19c334c900a9b9208f7cb0b29468a14386102fb24bb9d4fe322d523cb8555"
+      },
+      {
+        "file": "laboratory-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/laboratory-audit.mjs.txt",
+        "outputSha256": "eac3106bee1f8ff60e3171099ed42ef729fbeeb5572e9cf4a3dce57b7de26779"
+      },
+      {
+        "file": "lab-foundation-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/lab-foundation-audit.mjs.txt",
+        "outputSha256": "87da388dfc215a056f46812b2ef92031aefe2c166745994e57dff829758d7376"
+      },
+      {
+        "file": "pet-stress-guard.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/pet-stress-guard.mjs.txt",
+        "outputSha256": "dba11e2329c8f1b446493526c41361a0ee10b3e6d41a494c31965ccb34fccb42"
+      },
+      {
+        "file": "crew-pet-node-guard.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/crew-pet-node-guard.mjs.txt",
+        "outputSha256": "679beb990d8cc39e8f6a85e7590f104fc5eff8c2fd2ca361098259fc2c15bc48"
+      },
+      {
+        "file": "transmog-receipt-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/transmog-receipt-audit.mjs.txt",
+        "outputSha256": "2822a6cfaffe9d4743113bf4457c6b589e3126d69e02457b9641edfba0c5b163"
+      },
+      {
+        "file": "today-reads-lint.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/today-reads-lint.mjs.txt",
+        "outputSha256": "b8b8aa54db0fe8d9943452448ca42b7b966a00bbf099dfd13cdd06c9fb8565a4"
+      },
+      {
+        "file": "kitchen-atomic-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/kitchen-atomic-audit.mjs.txt",
+        "outputSha256": "d74bbe001fff2431863b93e0b4acd61e09fbf9ba1c08593b9f61ff1dec43683d"
+      },
+      {
+        "file": "backup-encoder-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/backup-encoder-audit.mjs.txt",
+        "outputSha256": "f89f8b7aee2c385d69c48f00e3303a50aa14e1d2eae99565826c4346104995c2"
+      },
+      {
+        "file": "backup-key-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/backup-key-audit.mjs.txt",
+        "outputSha256": "893b3919fce47869d1ed1a73616edb19efcbba8e92de26ace7f9a03e0725fd03"
+      },
+      {
+        "file": "backup-version-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/backup-version-audit.mjs.txt",
+        "outputSha256": "da2d58fece525984c0cd953b6837f55c6eead6508c42e029ff5c139f7c28ed48"
+      },
+      {
+        "file": "backup-conflict-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/backup-conflict-audit.mjs.txt",
+        "outputSha256": "4ea84898f999e19d67bfb6f5ea050966391471d46a65e7b3f7e6bb45a6afe765"
+      },
+      {
+        "file": "unit.test.js",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/unit.test.js.txt",
+        "outputSha256": "0ad1f24b98af56f5957f985d9579806f5db69a17aa08faff8e634bff67e4f396"
+      },
+      {
+        "file": "log-xp-farm-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/log-xp-farm-audit.mjs.txt",
+        "outputSha256": "f4a2e20c65edcb41927af6c0707986272d9c454de5537fea0401db8831f3a650"
+      },
+      {
+        "file": "drip-badge-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/drip-badge-audit.mjs.txt",
+        "outputSha256": "0e181c753844438f165695d2090578e919f0e6edc266bcda79621953e3ae98a9"
+      },
+      {
+        "file": "xp-key-provenance-lint.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/xp-key-provenance-lint.mjs.txt",
+        "outputSha256": "37cac2451708e1dcb22a78ba3f5c8f0743184a32b68da5b0f5185ce981a64993"
+      },
+      {
+        "file": "facegate-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/facegate-audit.mjs.txt",
+        "outputSha256": "c7349cdc6a0896847b6635a8d26bb1596a3ac8a34c119c152b59c738dc79fa87"
+      },
+      {
+        "file": "garden-appetite-guard.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/garden-appetite-guard.mjs.txt",
+        "outputSha256": "af44b10f069bc10fbe61e42df2bac79cd64c7894ac23d8546b599ec0e83c7d4d"
+      },
+      {
+        "file": "pit.test.js",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/pit.test.js.txt",
+        "outputSha256": "9a643f2c25a5e1b61cea59dfd6bdf21ccf13281ecd46be9313be7b1b14a5ec78"
+      },
+      {
+        "file": "quest-daymore-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/quest-daymore-audit.mjs.txt",
+        "outputSha256": "aa1bf0b85eec68d8a1ebb0631a508b75444d5bc9cbe05628b61d21ba9cb4ea07"
+      },
+      {
+        "file": "quest-pick-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/quest-pick-audit.mjs.txt",
+        "outputSha256": "c7e202cc6263568f2ea806509ea2b577548aed2a67c3aa660a365a18955d4ce5"
+      },
+      {
+        "file": "first-fight-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/first-fight-audit.mjs.txt",
+        "outputSha256": "aa94d0741189d06fcaabfd9120e6150bd7e5b9afade58bc76f66d946bd6aea23"
+      },
+      {
+        "file": "stat-source-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/stat-source-audit.mjs.txt",
+        "outputSha256": "76c3d1b9efa44e6a06ccfb5aea3a3d2f0a2b6dc037d9f0f929972b500b0d37c1"
+      },
+      {
+        "file": "bastions-rep-sim.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/bastions-rep-sim.mjs.txt",
+        "outputSha256": "f1bde03f63626d23c2f10d6dae183b74200a4dbd773264c86f9611cbf10a90e1"
+      },
+      {
+        "file": "analytics-tag-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/analytics-tag-audit.mjs.txt",
+        "outputSha256": "d80a10089985f34193985d3fc88e1b83f9ce928c393e8d172daec48b81150142"
+      },
+      {
+        "file": "icon-inventory-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/icon-inventory-audit.mjs.txt",
+        "outputSha256": "dc26596df48ce4bbf7f57f7ffae493a2a66529a1c125d90c70bf0bf11be2afdf"
+      },
+      {
+        "file": "version-stamp-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/version-stamp-audit.mjs.txt",
+        "outputSha256": "bf93b9622978811d1237bbd02b894c9337dd815aa4a25efaf7c2cf4a78c121ca"
+      },
+      {
+        "file": "boneyard-supply-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/boneyard-supply-audit.mjs.txt",
+        "outputSha256": "7017e4adc3d4dbfbd3b2ac02f0b19e92e31b125a9329038f50ef894a3f71514e"
+      },
+      {
+        "file": "loot-fallback-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/loot-fallback-audit.mjs.txt",
+        "outputSha256": "384151d211ee9d6cd7495763ec52c5a08a837e368396951dc8e0b0b5b9b4f9d1"
+      },
+      {
+        "file": "guard-hygiene-lint.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/guard-hygiene-lint.mjs.txt",
+        "outputSha256": "41d4be54b07be957cd020c9c432df3766e312556b0edb7a8fab084af84df55d7"
+      },
+      {
+        "file": "guard-provenance-lint.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/guard-provenance-lint.mjs.txt",
+        "outputSha256": "8724b99c8d1009bd6cb372aade2eb999d75c9815968ddddf0b2b48ae9bc3f062"
+      },
+      {
+        "file": "feedback-status-lint.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/feedback-status-lint.mjs.txt",
+        "outputSha256": "b1574188ac9ed9317fdb00dc85776ec65b74f78b327a4fd015b4ef80c0e5c241"
+      },
+      {
+        "file": "rack-theme-lint.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/rack-theme-lint.mjs.txt",
+        "outputSha256": "cb8073ea6ad0c472d9fbbaa04fd923ee2d49ac7fca7857a5e24416727d8d1d6c"
+      },
+      {
+        "file": "rack-rotate-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/rack-rotate-audit.mjs.txt",
+        "outputSha256": "c81f7b9ccfb06a08a83c673915f14512e2cbd2bb86ca10123bb96386130d8487"
+      },
+      {
+        "file": "pet-accessory-lint.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/pet-accessory-lint.mjs.txt",
+        "outputSha256": "082bc1f324a9aab7c0b0efd205f7ae41c951cadff776d29c47fbc165afb46556"
+      },
+      {
+        "file": "pet-pool-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/pet-pool-audit.mjs.txt",
+        "outputSha256": "b96e940e72035c17d0c9c8afc5b1397a2112fdb75b5b1ea58f93a8a71357094d"
+      },
+      {
+        "file": "manifest-exports-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/manifest-exports-audit.mjs.txt",
+        "outputSha256": "9e3b4160fa333b736039b02b773d2ccfcea87c7ccf68b6f7543375e8e082f071"
+      },
+      {
+        "file": "xp-curve-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/xp-curve-audit.mjs.txt",
+        "outputSha256": "4e390f337b4a2e76bc6a7d7ea09e21560ebbf198a17fef9d5bb8c0fe0967c248"
+      },
+      {
+        "file": "live-api-register-lint.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/live-api-register-lint.mjs.txt",
+        "outputSha256": "df9a32517210354d908fc2ca7fe1b507ab512faa88299b63d9eaee1a42d7cbe0"
+      },
+      {
+        "file": "claim-evidence-lint.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/claim-evidence-lint.mjs.txt",
+        "outputSha256": "08f73eb82e1caf3591b261651ff39e23d516a76994f92d112bac191c070cba6a"
+      },
+      {
+        "file": "thumb-freshness-lint.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/thumb-freshness-lint.mjs.txt",
+        "outputSha256": "36dee8da38acf167c53e7fffa44efde675a6dba4a66f6df56e9f78bc29652ae3"
+      },
+      {
+        "file": "render-sink-lint.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/render-sink-lint.mjs.txt",
+        "outputSha256": "603a99fe1922ffa71313b2142b24c8ac01854acc3539ad9532da13afeb99d7ae"
+      },
+      {
+        "file": "lapse-witness-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/lapse-witness-audit.mjs.txt",
+        "outputSha256": "53efc5d4a51e4e2ab2f1d2ebfabb6dd63757c362b6a8d5cccdada76b01fb5ce1"
+      },
+      {
+        "file": "spawn-claim-atomic-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/spawn-claim-atomic-audit.mjs.txt",
+        "outputSha256": "ae28b0be0f605bcd16d1d38c44fad338258f53ce011af0caae88b8bfc279c13b"
+      },
+      {
+        "file": "wardrobe-family-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/wardrobe-family-audit.mjs.txt",
+        "outputSha256": "d24eb6c21a0a4df63ff22c727507648d02d1ff11b8c0a1e99e2967fb571ab756"
+      },
+      {
+        "file": "football-kit-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/football-kit-audit.mjs.txt",
+        "outputSha256": "59d8245676e8eafc8236d0d772d18852a1df2e8a82c32e4acfdeb0a9b6545225"
+      },
+      {
+        "file": "restore-latch-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/restore-latch-audit.mjs.txt",
+        "outputSha256": "32d686ad6d451db3e8942f7eb0db69bcdbe4df915e10e4442f56d5bb7b1abb20"
+      },
+      {
+        "file": "first-pet-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/first-pet-audit.mjs.txt",
+        "outputSha256": "3f9090d88ae4b7b75e80dd8233412ce644bb9d282f83f12799fe8e874e4a080e"
+      },
+      {
+        "file": "shop-economy-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/shop-economy-audit.mjs.txt",
+        "outputSha256": "d841553adde1c15f8d013e1079daade1ef6e33df9400514be25b0ab2ed70d8bc"
+      },
+      {
+        "file": "recovery-status-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/recovery-status-audit.mjs.txt",
+        "outputSha256": "121f82769685469aa69e55fbbeffdd36388452795feb46d19e1f0c6e0834c9bb"
+      },
+      {
+        "file": "currency-revision-lint.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/currency-revision-lint.mjs.txt",
+        "outputSha256": "17c224dcdf5a7b1c9ee37e1d757eaa57ccd7ca5cfbeacb1557d036b6a284ab27"
+      },
+      {
+        "file": "inv-tombstone-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/inv-tombstone-audit.mjs.txt",
+        "outputSha256": "50c2850fd414dfd4adc2e65350dc1ea8b863a5fe830f50e11657ebc89917f050"
+      },
+      {
+        "file": "take-and-pay-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/take-and-pay-audit.mjs.txt",
+        "outputSha256": "77c2162cb8cac5e52fa33f07d357380cf48e6c5a3dc2229d7ff6ec1a89cfd44c"
+      },
+      {
+        "file": "c6-price-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/c6-price-audit.mjs.txt",
+        "outputSha256": "33a06dd62d2beb4a1a92acb9655e0e2f9373184b21e9146cdf6348298b0b977c"
+      },
+      {
+        "file": "pet-morph-animation-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/pet-morph-animation-audit.mjs.txt",
+        "outputSha256": "4748fbe382b4b817cb96f93e05c3ccf038b7c45f50e56a819f247909e5560d98"
+      },
+      {
+        "file": "pet-palette-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/pet-palette-audit.mjs.txt",
+        "outputSha256": "b6450a53dc732351516f1cb46ae5c780aaf6b9385f9bfbee2c42608348d3089c"
+      },
+      {
+        "file": "fontscale-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/fontscale-audit.mjs.txt",
+        "outputSha256": "4adfbdd83c8da6cedfd8f6df51e8ddefa40744891c65d019bf8ec576faea94ac"
+      },
+      {
+        "file": "wheel-look-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/wheel-look-audit.mjs.txt",
+        "outputSha256": "f035476fc892f82bf2d6dec62bea2fce35f520ee28d6b3d93390f53e1ffdde34"
+      },
+      {
+        "file": "wheel-easing-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/wheel-easing-audit.mjs.txt",
+        "outputSha256": "2faf6844605219a37d758f4317186dfc488ac5e4fcbc6ce9ccc9e3fa2840609b"
+      },
+      {
+        "file": "storage-boot-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/storage-boot-audit.mjs.txt",
+        "outputSha256": "0389dcbd54e18febc4cf804448097a539f35fb9769514f62c0d35232842a9a7b"
+      },
+      {
+        "file": "crate-cadence-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/crate-cadence-audit.mjs.txt",
+        "outputSha256": "a5962333de9503467c847afd04bd5003584cd06b4532725722d15a415d310b4a"
+      },
+      {
+        "file": "r4-app-p1-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/r4-app-p1-audit.mjs.txt",
+        "outputSha256": "ffb6a774fc3a04936648dd2726a9ab81222af21b1c02d296a2a78bdadcc961f6"
+      },
+      {
+        "file": "water-retry-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/water-retry-audit.mjs.txt",
+        "outputSha256": "992b5c00d42b2f8b0ea2cfa97b379a70cef4864308638a1b982d821702f07d8a"
+      },
+      {
+        "file": "cloud-off-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/cloud-off-audit.mjs.txt",
+        "outputSha256": "9ae561c44f26951fd1e58cc0fe508381b079bddb43f8a5b57b22dd2fb0553a0b"
+      },
+      {
+        "file": "r4-silence-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/r4-silence-audit.mjs.txt",
+        "outputSha256": "e61a06f3523fdbb754a699878add70c87b497de26fcd6abd078c710c9b1b9dcc"
+      },
+      {
+        "file": "silence-disclosure-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/silence-disclosure-audit.mjs.txt",
+        "outputSha256": "d66c46af996c03ac45b4c6fba310563bf92472578721a770ec6cae6815c074ad"
+      },
+      {
+        "file": "health-disclosure-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/health-disclosure-audit.mjs.txt",
+        "outputSha256": "e0884ef936877dccbed824f394484e9df177d2fff762c3df7d167d41f8293222"
+      },
+      {
+        "file": "paddock-pack-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/paddock-pack-audit.mjs.txt",
+        "outputSha256": "f719b1020ce0526d7cd5ee1258ce0d7ce6a2e34884e87e926220410a43b557e7"
+      },
+      {
+        "file": "numbers-honesty-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/numbers-honesty-audit.mjs.txt",
+        "outputSha256": "3e54dc4e76dc5b2b747736a4702798ab573c7a30d97405d9d2023a412effb0c8"
+      },
+      {
+        "file": "locale-numbers-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/locale-numbers-audit.mjs.txt",
+        "outputSha256": "d3b87ac8ab27afa0528c68a8010525187c8b348c7ca3e67fef70e3c373d35f96"
+      },
+      {
+        "file": "audit-output-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/audit-output-audit.mjs.txt",
+        "outputSha256": "2e9e799a9da0af469cd1066f3b1c34c279574d34f9fd96e30351e125781d49b7"
+      },
+      {
+        "file": "branch-graveyard-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/branch-graveyard-audit.mjs.txt",
+        "outputSha256": "d689bee1826cb1ba05f94c5cc2c67ac970b9113992b0430e454e471c1770c242"
+      },
+      {
+        "file": "store-runtime-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/store-runtime-audit.mjs.txt",
+        "outputSha256": "de11e9ec2e4b2f552d615790fd70b0b6e8a1096d487527f34866ece54e052780"
+      },
+      {
+        "file": "r47-rest-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/r47-rest-audit.mjs.txt",
+        "outputSha256": "d8d420e90df7aea5677df14bf139e579819cdff2e57d58d85980ebd3866a011b"
+      },
+      {
+        "file": "r47-economy-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/r47-economy-audit.mjs.txt",
+        "outputSha256": "ea1d4d2bef86ab6290e2858920965d0958d8abde96e7635d86c75ce50d97b2c3"
+      },
+      {
+        "file": "submission-build-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/submission-build-audit.mjs.txt",
+        "outputSha256": "025546435d3d3a828d0032cfdc8b6a2034a0b2eba3d092735eda9731c0f59aa1"
+      },
+      {
+        "file": "harness-environment-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/harness-environment-audit.mjs.txt",
+        "outputSha256": "17047d2bed8a3b6f4d17c1390c9717332e32f470cbc48d46100ec400e9b71bad"
+      },
+      {
+        "file": "guard-debts-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/guard-debts-audit.mjs.txt",
+        "outputSha256": "eeabf016f35dc76c44a299e50da6abe824b5abba4f13a046dd30fddfa9525529"
+      },
+      {
+        "file": "submission-preflight-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/submission-preflight-audit.mjs.txt",
+        "outputSha256": "0f63f3f09aba60aa9e6769006554067b22818796547ebfbe23220e1e3791ae9a"
+      },
+      {
+        "file": "pet-state-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/pet-state-audit.mjs.txt",
+        "outputSha256": "c351afd1a3225b2f5f4f50ae623a46100e1461d6bb54b3fcc128d4741c2b5299"
+      },
+      {
+        "file": "pet-family-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/pet-family-audit.mjs.txt",
+        "outputSha256": "8270821194632e4ff29cee241d25f071b40cddc431527a2c02578665aac67926"
+      },
+      {
+        "file": "crew-pet-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/crew-pet-audit.mjs.txt",
+        "outputSha256": "28196c7d2ada5e1c41748f062f1d9a06f4faec661f0192b8ad59c97bb7902b8e"
+      },
+      {
+        "file": "coins-merge-tie-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/coins-merge-tie-audit.mjs.txt",
+        "outputSha256": "86968d6bf5af7ba3a49ea902386304c3cd2f457222d734ec94af4457269b9d35"
+      },
+      {
+        "file": "routine-race-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/routine-race-audit.mjs.txt",
+        "outputSha256": "929e199bebf4bbe6a4ceb7606cfba7254001582c45bf2826346b66dd04e8f07b"
+      },
+      {
+        "file": "dayone-topup-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/dayone-topup-audit.mjs.txt",
+        "outputSha256": "b72774e56de3e127f1344d341bf81226211f7ec71a7ac72a0fb8aabb1a4860ec"
+      },
+      {
+        "file": "dish-worth-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/dish-worth-audit.mjs.txt",
+        "outputSha256": "033eb6bb54224d9afe7fc61fb8700566b6ba8434fe87846e22fb4af84525fec1"
+      },
+      {
+        "file": "pet-C-node-guard.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/pet-C-node-guard.mjs.txt",
+        "outputSha256": "cf4d3701780c2944d2ddb9893673ef02a3a4c8b5a69f9aba078ccd7bb1dae8f7"
+      },
+      {
+        "file": "r48-state-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/r48-state-audit.mjs.txt",
+        "outputSha256": "18f8eb403cffbd1ba7714ade310b2e8560fa62896dcc7a02aceb422d17b6a09b"
+      },
+      {
+        "file": "r46-logging-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/r46-logging-audit.mjs.txt",
+        "outputSha256": "06fc843775479787dac29b93e03ff602d6cc4e644f71cd004034be7238ce9280"
+      },
+      {
+        "file": "r46-diary-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/r46-diary-audit.mjs.txt",
+        "outputSha256": "73520877baef6cbf4d35f9915383285b3b98bf00fea07d347887ccc9bf20317a"
+      },
+      {
+        "file": "zero-calorie-seam-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/zero-calorie-seam-audit.mjs.txt",
+        "outputSha256": "2bcdb580ea1218f507b598fd3d0ef909ec7916d9706df98899d5602bad9b53be"
+      },
+      {
+        "file": "audit-completion-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/audit-completion-audit.mjs.txt",
+        "outputSha256": "9d03cc2f3d28650535f613fadd6b8fe2a06121018a2934f836ff14f7239ded68"
+      },
+      {
+        "file": "machine-character-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/machine-character-audit.mjs.txt",
+        "outputSha256": "5ae5a5828bc0d3a56e244cc24c8790185ae203645ea95e4a16e7b781237b04ec"
+      },
+      {
+        "file": "n3-deadpaths-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/n3-deadpaths-audit.mjs.txt",
+        "outputSha256": "fbf8dae12ef53a3de811fec1d727a6bfd1e9e834cfcadd60fc3ccbe887ed9dd5"
+      },
+      {
+        "file": "m5-prove-red.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/m5-prove-red.mjs.txt",
+        "outputSha256": "d67ab830b69600a573ec8ba23f9f6f3b5c16d7f4ca607d66006f3c154d0173ed"
+      },
+      {
+        "file": "lookup-guard-lint.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/lookup-guard-lint.mjs.txt",
+        "outputSha256": "85eb0563cd9321bd9d1aefdf3074b65675787bc786c361c042ff8a3a287fdcc7"
+      },
+      {
+        "file": "restore-state-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/restore-state-audit.mjs.txt",
+        "outputSha256": "8d78fe2507b0387124df6428cd51c19684a5832a8883d6c8b2ff3d67bfb55604"
+      },
+      {
+        "file": "restore-debt-edges-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/restore-debt-edges-audit.mjs.txt",
+        "outputSha256": "e152c2e406f1e4df28ffa90e21f90f7690ce6d733b1e2e2e00af69e5a6e9cf2b"
+      },
+      {
+        "file": "restore-debt-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/restore-debt-audit.mjs.txt",
+        "outputSha256": "9f6fdaffbf8456c20efb34676d87f1d21fd0c7a106fb5b51bd586c414aa9e517"
+      },
+      {
+        "file": "p1-r48-rest-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/p1-r48-rest-audit.mjs.txt",
+        "outputSha256": "147b325aee058da145a434f0a6ad8718b9070e11ad07a6be5b84a51caa5dd9ce"
+      },
+      {
+        "file": "pet-a11y-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/pet-a11y-audit.mjs.txt",
+        "outputSha256": "590be8fd22657ba2b97c2053fe6cf1376a5267ec92e89ea7983354317b999e20"
+      },
+      {
+        "file": "kennel-copy-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/kennel-copy-audit.mjs.txt",
+        "outputSha256": "8c4d01cd2f84225602cfd9895ca87b0ba9a312485b588652fb2f5c4cff0e7195"
+      },
+      {
+        "file": "breed-lock-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/breed-lock-audit.mjs.txt",
+        "outputSha256": "8b5c1d555038ebca9d8c1dd4c33985ce479d8fecfaafc418af5aebaf09781810"
+      },
+      {
+        "file": "device-loss-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/device-loss-audit.mjs.txt",
+        "outputSha256": "7aa0e57d2e3ae59af5abc59cddc0848f456b10d1932c7dba1de3b1ba477e8695"
+      },
+      {
+        "file": "multidevice-earnings-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/multidevice-earnings-audit.mjs.txt",
+        "outputSha256": "0fa6df111eda05345d5c5175605f29fb906dab7b1da274e32ba8c8508d6f41c1"
+      },
+      {
+        "file": "response-bodies-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/response-bodies-audit.mjs.txt",
+        "outputSha256": "89ffe53211b3b8693aab80b82ac97f7d4607603593daf06aa11122ab705a0fbc"
+      },
+      {
+        "file": "p1-merge-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/p1-merge-audit.mjs.txt",
+        "outputSha256": "2dadd47ae0f51b4a8803e1e58d95ad00260f450d79bd46b7fe2d9264ac2a74ab"
+      },
+      {
+        "file": "quest-wheel-budget-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/quest-wheel-budget-audit.mjs.txt",
+        "outputSha256": "21f4c8cf64a8c425daa5174df92707b0a74f60fc155f34dc21358ddd52f0bf8a"
+      },
+      {
+        "file": "kitchen-delivery-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/kitchen-delivery-audit.mjs.txt",
+        "outputSha256": "9577820c2b3375fd79289b2148f3e3695466b00c8ba912ff0df26d4cdcd8a473"
+      },
+      {
+        "file": "map-playtest-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/map-playtest-audit.mjs.txt",
+        "outputSha256": "8a20b14b35b5475241b9ca05d6f74974e05532684ed6b7836effabd12728d88f"
+      },
+      {
+        "file": "p1-dens-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/p1-dens-audit.mjs.txt",
+        "outputSha256": "fd521e75aabad7cdba1b8c87018ab0be9569d5781f528c1adce0bf67d3ae187c"
+      },
+      {
+        "file": "crew-yard-row-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/crew-yard-row-audit.mjs.txt",
+        "outputSha256": "f4d4158603b40b4fb770a35635d53221def65bb67f8f7760ea941a532c53ca5a"
+      },
+      {
+        "file": "pet-rarity-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/pet-rarity-audit.mjs.txt",
+        "outputSha256": "db759d9625907ebd17f52e019ecf73f54fd2edc37da2c09aea7410e22aad6819"
+      },
+      {
+        "file": "stable-rooms-top-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/stable-rooms-top-audit.mjs.txt",
+        "outputSha256": "4859d35f6652bb80fc492f8ff9cf037c2e3952c008a8beeda10d69c777f8cd62"
+      },
+      {
+        "file": "today-playtest-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/today-playtest-audit.mjs.txt",
+        "outputSha256": "89f53d882fd7bc801657a0c10460ebf9ff4139777b293b212d889ee2b08096d8"
+      },
+      {
+        "file": "crew-playtest-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/crew-playtest-audit.mjs.txt",
+        "outputSha256": "bfb7df47c71f4459740773c326f4c62fcaf7fc7eec9b469d7f970614c13d0102"
+      },
+      {
+        "file": "firstrun-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/firstrun-audit.mjs.txt",
+        "outputSha256": "b54b62079fdf49a220985e7700afc61e55a1c78abaab42d1161cb4c6fbb86237"
+      },
+      {
+        "file": "settings-safety-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/settings-safety-audit.mjs.txt",
+        "outputSha256": "51310feeab477d1e3ed22bfab3ae1a366aba892b7b527bdd16a4fc2c07b92995"
+      },
+      {
+        "file": "progress-playtest-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/progress-playtest-audit.mjs.txt",
+        "outputSha256": "1a56cd744197ccbd269f366ba54e28064b73b1dd3fb30b5a161d4b1e4be185c6"
+      },
+      {
+        "file": "leaderboard-honesty-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/leaderboard-honesty-audit.mjs.txt",
+        "outputSha256": "dbdf803fe58a04da03f2ec67cbd524f8b9697861ec9c407953e4185cd6447d46"
+      },
+      {
+        "file": "breed-two-tap-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/breed-two-tap-audit.mjs.txt",
+        "outputSha256": "4523f1bced35fef927516b26c1f460157884d87c87e7d696b3a7d03226f157e6"
+      },
+      {
+        "file": "after-await-event-lint.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/after-await-event-lint.mjs.txt",
+        "outputSha256": "a59bdfc385a5888190395ced3cbbc6c26a460caeeef3049d4f0d537cc066af58"
+      },
+      {
+        "file": "boneyard-zoom-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/boneyard-zoom-audit.mjs.txt",
+        "outputSha256": "52bd74f701007ea415ae91d1114c50ebc0e12f97596cf1a94a49568798f6bc3c"
+      },
+      {
+        "file": "lab-conflict-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/lab-conflict-audit.mjs.txt",
+        "outputSha256": "73f26239e131790d0dbaa9b69295ba166f0fa971d0d90fc2475cfe1db2dfc823"
+      },
+      {
+        "file": "lab-lock-recovery-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/lab-lock-recovery-audit.mjs.txt",
+        "outputSha256": "81b733a8255f98801c8acf2b25f91446a11d548e41c0720be4a6c516a93cc3f0"
+      },
+      {
+        "file": "r3-rest-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/r3-rest-audit.mjs.txt",
+        "outputSha256": "e4b25d90970ed2cd520dddaa0f598a47e44e03dfba8085a1e41d139767f9317b"
+      },
+      {
+        "file": "collection-cell-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/collection-cell-audit.mjs.txt",
+        "outputSha256": "0a65d1ce36dbea02dacd75d4dd0ffe0d255570716d2ce0e9607db528fa5995e7"
+      },
+      {
+        "file": "r6-merge-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/r6-merge-audit.mjs.txt",
+        "outputSha256": "bab1c52fb4c1bab0e112391d23304306d8471ce4eb5f04f82d4e733919834143"
+      },
+      {
+        "file": "r6-guards-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/r6-guards-audit.mjs.txt",
+        "outputSha256": "bbdb85335190adda5179a31a6ae379ffb53706685aa86db47cefbc8dc1b1d171"
+      },
+      {
+        "file": "r6-app-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/r6-app-audit.mjs.txt",
+        "outputSha256": "920a51e77df6455e3c0f168676579cf2dc5f61f7a0a4e3c9704dd426d1f6c131"
+      },
+      {
+        "file": "crew-capture-node-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/crew-capture-node-audit.mjs.txt",
+        "outputSha256": "55c07e0f3aebaed78d82d1b6640bf44c61510a1dfcaa9bddc52550619b350188"
+      },
+      {
+        "file": "pet-parity-guard.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/pet-parity-guard.mjs.txt",
+        "outputSha256": "afca9030c1eb00204dcf791c3c904901b63491a63ba4391242b40708b05d240a"
+      },
+      {
+        "file": "verify-tail-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/verify-tail-audit.mjs.txt",
+        "outputSha256": "f45bbcd9a70cacdd5766d269961361f988e78e96038a5fa0a4f64c8d060d0073"
+      },
+      {
+        "file": "cloud-optout-transport-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/cloud-optout-transport-audit.mjs.txt",
+        "outputSha256": "84af98bd2c878a1e1d256ce9d65ebcb999213df43ef445fb1585ad021c441d00"
+      },
+      {
+        "file": "r4-restore-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/r4-restore-audit.mjs.txt",
+        "outputSha256": "6ee6093793ae5f0caf06e8fa772efb62fa423b3af381620a0053c9bf15da8190"
+      },
+      {
+        "file": "reachable-density-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/reachable-density-audit.mjs.txt",
+        "outputSha256": "4947abf08f14ba574a96e019a39b8407649a7e99b1f413af756a7c2856240ce8"
+      },
+      {
+        "file": "native-shell-comment-audit.mjs",
+        "code": 0,
+        "signal": null,
+        "outputFile": "/tmp/train542-proof/final-pure/native-shell-comment-audit.mjs.txt",
+        "outputSha256": "cabc1fd23c46f083fa53a8d5491e4f309ec1317e8147f5f08f41e7226a771624"
+      }
+    ]
+  },
+  "coverage": {
+    "command": "node tests/release-gate.mjs --coverage-only",
+    "exit": 0,
+    "output": "coverage: 414 audits on disk, 126 fast, 129 full, 159 skipped\n"
+  },
+  "redControls": {
+    "command": "node docs/train542-integration/prove-red.mjs /tmp/train542-proof/final-red",
+    "exit": 0,
+    "count": 12,
+    "output": "PASS RED CONTROL room2-pre-integration: lab-room2-audit.mjs exited 1; FAIL finding 15\nPASS RED CONTROL breed-last-colour-no-typed-gate: breed-last-colour-audit.mjs exited 1; two taps cannot consume the last colour\nPASS RED CONTROL stable-loss-pre-app-lane: stable-loss-disclosure-audit.mjs exited 1; missing=banked steps, nickname, bond, talents, talent name, lineage\nPASS RED CONTROL lab-ui-hidden-offer: lab-ui-audit.mjs exited 1; AssertionError[\\s\\S]*data-lab-hide\nPASS RED CONTROL lab-ui-hidden-recovery: lab-ui-audit.mjs exited 1; faulty variant must be rejected|AssertionError[\\s\\S]*data-lab-open\nPASS RED CONTROL kennel-generic-spare-name: kennel-copy-audit.mjs exited 1; FAIL R44-14 armed breeding button and toast keep the spare identity: armed breed button omitted colour\\/level\nPASS RED CONTROL rooms-below-album: stable-rooms-top-audit.mjs exited 1; all three room controls must precede the album\nPASS RED CONTROL rooms-render-list-count: stable-rooms-top-audit.mjs exited 1; tile carries its live count\nPASS RED CONTROL breed-two-tap-pre-event-fix: breed-two-tap-audit.mjs exited 1; TypeError: Cannot read properties of null \\(reading 'dataset'\\)\nPASS RED CONTROL collection-pre-cells-lane: collection-cell-audit.mjs exited 1; FAIL visible last-cell warning[\\s\\S]*collection cell loss\nPASS RED CONTROL guards-missing-gate-call: r6-guards-audit.mjs exited 1; AssertionError[\\s\\S]*requireLabFindingCoverage\nPASS RED CONTROL guards-missing-proof-row: r6-guards-audit.mjs exited 1; AssertionError[\\s\\S]*14 !== 15\n12/12 defect controls rejected. Streams: /tmp/train542-proof/final-red\n",
+    "entries": [
+      {
+        "id": "room2-pre-integration",
+        "audit": "lab-room2-audit.mjs",
+        "exit": 1,
+        "evidence": "FAIL finding 15",
+        "outputFile": "/tmp/train542-proof/final-red/room2-pre-integration.txt",
+        "outputSha256": "b1ae9c269abfd8e5cd543b45431e0687eb454810a74e294d59821c16c7699ba7"
+      },
+      {
+        "id": "breed-last-colour-no-typed-gate",
+        "audit": "breed-last-colour-audit.mjs",
+        "exit": 1,
+        "evidence": "two taps cannot consume the last colour",
+        "outputFile": "/tmp/train542-proof/final-red/breed-last-colour-no-typed-gate.txt",
+        "outputSha256": "a27afc26dd98fff9c074ac47286b9801bff780241d07b9b7fd8f5ee86baefe55"
+      },
+      {
+        "id": "stable-loss-pre-app-lane",
+        "audit": "stable-loss-disclosure-audit.mjs",
+        "exit": 1,
+        "evidence": "missing=banked steps, nickname, bond, talents, talent name, lineage",
+        "outputFile": "/tmp/train542-proof/final-red/stable-loss-pre-app-lane.txt",
+        "outputSha256": "3ab09ab3b9232fd3c3fb5b9d8a40c280999b0768182c5968bd94fd7285319b2b"
+      },
+      {
+        "id": "lab-ui-hidden-offer",
+        "audit": "lab-ui-audit.mjs",
+        "exit": 1,
+        "evidence": "AssertionError[\\s\\S]*data-lab-hide",
+        "outputFile": "/tmp/train542-proof/final-red/lab-ui-hidden-offer.txt",
+        "outputSha256": "3cf6a623eb439f7ddb08ee0542074d4578452c528d5c09ebc6157a5a4f55fd8a"
+      },
+      {
+        "id": "lab-ui-hidden-recovery",
+        "audit": "lab-ui-audit.mjs",
+        "exit": 1,
+        "evidence": "faulty variant must be rejected|AssertionError[\\s\\S]*data-lab-open",
+        "outputFile": "/tmp/train542-proof/final-red/lab-ui-hidden-recovery.txt",
+        "outputSha256": "5445dddd0643c62b34371bce316f98116145d5ef20fd98331ef2835f37881593"
+      },
+      {
+        "id": "kennel-generic-spare-name",
+        "audit": "kennel-copy-audit.mjs",
+        "exit": 1,
+        "evidence": "FAIL R44-14 armed breeding button and toast keep the spare identity: armed breed button omitted colour\\/level",
+        "outputFile": "/tmp/train542-proof/final-red/kennel-generic-spare-name.txt",
+        "outputSha256": "43576ca75d929d2e792c17a5b7fa603651c0960ae04ff6beb395f56f310ee33f"
+      },
+      {
+        "id": "rooms-below-album",
+        "audit": "stable-rooms-top-audit.mjs",
+        "exit": 1,
+        "evidence": "all three room controls must precede the album",
+        "outputFile": "/tmp/train542-proof/final-red/rooms-below-album.txt",
+        "outputSha256": "c276f04e8154ac47f129718d66ec17115295e347ac9f23fd6763a131ade36113"
+      },
+      {
+        "id": "rooms-render-list-count",
+        "audit": "stable-rooms-top-audit.mjs",
+        "exit": 1,
+        "evidence": "tile carries its live count",
+        "outputFile": "/tmp/train542-proof/final-red/rooms-render-list-count.txt",
+        "outputSha256": "ddd9543156bee2ebeb8dadd7b5b58a382fcd4f7f55cc522ecc1d8496f4efba63"
+      },
+      {
+        "id": "breed-two-tap-pre-event-fix",
+        "audit": "breed-two-tap-audit.mjs",
+        "exit": 1,
+        "evidence": "TypeError: Cannot read properties of null \\(reading 'dataset'\\)",
+        "outputFile": "/tmp/train542-proof/final-red/breed-two-tap-pre-event-fix.txt",
+        "outputSha256": "4bdddb8a2e4a0b61c4f17731c219cad2d2fde909676564713dc38ea4e4afecf0"
+      },
+      {
+        "id": "collection-pre-cells-lane",
+        "audit": "collection-cell-audit.mjs",
+        "exit": 1,
+        "evidence": "FAIL visible last-cell warning[\\s\\S]*collection cell loss",
+        "outputFile": "/tmp/train542-proof/final-red/collection-pre-cells-lane.txt",
+        "outputSha256": "0106b8e871b524a3e06501ce5d4ea96c13696f5ff8256af628e33bef8e3e0523"
+      },
+      {
+        "id": "guards-missing-gate-call",
+        "audit": "r6-guards-audit.mjs",
+        "exit": 1,
+        "evidence": "AssertionError[\\s\\S]*requireLabFindingCoverage",
+        "outputFile": "/tmp/train542-proof/final-red/guards-missing-gate-call.txt",
+        "outputSha256": "8803d7578b2b47e51e87a380b8c48724fc36b0f05751371a652f64a963b4575b"
+      },
+      {
+        "id": "guards-missing-proof-row",
+        "audit": "r6-guards-audit.mjs",
+        "exit": 1,
+        "evidence": "AssertionError[\\s\\S]*14 !== 15",
+        "outputFile": "/tmp/train542-proof/final-red/guards-missing-proof-row.txt",
+        "outputSha256": "43d89823476cb36a4d480ecc63db3d64e1668529e0faa6db270933d8b6383ded"
+      }
+    ]
+  },
+  "appHistoricalControl": {
+    "command": "R6_APP_SOURCE=/tmp/train542-proof/pre-app-lane.js node tests/r6-app-audit.mjs",
+    "source": "git show b48f2e2c^:js/app.js",
+    "exit": 1,
+    "failures": [
+      "RED R6-S3 stale rendered Breed losses refuse the first tap after real step credit: AssertionError [ERR_ASSERTION]: stale tap must refuse and render the true losses",
+      "RED R6-R1 Stable door counts durable intents and unseen data, including non-renderable operations: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:",
+      "RED R6-C3 invested Breed requires typed consent and ordinary surplus retains two taps: AssertionError [ERR_ASSERTION]: two taps must not spend invested pet",
+      "RED R6-C2 destruction disclosure names the Base cell of a shiny: AssertionError [ERR_ASSERTION]: The input did not match the regular expression /Your last Base .*collection cell will become empty/. Input:",
+      "RED R6-R2 incubator purchase agrees with zero extra uses and affordable positive control: AssertionError [ERR_ASSERTION]: The input did not match the regular expression /<button[^>]+data-lab-buy=\"2\" disabled/. Input:",
+      "RED R6-A1 interrupted presentation snapshots keep Today and post-hatch invitations: AssertionError [ERR_ASSERTION]: The input did not match the regular expression /data-lab-open/. Input:"
+    ]
+  },
+  "changedFileSha256": {
+    "docs/CLAIMS.md": "bc3d6de5c354572b04a074b456a6f98faa644946a864b65939fd0deb9127b804",
+    "js/app.js": "35caf583579298d33988f315aa7c43c67e38f6c25c4f3d02990d6cba2510f6a7",
+    "js/loot.js": "936649560e1a65a67dd79f0dfd26780d637faab9100ea2d5399ef2354de980d1",
+    "tests/breed-last-colour-audit.mjs": "5916f1317780f8d663486d49d34721dde1bb53b1e4e994bb309b83de2318807f",
+    "tests/collection-cell-audit.mjs": "87648f578918ddd05e17b0696687e11eae60431679f4b7cae139268a44a770d7",
+    "tests/kennel-copy-audit.mjs": "d883dfbf7227ab11a64f6fd22db5f4f5dd067f80721163d73d4f9788cffa0f23",
+    "tests/lab-room2-audit.mjs": "570292b3c940161837cd2e10e4bf6667e197583da773c44418af977579053f0d",
+    "tests/lab-ui-audit.mjs": "dbc7d03fa13542795c1a4fdec21746aa84cc93b2c05f3dc06690fe501acf4455",
+    "tests/lib/pet-destruction-harness.mjs": "94c928c1ec8dd23b0083ad7688775f9be9f8c965e80aacaa1e8f27c6750333c3",
+    "tests/lib/r6-app-harness.mjs": "ac260c5d9523e3ade29bd9b3128166040b7f9e570959ff2b09224882f82bd36a",
+    "tests/r6-guards-audit.mjs": "a0d996d346c6e608af55ed75b910dc061ff7a95bf4c12437b4a5b879c5d4d24d",
+    "tests/release-gate.mjs": "89b74c36c17ed1d369f146154b1f96646d2e5cbae2f7201b0aeb47367043e31d",
+    "tests/stable-loss-disclosure-audit.mjs": "be3964eeb02d387d13e26c26348cb5b159ed4dba00a87ccad7e5633e2f7d7fcd",
+    "tests/stable-rooms-top-audit.mjs": "249a30ac7cab64d050ec85a37a6a008f879b7fb22fc2978c5c5b142961d3e228",
+    "docs/train542-integration/run-pure.mjs": "988f5709e7edd3be0c657a48aa8e26b24d16cdae24ed6a7e794c184dcfb7969b",
+    "docs/train542-integration/prove-red.mjs": "fea382350a525296eb680dd37c9de66b4f9c945d61d2fb6b219e8fa3d83eb897",
+    "docs/train542-integration/REPORT.md": "0d304f969cc369c1ff45774bb7c802837f448a7eba47770d0e2b88c1498f4d22"
+  },
+  "preservation": {
+    "existingV542ContentUnchanged": true,
+    "versionAndChangelogUnchanged": true,
+    "auditsRemovedOrReclassified": false
+  },
+  "deniedOrBlockedActions": [],
+  "deviations": [],
+  "committed": false,
+  "pushed": false,
+  "published": false,
+  "limits": "Node services and DOM doubles only. Browser, layout and deployment acceptance unrun."
+}
