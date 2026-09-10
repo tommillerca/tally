@@ -1,5 +1,55 @@
 # What each patch note claims, and what backs it
 
+
+
+## v551 (2026-09-10)
+
+### Operator verification, 2026-09-10 (this is the release record)
+
+Rebased from the lane's v545 base onto v550 and restamped to v551. PURE **165/165, red=0**
+on node v22.22.2, after fixing one real red the lane owed: `icon-inventory-audit` requires
+every function in `js/` that draws a picture to be declared, and `mountStudio` was not.
+It is declared now as a `scene`, with why it is not an icon path. Verified green on clean
+`origin/main` first, so it was this lane's red and not pre-existing.
+
+**The visual review the builder said was owed.** Rendered in the real app at 430x932 and
+inspected, not described:
+
+- The Wardrobe entry is a right-aligned underlined text link, "The Studio", 82x44px,
+  13px, `rgb(185,172,151)` on transparent. It reads as a quiet link and not as a promoted
+  button, which is the contract `studio-audit` asserts in source. It sits above the
+  fit controls and is not competing with them.
+- The route resolves to `#/studio`, and the preview is a real composited image:
+  `naturalWidth/Height` 1080x1920, visible, with the figure, the equipped hat, the balloon,
+  the katana and the pet all present, the fixed caption applied under a BONEHEADZ wordmark.
+  Backdrop sits above the preview; the exit is the same quiet text link beside the heading.
+  Controls present: Backdrop, Include my pet, Choose a caption, Include my friend code,
+  Frame (None only, as designed), Save to device, Retry preview. Status line "Ready to save."
+
+**Known and NOT fixed, deliberately, because this is a half-build for Tom to try:**
+
+1. The export's bottom third is empty. The figure occupies roughly the top half of the
+   1080x1920 canvas and the caption block sits under the figure's feet rather than anchored
+   to the card, so a third of the picture is blank backdrop.
+2. The pet floats to the right of the bonehead at a smaller scale on a different baseline,
+   unanchored to the figure.
+3. Backdrop, caption and frame use raw platform `<select>` chrome and default checkboxes,
+   not the Bangers/sticker vocabulary of the rest of the app. On this screen it currently
+   reads closer to a settings form than to Boneheadz.
+
+None of these are regressions and none block trying it. They are composition and styling
+work on an unfinished feature, recorded here so the next round starts from measurements
+rather than from a fresh look.
+
+Still unproven: native Photos permission and save on iOS, the Android document picker, and
+a real browser download. No native build was compiled; the native sources ship inert until
+one is.
+
+
+Changelog item: An early, unfinished Studio sits behind a plain text link in the Wardrobe. It is here to be tried, not finished: saving a picture needs a newer app build on phones.
+
+1. PROOF: studio-audit.mjs | REACH: The production Wardrobe entry expression and its click handler are executed and the `#/studio` route is asserted; the plain-text style contract rejects loud, missing and accent-filled entry mutations, so the entry cannot drift into a promoted button without going red. Backdrop precedes the preview and the exit is the same quiet text control beside the heading. Captions are a fixed select pool; there is no free-text field. Real 1080x1920 PNG composition, decoding, byte-for-byte determinism across repeated renders, layer order including both hands, shiny/base pixel difference, the safe-zone rejection of a flush-to-bottom layout, and the privacy boundary (health and profile fields rejected) all run against real catalogue art and a real PNG encoder. On save, a native bridge double WITHOUT the plugin proves the handler reports that this app build cannot save yet, keeps the preview and the draft, and makes no download request and no success claim; browsers request a PNG download without claiming a completed write. Not proven here: rendered prominence, touch reach, real Photos permission sheets, the Android picker, and any native build. The frame catalogue is empty by design and a forced frame export is rejected.
+
 ## v550 (2026-09-10)
 
 ### Operator verification, 2026-09-10 (this is the release record)

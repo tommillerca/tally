@@ -18,6 +18,7 @@
 		B0NEHEAD00000000000001AB /* HealthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0NEHEAD00000000000001AA /* HealthPlugin.swift */; };
 		B0NEHEAD00000000000002AB /* BoneheadzViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0NEHEAD00000000000002AA /* BoneheadzViewController.swift */; };
 		B0NEHEAD00000000000004AB /* BhVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0NEHEAD00000000000004AA /* BhVault.swift */; };
+		570D100000000000000001AB /* StudioSave.swift in Sources */ = {isa = PBXBuildFile; fileRef = 570D100000000000000001AA /* StudioSave.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +36,7 @@
 		B0NEHEAD00000000000002AA /* BoneheadzViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoneheadzViewController.swift; sourceTree = "<group>"; };
 		B0NEHEAD00000000000004AA /* BhVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BhVault.swift; sourceTree = "<group>"; };
 		B0NEHEAD00000000000003AA /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		570D100000000000000001AA /* StudioSave.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioSave.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -73,6 +75,7 @@
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				B0NEHEAD00000000000001AA /* HealthPlugin.swift */,
 				B0NEHEAD00000000000004AA /* BhVault.swift */,
+				570D100000000000000001AA /* StudioSave.swift */,
 				B0NEHEAD00000000000002AA /* BoneheadzViewController.swift */,
 				B0NEHEAD00000000000003AA /* App.entitlements */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -169,6 +172,7 @@
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				B0NEHEAD00000000000001AB /* HealthPlugin.swift in Sources */,
 				B0NEHEAD00000000000004AB /* BhVault.swift in Sources */,
+				570D100000000000000001AB /* StudioSave.swift in Sources */,
 				B0NEHEAD00000000000002AB /* BoneheadzViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

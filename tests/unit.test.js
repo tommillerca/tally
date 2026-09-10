@@ -105,6 +105,11 @@ test('R52-9 locale formatter/parser round trips and ambiguity control', async ()
   checkLocaleNumbers();
 });
 
+test('Studio half build: real PNG compositor, privacy, safe zones and save controls', async () => {
+  const { checkStudio } = await import('./studio-audit.mjs');
+  await checkStudio();
+});
+
 async function runAll() {
   for (const [name, fn] of QUEUE) {
     try { await fn(); passed++; }

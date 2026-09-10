@@ -1,3 +1,5 @@
+import { mountStudio } from './studio-screen.js';
+import { STUDIO_DEFAULTS } from './studio.js';
 // Tally: app orchestrator. Screens, sheets, and flows.
 import { labEqual } from './laboratory.js';
 import { db, kvGet, kvSet, kvUpdate, payAtomic, newId, exportAll, importAll, STORES, useDbName, storageStatus, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG, dayIsUnwitnessed } from './db.js';
@@ -3642,7 +3644,7 @@ function route({ keepScroll = false } = {}) {
   trackScreen(tab); // screen-dwell heatmap: time spent per bottom-nav screen
   // #/shop is a deep link into the hub, so it must light the Bonehead tab rather
   // than leaving the bar with nothing selected.
-  const navTab = tab === 'shop' ? 'bonehead' : tab;
+  const navTab = tab === 'shop' || tab === 'studio' ? 'bonehead' : tab;
   $$('#tabbar .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === navTab));
   // fire-and-forget: every nav/refresh re-reads the crate count, except Today,
   // where renderToday sets it from the inv rows it already holds (QA round 28 G3)
@@ -3651,13 +3653,14 @@ function route({ keepScroll = false } = {}) {
   const gear = $('#gearBtn');
   // Today carries its own gear in the day strip, so the floating one stays out
   // of the way and nothing sits above the Bonehead.
-  if (gear) gear.hidden = tab === 'settings' || tab === 'boneyard' || tab === 'today';
+  if (gear) gear.hidden = tab === 'settings' || tab === 'boneyard' || tab === 'today' || tab === 'studio';
   const el = scr;
   if (isNav) el.classList.remove('screen-in');
   let done, isToday = false;
   // #/shop is a deep link into the hub's Shop tab, not a screen of its own.
   if (tab === 'shop') { pendingHubTab = 'shop'; done = renderBonehead(el); }
   else if (tab === 'bonehead') done = renderBonehead(el);
+  else if (tab === 'studio') done = renderStudio(el);
   // #/progress is the HEALTH data screen (steps, sleep, weight, intake). The hub's
   // "Level" tab is character progression. Similar names, different features: do
   // not fold one into the other.
@@ -16340,6 +16343,29 @@ function bindBadgeTaps(wrap) {
 // (Wardrobe, Backpack, Shop, Build, Progress), and it used to be reachable only
 // by tapping small chips on Today. openCharacter(tab) is kept as the one way in
 // so every old caller lands in the right place.
+// Studio only exports this player's appearance. Explicitly project the instance
+// fields rather than passing state, an outfit's pseudo-shiny, or a full profile.
+const studioDraft = { ...STUDIO_DEFAULTS };
+async function renderStudio(el) {
+  const [outfit, instance, wear, me, owned] = await Promise.all([
+    equipped(), equippedPetInstance(), petWear(), social.socialMe(), ownedCosmeticIds(),
+  ]);
+  if (currentTab() !== 'studio') return;
+  const pet = instance && instance.sp === outfit.C ? {
+    id: instance.sp, shiny: !!instance.shiny, morph: instance.morph || 'base',
+    wear: Object.fromEntries(petWornItems(instance.sp, wear).map(item => [item.slot, item.id])),
+  } : null;
+  if (outfit.C && !pet) {
+    el.innerHTML = '<h1 class="page-h1">The Studio</h1><p class="note">Equip your pet again in the Stable before creating this image.</p><button class="studio-link" id="studioBack">Back to Wardrobe</button>';
+    $('#studioBack', el).onclick = () => openCharacter('wardrobe');
+    return;
+  }
+  screenCleanup = mountStudio(el, {
+    look: { outfit, pet, friendCode: me?.friendCode || null }, // studio-instance
+    ownedBackdrops: owned, draft: studioDraft, onBack: () => openCharacter('wardrobe'),
+  });
+}
+
 function openCharacter(tab = 'wardrobe') {
   /* WHICH HUB SUB-TAB PEOPLE ACTUALLY OPEN. Sub-tabs emit no events, so when
      Tom asked whether anyone uses Looks (2026-08-18) no number existed and none
@@ -16697,6 +16723,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             Wardrobe, which is also where transmog lives. */''}
     </div>
     ${/* the LOOKS card lived here; it is in the Wardrobe now, see the note above */''}
+    ${tab === 'wardrobe' ? '<div class="wardrobe-studio-entry"><button class="studio-link" id="wardrobeStudio">The Studio</button></div>' : ''}
     <div id="chContent"></div>`;
 
   /* GWART TAKES THE WHOLE HEADER, AND ONLY ON THE SHOP TAB. The panel above
@@ -16763,6 +16790,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
      covered path, not a new one: no second reveal, no per-screen animation, just
      the chips using the machinery that tally/CLAUDE.md says owns this. */
   $$('#chTabs .chip, .ward-looks', body).forEach(c => c.addEventListener('click', () => openCharacter(c.dataset.tab)));
+  $('#wardrobeStudio', body)?.addEventListener('click', () => { location.hash = '#/studio'; });
   const content = $('#chContent', body);
   if (curtains) requestAnimationFrame(() => requestAnimationFrame(() => $$('.curt', body).forEach(x => x.classList.add('open'))));
 
@@ -24601,7 +24629,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v550'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v551'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

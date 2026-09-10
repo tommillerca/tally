@@ -11,5 +11,6 @@ class BoneheadzViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(HealthPlugin())
         bridge?.registerPluginInstance(BhVault())
+        bridge?.registerPluginInstance(StudioSave())
     }
 }

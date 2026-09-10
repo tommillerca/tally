@@ -9,6 +9,10 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 551, date: '2026-09-10', title: 'Quiet groundwork', items: [
+    'An early, unfinished Studio sits behind a plain text link in the Wardrobe. It is here to be tried, not finished: saving a picture needs a newer app build on phones.',
+  ] },
+
   { n: 550, date: '2026-09-10', title: 'A clearer Dressing Room', items: [
     'Wear it now shows the next step before you choose a look. Free changes, the look you are wearing, and paid looks have distinct labels.',
     'The Wardrobe counts collected looks and other looks to try, with links to the Backpack and cosmetic Shop.',

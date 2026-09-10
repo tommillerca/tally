@@ -1,0 +1,5 @@
+PASS Studio: real 1080x1920 PNG, deterministic bytes (9ec1ca64dc8d9fc934807e15b2fe9c18ca0f43a09b958e0d0c18283c6a3afcfd), registered z-order pixels, shiny pixels, controls and save-byte handoff.
+PASS entry: Wardrobe-only, reachable handler, quiet style contract; Backdrop before preview; fixed caption picker; old-shell Save reports unavailable and retains preview.
+PASS CONTROL: loud/missing/accent-filled entry, flush-to-bottom information, reversed z-order, base pet, free text, health payloads, missing assets, invalid PNG and denied saves rejected.
+UNPROVEN: visual review, real browser controls and native Photos/file-picker execution.
+
