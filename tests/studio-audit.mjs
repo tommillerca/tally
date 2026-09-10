@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 import { importAuditPackage } from './lib/audit-dependencies.mjs';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, PET_SLOTS, bhAsset, petWornItems } from '../data/boneheadz.js';
-import { composeStudio, studioPlan, assertStudioSafe, assertStudioPng, STUDIO_FRAMES, STUDIO_CAPTIONS, STUDIO_POSITIONS, STUDIO_MARK_POSITIONS, STUDIO_MONSTERS, STUDIO_TEXT_STICKERS, studioCrewAppearance, studioInk } from '../js/studio.js';
+import { composeStudio, studioPlan, assertStudioSafe, assertStudioPng, STUDIO_FRAMES, STUDIO_CAPTIONS, STUDIO_POSITIONS, STUDIO_MARK_POSITIONS, STUDIO_MONSTERS, STUDIO_TEXT_STICKERS, studioCrewAppearance, studioInk, studioClearPosition, studioMarkContrast, assertStudioMarkContrast } from '../js/studio.js';
 import { saveStudioImage, studioSaveMode } from '../js/studio-save.js';
 import { mountStudio } from '../js/studio-screen.js';
 
@@ -25,6 +25,64 @@ export async function checkStudio() {
   const outfit = Object.fromEntries(BH_SLOTS.filter(s => !['BG', 'C'].includes(s.code))
     .map(s => [s.code, s.default || BH_ITEMS.find(i => i.slot === s.code)?.id]).filter(([, id]) => id));
   const look = { outfit, pet: { id: 'C1', shiny: true, morph: 'base', wear: null }, friendCode: 'BONE-ABCD-EFGH' };
+  // Real v553 compositor, frozen before this correction, with local imports only.
+  const baselineSource = source('docs/reviews/studio-r2/v553-compositor.txt');
+  assert.equal(digest(Buffer.from(baselineSource)), '2cc1a56aa345eeae3f2f0c6f88b84449f99e7edcd6c40093650e557c89f5ac6d', 'frozen v553 source');
+  const baseline = await import('data:text/javascript;base64,' + Buffer.from(
+    baselineSource.replace(/from '([^']+)'/g, (_, path) =>
+      `from '${new URL(path, new URL('../js/studio.js', import.meta.url)).href}'`)).toString('base64'));
+  const contrastProbe = async (compose, options) => {
+    let measurement, surfaceSeen = false;
+    const probeRuntime = { ...runtime, createCanvas(w, h) {
+      const c = createCanvas(w, h);
+      if (w === 1080 && h === 1920 && !surfaceSeen) {
+        surfaceSeen = true;
+        const cx = c.getContext('2d'), draw = cx.drawImage.bind(cx);
+        cx.drawImage = (...args) => {
+          // Source dimensions identify the unchanged wordmark, independently
+          // of production placement metadata and production contrast reporting.
+          if (args[0].width !== 740 || args[0].height !== 197) return draw(...args);
+          const before = cx.getImageData(0, 0, w, h).data;
+          const mask = createCanvas(w, h), mx = mask.getContext('2d');
+          mx.imageSmoothingEnabled = cx.imageSmoothingEnabled;
+          mx.setTransform(cx.getTransform()); mx.drawImage(...args);
+          draw(...args);
+          measurement = { before, mask };
+        };
+      }
+      return c;
+    } };
+    const result = await compose(look, options, probeRuntime);
+    assert.ok(measurement, 'actual wordmark draw intercepted');
+    const decoded = createCanvas(1080, 1920);
+    decoded.getContext('2d').drawImage(await loadImage(await bytes(result.blob)), 0, 0);
+    const decodedMask = createCanvas(1080, 1920);
+    decodedMask.getContext('2d').drawImage(await loadImage(await measurement.mask.encode('png')), 0, 0);
+    const contrast = studioMarkContrast(measurement.before,
+      decoded.getContext('2d').getImageData(0, 0, 1080, 1920).data,
+      decodedMask.getContext('2d').getImageData(0, 0, 1080, 1920).data);
+    return { result, contrast };
+  };
+  const red = await contrastProbe(baseline.composeStudio, {});
+  console.log('BASELINE', JSON.stringify(red.contrast));
+  assert.equal(red.contrast.edgeMinimum.toFixed(2), '1.00');
+  assert.throws(() => assertStudioMarkContrast(red.contrast), /below 4.5:1/);
+  console.log('CONTROL RED v553: opaque-core contrast 1.04:1 below 4.5:1; all-pixel minimum 1.00:1.');
+  for (const backdrop of [null, ...BH_ITEMS.filter(i => i.slot === 'BG').map(i => i.id)]) {
+    for (const markPosition of STUDIO_MARK_POSITIONS) {
+      const { result, contrast } = await contrastProbe(composeStudio, { backdrop, markPosition });
+      assertStudioMarkContrast(contrast);
+      console.log('CONTRAST', JSON.stringify({ backdrop, markPosition, ...contrast,
+        positions: result.information.filter(b => ['brand', 'caption'].includes(b.id)) }));
+    }
+  }
+  const occupancyControl = createCanvas(1081, 1920), occ = occupancyControl.getContext('2d');
+  occ.fillRect(65, 270, 950, 1270); occ.clearRect(700, 1100, 100, 100);
+  const clear = studioClearPosition(occupancyControl, { x: 65, y: 270, width: 100, height: 100 });
+  assert.deepEqual([clear.x, clear.y, clear.overlapPixels], [700, 1100, 0], 'CONTROL distant clear position beats preferred ink');
+  occ.fillRect(700, 1100, 100, 100);
+  assert.equal(studioClearPosition(occupancyControl, { x: 65, y: 270, width: 100, height: 100 }).overlapPixels, 10000,
+    'CONTROL no clear position reports unavoidable overlap');
   const plain = await composeStudio(look, {}, runtime);
   assert.ok(plain.bounds.find(b => b.id === 'body').height > 1000, 'V2 figure must grow materially inside the unchanged safe band');
   const first = await bytes(plain.blob);
@@ -109,10 +167,11 @@ export async function checkStudio() {
   // Capture the compositor's actual draw calls at their actual transforms onto
   // transparent PNGs. Encode, decode, then measure ink, not planned rectangles.
   const measureComposition = async (compose, input, opts) => {
-    const draws = [];
+    const draws = []; let surfaceSeen = false;
     const measuredRuntime = { ...runtime, createCanvas(w, h) {
       const c = createCanvas(w, h);
-      if (w === 1080 && h === 1920) {
+      if (w === 1080 && h === 1920 && !surfaceSeen) {
+        surfaceSeen = true;
         const cx = c.getContext('2d'), original = cx.drawImage.bind(cx);
         cx.drawImage = (...args) => {
           const isolated = createCanvas(w, h), ic = isolated.getContext('2d');
@@ -143,9 +202,55 @@ export async function checkStudio() {
     safeAreaPercent: 100 * bodyPixels.ink.width * bodyPixels.ink.height / (950 * 1270),
     pet: petPixels.ink, petGround: petPixels.ink.y + petPixels.ink.height,
     figureFeet: measured.result.feetY }));
+  // Union and largest 8-connected component of decoded figure + pet PNGs.
+  const union = createCanvas(1080, 1920), ux = union.getContext('2d');
+  ux.drawImage(petPixels.decoded, 0, 0); ux.drawImage(bodyPixels.decoded, 0, 0);
+  const rgba = ux.getImageData(0, 0, 1080, 1920).data;
+  const occupied = Uint8Array.from({ length: 1080 * 1920 }, (_, i) => rgba[i * 4 + 3] > 14 ? 1 : 0);
+  const inkCount = occupied.reduce((a, b) => a + b, 0);
+  const queue = new Int32Array(occupied.length); let largest = { count: 0 };
+  for (let start = 0; start < occupied.length; start++) {
+    if (!occupied[start]) continue;
+    let head = 0, end = 1, left = 1080, right = 0, top = 1920, bottom = 0;
+    queue[0] = start; occupied[start] = 0;
+    while (head < end) {
+      const p = queue[head++], x = p % 1080, y = Math.floor(p / 1080);
+      left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, ny = y + dy, n = ny * 1080 + nx;
+        if (nx < 0 || nx >= 1080 || ny < 0 || ny >= 1920 || !occupied[n]) continue;
+        occupied[n] = 0; queue[end++] = n;
+      }
+    }
+    if (end > largest.count) largest = { count: end, x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
+  }
+  const metrics = { inkPercent: 100 * inkCount / (950 * 1270),
+    largestComponentBoxPercent: 100 * largest.width * largest.height / (950 * 1270),
+    petGroundMinusFeet: petPixels.ink.y + petPixels.ink.height - measured.result.feetY,
+    bounds: studioInk(union), figureShrinkPercent: 0 };
+  assertStudioSafe([{ id: 'union', ...metrics.bounds }]);
+  const baselineMeasured = await measureComposition(baseline.composeStudio, look, {});
+  const baselineUnion = createCanvas(1080, 1920), bu = baselineUnion.getContext('2d');
+  bu.drawImage(baselineMeasured.measured[0].decoded, 0, 0);
+  bu.drawImage(baselineMeasured.measured[1].decoded, 0, 0);
+  assert.deepEqual(rgba, bu.getImageData(0, 0, 1080, 1920).data,
+    'decoded figure and pet unchanged byte for byte from v553 audit fixture');
+  assert.equal(metrics.petGroundMinusFeet, 0);
+  console.log('ROUND1', JSON.stringify(metrics));
   for (const bubblePosition of STUDIO_POSITIONS) for (const markPosition of STUDIO_MARK_POSITIONS) {
-    const r = await composeStudio(look, { bubblePosition, markPosition, caption: 'personality', includeFriendCode: true }, runtime);
+    const placement = await measureComposition(composeStudio, look, { bubblePosition, markPosition, caption: 'personality', includeFriendCode: true });
+    const r = placement.result;
+    const actualOverlap = placement.measured.slice(-2).map((m, index) => {
+      const mask = m.decoded.getContext('2d').getImageData(0, 0, 1080, 1920).data;
+      let ink = 0, overlap = 0;
+      for (let i = 0; i < mask.length; i += 4) if (mask[i + 3] > 14) {
+        ink++; if (rgba[i + 3] > 14) overlap++;
+      }
+      assert.equal(overlap, 0, 'decoded bubble/mark pixels clear the audit figure and pet');
+      return { id: index ? 'brand' : 'caption', ink, overlapPixels: overlap, overlapPercent: 100 * overlap / ink };
+    });
     assertStudioSafe([...r.bounds, ...r.information]);
+    console.log('PLACEMENT', JSON.stringify({ bubblePosition, markPosition, positions: r.information, actualOverlap }));
     assert.ok(r.information.find(b => b.id === 'caption').y < 600, 'bubble leaves the lower third');
     assert.notEqual(digest(await bytes(r.blob)), digest(first));
   }
@@ -169,7 +274,7 @@ export async function checkStudio() {
   };
   for (const entry of [sticker, ...STUDIO_MONSTERS.map(id => ({ kind: 'monster', id, x: 540, y: 900, size: 180, flip: false }))]) {
     const r = await measureComposition(composeStudio, look, { stickers: [entry] });
-    const last = r.measured.at(-1), inputColours = colourSet(last.input), outputColours = colourSet(last.decoded);
+    const last = r.measured.at(-3), inputColours = colourSet(last.input), outputColours = colourSet(last.decoded);
     assert.equal(last.smoothing, false, 'nearest-neighbour art sampling');
     assert.ok(outputColours.size <= inputColours.size, 'downsample introduces no colour-count inflation');
     assert.ok([...outputColours].every(c => inputColours.has(c)), 'nearest-neighbour output palette is a subset of the stacked input');
@@ -182,7 +287,7 @@ export async function checkStudio() {
   assert.notEqual(digest(await bytes(forward.blob)), digest(await bytes(backward.blob)), 'array order changes overlapping encoded pixels');
   const unflipped = await measureComposition(composeStudio, look, { stickers: [aSticker] });
   const flipped = await measureComposition(composeStudio, look, { stickers: [{ ...aSticker, flip: true }] });
-  const unflipLayer = unflipped.measured.at(-1).decoded, flipLayer = flipped.measured.at(-1).decoded;
+  const unflipLayer = unflipped.measured.at(-3).decoded, flipLayer = flipped.measured.at(-3).decoded;
   assert.notEqual(digest(await bytes(unflipped.result.blob)), digest(await bytes(flipped.result.blob)), 'flip changes actual PNG');
   const mirror = createCanvas(1080, 1920), mx = mirror.getContext('2d');
   mx.translate(1000, 0); mx.scale(-1, 1); mx.drawImage(unflipLayer, 0, 0);
