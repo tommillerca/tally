@@ -1,4 +1,6 @@
 // Node unit tests: node tests/unit.test.js
+import { PURE as DEVICE_REPORT_PURE } from './device-report-audit.mjs';
+import * as deviceReport from '../js/device-report.js';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import * as execFile_ from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -71,6 +73,9 @@ let passed = 0, failed = 0;
    them, sync and async alike. */
 const QUEUE = [];
 function test(name, fn) { QUEUE.push([name, fn]); }
+
+// Register every Device report PURE guard with the agreed Node proof runner.
+for (const [name, guard] of DEVICE_REPORT_PURE) test(`Device report PURE: ${name}`, () => guard(deviceReport));
 
 test('cloud opt-out stops garment profile uploads and discloses stale Crew entries', () => {
   const output = execFile_.execFileSync(process.execPath,
