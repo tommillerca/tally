@@ -1,0 +1,51 @@
+AUDIT START figure-audit.mjs: completion pending; planned rows undeclared
+PASS  COVERAGE there are pet call sites to audit at all (zero is a FAILURE)  25 found
+FAIL  COVERAGE every pet call site in the app is registered here  js/app.js:20318  return `<button class="chip kin${on ? ' on' : ''}" type="button" data-kin="${x.iid}" role=
+      js/app.js:21322  const art = `<span class="lab-instance-art" aria-hidden="true">${petPortraitHtml(p.sp, 64,
+      js/app.js:21354  return `<figure class="lab-specimen" aria-label="${esc(labColour(morph))} ${esc(labSpecies
+      js/app.js:21357  if (KENNEL_SPECIES.some(x => x.id === sp) && !expanded) return `<section class="lab-identi
+      js/app.js:21358  return `<fieldset class="lab-species"><legend>${sp ? 'Change species <button class="link" 
+      js/app.js:21383  const art = petSpriteHtml(q.species, 64, false, { morph: b.morph, shiny: false, wear: null
+PASS  STATIC friend profile has no per-pet paddock row  the equipped pet remains covered by friend-profile
+PASS  STATIC nothing builds a pet out of an outfit slot (that is how shiny is lost)  no { id: x.C } constructions
+PASS  STATIC the contract helpers exist to be used  petFrom + petAsideHtml present
+PASS  STACK every avatar that draws the pet slot says whose shiny it is  all C-slot renders carry a shinyPetId
+      STACK EXEMPT  splash-word: the montage frames are randomOutfit(), nobody's real Bonehead, so there is no shiny to honour
+PASS  COVERAGE every undriven site states why it cannot be driven  studio, fight-arena, pet-card, hollow-pet, emporium-pet-hero, helper, paddock-herd, pet-levelup, stable-roster, breed-trade, breed-fused, breed-waiting, shop-pet-reveal
+      NOT DRIVEN  studio: Separate canvas compositor. tests/studio-audit.mjs in PURE decodes PNGs and verifies instance shiny, registered layers and safe bands; visual and native review still owed.
+      NOT DRIVEN  fight-arena: reaching it means winning into a live fight; the arena stage is covered for decode by tests/fx-audit.js, which drives real moves
+      NOT DRIVEN  pet-card: petPanelHtml has no caller in js/app.js (dead render, left alone deliberately)
+      NOT DRIVEN  hollow-pet: UNREACHABLE: the Hollow lost its player doors on 2026-08-18. The keeper is a FIXED gardening fit (HLW_FIT), so a paired Bonehead-to-pet alignment check would be asserting against a costume rather than against the figure contract. The pet itself goes through petAsideHtml with shiny left UNDEFINED so S.shinyPets answers, which is the STATIC rule below. The old hollow-audit.mjs was deleted; garden-closed-audit.mjs guards the closed doors and uses __openHollow only as a control.
+      NOT DRIVEN  emporium-pet-hero: the SHOP SHELF, not the player's own figure: Bumbleseal is drawn at 176 in Gwart's Menagerie before anybody owns her, so there is no Bonehead in the frame to stand her beside and the plane/scale rows this file exists for have nothing to compare. What CAN go wrong here is the crop and the price, and both are graded elsewhere: tests/pet-accessory-lint.mjs owns the product-shot framing and tests/purchase-firewall.mjs drives the buy itself to destruction. Registered rather than driven so the row cannot rot into "covered".
+      NOT DRIVEN  helper: this IS petAsideHtml, the contract itself
+      NOT DRIVEN  paddock-herd: the scene is driven end-to-end by tests/paddock-scene-audit.mjs (gate FULL tier): real Stable chip tap, decoded herd from a real roster, a whole-cast packing assertion in the live DOM, and motion asserted as rendered pixels (headless freezes the main-thread animation clock, so gBCR lies; screenshots are the layer the player sees).
+      NOT DRIVEN  pet-levelup: the celebration overlay only opens on a real pet level-up, which needs the step threshold to be crossed inside the run
+      NOT DRIVEN  stable-roster: the Stable roster is now a coverflow ring with no Bonehead beside it (v317, was the t3-petcard grid); it passes x.shiny off the instance row and draws through petPortraitHtml(..., {mass:true}), which is the contract
+      NOT DRIVEN  breed-trade: the breeding result only renders after a real breed completes; guarded separately by the breeding checks in tests/t2-audit.mjs
+      NOT DRIVEN  breed-fused: same overlay as breed-trade, the parents strip inside it
+      NOT DRIVEN  breed-waiting: only rendered while exactly one pet is flagged for breeding; the state is driven by the Stable checks rather than from here
+      NOT DRIVEN  shop-pet-reveal: the celebration only opens after a real 50,000-coin purchase, which needs the coin balance and the unowned-pet state to be staged inside the run
+PASS  SETUP ink measurement works on this machine  decoder exact on a synthetic bbox; assets/bh/B/B0-1.png {"w":640,"h":640,"x0":131,"y0":218,"x1":509,"y1":594}
+RETAINED FAIL COVERAGE every pet call site in the app is registered here  js/app.js:20318  return `<button class="chip kin${on ? ' on' : ''}" type="button" data-kin="${x.iid}" role=
+INTERRUPTED figure-audit.mjs: Error: listen EPERM: operation not permitted 127.0.0.1
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+AUDIT END figure-audit.mjs: FAILED; INCOMPLETE; rows=8/undeclared; failed=1; unproven=0; exit=1
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted 127.0.0.1
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '127.0.0.1'
+}
+
+Node.js v22.22.2

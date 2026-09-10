@@ -1,0 +1,4 @@
+PASS Studio: real 1080x1920 PNG, deterministic bytes (eba5d75592f19cede5283d5f8eb2924750542b5f3c832153fb39a99cd7929a5f), registered z-order pixels, shiny pixels, controls and save-byte handoff.
+PASS CONTROL: flush-to-bottom information rejected; reversed z-order, base pet, free text, health payloads, missing assets, invalid PNG and denied saves rejected.
+UNPROVEN: visual review, real browser controls and native Photos/file-picker execution.
+

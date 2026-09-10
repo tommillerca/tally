@@ -97,6 +97,7 @@ const SP = 'C1';
    must say why, in `undriven`, and it is printed on every run so it cannot rot
    quietly into "covered". */
 const SITES = [
+  { key: 'studio', claim: 'studio-instance', paired: false, undriven: 'Separate canvas compositor. tests/studio-audit.mjs in PURE decodes PNGs and verifies instance shiny, registered layers and safe bands; visual and native review still owed.' },
   {
     key: 'today-hero', claim: 'hero-companion', paired: true,
     bh: '#bhStage .hero-char', pet: '#bhStage .hero-companion',

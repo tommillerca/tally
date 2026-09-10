@@ -24,6 +24,10 @@ const SAFE_AREA_PX = 59;          // iPhone 14 Pro Dynamic Island
 
 // Where each control must land. Add a row whenever you add a control.
 const CONTROL_EXPECTATIONS = [
+  { id: 'wardrobeStudio', on: 'bonehead', expect: { hash: '#/studio' } },
+  { id: 'studioBack', on: 'studio', expect: { hash: '#/bonehead', hubTab: 'wardrobe' } },
+  // Studio option, retry and save handlers are driven by studio-audit.mjs.
+  // Native permission sheets and layout still require device review.
   { id: 'trendsBtn', on: 'today', expect: { hash: '#/progress' } },
   { id: 'coinBtn', on: 'today', expect: { hash: '#/bonehead', hubTab: 'crates' } },
   { id: 'dustBtn', on: 'today', expect: { hash: '#/bonehead', hubTab: 'crates' } },

@@ -188,6 +188,7 @@ const EMITTERS = {
   'js/app.js:calorieRingCard':    ['chart', 'the calorie ring, drawn on Today AND on Trends from this one function.'],
   /* ---- scene, stage and character art: sized by layout, not by an icon size ---- */
   'js/app.js:avatarLayersHtml':     ['scene', 'the Bonehead figure: cosmetic layers stacked at stage size.'],
+  'js/studio-screen.js:mountStudio': ['scene', 'the Studio preview. It emits one <img> whose src is an object URL for the 1080x1920 PNG the headless compositor in js/studio.js just produced, so the picture is the export itself at display size, not an icon and not a second rendering path. Nothing here calls pixCur or ICONS; a swap of the icon set has nothing to do in this file. The compositor that builds those pixels is proved separately in tests/studio-audit.mjs.'],
   'js/app.js:croppedPetImg':        ['scene', 'a pet sprite cropped to its own art box.'],
   'js/app.js:onbGwartHtml':         ['scene', 'Gwart at the onboarding door (#279): the Today row scene at 74px, portrait plus stars beside his talk box. Composed from the shipped gwart art, draws no icon.'],
   'js/app.js:buildDenPin':          ['scene', 'a boss den marker on the map, built from the tombstone art.'],
