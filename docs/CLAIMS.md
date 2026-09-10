@@ -65,6 +65,56 @@ exit 0
 - The verification-tail guard changes from the superseded 40-coin/comment contract to the authorized 340-coin/comment contract. Its unrelated missing-acorn subprocess proof remains unchanged. Other guard thresholds are retained.
 
 #### Proof output and guard comparison
+## v548
+
+R9 Wardrobe feedback. Codex could not run the browser guard (`listen EPERM`), so
+the operator ran it and ran the red proof: against pre-fix `js/app.js` and
+`app.css` the same audit fails 9 rows, and the `doll pixels` control PASSES in
+both runs, so the audit is not simply failing everything. Final run 49/49
+COMPLETE, exit 0.
+
+Changelog item: Putting a piece on updates its slot picture and says it is on. Taking it off says it is off.
+
+1. PROOF: wardrobe-feedback-audit.mjs | REACH: R9-F9 and R9-F11. `restageWardrobe` repainted the doll and the rings inside one slot's grid and never the slot tile above it, so the tile kept its `+` until a different slot was tapped. Measured on pre-fix code: `slot pixels: changed=0, ink=0` on hat, top and pants. After: `changed=5334, ink=17310`. The `doll pixels: changed=5924` control passes in BOTH runs, which is what makes the slot-tile rows mean something.
+
+Changelog item: Tiles that take off statted gear show that they need two taps, and the first tap tells you what will come off.
+
+2. PROOF: wardrobe-feedback-audit.mjs | REACH: R9-M11 and R9-M14. An arming tile and a non-arming one were identical in `class`, `aria-label`, `title`, `role` and inner HTML; only `data-armWired="1"` differed and no CSS rule referenced it, so the two-tap contract was invisible until after the first tap. One tap on a two-tap tile emitted nothing at all: pre-fix `one immediate announcement: {"messages":[],"buzz":[]}`.
+
+Changelog item: Dressing gives a light tap, and Wardrobe confirmations take priority over startup chatter.
+
+3. PROOF: wardrobe-feedback-audit.mjs | REACH: R9-F14 and R9-F18. Pre-fix `dressing haptic: []` on every slot: the only control in the room that vibrated was `Take it all off`. The announcement now arrives at ~30ms and the F18 rows pin that an active error survives a burst of routine toasts and that the action receipt follows it.
+
+Changelog item: Deleting a saved fit asks you to confirm first.
+
+4. PROOF: wardrobe-feedback-audit.mjs | REACH: R9-M-C. Melting a garment cost two taps, a confirm, a toast and a haptic; deleting a saved outfit was one tap and nothing. The ceremony was spent on destruction and withheld from the destructive act with no undo.
+
+### Operator note: a borrowed row was removed, and why
+
+The suite asserted the shared `tests/ui-audit.js` `uiAudit()`. That row is RED on
+CLEAN MAIN with the identical four problems (`#coinBtn opened hub tab shop,
+expected crates`, `#charBtn opened hub tab crates, expected wardrobe`,
+`#dropToShop` and `#spireToMap` MISSING on today), measured 2026-09-10 by running
+`uiAudit()` on origin/main with no lane changes present. It is drift between
+`tests/ui-audit.js` and the app, it is not this lane's regression, and borrowing
+it meant this suite could never go green for reasons outside its own subject. The
+drift is real and is being tracked separately; it is NOT fixed here.
+
+## R9 Round 2 audit fixture (2026-09-10)
+
+Frozen plan SHA256 verified: `c1c5ad88b1edbc7bb878b211c6ed2f5f3eb208aa1a1862a002b386bd2e3302b5`.
+The accepted production fix is unchanged. This checkout is the Tally root;
+its `CLAUDE.md` supplies the requested UI regression rules.
+
+Changed files: `tests/wardrobe-feedback-audit.mjs`, `tests/release-gate.mjs`,
+and `docs/CLAIMS.md`. The fixture now locates the granted item's rendered
+family tile and checks the displayed variant's name. The demo owns IR10-3,
+so granting IR10-1 does not guarantee a separate IR10-1 control. Pixel,
+announcement, haptic and timing assertions remain intact. The shared audit
+lifecycle declares 50 rows for the full run, 28 for F9 and 5 for M14.
+Completion requires the exact denominator; blocked runs retain exit 2.
+
+Local proof output:
 
 ```text
 node tests/unit.test.js
@@ -472,6 +522,52 @@ The first render must fail affordability assertions, the final render must pass,
 ```
 
 </details>
+node tests/wardrobe-feedback-audit.mjs
+AUDIT PLAN wardrobe-feedback-audit.mjs: 50 rows
+BLOCKED/INCOMPLETE after 0/50 rows: Error: listen EPERM: operation not permitted 127.0.0.1
+AUDIT END wardrobe-feedback-audit.mjs: FAILED; INCOMPLETE; rows=0/50; failed=0; unproven=0; exit=2
+
+node tests/wardrobe-feedback-audit.mjs --fault=f9 --case=f9
+AUDIT PLAN wardrobe-feedback-audit.mjs: 28 rows
+BLOCKED/INCOMPLETE after 0/28 rows: Error: listen EPERM: operation not permitted 127.0.0.1
+AUDIT END wardrobe-feedback-audit.mjs: FAILED; INCOMPLETE; rows=0/28; failed=0; unproven=0; exit=2
+
+node tests/wardrobe-feedback-audit.mjs --fault=m14 --case=m14
+AUDIT PLAN wardrobe-feedback-audit.mjs: 5 rows
+BLOCKED/INCOMPLETE after 0/5 rows: Error: listen EPERM: operation not permitted 127.0.0.1
+AUDIT END wardrobe-feedback-audit.mjs: FAILED; INCOMPLETE; rows=0/5; failed=0; unproven=0; exit=2
+```
+
+An isolated Node check of the actual resolver callback with catalogue-backed
+family membership resolves IR10-1 to the rendered IR10-3, and rejects a wrong
+slot or missing tile. This verifies fixture selection only, not browser pixels.
+Syntax and diff whitespace checks pass.
+
+Blocked requirement and proposed deviation: the sandbox refuses localhost
+listening, so a complete browser rerun and its full emitted row list cannot
+be supplied here. Zero browser rows ran. Independent review must run the
+full audit on a host that permits the local server and require 50/50 rows.
+The supplied plan records the reviewer's earlier 16-row green run and F9
+red evidence; those are supplied evidence, not new local measurements.
+No automatic approval review rejection occurred. No permission escalation,
+commit, push, publication, original-checkout edit or production redesign was
+performed. Changelog and version stamps remain unchanged for this audit-only
+repair. This report is advisory and does not claim completed browser proof.
+
+## v546 (2026-09-10)
+
+R9 frozen work order, SHA256 d8b35d96060bbc02e9b623e195236dfa2b469aff0f17819aa4b9554ad82a7f99. Implementation is local and pending independent review. No commit, push or publication.
+
+1. PROOF: wardrobe-feedback-audit.mjs | REACH: Wardrobe cosmetic grid, family colourway rail, football Wear control, and both gear equip controls. Successful dressing emits one existing-voice "on" toast. The empty-slot control says Take off while dressed and emits "off" when used. Cosmetic and football equips now reuse the look path's slot renderer and canvas hydration without rebuilding the room. F9 checks five empty slots (H, T, P, IR, IL), slot and doll screenshot differences, painted canvas ink, disappearance of the plus, and exactly one toast mutation within 300ms of the actual tap. BLOCKED: no browser assertions ran here.
+2. PROOF: wardrobe-feedback-audit.mjs | REACH: A cosmetic tile that displaces statted gear shows a 2 taps cue and names the consequence in its accessible label and title before the first tap. The first tap emits the existing warning text and a light haptic, without equipping. M11 checks the cue's screenshot contribution; M14 checks exactly one immediate warning, unchanged gear and painted art after the 3200ms cool-off. BLOCKED: no browser assertions ran here.
+3. PROOF: wardrobe-feedback-audit.mjs | REACH: Successful cosmetic, football, gear, saved-fit and free-look commits use the existing light haptic. Paid looks retain the existing single spend haptic. Wardrobe receipts and warnings preempt routine startup chatter and discard queued routine notices; active or queued write errors retain priority. Save, wear and strip receipts use the same priority. The audit operates those controls and observes toast mutations and platform vibration calls. BLOCKED: no browser assertions ran here.
+4. PROOF: wardrobe-feedback-audit.mjs | REACH: Long-press a saved fit, then tap its delete control. The existing sheet system asks Delete fit or Cancel before deletion. The audit asserts that opening and cancelling retain the saved fit, and only confirmation removes it and emits one receipt. Melting's ceremony is unchanged. BLOCKED: no browser assertions ran here.
+
+Validation: the agreed `node tests/unit.test.js` completed with `384 passed, 0 failed` and exit 0. Version-stamp audit passed all four checks; version alignment, release-gate coverage-only, guard hygiene and claim evidence passed. The existing wardrobe-noise audit passed 5/5 and shop-economy audit passed 18/18 (Node checks, no pixel claim). The new browser audit exits 2 with `BLOCKED/INCOMPLETE after 0 rows: Error: listen EPERM: operation not permitted 127.0.0.1`. The required `tests/ui-audit.js` run is included at the end of the new audit but remains unexecuted because browser setup failed. No rendered UI verification is claimed.
+
+Independent red proof is still required. Run `node tests/wardrobe-feedback-audit.mjs --fault=f9 --case=f9` and `node tests/wardrobe-feedback-audit.mjs --fault=m14 --case=m14`, then run without flags for green. Both fault commands were attempted and exited 2 on listen EPERM before any assertion ran. Each fault replaces one served source site without editing a checkout. Before committing, `--baseline --case=f9` and `--baseline --case=m14` serve this checkout's HEAD app.js to measure the original defects independently. Both baseline commands were also attempted and exited 2 on the same bind restriction. Exit 2 or zero executed rows is an infrastructure block, never proof of red.
+
+Deviation: browser acceptance, including the independent F9 and M14 red proofs, is deferred to a runner permitted to bind a local server. No implementation redesign is proposed. Existing write-error notices deliberately outrank routine Wardrobe feedback; the priority change does not discard failure notices. The v546 stamps are local candidate metadata only. Original app.js lines 16900-17000, js/loot.js and assets/bh/** are untouched.
 
 ## v544 (2026-09-10)
 
