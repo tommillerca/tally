@@ -97,7 +97,13 @@ for (const scenario of ['degraded', 'fresh', 'one-stale', 'all-stale', 'unknown'
     assert.ok(!h.fixture.race.players.some(p => p.playerId === 'capture-6'), 'Never-synced friend is absent from the server race');
     assert.match(race, /Placeholder figure: outfit not shared/);
     assert.match(race, /Progress comparison awaits recent syncs/);
-    assert.equal((race.match(/width:0%/g) || []).length, 5, 'Unavailable comparisons have no invented fill');
+    const lanes = [...race.matchAll(/class="race-lane [^]*?<i style="width:([\d.]+)%"/g)];
+    for (const [i, p] of h.fixture.race.players.entries()) {
+      h.ctx.laneStamp = p.seenAt;
+      const fresh = vm.runInContext('onlineLabel(laneStamp).fresh', h.ctx);
+      assert.equal(Number(lanes[i][1]) > 0, fresh, 'Only the lane awaiting sync has no fill');
+      assert.equal(lanes[i][0].includes('race-pending-track'), !fresh);
+    }
     assert.match(race, /24,000/);
   }
   assert.equal(h.calls(), 0);

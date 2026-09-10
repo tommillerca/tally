@@ -1,5 +1,62 @@
 # What each patch note claims, and what backs it
 
+## v558 (2026-09-10)
+
+### Operator verification: replayed against the real production board
+
+The guard proves the mechanism on a fixture. This replays the ACTUAL live board through
+the actual production `onlineLabel` and the actual lane-width expression, both extracted
+from `js/app.js` rather than reimplemented.
+
+Board: week 2026-09-04, read from production D1 at 2026-09-10 16:55Z. 11 racers, ages in
+hours since last sync.
+
+| Racer | steps | fresh | bar before | bar after |
+|---|---:|---|---:|---:|
+| Massive Phalange | 47,654 | yes | 0% | **100.0%** |
+| Chiseled Goblin | 34,533 | yes | 0% | **72.5%** |
+| Massive Horn | 31,938 | yes | 0% | **67.0%** |
+| Savage Coccyx | 17,265 | no | 0% | 0% |
+| Feisty Fang | 12,488 | yes | 0% | **26.2%** |
+| Bony Wrecker | 7,044 | no (99.3h) | 0% | 0% |
+| Withered Lich | 5,515 | yes | 0% | **11.6%** |
+| (no name) | 5,312 | no (119.8h) | 0% | 0% |
+| Massive Coccyx | 2,861 | yes | 0% | **6.0%** |
+| Chrome Horn #8 | 1,455 | yes | 0% | **3.1%** |
+| Dusty Boneyard #24 | 245 | no (145.9h) | 0% | 0% |
+
+**Bars drawn: 0/11 before, 7/11 after.** The four that stay flat are genuinely stale and
+keep the neutral pending rail plus their own "awaiting sync" note, which is the honesty the
+original gate existed to protect. What changed is only its SCOPE: one racer being stale is
+now a fact about that racer instead of about the board.
+
+The degradation is graded too, not just the happy path: when the racer directly above you
+is stale, the standing line drops to "You are Nth" and keeps the rank, rather than printing
+a gap against a number that has not moved in four days.
+
+Not proven here: on-screen bar widths and layout. This asserts the values production
+computes, from production code, against real data.
+
+
+Changelog item: The Step Race now shows progress for racers with recent syncs even when someone else is awaiting a sync. Your standing stays visible when your own sync is recent, and step gaps appear when both you and the racer above have recent syncs.
+
+1. PROOF: leaderboard-honesty-audit.mjs, crew-capture-node-audit.mjs | REACH: executes production hydrateRace
+   with a fixed clock and mixed fresh/stale rows. Both new regression cases failed
+   against the unchanged every() gate (49 passed, 2 failed, exit 1): the fresh own
+   lane computed zero width. After the fix: 51 passed, 0 failed, exit 0.
+   Checks non-zero fresh lane widths, zero stale lane widths and pending rails,
+   visible own standing despite another stale racer, and gaps only when both
+   own and directly adjacent rows are fresh. Existing controls cover an empty
+   board, unavailable timestamps and stale own rows. Registered in PURE.
+   The existing crew-capture-node audit now checks pending fill per lane too.
+   These are computed production markup values, not on-screen measurements.
+   node tests/unit.test.js: 385 passed, 0 failed, exit 0. All 166 PURE suites
+   passed via a socket-free runner plus targeted reruns. The first PURE pass
+   caught the obsolete all-bars-empty capture assertion; its corrected audit
+   passed 16 checks, exit 0. Release-gate coverage-only also passed.
+   Browser layout and screenshots remain the operator's proof. No server,
+   freshness threshold, earned state, art or build number changes.
+
 ## v557 (2026-09-10)
 
 Tom, 2026-09-10: "the studio is unseable in it's current state it's actually bricked."
@@ -51,7 +108,6 @@ commit bar and knows nothing about the Studio. Nothing in the tree asked "is the
 this screen exists for actually reachable", which is the same question that audit was
 written to answer for a different screen. The two rows above are the Studio's version of
 it, and the pattern is worth repeating on any screen whose primary control is fixed.
-
 
 ## v555 (2026-09-10)
 
@@ -161,7 +217,6 @@ comment there says the Base-only grant policy never relabels existing rows, whic
 No code change. Recorded here because the answer is a policy, not a coincidence, and the
 next person to ask deserves the trace rather than a second investigation.
 
-
 ## v554 (2026-09-10)
 
 SILENT BUILD. Fixes the invisible BONEHEADZ wordmark shipped knowingly in v553.
@@ -220,7 +275,6 @@ right call and it was flagged rather than hidden.
    also asserts the decoded figure/pet union is byte-identical to the previous compositor,
    so buying clearance for the mark cannot silently shrink the figure. NOT proven by the
    audit: rendered prominence and touch reach, which are the operator measurements above.
-
 
 ## v556 (2026-09-10)
 
@@ -367,7 +421,6 @@ reach on a real device.
    prominence, colour contrast, touch reach or any browser layout, which is why the
    wordmark defect above was found by the operator render and not by the audit.
 
-
 ## v552 (2026-09-10)
 
 SILENT BUILD, declared in `SILENT_BUILDS` (js/changelog.js). The Studio stays unlisted at
@@ -465,7 +518,6 @@ Rendered and MEASURED at 430x932 in the real app:
 NOT done here, and Tom asked for it: the full Wardrobe header rejig above the paper doll.
 The level pill, the bone count, the looks pill and the fits count are still four different
 treatments at four different alignments. Only the Studio entry was moved.
-
 
 
 
@@ -612,7 +664,6 @@ its Wear it control is `disabled` with no `data-look-apply`. After choosing a lo
 arms, enables, carries `data-look-apply="H10-3"`, and a tap at its centre hit-tests to
 `BUTTON.btn mog-go`. Both acquisition links render ("Open Backpack", "Cosmetic Shop").
 The header pill reads `16/624 collected looks · 2 other looks to try`.
-
 
 ### Round 2, current review result
 
@@ -784,7 +835,6 @@ MEASURE day-one wallet=340; cheapest rack piece=300; affordable themed pieces=1/
 3 passed, 0 failed
 exit 0
 ```
-
 
 #### Scope, limits and deviations
 
@@ -1042,7 +1092,6 @@ Raw before/after logs, the extracted census, the runner, initial results and the
 | `native-shell-comment-audit.mjs` | 0 | 0 |
 
 </details>
-
 
 ## v547
 
@@ -1740,7 +1789,6 @@ Changelog item: The Boneyard water classifier backs off failed tile requests and
 
 10. PROOF: water-retry-audit.mjs | REACH: R4-20, classifier only: A boot TileJSON outage and a tile-only outage recover queued classifier tiles without walking or another lookup. Retained URLs use a 15-second base doubling to a 120-second ceiling with 0 to 20% downward jitter. Healthy delivery stops retries. Visible MapLibre recovery is unresolved, see R4-FINISH-REPORT.md.
 
-
 ## v534 (2026-09-09)
 
 1. PROOF: c6-price-audit.mjs | REACH: C6 Bumbleseal cost 50,000 coins while being obtainable free from the ordinary egg pool. Repriced to 5,000, and anyone who paid the old price is credited the 45,000 difference exactly once, keeping their pet and all progress. Measured from production analytics before the change: `buy_pet` with `{"id":"C6","cost":50000}` fired 5 times across 5 distinct devices, so the refund population is small and the entitlement, not a server count, decides who is owed. A replayed refund grants nothing, an aborted credit burns no entitlement and can retry, and a player who hatched C6 free is owed nothing.
@@ -1911,7 +1959,6 @@ destruction helpers its production slice now calls. The assembled release runs
 socket proofs were not run. Laboratory findings 6 and 15 remain open, blocked by
 the reserved Destroy scope.
 
-
 ## T1: pet re-tune rulings (2026-09-07)
 
 1. PROOF: pit.test.js | REACH: Eternal Guard retains its per-species, automatic level-10 unlock, with the contract and existing player text both promising exactly 20% HP. A real lethal hit saves once at that amount; reverting to 40% fails both effect and resolved-HP checks.
@@ -1938,7 +1985,6 @@ Four verdicts, files, exact proof output, denials and deviations are recorded in
 [RELEASE-GATE-STATUS.md](RELEASE-GATE-STATUS.md). [TESTFLIGHT-STATE.md](TESTFLIGHT-STATE.md)
 attributes the supplied snapshot and marks current remote verification blocked
 by the contradictory ASC instruction. No commit, push or publication occurred.
-
 
 ## M5: first-run disclosure and lookup guards (2026-09-07)
 
@@ -2366,7 +2412,6 @@ the upload path and its guards.
 2. PROOF: submission-preflight-audit.mjs | REACH: `native/submission-preflight.mjs` runs after `npx cap sync ios` and grades the bundle that is about to be archived rather than the repo: the bundle declares `STORE_BUILD = true`, the synced iOS config has no `server` key, and no TestFlight or beta string is reachable. It exits non-zero, so `set -e` stops the script before the archive. The audit drives all three refusals plus a healthy control against real invocations, because a guard that cannot fail is not a guard. Verified against a real `build-store.sh` output (passes) and against a real internal `build-www.sh` output, where it names both defects: "does not declare STORE_BUILD = true" and "still has a server key, so the app would load the live site over the network instead of its own bundle".
 
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
-
 
 ## v524
 1. PROOF: pet-palette-audit.mjs | REACH: hatch or make a Frost pet and look at it beside the ordinary one. Tom, on v523: "i got a frost drizzle and the colour is so close to the base drizzle i thought i ahd the same pet." Measured, mean core delta with ink and highlights excluded: C1 base sits at hue 185/19% and C1 frost at 200/32%, **fifteen degrees apart on a pale creature**, because Drizzle's source fill `#cffbff` is already icy and a frost recolour barely moved it. Measuring ALL 90 within-species pairs found Tom's case was not the worst: **ember versus rose was worse on four species** (C4 9.62, C5 9.64, C2 11.07, C6 13.16) and nobody had made a Rose yet, since it shipped hours earlier. The palette targets in `scripts/build-pet-morphs-v2.py` were retuned to a stated minimum of 20; every species now measures at least 21.14 (C1 10.13 to 21.40, C4 9.62 to 23.60, C5 9.64 to 21.19). 14 morph PNGs and 42 thumbnails regenerated. Protected regions come out byte-identical, so Cam's ink, eye whites, teeth and blush are untouched. The guard fails against the shipped art, which is its control.
@@ -4098,7 +4143,6 @@ Not yet released (WIP on feat/kennel-ui, off feat/kennel-phase-a, no version bum
 
 2. PROOF: news-banner-audit.mjs (its TILES row is the one that would catch a thumbnail that changed size or position: it bounds every thumbnail to the same longest side and centre, and it went RED on my first attempt at this, which is how I know it can see a difference. Green on the shipped tree) plus art-resolution-audit.mjs (nothing is drawn above 1.40x its source anywhere in the app, so a smaller file cannot have been swapped in somewhere it would be stretched: the news slots paint at 24 to 40 CSS px against 192px art, and the Paddock lurker at 96 CSS px against 192px art, both downscales) plus icon-inventory-audit.mjs (ASSETS: every art path the drawers can ask for exists on disk, so no slot fell back to a missing file) | REACH: Look at the Paddock and at the news rows on Today. The pet at the edge of the Paddock and the little pictures beside each news row are the same art in the same places at the same sizes.
 
-
 ## v463
 
 1. PROOF: art-resolution-audit.mjs (its RESOLUTION row, whose bound is 1.40x and which was RED on main because of my own v462 shelf: measured `shop:thumb/384/B/B0-1.png src 384 drawn 583 = 1.52x`, and the offending images were confirmed to be mine by container rather than assumed, `inGrid: 1`, the second grid. The cause is that the tile CROPS to the body part with a scale, so a 130px tile carries a 292 CSS px layer, 583 device px at dpr 2. THAT EXACT UPSCALE IS IN THAT AUDIT'S OWN HEADER, with these same numbers, as the reason the rack moved to masters originally; I reintroduced it without reading the history in the file. The way out was measured rather than reasoned: masters at 12 tiles put the Shop at 115.6 MB, at 8 still over, at 6 STILL over, so masters do not fit at any useful count; the 384 tier at four across gives 167 CSS / 333 device = 0.87x. Worst upscale in the whole app is now 1.40x, which is the themed shelf's own long-standing on-the-line case) plus memory-census.mjs (Shop 83.8 MB against the 90 MB ceiling) plus grid-min-width-audit.mjs (20/20: the denser grid does not push a control off any of the three phone widths, and the price pill still fits "1,000" at 76px) | REACH: Open the Shop and scroll to the shelf under the themed nine. It is four tiles across instead of three and the artwork is crisper. Nothing was removed: it is still twelve pieces.
@@ -4122,7 +4166,6 @@ Not yet released (WIP on feat/kennel-ui, off feat/kennel-phase-a, no version bum
 1. PROOF: t2-audit.mjs (its BREED rows, three of which came back the moment the dangling return field was removed. `js/loot.js:869` returned a `cost` key whose variable #203 deleted when breeding stopped costing dust, and the only three `cost` bindings in that file sit at 169, 1670 and 1744, all inside other functions. A strict-mode ES module with no binding in scope throws ReferenceError, so the throw was unconditional rather than an edge case: every breed, every player, every time. The single caller at `js/app.js:15938` never read the key, which is why deleting it is the whole fix. NOT in the v456 baseline, which is why an earlier baseline diff showed one t2 failure where a fresh run showed four) | REACH: Open the Stable, pick two pets and breed them. The reveal opens and shows the offspring with its new lineage rank. Before this the screen did nothing visible at all.
 
 2. PROOF: NONE for the data claim specifically, and that is deliberate rather than an omission: it is a statement about what ALREADY happened on players' devices during v458 and v459, which no audit on this tree can grade. It is read off the control flow instead, and the reading is what corrected a FALSE first draft of this very note. The throw is on the return, and every mutation is persisted above it: `savePetInstances` with the fed pet already removed, `kvSet('petBreedCredit')`, the level-bank delete, `clearBond`, `clearNick`, and the equipped/extinct cleanup. The keeper's `lineage` is mutated in place on an object inside the saved list. The caller has no try/catch, so the throw also skipped `render()` and the `sel`/`offSp` reset, which is why the Stable looked frozen with the pair still selected rather than showing an error. The first draft of this note said "your pets were never consumed" the opposite of the truth, written from where the throw is rather than from what runs before it | REACH: Nothing to do. If you bred in the last two days, it worked: the fed pet is gone and your keeper carries the extra lineage rank. Reopening the Stable at the time would have shown that. No breed was charged or applied twice.
-
 
 ## v459
 
@@ -4216,7 +4259,6 @@ Not yet released (WIP on feat/kennel-ui, off feat/kennel-phase-a, no version bum
 3. PROOF: NONE for the sentence itself, which is a statement of intent, not a mechanic, and saying otherwise would be the dishonest move. What IS graded is the mechanic it describes: row 3 of the lint above fails on any dust spend that hands out an egg, a crate, a consumable, gear or a pet, and purchase-firewall.mjs holds the same line for coins | REACH: Nothing to do. It explains why the three items were withdrawn.
 
 4. PROOF: reward-sop-audit.mjs (it derives every paying call site in js/ from the source and fails on one that is not declared in its registry; after this change the grantCrate and grantEgg sites in the quests, game, hunt, poi, social, wheel and app modules are all still present and still registered, and the run is green at exit 0). NONE end to end for any single drop: no audit walks a player from 14,000 steps to an egg in their bag | REACH: Walk 14,000 steps in a day for a Step Egg. Cross any level for a Bone Crate, and every tenth level also hands you an egg. Finish a quest, spin the daily wheel, close a day inside your budget, burn a workout's worth of calories, or beat a den boss, the Mimic, the Wanderer or a Gauntlet rung. None of those changed.
-
 
 ## v445
 
@@ -4332,7 +4374,6 @@ note in a later build if he confirms it, and more work if he does not.
   and one tap only centres the card. Now written as two taps, with the empty state
   named.
 
-
 ## 2026-09-07: R45 guard debts
 
 This section supersedes the crate performance numbers in the earlier v500
@@ -4367,7 +4408,6 @@ commands and native integration proposal are in tests/wave-guards-report.md.
 4. PROOF: r46-logging-audit.mjs | REACH: Add's budget uses the same sum of rounded diary rows as Today. Five 100.4 kcal rows display and budget as 500 kcal, leaving 1500 against 2000.
 
 R46-7 is deferred with a proposed common diary-date definition for Trends and the logging streak. R46-9, R46-10, R46-11 and R46-12 lack finding details in the frozen plans and checkout reports located in this review; no behavior change is claimed for those items. No release or deployment is claimed by this section.
-
 
 ## 2026-09-07: N2 audit completion and dependency disclosure
 
@@ -4627,7 +4667,6 @@ Pending reviewer proofs, with expected results rather than measured passes:
 
 Raw logs and throwaway copies are in `/private/tmp/m2-r46-proof`. This report is
 advisory for independent review and is not release approval.
-
 
 ## K1, 2026-09-07: App Store updates and guard controls
 
@@ -4975,7 +5014,6 @@ requested docs. No version stamp, changelog, commit, push or publication.
 1. PROOF: restore-state-audit.mjs | REACH: Settings file import and cloud merge reach production importAll, followed by actual equipment, receipt and export readers. Invalid known containers, duplicate kv keys and unsupported pet bank formats refuse before store writes. Receipt unions preserve both sides on merges. Unsupported equipment is hidden from the normal look reader without erasing its stored selection during loot equip calls. The raw Dressing Room contract is retained. Throwaway original-source reversion reports 2 passed, 19 failed; restored code reports 21 passed, 0 failed.
 2. PROOF: restore-debt-audit.mjs | REACH: Explicitly unresolved, not green. An old blob erases an earned pet duplicate (2 to 1), lowers its banked steps (1000 to 10), and refunds a spent potion (0 to 1). A future same-schema food buff is deleted when the cooking reader opens it (1 to 0). All four desired invariants remain failing assertions in PURE. The coordinated fixes and file ownership boundaries are in docs/P3-KV-CENSUS.md.
 3. PROOF: unit.test.js | REACH: The agreed command ran and reported 364 passed, 1 failed, exit 1. The same serveTree subprocess failure occurs on the unmodified baseline. The standalone serve-tree-identity PURE entry requires prohibited local sockets and was not run. Browser/server results are not certified. Full per-file Node results, measured red/green output, blockers and deviations are in docs/P3-RESTORE-REPORT.md.
-
 
 ## 2026-09-07: L1 transaction pairs, advisory and incomplete
 

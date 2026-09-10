@@ -897,7 +897,7 @@ export function raceStanding(serverRows, race, wk, own, name, myFit, ordinal, es
     : yourRank === 1 ? 'You are in front. Keep it that way.'
     : aboveRow ? `You are <b>${ordinal(yourRank)}</b>, ${behind.toLocaleString()} behind ${esc(aboveRow.name)}`
     : `You are <b>${ordinal(yourRank)}</b>`;
-  return { rows, yourRank, mine, behind, aboveName: aboveRow ? aboveRow.name : null, standing };
+  return { rows, yourRank, mine, behind, aboveRow, aboveName: aboveRow ? aboveRow.name : null, standing };
 }
 
 /* THE PODIUM THAT WAS PAID, for a week that has already settled.
