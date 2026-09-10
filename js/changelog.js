@@ -10,6 +10,10 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 557, date: '2026-09-10', title: 'The Studio opens properly', items: [
+    'The Studio was unusable: the button that opens the sticker tray sat underneath the bottom navigation, and the picture blocked scrolling, so there was no way to reach it. Both are fixed.',
+  ] },
+
   { n: 556, date: '2026-09-10', title: 'The Studio builds like a story', items: [
   'The Studio works like a story: tap a sticker to place it, drag to move, pinch and twist to resize and rotate, and drop it in the bin to remove it. Keyboard and screen-reader controls are still available.',
   'The Wanderer, The Mimic, The Glutton and Gwart are in the sticker tray, alongside your Crew and slogans.',
