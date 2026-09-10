@@ -319,11 +319,12 @@ PURE.push('routine-race-audit.mjs');
 PURE.unshift('version-align-lint.mjs');
 /* dayone-topup-audit is PURE for the same reason spawn-claim-atomic-audit is:
    mem-idb under the real js/db.js, js/game.js and js/loot.js, no browser, ~2s.
-   It owns the day-one coin floor (master handoff B4, 2026-09-07): the welcome
-   kit's one-time 40-coin grant is paid exactly once and survives a /register
-   that answers 429, and a PERFECT first day driven through the shipped payout
-   functions over twelve seeds clears the 300 rack floor at the median (304 with
-   the grant, 264 without). Proved red by deleting the grant: 6 rows, exit 1. */
+   It guards the welcome kit's one-time DAYONE_TOPUP payment and its survival
+   of a /register that answers 429. The original 40-coin ruling was superseded
+   by Tom's day-one grant ruling: 340 coins buys the unchanged 300 rack anchor.
+   A PERFECT first day over twelve seeds must still clear that floor and stay
+   below the existing 900-coin ceiling. Historical 40-coin measurements remain
+   in the audit; current measurements are printed on every run. */
 PURE.push('dayone-topup-audit.mjs');
 /* dish-worth-audit is PURE for the same reason xp-curve-audit is: it imports
    js/pit.js through tests/fight-sim.mjs, no browser and no database, ~3s. It

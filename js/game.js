@@ -1242,8 +1242,8 @@ async function runInitBackfill(targets, onProgress) {
 }
 
 // One-time welcome kit when the RPG layer first arrives (or on fresh install).
-// Keep the existing day-one coin floor and ready-to-hatch egg tier.
-export const DAYONE_TOPUP = 40;
+// Funds one 300-coin rack anchor with 40 left; the ready-to-hatch egg tier stays.
+export const DAYONE_TOPUP = 340;
 export async function initLootIfNeeded() {
   // A completed legacy kit is still completed. Avoid scanning its ledger at boot.
   if (await kvGet('loot-init', false)) return null;

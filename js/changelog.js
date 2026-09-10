@@ -5,6 +5,7 @@
 // Pending train notes. The operator assigns a build number and moves these
 // into CHANGES when assembling the release. No version stamp is advanced here.
 export const NEXT_CHANGES = [
+  'New players receive 340 welcome coins, enough for one 300-coin rack piece with 40 coins left.',
 ];
 
 export const CHANGES = [
