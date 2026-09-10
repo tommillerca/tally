@@ -553,6 +553,7 @@ const BROWSER = [
   /* QA round 23 F1 and F3, the Dressing Room. Both browser-tier, both written on a
      machine under a gate (STATIC ONLY), so neither was run in the session that wrote
      it; their headers state the prove-red and the first gate run is the proof. */
+  'wardrobe-feedback-audit.mjs', // R9: real equip controls, slot/doll pixels, one immediate receipt, first-tap warning and saved-fit deletion consent. Browser red proofs pending listen EPERM.
   'wardrobe-restage-audit.mjs',      // a look tap (preview AND the two-tap paid commit) never rebuilds #chContent, never shows it empty in any sampled frame, and every visible doll layer is decoded in every frame; controls prove the tap happened (art in the stage, transmog written, dust down by the price). Red on the old renderCharacter path by construction (REBUILD) and by QA's own frame count (CONTENT). One boot, ~25s
   'wardrobe-commit-reach-audit.mjs', // the Wear it bar is under the thumb at scrollTop 0 at 375x667 and 390x844 (rect in viewport AND elementFromPoint), while its panel is still below the fold (so a short page cannot pass it), un-sticks at full scroll so it covers no look tile, and is a direct child of .mog-dock. Red without the sticky rule with the button at ~1810. One boot, ~20s
   /* THE TWO ICON-RENDER AUDITS. boneyard-icon-audit landed on main with NO

@@ -472,6 +472,20 @@ The first render must fail affordability assertions, the final render must pass,
 ```
 
 </details>
+## v546 (2026-09-10)
+
+R9 frozen work order, SHA256 d8b35d96060bbc02e9b623e195236dfa2b469aff0f17819aa4b9554ad82a7f99. Implementation is local and pending independent review. No commit, push or publication.
+
+1. PROOF: wardrobe-feedback-audit.mjs | REACH: Wardrobe cosmetic grid, family colourway rail, football Wear control, and both gear equip controls. Successful dressing emits one existing-voice "on" toast. The empty-slot control says Take off while dressed and emits "off" when used. Cosmetic and football equips now reuse the look path's slot renderer and canvas hydration without rebuilding the room. F9 checks five empty slots (H, T, P, IR, IL), slot and doll screenshot differences, painted canvas ink, disappearance of the plus, and exactly one toast mutation within 300ms of the actual tap. BLOCKED: no browser assertions ran here.
+2. PROOF: wardrobe-feedback-audit.mjs | REACH: A cosmetic tile that displaces statted gear shows a 2 taps cue and names the consequence in its accessible label and title before the first tap. The first tap emits the existing warning text and a light haptic, without equipping. M11 checks the cue's screenshot contribution; M14 checks exactly one immediate warning, unchanged gear and painted art after the 3200ms cool-off. BLOCKED: no browser assertions ran here.
+3. PROOF: wardrobe-feedback-audit.mjs | REACH: Successful cosmetic, football, gear, saved-fit and free-look commits use the existing light haptic. Paid looks retain the existing single spend haptic. Wardrobe receipts and warnings preempt routine startup chatter and discard queued routine notices; active or queued write errors retain priority. Save, wear and strip receipts use the same priority. The audit operates those controls and observes toast mutations and platform vibration calls. BLOCKED: no browser assertions ran here.
+4. PROOF: wardrobe-feedback-audit.mjs | REACH: Long-press a saved fit, then tap its delete control. The existing sheet system asks Delete fit or Cancel before deletion. The audit asserts that opening and cancelling retain the saved fit, and only confirmation removes it and emits one receipt. Melting's ceremony is unchanged. BLOCKED: no browser assertions ran here.
+
+Validation: the agreed `node tests/unit.test.js` completed with `384 passed, 0 failed` and exit 0. Version-stamp audit passed all four checks; version alignment, release-gate coverage-only, guard hygiene and claim evidence passed. The existing wardrobe-noise audit passed 5/5 and shop-economy audit passed 18/18 (Node checks, no pixel claim). The new browser audit exits 2 with `BLOCKED/INCOMPLETE after 0 rows: Error: listen EPERM: operation not permitted 127.0.0.1`. The required `tests/ui-audit.js` run is included at the end of the new audit but remains unexecuted because browser setup failed. No rendered UI verification is claimed.
+
+Independent red proof is still required. Run `node tests/wardrobe-feedback-audit.mjs --fault=f9 --case=f9` and `node tests/wardrobe-feedback-audit.mjs --fault=m14 --case=m14`, then run without flags for green. Both fault commands were attempted and exited 2 on listen EPERM before any assertion ran. Each fault replaces one served source site without editing a checkout. Before committing, `--baseline --case=f9` and `--baseline --case=m14` serve this checkout's HEAD app.js to measure the original defects independently. Both baseline commands were also attempted and exited 2 on the same bind restriction. Exit 2 or zero executed rows is an infrastructure block, never proof of red.
+
+Deviation: browser acceptance, including the independent F9 and M14 red proofs, is deferred to a runner permitted to bind a local server. No implementation redesign is proposed. Existing write-error notices deliberately outrank routine Wardrobe feedback; the priority change does not discard failure notices. The v546 stamps are local candidate metadata only. Original app.js lines 16900-17000, js/loot.js and assets/bh/** are untouched.
 
 ## v544 (2026-09-10)
 

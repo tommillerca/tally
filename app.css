@@ -4578,6 +4578,10 @@ body::before {
 /* the armed state of a fit tile that would take statted gear off (QA round 22
    W5): armToConfirm swaps the art for the consequence, in the app's arm gold */
 .ward-cell.arming { color: var(--gold); border-color: var(--gold); text-align: center; padding: 4px; }
+/* The two-tap contract is visible before touching a garment or colourway. */
+.ward-arm-cue { position: relative; z-index: 2; display: block; padding: 2px 4px; border-radius: 4px; font-size: var(--fs-0); line-height: 1.2; color: var(--text); background: var(--surface-2); text-align: center; pointer-events: none; }
+.ward-cell .ward-arm-cue { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+.ward-two-tap { border-style: dashed; }
 /* the inspect panel: full stats + what the ⚡ ability actually does */
 .gear-inspect {
   display: grid; grid-template-columns: 62px 1fr; gap: 10px 12px; margin: 12px 2px 4px;

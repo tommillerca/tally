@@ -9,6 +9,11 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 548, date: '2026-09-10', title: 'The Wardrobe answers', items: [
+    'Putting a piece on updates its slot picture and says it is on. Taking it off says it is off.',
+    'Tiles that take off statted gear show that they need two taps, and the first tap tells you what will come off.',
+    'Dressing gives a light tap, and Wardrobe confirmations take priority over startup chatter.',
+    'Deleting a saved fit asks you to confirm first.',
   { n: 547, date: '2026-09-10', title: 'A price you can read', items: [
     'Shop prices you can afford keep their filled coin or dust colors and dark digits; prices beyond your wallet are hollow.',
     'Bumbleseal and her accessories show hollow prices when you are short of coins.',
