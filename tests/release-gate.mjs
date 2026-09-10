@@ -368,6 +368,7 @@ PURE.push('stable-rooms-top-audit.mjs'); // Frozen room row: production template
 PURE.push('today-playtest-audit.mjs'); // 2026-09-08: Today handlers, rollover retries, protected streak copy and atomic milestone crates; Node only.
 PURE.push('crew-playtest-audit.mjs'); // Frozen Crew playtest: owed gifts, aborted opens and actual social controls; Node only.
 PURE.push('firstrun-audit.mjs'); // Frozen first-run: interrupted kit, onboarding handlers and day-one play; Node only.
+PURE.push('dayone-affordability-audit.mjs'); // Frozen grant: real welcome wallet buys one rack piece; empty/funded and legacy controls, Node only.
 PURE.push('settings-safety-audit.mjs'); // Settings/file-import loss review, durable undo, quota refusal, stale review and transaction abort/retry; Node only.
 PURE.push('progress-playtest-audit.mjs'); // Frozen Progress lane: badge abort/retry, real charts, sleep and detail handlers; no sockets.
 PURE.push('leaderboard-honesty-audit.mjs'); // Staleness copy across crew, leaderboard, podium and race; Node only.

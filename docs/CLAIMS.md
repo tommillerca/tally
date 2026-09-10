@@ -1,5 +1,340 @@
 # What each patch note claims, and what backs it
 
+## vNEXT
+
+### Day-one grant work order: BLOCKED, advisory for independent review (2026-09-10)
+
+The supplied plan file matches SHA256 `ef2958e0e380e8cee86d96e4cbed9c1fd56cfe30c79a3e493f9193ff98c493a3`.
+The requested economy change is **not implemented**. The checkout still grants 40 coins.
+No player-facing claim was added to `js/changelog.js`: `NEXT_CHANGES` remains empty.
+Consequently there is no new changelog item requiring a shipping PROOF row. The
+requested grant changelog item and its matching proof remain blocked with the
+product change. No version stamp was changed.
+
+Files changed in this attempt:
+
+- `tests/dayone-affordability-audit.mjs`: a regression guard exercising the real
+  `initLootIfNeeded()` payment and `buyRackItem()` path over the project's mem-idb.
+  It requires a fresh welcome wallet to afford an actual themed rack piece and
+  less than two cheapest pieces, then verifies ownership, debit and no refill.
+  Controls test refusal at 40 coins, success at the exact 300-coin anchor price,
+  and no new grant for an already completed legacy welcome kit.
+- `tests/release-gate.mjs`: registers that guard in PURE. It intentionally exposes
+  the unresolved product requirement as a failing gate entry.
+- `docs/CLAIMS.md`: this advisory, measurement limits and complete PURE census.
+
+#### Blockers and proposed deviations
+
+1. **Scope conflict:** `DAYONE_TOPUP` is defined at `js/game.js:1246`, not in
+   `js/loot.js`. The frozen scope excludes `js/game.js`. Proposed exception:
+   change only `export const DAYONE_TOPUP = 40;` to `340`, after the required
+   economy evidence supports it. An explicit scope question is pending; this
+   checkout line was not edited.
+2. **Conflicting existing guard:** `tests/verify-tail-audit.mjs:14` requires
+   `grant === 40`; lines 18 to 20 require the old unaffordable-wallet comments
+   and forbid 340. That existing test is outside the scope of "any new test".
+   Proposed exception: update only its item-2 contract to verify the real grant,
+   truthful comments and retained 300-coin price; retain the unrelated item-5
+   dependency proof. Permission is pending. No audit was disabled or removed.
+3. **Required instrument unavailable:** searches within this checkout found no
+   simulation or census source reproducing the plan's light/steady/heavy
+   71/194/431 coins/day, 282/103/46 incubator days or 63 Shop controls. The available
+   `scratchpad/r33/faucet/faucet.mjs` explicitly identifies itself as a rebuilt
+   instrument with different absolute results. It has light/committed/heavy
+   profiles, never calls `initLootIfNeeded()`, and initializes no welcome wallet.
+   Its `today` scenario also overrides crate coin ranges. Running it unchanged
+   cannot measure this grant change. The required source paths were requested.
+   Proposed fallback, only after agreement: adapt that model explicitly to real
+   onboarding, document its assumptions, and establish a new baseline. It has
+   **not** been substituted for the promised simulation.
+4. **Comment premise already changed:** both `js/loot.js` comments already name
+   the actual 40-coin grant and explain that it cannot afford the 300-coin anchor.
+   They remain accurate while the grant is unchanged. The proposed 340-coin
+   wording must follow, not precede, an authorized and validated grant edit.
+
+`app.css`, `js/app.js`, original checkouts and all version stamps were untouched.
+No commit, push, publication, external message, or network action was performed.
+No tool action was denied. The blocked actions above were withheld because of
+scope and missing evidence, not an automatic approval-review rejection.
+
+#### Required before/after measurements and their status
+
+The AFTER column is an isolated candidate, **not the final checkout**. A disposable
+copy under `/private/tmp/dayone-grant-proof/candidate` changed only the grant
+constant to 340 and ran the identical new guard. Neither demo seeding nor an
+arbitrary test wallet was used for its REAL GRANT row.
+
+| Measurement | BEFORE, checkout | AFTER, isolated 340 candidate |
+|---|---:|---:|
+| Day-one wallet before opening crates | 40 | 340 |
+| Affordable themed rack pieces | 0/8 | 1/8 |
+| Wallet after buying the 300-coin anchor | Purchase refused | 40 |
+| Affordable controls out of the specified 63 Shop controls | UNPROVEN, census source missing | UNPROVEN, census source missing |
+| Light cumulative coins, day 7 / day 30 | Required simulation unavailable | UNPROVEN |
+| Steady cumulative coins, day 7 / day 30 | Required simulation unavailable | UNPROVEN |
+| Heavy cumulative coins, day 7 / day 30 | Required simulation unavailable | UNPROVEN |
+| Light days to 20,000, against known 282 | 282 is supplied history, not reproduced | UNPROVEN |
+| Steady days to 20,000, against known 103 | 103 is supplied history, not reproduced | UNPROVEN |
+| Heavy days to 20,000, against known 46 | 46 is supplied history, not reproduced | UNPROVEN |
+| Existing supply/economy guards on final checkout | All existing PURE entries exit 0 | Candidate full census not run; verify-tail conflicts by source |
+
+The 8-piece themed shelf is a narrower measured population than the specified
+63-control Shop census. It is not presented as a replacement denominator. The
+340 candidate funds one cheapest rack purchase; it does not establish that only
+one Shop control is affordable or prohibit buying several cheaper consumables.
+
+For instrument identification only, the available model was actually run:
+
+```text
+node scratchpad/r33/faucet/faucet.mjs --days 60 --rules today --out /private/tmp/dayone-grant-proof/existing-sim
+exit 0; seeds 11,23,47; every produced crate opened
+```
+
+| Existing rebuilt model profile | Mean coins/day over 60 days | Mean day-30 wallet plus shop spend |
+|---|---:|---:|
+| light | 10.97 | 352 |
+| committed (not established as the plan's steady profile) | 282.57 | 8,534 |
+| heavy | 489.70 | 14,393 |
+
+Those results exclude the welcome grant and are not the required BEFORE table.
+Full per-seed output is in `/private/tmp/dayone-grant-proof/existing-sim.txt` and
+`/private/tmp/dayone-grant-proof/existing-sim/all.json`.
+
+A screening calculation using the plan's rounded rates also does **not** justify
+calling entry inflation small. This is arithmetic, not simulation: grant plus
+N earning days, no spending or progression feedback, with the same daily rate
+before and after.
+
+| Profile, supplied coins/day | Day 7: 40 grant to 340 grant | Week-one increase | Day 30: 40 grant to 340 grant |
+|---|---:|---:|---:|
+| light, 71 | 537 to 837 | 55.9% | 2,170 to 2,470 |
+| steady, 194 | 1,398 to 1,698 | 21.5% | 5,860 to 6,160 |
+| heavy, 431 | 3,057 to 3,357 | 9.8% | 12,970 to 13,270 |
+
+This does not prove an actual week-one distortion, but it leaves the promised
+small-inflation condition unproven. No claim of economy safety or incubator
+acceleration is made. The grant edit is stopped pending the specified evidence.
+
+#### Proof output
+
+The new guard on the unchanged production grant exits **1**:
+
+```text
+MEASURE day-one wallet=40; cheapest rack piece=300; affordable themed pieces=0/8
+FAIL REAL GRANT: first boot can afford at least one rack piece: real grant 40 cannot afford a 300-coin rack piece
+PASS CONTROL: 40 coins refuse the anchor; its exact price buys it
+PASS CONTROL: a completed legacy welcome kit receives no new grant
+2 passed, 1 failed
+```
+
+The identical guard against the isolated one-line 340 candidate exits **0**:
+
+```text
+MEASURE day-one wallet=340; cheapest rack piece=300; affordable themed pieces=1/8
+PASS REAL GRANT: first boot can afford at least one rack piece
+PASS CONTROL: 40 coins refuse the anchor; its exact price buys it
+PASS CONTROL: a completed legacy welcome kit receives no new grant
+3 passed, 0 failed
+```
+
+Agreed proof command on this checkout:
+
+```text
+node tests/unit.test.js
+384 passed, 0 failed
+exit 0
+```
+
+Full PURE execution, enumerating the declaration plus all registrations in
+`tests/release-gate.mjs` through the existing runner:
+
+```text
+Baseline: node docs/train542-integration/run-pure.mjs /private/tmp/dayone-grant-proof/baseline-pure
+160/160 PURE entries exit 0; runner exit 0
+Final: node docs/train542-integration/run-pure.mjs /private/tmp/dayone-grant-proof/final-pure
+160/161 PURE entries exit 0; runner exit 1
+node tests/release-gate.mjs --coverage-only
+coverage: 418 audits on disk, 127 fast, 130 full, 161 skipped
+exit 0
+```
+
+The runner rejects a census smaller than 156 or one with duplicate entries.
+The only failing final entry is the new affordability guard. Existing supply and
+economy guards have not moved on this checkout, whose economy is unchanged.
+**All-PURE-green acceptance is unmet.** Baseline/final per-process streams,
+enumeration and exit statuses are under the paths printed above; unit output is
+`/private/tmp/dayone-grant-proof/unit.txt`. These temporary paths are local
+advisory evidence, not published artifacts.
+
+<details>
+<summary>All 161 PURE entries enumerated from the final release gate, with exit codes</summary>
+
+| PURE entry | Exit |
+|---|---:|
+| `version-align-lint.mjs` | 0 |
+| `no-debug-markers-lint.mjs` | 0 |
+| `store-copy-lint.mjs` | 0 |
+| `migration-guard-audit.mjs` | 0 |
+| `sync-observability-audit.mjs` | 0 |
+| `sync-identity-audit.mjs` | 0 |
+| `sync-native-audit.mjs` | 0 |
+| `lab-density-audit.mjs` | 0 |
+| `crew-outfit-audit.mjs` | 0 |
+| `dock-line-audit.mjs` | 0 |
+| `whatsnew-boot-audit.mjs` | 0 |
+| `wardrobe-noise-audit.mjs` | 0 |
+| `sync-clientpath-audit.mjs` | 0 |
+| `sync-authpath-audit.mjs` | 0 |
+| `sync-path-audit.mjs` | 0 |
+| `wardrobe-playtest-audit.mjs` | 0 |
+| `lab-room2-audit.mjs` | 0 |
+| `stable-stale-disclosure-audit.mjs` | 0 |
+| `breed-last-colour-audit.mjs` | 0 |
+| `stable-loss-disclosure-audit.mjs` | 0 |
+| `lab-health-recovery-audit.mjs` | 0 |
+| `lab-integration-audit.mjs` | 0 |
+| `lab-ui-audit.mjs` | 0 |
+| `laboratory-audit.mjs` | 0 |
+| `lab-foundation-audit.mjs` | 0 |
+| `pet-stress-guard.mjs` | 0 |
+| `crew-pet-node-guard.mjs` | 0 |
+| `transmog-receipt-audit.mjs` | 0 |
+| `today-reads-lint.mjs` | 0 |
+| `kitchen-atomic-audit.mjs` | 0 |
+| `backup-encoder-audit.mjs` | 0 |
+| `backup-key-audit.mjs` | 0 |
+| `backup-version-audit.mjs` | 0 |
+| `backup-conflict-audit.mjs` | 0 |
+| `unit.test.js` | 0 |
+| `log-xp-farm-audit.mjs` | 0 |
+| `drip-badge-audit.mjs` | 0 |
+| `xp-key-provenance-lint.mjs` | 0 |
+| `facegate-audit.mjs` | 0 |
+| `garden-appetite-guard.mjs` | 0 |
+| `pit.test.js` | 0 |
+| `quest-daymore-audit.mjs` | 0 |
+| `quest-pick-audit.mjs` | 0 |
+| `first-fight-audit.mjs` | 0 |
+| `stat-source-audit.mjs` | 0 |
+| `bastions-rep-sim.mjs` | 0 |
+| `analytics-tag-audit.mjs` | 0 |
+| `icon-inventory-audit.mjs` | 0 |
+| `version-stamp-audit.mjs` | 0 |
+| `boneyard-supply-audit.mjs` | 0 |
+| `loot-fallback-audit.mjs` | 0 |
+| `guard-hygiene-lint.mjs` | 0 |
+| `guard-provenance-lint.mjs` | 0 |
+| `feedback-status-lint.mjs` | 0 |
+| `rack-theme-lint.mjs` | 0 |
+| `rack-rotate-audit.mjs` | 0 |
+| `pet-accessory-lint.mjs` | 0 |
+| `pet-pool-audit.mjs` | 0 |
+| `manifest-exports-audit.mjs` | 0 |
+| `xp-curve-audit.mjs` | 0 |
+| `live-api-register-lint.mjs` | 0 |
+| `claim-evidence-lint.mjs` | 0 |
+| `thumb-freshness-lint.mjs` | 0 |
+| `render-sink-lint.mjs` | 0 |
+| `lapse-witness-audit.mjs` | 0 |
+| `spawn-claim-atomic-audit.mjs` | 0 |
+| `wardrobe-family-audit.mjs` | 0 |
+| `football-kit-audit.mjs` | 0 |
+| `restore-latch-audit.mjs` | 0 |
+| `first-pet-audit.mjs` | 0 |
+| `shop-economy-audit.mjs` | 0 |
+| `recovery-status-audit.mjs` | 0 |
+| `currency-revision-lint.mjs` | 0 |
+| `inv-tombstone-audit.mjs` | 0 |
+| `take-and-pay-audit.mjs` | 0 |
+| `c6-price-audit.mjs` | 0 |
+| `pet-morph-animation-audit.mjs` | 0 |
+| `pet-palette-audit.mjs` | 0 |
+| `fontscale-audit.mjs` | 0 |
+| `wheel-look-audit.mjs` | 0 |
+| `wheel-easing-audit.mjs` | 0 |
+| `storage-boot-audit.mjs` | 0 |
+| `crate-cadence-audit.mjs` | 0 |
+| `r4-app-p1-audit.mjs` | 0 |
+| `water-retry-audit.mjs` | 0 |
+| `cloud-off-audit.mjs` | 0 |
+| `r4-silence-audit.mjs` | 0 |
+| `silence-disclosure-audit.mjs` | 0 |
+| `health-disclosure-audit.mjs` | 0 |
+| `paddock-pack-audit.mjs` | 0 |
+| `numbers-honesty-audit.mjs` | 0 |
+| `locale-numbers-audit.mjs` | 0 |
+| `audit-output-audit.mjs` | 0 |
+| `branch-graveyard-audit.mjs` | 0 |
+| `store-runtime-audit.mjs` | 0 |
+| `r47-rest-audit.mjs` | 0 |
+| `r47-economy-audit.mjs` | 0 |
+| `submission-build-audit.mjs` | 0 |
+| `harness-environment-audit.mjs` | 0 |
+| `guard-debts-audit.mjs` | 0 |
+| `submission-preflight-audit.mjs` | 0 |
+| `pet-state-audit.mjs` | 0 |
+| `pet-family-audit.mjs` | 0 |
+| `crew-pet-audit.mjs` | 0 |
+| `coins-merge-tie-audit.mjs` | 0 |
+| `routine-race-audit.mjs` | 0 |
+| `dayone-topup-audit.mjs` | 0 |
+| `dish-worth-audit.mjs` | 0 |
+| `pet-C-node-guard.mjs` | 0 |
+| `r48-state-audit.mjs` | 0 |
+| `r46-logging-audit.mjs` | 0 |
+| `r46-diary-audit.mjs` | 0 |
+| `zero-calorie-seam-audit.mjs` | 0 |
+| `audit-completion-audit.mjs` | 0 |
+| `machine-character-audit.mjs` | 0 |
+| `n3-deadpaths-audit.mjs` | 0 |
+| `m5-prove-red.mjs` | 0 |
+| `lookup-guard-lint.mjs` | 0 |
+| `restore-state-audit.mjs` | 0 |
+| `restore-debt-edges-audit.mjs` | 0 |
+| `restore-debt-audit.mjs` | 0 |
+| `p1-r48-rest-audit.mjs` | 0 |
+| `pet-a11y-audit.mjs` | 0 |
+| `kennel-copy-audit.mjs` | 0 |
+| `breed-lock-audit.mjs` | 0 |
+| `device-loss-audit.mjs` | 0 |
+| `multidevice-earnings-audit.mjs` | 0 |
+| `response-bodies-audit.mjs` | 0 |
+| `p1-merge-audit.mjs` | 0 |
+| `quest-wheel-budget-audit.mjs` | 0 |
+| `kitchen-delivery-audit.mjs` | 0 |
+| `map-playtest-audit.mjs` | 0 |
+| `p1-dens-audit.mjs` | 0 |
+| `crew-yard-row-audit.mjs` | 0 |
+| `pet-rarity-audit.mjs` | 0 |
+| `stable-rooms-top-audit.mjs` | 0 |
+| `today-playtest-audit.mjs` | 0 |
+| `crew-playtest-audit.mjs` | 0 |
+| `firstrun-audit.mjs` | 0 |
+| `dayone-affordability-audit.mjs` | 1 |
+| `settings-safety-audit.mjs` | 0 |
+| `progress-playtest-audit.mjs` | 0 |
+| `leaderboard-honesty-audit.mjs` | 0 |
+| `breed-two-tap-audit.mjs` | 0 |
+| `after-await-event-lint.mjs` | 0 |
+| `boneyard-zoom-audit.mjs` | 0 |
+| `lab-conflict-audit.mjs` | 0 |
+| `lab-lock-recovery-audit.mjs` | 0 |
+| `r3-rest-audit.mjs` | 0 |
+| `collection-cell-audit.mjs` | 0 |
+| `r6-merge-audit.mjs` | 0 |
+| `r6-guards-audit.mjs` | 0 |
+| `r6-app-audit.mjs` | 0 |
+| `crew-presence-audit.mjs` | 0 |
+| `crew-capture-node-audit.mjs` | 0 |
+| `pet-parity-guard.mjs` | 0 |
+| `verify-tail-audit.mjs` | 0 |
+| `cloud-optout-transport-audit.mjs` | 0 |
+| `r4-restore-audit.mjs` | 0 |
+| `reachable-density-audit.mjs` | 0 |
+| `native-shell-comment-audit.mjs` | 0 |
+
+</details>
+
 ## v544 (2026-09-10)
 
 Changelog item: The off-hand brushes and spades are held properly now.
