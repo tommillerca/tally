@@ -65,12 +65,28 @@ exit 0
 - The verification-tail guard changes from the superseded 40-coin/comment contract to the authorized 340-coin/comment contract. Its unrelated missing-acorn subprocess proof remains unchanged. Other guard thresholds are retained.
 
 #### Proof output and guard comparison
+## R9 Round 2 audit fixture (2026-09-10)
+
+Frozen plan SHA256 verified: `c1c5ad88b1edbc7bb878b211c6ed2f5f3eb208aa1a1862a002b386bd2e3302b5`.
+The accepted production fix is unchanged. This checkout is the Tally root;
+its `CLAUDE.md` supplies the requested UI regression rules.
+
+Changed files: `tests/wardrobe-feedback-audit.mjs`, `tests/release-gate.mjs`,
+and `docs/CLAIMS.md`. The fixture now locates the granted item's rendered
+family tile and checks the displayed variant's name. The demo owns IR10-3,
+so granting IR10-1 does not guarantee a separate IR10-1 control. Pixel,
+announcement, haptic and timing assertions remain intact. The shared audit
+lifecycle declares 50 rows for the full run, 28 for F9 and 5 for M14.
+Completion requires the exact denominator; blocked runs retain exit 2.
+
+Local proof output:
 
 ```text
 node tests/unit.test.js
 384 passed, 0 failed
 exit 0
 
+<<<<<<< HEAD
 PURE census from tests/release-gate.mjs: 161 unique entries (minimum required: 156)
 Full sequential run: 160/161 exit 0; r6-guards-audit.mjs exit 1
 Cause: vNEXT used a quoted changelog item instead of the required Changelog item: line.
@@ -472,6 +488,40 @@ The first render must fail affordability assertions, the final render must pass,
 ```
 
 </details>
+=======
+node tests/wardrobe-feedback-audit.mjs
+AUDIT PLAN wardrobe-feedback-audit.mjs: 50 rows
+BLOCKED/INCOMPLETE after 0/50 rows: Error: listen EPERM: operation not permitted 127.0.0.1
+AUDIT END wardrobe-feedback-audit.mjs: FAILED; INCOMPLETE; rows=0/50; failed=0; unproven=0; exit=2
+
+node tests/wardrobe-feedback-audit.mjs --fault=f9 --case=f9
+AUDIT PLAN wardrobe-feedback-audit.mjs: 28 rows
+BLOCKED/INCOMPLETE after 0/28 rows: Error: listen EPERM: operation not permitted 127.0.0.1
+AUDIT END wardrobe-feedback-audit.mjs: FAILED; INCOMPLETE; rows=0/28; failed=0; unproven=0; exit=2
+
+node tests/wardrobe-feedback-audit.mjs --fault=m14 --case=m14
+AUDIT PLAN wardrobe-feedback-audit.mjs: 5 rows
+BLOCKED/INCOMPLETE after 0/5 rows: Error: listen EPERM: operation not permitted 127.0.0.1
+AUDIT END wardrobe-feedback-audit.mjs: FAILED; INCOMPLETE; rows=0/5; failed=0; unproven=0; exit=2
+```
+
+An isolated Node check of the actual resolver callback with catalogue-backed
+family membership resolves IR10-1 to the rendered IR10-3, and rejects a wrong
+slot or missing tile. This verifies fixture selection only, not browser pixels.
+Syntax and diff whitespace checks pass.
+
+Blocked requirement and proposed deviation: the sandbox refuses localhost
+listening, so a complete browser rerun and its full emitted row list cannot
+be supplied here. Zero browser rows ran. Independent review must run the
+full audit on a host that permits the local server and require 50/50 rows.
+The supplied plan records the reviewer's earlier 16-row green run and F9
+red evidence; those are supplied evidence, not new local measurements.
+No automatic approval review rejection occurred. No permission escalation,
+commit, push, publication, original-checkout edit or production redesign was
+performed. Changelog and version stamps remain unchanged for this audit-only
+repair. This report is advisory and does not claim completed browser proof.
+
+>>>>>>> 2824173f (round 2: fixture + declared rows)
 ## v546 (2026-09-10)
 
 R9 frozen work order, SHA256 d8b35d96060bbc02e9b623e195236dfa2b469aff0f17819aa4b9554ad82a7f99. Implementation is local and pending independent review. No commit, push or publication.

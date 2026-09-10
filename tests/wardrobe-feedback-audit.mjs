@@ -29,12 +29,17 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { boot, seed, sleep, serveTree } from './godmode.js';
+import { declareAudit, recordAuditRow, completeAudit } from './audit-lifecycle.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const flag = name => process.argv.find(a => a.startsWith(`--${name}=`))?.split('=')[1];
 const only = flag('case'), fault = flag('fault');
 if (only && !['f9', 'm14'].includes(only)) throw new Error('Unknown --case');
 if (fault && !['f9', 'm14'].includes(fault)) throw new Error('Unknown --fault');
+// F9: five slots times five rows, plus three off/on rows. M14: five rows.
+// The full run adds seventeen rows for the remaining controls and shared toast.
+const expectedRows = only === 'f9' ? 28 : only === 'm14' ? 5 : 50;
+declareAudit({ expectedRows });
 let source = process.argv.includes('--baseline')
   ? execFileSync('git', ['show', 'HEAD:js/app.js'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
   : readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');
@@ -47,6 +52,7 @@ if (fault) {
 let fails = 0, rows = 0, browser, srv;
 const ok = (name, pass, detail = '') => {
   rows++;
+  recordAuditRow(name, pass ? 'PASS' : 'FAIL');
   console.log(`${pass ? 'PASS' : 'FAIL'} ${name}${detail ? ': ' + detail : ''}`);
   if (!pass) fails++;
 };
@@ -168,8 +174,21 @@ try {
     ok(label, f.messages.length === 1 && f.messages[0].text === expected && f.messages[0].ms <= 300 && f.buzz.length === 1, JSON.stringify(f));
   };
   if (!only || only === 'f9') {
-    for (const [slot, item] of Object.entries(fixture.items)) {
+    for (const [slot, seededItem] of Object.entries(fixture.items)) {
       await wardrobe(slot);
+      // The demo already owns colourways, including IR10-3. A family tile
+      // shows its best owned variant while empty, not necessarily the id we
+      // granted. Tap that real tile and check the receipt for its displayed art.
+      const item = await page.evaluate(async ({ slot, id }) => {
+        const grid = document.querySelector(`.ward-grid[data-wslot="${slot}"]`);
+        const tile = [...grid.querySelectorAll('button[data-equip]')].find(el =>
+          el.dataset.equip === id || (el.dataset.famIds || '').split(' ').includes(id));
+        const { BH_BY_ID } = await import('./data/boneheadz.js');
+        const rendered = tile && BH_BY_ID[tile.dataset.equip];
+        if (!rendered || rendered.slot !== slot) throw new Error(`No rendered fixture tile for ${slot}: ${id}`);
+        return { id: rendered.id, name: rendered.name };
+      }, { slot, id: seededItem.id });
+      fixture.items[slot] = item;
       const pd = `.pd-slot[data-pd="${slot}"]`;
       ok(`F9 ${slot} starts empty`, !!(await page.$(`${pd} .pd-empty`)));
       const before = await shot(pd);
@@ -308,11 +327,12 @@ try {
     const ui = await page.evaluate(async () => (await import('./tests/ui-audit.js')).uiAudit());
     ok('Required UI audit', ui.pass && ui.checked.controls > 0, JSON.stringify(ui));
   }
-  if (!rows) throw new Error('No audit rows ran');
-  console.log(`${rows - fails} passed, ${fails} failed`);
+  if (rows !== expectedRows) throw new Error(`Expected ${expectedRows} audit rows, ran ${rows}`);
+  completeAudit();
+  console.log(`${rows - fails} passed, ${fails} failed; rows=${rows}/${expectedRows}`);
   process.exitCode = fails ? 1 : 0;
 } catch (error) {
-  console.error(`BLOCKED/INCOMPLETE after ${rows} rows: ${error.stack || error}`);
+  console.error(`BLOCKED/INCOMPLETE after ${rows}/${expectedRows} rows: ${error.stack || error}`);
   process.exitCode = 2;
 } finally {
   if (browser) await browser.close();
