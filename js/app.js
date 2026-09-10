@@ -242,14 +242,15 @@ const LIMITS = {
   age: { min: MIN_AGE, max: 120 },
   heightCm: { min: 90, max: 250 },
 };
-// last_seen is a server contact timestamp, never evidence of presence or absence.
-// Keep minute/hour precision only below one day. Missing/future clocks are unknown.
+// last_seen is a server contact timestamp. Contacts under six minutes read Online now.
+// Older contacts describe sync age, never absence. At a day, allow for delayed syncing.
+// Missing/future clocks are unknown.
 function onlineLabel(lastSeen) {
   const age = Date.now() - lastSeen;
   if (!Number.isFinite(lastSeen) || lastSeen <= 0 || age < 0) return { on: false, fresh: false, text: 'Sync time unavailable' };
   if (age >= 86400000) return { on: false, fresh: false, text: 'Awaiting a recent sync' };
   const mins = Math.floor(age / 60000);
-  if (mins < 6) return { on: true, fresh: true, text: 'Synced recently' };
+  if (mins < 6) return { on: true, fresh: true, text: 'Online now' };
   return { on: false, fresh: true, text: mins < 60 ? `Synced ${mins}m ago` : `Synced ${Math.floor(mins / 60)}h ago` };
 }
 function snapshotNotice(rows, key = 'lastSeen') {
@@ -12461,7 +12462,7 @@ function crewCardHtml(f, since) {
   return `<button class="cfan-card" data-fan="${esc(f.playerId)}">
     <span class="cfan-hit"></span>
     <div class="cfan-stage"></div>
-    ${ol.on ? '<span class="cfan-live" title="Synced recently"></span>' : ''}
+    ${ol.on ? '<span class="cfan-live" title="Online now"></span>' : ''}
     <span class="cfan-fstar" hidden>${ICONS.star(15)}</span>
     <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small><span class="cfan-title">${p.title ? esc(p.title) : p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}</span><span class="lv">LV ${p.level || 1}</span></small><small class="cfan-snapshot">${esc(ol.text)}</small>${since ? `<small class="cfan-since">${esc(since)}</small>` : ''}${
       /* CREW-13: spires had zero surface anywhere on the Crew tab. Skipped
@@ -12545,25 +12546,8 @@ async function renderFriends(el) {
   el.innerHTML = `
     <h1 class="page-h1">The Crew<span class="sub">You're <b>${esc(dispName)}</b> · <button class="link" id="crewEditName">${me.name ? 'change name' : 'pick a name'}</button></span></h1>
 
-    <!-- CREW-7, 2026-09-05: a sealed gift used to sit inside DELIVERIES,
-         under the fan, cheers, the leaderboard, the race and ADD A FRIEND --
-         measured at 1301-1754px of scroll on a 390x844 phone, off the first
-         screen every time. A gift is the one thing in this tab that is
-         genuinely pending, so while one is sealed it renders here, above
-         even the fan (which is the one thing Tom's 2026-08-08 ORDER MATTERS
-         ruling below otherwise puts first). Opening it (or there being none)
-         collapses this back to nothing. -->
-    <div class="card gift-top-card" id="giftTopCard" hidden>
-      <div class="card-title">A GIFT IS WAITING</div>
-      <div id="giftTopList"></div>
-    </div>
-
-    <!-- ORDER MATTERS HERE. Tom, 2026-08-08 (supersedes the same-day "greet with
-         the leaderboard" call): "the fan should be at the very top when you open
-         it and then the rest of the features can fall below." So: YOUR CREW as a
-         fan of cards first, the standings and the race under it, then what
-         arrived, then people to add. Your own friend code is REFERENCE, not a
-         greeting, so it stays at the bottom where you go looking for it. -->
+    <!-- Tom, 2026-09-09: greet with the fan, then notifications. Gifts stay
+         immediately below the fan with their OPEN control and pending tab badge. -->
     <div class="cfan-block">
       <div class="cfan-head"><span>YOUR CREW<b id="cfanCount"></b></span><i></i><small>SWIPE OR TAP</small></div>
       <div class="cfan-faves" id="cfanFaves" hidden></div>
@@ -12582,7 +12566,7 @@ async function renderFriends(el) {
              remembers itself would eventually hide most of someone's crew with no
              obvious reason why. -->
         <button class="cfan-online" id="cfanOnline" aria-pressed="false"
-                aria-label="Show only friends with a recent sync"><i class="live-dot"></i>Recent syncs</button>
+                aria-label="Show only friends online now"><i class="live-dot"></i>Online now</button>
       </div>
       <p class="cfan-nohit note" id="cfanNoHit" hidden></p>
       <div class="cfan-wrap" id="cfanWrap" hidden><div class="cfan-deck" id="cfanDeck"></div></div>
@@ -12608,11 +12592,12 @@ async function renderFriends(el) {
       <div id="cfanLoading" class="friends-loading">Loading your Crew...</div>
     </div>
 
-    <!-- CHEERS SIT DIRECTLY UNDER THE FAN, above the leaderboard and the race.
-         Tom, 2026-08-22: "it's very easy to pass them by". Position IS the fix:
-         DELIVERIES lives at the bottom of this tab, below three other cards, and
-         a message from a person cannot be filed under the archive. This is the
-         only card in the Crew tab that is somebody talking to you. -->
+    <div class="card gift-top-card" id="giftTopCard" hidden>
+      <div class="card-title">A GIFT IS WAITING</div>
+      <div id="giftTopList"></div>
+    </div>
+
+    <!-- Cheers follow the fan and pending gifts, before the standings. -->
     <div class="card cheers-card" id="cheersCard" hidden>
       <div class="card-title">CHEERS<span class="cheers-new" id="cheersNew" hidden></span></div>
       <div id="cheersList"></div>
@@ -12692,11 +12677,8 @@ async function renderFriends(el) {
     const giftCard = $('#giftTopCard', el), giftList = $('#giftTopList', el);
     if (!card || !list) return;
 
-    /* SEALED GIFTS, at the TOP of the tab (CREW-7). Tom, 2026-08-08: "its
-       boring to just have it appear with no fanfare or credit to the sender."
-       A gift you have not opened is the only thing in this whole tab that is
-       genuinely pending, so it gets its own card above the fold rather than
-       filed under DELIVERIES history. */
+    /* Sealed gifts sit immediately below the fan. The OPEN control and tab
+       badge persist until opened; gifts are not filed under delivery history. */
     if (giftCard && giftList) {
       if (!sealed.length) { giftCard.hidden = true; }
       else {
@@ -13130,7 +13112,7 @@ async function renderFriends(el) {
          case (people are asleep), so that message also says how to undo it. */
       noHit.textContent = !empty ? ''
         : fanQuery.trim() ? `Nobody in your Crew matches "${fanQuery}".`
-        : fanOnlineOnly ? 'No recent syncs in this selection. Tap Recent syncs again to see everyone.'
+        : fanOnlineOnly ? 'No friends online now in this selection. Tap Online now again to see everyone.'
         : 'Nobody in your Crew yet.';
     }
     wrap.hidden = empty;
@@ -24561,7 +24543,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v544'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v545'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

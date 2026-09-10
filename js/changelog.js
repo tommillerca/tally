@@ -9,6 +9,11 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 545, date: '2026-09-10', title: 'Online now, and your crew first', items: [
+    'Crew now says "Online now" for contacts under six minutes old, while older and unavailable sync times keep their existing wording.',
+    'Your Crew fan comes before waiting gifts, with gifts and cheers directly below it.',
+  ] },
+
   { n: 544, date: '2026-09-10', title: 'Held properly at last', items: [
     'The off-hand brushes and spades are held properly now.',
   ] },

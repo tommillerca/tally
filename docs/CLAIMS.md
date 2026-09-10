@@ -30,6 +30,22 @@ The operator's four rendered search rounds selected these offsets, superseding t
 
 Validation for this pending change: `node tests/unit.test.js` exits 0 with `384 passed, 0 failed`. All 159 PURE entries ran: 158 exit 0, `facegate-audit.mjs` exits 1 on the four requested offsets (brush overlap 28.53%/28.52%, spades 4.26%/4.44%, against 2%). All-PURE-green acceptance is unmet. Fresh renderer capture is blocked by `listen EPERM`; retain the exact offsets for independent review and reconcile the source facegate with rendered face visibility before assembly.
 
+## v545 (2026-09-10)
+
+Changelog item: Crew now says "Online now" for contacts under six minutes old, while older and unavailable sync times keep their existing wording.
+
+1. PROOF: crew-presence-audit.mjs, leaderboard-honesty-audit.mjs | REACH: Executes the production onlineLabel with a fixed clock. Fresh-state guard was RED on the initial checkout (3 passed, 1 failed), then GREEN (4 passed, 0 failed). Exact six-minute, hour and day boundaries, missing/invalid/future clocks and the delayed-sync notice retain their prior values. The honesty audit retains all 49 checks, including pending requests and empty/stale-own race rows. Its mixed-board stale prohibition targets the stale friend's rendered row so a fresh self row can say Online now. Node DOM doubles, no pixel claim.
+
+Changelog item: Your Crew fan comes before waiting gifts, with gifts and cheers directly below it.
+
+2. PROOF: crew-order-browser-audit.mjs | REACH: BLOCKED, rendered proof belongs to the operator under the frozen listen EPERM restriction. The new guard uses crew-browser-runner.mjs and crew-capture.mjs on an operator-selected local demo page. It seeds a sealed gift in tally-demo, measures actual fan/notification rectangles at 390px and 430px, requires the old placement mutation to fail, checks OPEN by scroll and hit testing, and writes screenshots and JSON outside the checkout. It exits 97 here without operator CDP configuration. Command: CREW_CAPTURE_CDP=http://127.0.0.1:9222 CREW_CAPTURE_URL='http://127.0.0.1:PORT/?demo' node tests/crew-order-browser-audit.mjs. No rendered result is claimed.
+
+Urgency and reach: the existing Crew tab badge includes incoming requests and sealed gifts. A sealed gift retains its badge until explicitly opened and has no local expiry; its OPEN card is now immediately below the fan. Friend requests retain Accept/Decline under Add a Friend and count in the tab badge until resolved. The badge points to the tab, not directly to a request, so reaching requests still takes scrolling. Opening Crew still marks request IDs as known for future notifications. No new push or jump-to-request behavior is claimed. The order guard's reachability and screenshot results remain unproven until the operator runs it.
+
+Validation: `node tests/unit.test.js` exited 0 with `384 passed, 0 failed`. `node tests/leaderboard-honesty-audit.mjs` exited 0 with `49 passed, 0 failed`. `node tests/crew-presence-audit.mjs` exited 0 with `4 passed, 0 failed`; the identical guard against the saved initial app.js exited 1 with `3 passed, 1 failed`, solely on the requested fresh copy. `node docs/train542-integration/run-pure.mjs /private/tmp/crew-presence-proof/final-pure` enumerated all 160 unique PURE entries from the release gate declaration and registrations, ran each in a separate Node process, and reported `160/160 PURE entries exit 0`. Full enumeration, per-process streams and results are in that output directory. The first census exposed an output-path validation lint failure in the new browser audit; it was corrected before the final complete run. Coverage-only exits 0. `node tests/crew-order-browser-audit.mjs` exits 97 here, so browser acceptance is still BLOCKED. No commit, push or publication was performed.
+
+Scope: only the online label, its associated Crew copy and Crew notification placement change in app.js. No race or leaderboard renderer is edited. No version stamp is advanced. No design deviation; browser acceptance remains BLOCKED as specified by the frozen order.
+
 ## v542 (2026-09-09)
 
 Changelog item: Shiny pets now hold the same Base collection cell in the Kennel and Stable loss warnings, even with an unsupported saved colour.

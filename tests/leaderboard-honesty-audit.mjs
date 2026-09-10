@@ -54,7 +54,7 @@ function harness(age, fleet = false) {
 }
 const scenarios = [['fresh', 60000, false], ['day-old', DAY, false], ['week-old', 7 * DAY, false], ['fleet-stale', 7 * DAY, true]];
 for (const [label, age, fleet] of scenarios) {
-  const expected = age < DAY ? 'Synced recently' : 'Awaiting a recent sync';
+  const expected = age < DAY ? 'Online now' : 'Awaiting a recent sync';
   for (const surface of ['leaderboard', 'fan card', 'fan selection', 'requests', 'profile', 'podium', 'newcomers', 'race', 'paddock']) {
     await check(`${label}: ${surface}`, async () => {
       const h = harness(age, fleet); let html;
@@ -71,7 +71,16 @@ for (const [label, age, fleet] of scenarios) {
       if (surface === 'race') { await vm.runInContext('hydrateRace()', h.ctx); html = h.node('#raceCard').innerHTML; }
       const copy = text(html);
       assert.ok(copy.includes('Pal'), 'CONTROL player stays reachable');
-      assert.doesNotMatch(copy, /online now|\bonline\b|last seen|\b\d+d ago|\byesterday\b/i);
+      assert.doesNotMatch(copy, /last seen|\b\d+d ago|\byesterday\b/i);
+      if (age >= 6 * 60000) {
+        // Mixed boards include a fresh self row. Grade the stale friend's own
+        // rendered row so Online now cannot leak onto it or ban the fresh self.
+        const staleHtml = fleet ? html : surface === 'leaderboard'
+          ? html.match(/data-lbview="pal"[^]*?(?=<div class="lb-row|$)/)?.[0]
+          : surface === 'race' ? html.match(/<button[^>]*data-raceview="pal"[^]*?<\/button>/)?.[0] : html;
+        assert.ok(staleHtml, 'CONTROL stale player row exists');
+        assert.doesNotMatch(text(staleHtml), /\bonline\b/i);
+      }
       if (!['podium', 'requests'].includes(surface)) assert.ok(copy.includes(expected), `expected "${expected}", got ${copy}`);
       if (['profile', 'podium', 'requests', 'paddock'].includes(surface)) assert.match(copy, /last shared/i);
       if (fleet && ['leaderboard', 'podium', 'race', 'fan selection'].includes(surface)) assert.match(copy, /No recent updates have reached this view/);
@@ -101,7 +110,7 @@ for (const [label, age] of scenarios) await check(`${label}: recent-sync filter`
     const noHit = {}, empty = fanOrder.length === 0;
     ${app.slice(start, end)}; globalThis.filterResult = { count: fanOrder.length, copy: noHit.textContent };`, h.ctx);
   if (age < DAY) assert.equal(h.ctx.filterResult.count, 1, 'CONTROL fresh friend is selectable');
-  else { assert.equal(h.ctx.filterResult.count, 0); assert.equal(h.ctx.filterResult.copy, 'No recent syncs in this selection. Tap Recent syncs again to see everyone.'); }
+  else { assert.equal(h.ctx.filterResult.count, 0); assert.equal(h.ctx.filterResult.copy, 'No friends online now in this selection. Tap Online now again to see everyone.'); }
 });
 for (const [label, age, fleet] of scenarios) await check(`${label}: map race strip`, () => {
   const h = harness(age, fleet);
@@ -144,7 +153,7 @@ await check('CONTROL timestamp boundaries and unavailable clocks', () => {
     const state = vm.runInContext('onlineLabel(stamp)', ctx);
     assert.equal(state.on, false); assert.equal(state.text, 'Sync time unavailable');
   }
-  for (const [age, expected] of [[0, 'Synced recently'], [6 * 60000, 'Synced 6m ago'], [3600000, 'Synced 1h ago'], [DAY - 1, 'Synced 23h ago'], [DAY, 'Awaiting a recent sync']]) {
+  for (const [age, expected] of [[0, 'Online now'], [6 * 60000, 'Synced 6m ago'], [3600000, 'Synced 1h ago'], [DAY - 1, 'Synced 23h ago'], [DAY, 'Awaiting a recent sync']]) {
     ctx.stamp = now - age;
     assert.equal(vm.runInContext('onlineLabel(stamp).text', ctx), expected);
   }
@@ -156,8 +165,8 @@ await check('CONTROL shared notice is bounded to available snapshots', () => {
   assert.doesNotMatch(vm.runInContext('snapshotNotice([{lastSeen: Date.now()}, {lastSeen: 1}])', ctx), /No recent updates/);
 });
 await check('filter copy and stale fan notice are wired', () => {
-  assert.ok(app.includes('aria-label="Show only friends with a recent sync"'), 'recent-sync filter label');
-  assert.ok(app.includes('No recent syncs in this selection. Tap Recent syncs again to see everyone.'), 'honest empty filter');
+  assert.ok(app.includes('aria-label="Show only friends online now"'), 'recent-sync filter label');
+  assert.ok(app.includes('No friends online now in this selection. Tap Online now again to see everyone.'), 'honest empty filter');
   assert.ok(app.includes('snapshotNotice(data.friends)'), 'shared Crew notice');
   assert.ok(!app.includes('Their stats will show once they next open the app'), 'no promise that app open fixes stats');
 });
