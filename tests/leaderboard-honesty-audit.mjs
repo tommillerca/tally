@@ -170,5 +170,28 @@ await check('filter copy and stale fan notice are wired', () => {
   assert.ok(app.includes('snapshotNotice(data.friends)'), 'shared Crew notice');
   assert.ok(!app.includes('Their stats will show once they next open the app'), 'no promise that app open fixes stats');
 });
+// Step race regression: execute hydrateRace itself, including its lane markup.
+for (const staleAbove of [false, true]) await check(`mixed race: fresh lanes and own standing (stale above=${staleAbove})`, async () => {
+  const h = harness(60000);
+  const me = h.ctx.raceFixture.players[1];
+  h.ctx.raceFixture.players.push({ ...h.p, playerId: 'idle', name: 'Idle', rank: 3, steps: 5000, seenAt: now - 3 * DAY });
+  if (staleAbove) h.p.seenAt = now - DAY;
+  await vm.runInContext('hydrateRace()', h.ctx);
+  const html = h.node('#raceCard').innerHTML;
+  const lanes = [...html.matchAll(/class="race-lane [^]*?<i style="width:([\d.]+)%"/g)];
+  assert.equal(lanes.length, 3, 'CONTROL all three production lanes rendered');
+  assert.ok(Number(lanes[1][1]) > 0, 'fresh own lane must have a non-zero computed bar');
+  assert.equal(Number(lanes[2][1]), 0, 'stale lane must have zero computed width');
+  assert.match(lanes[2][0], /race-pending-track/);
+  assert.equal(Number(lanes[0][1]) > 0, !staleAbove);
+  assert.match(html, /Last shared standings: You are <b>2th<\/b>/);
+  assert.match(html, /Showing last shared snapshots/);
+  assert.equal(/At last sync, you were/.test(html), !staleAbove, 'gap requires both own and adjacent row fresh');
+  me.seenAt = now - DAY;
+  await vm.runInContext('hydrateRace()', h.ctx);
+  const staleOwn = h.node('#raceCard').innerHTML;
+  assert.match(staleOwn, /Standings await recent updates/);
+  assert.doesNotMatch(staleOwn, /At last sync, you were/);
+});
 console.log(`LEADERBOARD HONESTY: ${passed} passed, ${failed} failed`);
 process.exitCode = failed ? 1 : 0;

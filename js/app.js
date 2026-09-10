@@ -13560,8 +13560,12 @@ async function renderFriends(el) {
        when it already sent a real rank. Absent and un-computable reads
        "unranked", never a made-up position. */
     const own = await weekStepsNow();
-    const { rows, mine, behind, standing, aboveName } = social.raceStanding(race.players || [], race, wk, own, await social.displayName(), myFit, ordinal, esc);
-    const comparisonsFresh = (race.players || []).every(p => onlineLabel(p.seenAt).fresh);
+    const { rows, mine, behind, standing, aboveName, aboveRow, yourRank } = social.raceStanding(race.players || [], race, wk, own, await social.displayName(), myFit, ordinal, esc);
+    const ownFresh = !!mine && onlineLabel(mine.seenAt).fresh;
+    const gapFresh = ownFresh && !!aboveRow && onlineLabel(aboveRow.seenAt).fresh;
+    // The rank is your snapshot; the embedded gap also needs the neighbour's.
+    const ownStanding = !gapFresh && mine && yourRank > 1
+      ? `You are <b>${ordinal(yourRank)}</b>` : standing;
     const raceNotice = snapshotNotice(race.players || [], 'seenAt');
     const lead = rows.length ? rows[0].steps : 0;
     /* CREW-3: on a device's first-ever race week, a gap (to first OR to the
@@ -13581,7 +13585,7 @@ async function renderFriends(el) {
         <span class="gbn-ico race-ico">${badgePixHtml('badge-footprint', 24)}</span>
         <span class="gbn-txt">
           <span class="race-h"><b>THE STEP RACE</b><span class="race-clock">${clock.toUpperCase()}</span></span>
-          <small>${!rows.length ? 'No steps have reached this board yet.' : comparisonsFresh ? 'Last shared standings: ' + standing : 'Standings await recent updates.'}</small>
+          <small>${!rows.length ? 'No steps have reached this board yet.' : ownFresh ? 'Last shared standings: ' + ownStanding : 'Standings await recent updates.'}</small>
         </span>
         <span class="gbn-chev">›</span>
       </summary>
@@ -13593,7 +13597,8 @@ async function renderFriends(el) {
           ${rows.map(p => {
             // A neutral rail keeps the figure visible while comparisons await
             // recent snapshots. Never give zero steps a decorative minimum.
-            const pct = comparisonsFresh && lead > 0 ? Math.max(0, Math.min(100, p.steps / lead * 100)) : 0;
+            const laneFresh = onlineLabel(p.seenAt).fresh;
+            const pct = laneFresh && lead > 0 ? Math.max(0, Math.min(100, p.steps / lead * 100)) : 0;
             const fit = { ...(p.outfit || {}) };
             const placeholder = !BH_BY_ID[fit.B] || !BH_BY_ID[fit.SK];
             if (!BH_BY_ID[fit.B]) fit.B = 'B0-1';
@@ -13620,10 +13625,10 @@ async function renderFriends(el) {
               <span class="rk" aria-label="Recorded rank ${p.rank}">${p.rank}</span>
               <div class="bd">
                 <div class="nm"><b>${esc(p.name)}</b>${raceFreshHtml(p, !(race.players || []).includes(p))}<span class="st">${p.steps.toLocaleString()}</span></div>
-                <div class="${comparisonsFresh ? 'track' : 'race-pending-track'}" aria-label="${comparisonsFresh ? `${p.steps.toLocaleString()} recorded steps` : 'Progress comparison unavailable until recent syncs'}"><i style="width:${pct}%"></i>
+                <div class="${laneFresh ? 'track' : 'race-pending-track'}" aria-label="${laneFresh ? `${p.steps.toLocaleString()} recorded steps` : 'Progress comparison unavailable until recent syncs'}"><i style="width:${pct}%"></i>
                   <span class="run" style="left:clamp(14px, ${pct}%, calc(100% - 14px))"${placeholder ? ' role="img" aria-label="Placeholder figure: outfit not shared"' : ''}>${avatarLayersHtml(fit, { noYard: true, skip: ['BG', 'C'], foreign: true })}</span>
                 </div>
-                ${!comparisonsFresh ? '<span class="race-fresh">Progress comparison awaits recent syncs.</span>' : ''}
+                ${!laneFresh ? '<span class="race-fresh">Progress comparison awaits recent syncs.</span>' : ''}
               </div>
             </${tag}>`;
           }).join('')}
@@ -13637,7 +13642,7 @@ async function renderFriends(el) {
              anyone would act on. */ ''}
         ${firstRace
           ? `<div class="race-gap">Your first race${friendCount ? `. ${friendCount} friend${friendCount === 1 ? '' : 's'} ${friendCount === 1 ? 'is' : 'are'} in it` : ''}.</div>`
-          : comparisonsFresh && behind ? `<div class="race-gap">At last sync, you were <b>${behind.toLocaleString()} steps</b> behind ${esc(aboveName || 'the racer above you')}${behind / 5500 * 60 <= 60 ? ` · about <b>${Math.max(1, Math.round(behind / 5500 * 60))} minutes</b> of walking` : ''}.</div>` : ''}
+          : gapFresh && behind ? `<div class="race-gap">At last sync, you were <b>${behind.toLocaleString()} steps</b> behind ${esc(aboveName || 'the racer above you')}${behind / 5500 * 60 <= 60 ? ` · about <b>${Math.max(1, Math.round(behind / 5500 * 60))} minutes</b> of walking` : ''}.</div>` : ''}
         ${podium.length ? `<div class="race-purse">
           <span class="lab">When it settles, the top ${podium.length} take</span>
           <div class="rows">
@@ -24644,7 +24649,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v557'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v558'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

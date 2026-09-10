@@ -374,7 +374,7 @@ PURE.push('firstrun-audit.mjs'); // Frozen first-run: interrupted kit, onboardin
 PURE.push('dayone-affordability-audit.mjs'); // Frozen grant: real welcome wallet buys one rack piece; empty/funded and legacy controls, Node only.
 PURE.push('settings-safety-audit.mjs'); // Settings/file-import loss review, durable undo, quota refusal, stale review and transaction abort/retry; Node only.
 PURE.push('progress-playtest-audit.mjs'); // Frozen Progress lane: badge abort/retry, real charts, sleep and detail handlers; no sockets.
-PURE.push('leaderboard-honesty-audit.mjs'); // Staleness copy across crew, leaderboard, podium and race; Node only.
+PURE.push('leaderboard-honesty-audit.mjs'); // Staleness copy and mixed-freshness Step Race production lanes, standing and gaps; Node only.
 PURE.push('breed-two-tap-audit.mjs'); // Real #doBreed handler driven through a full two-tap breed; roster 4->3.
 PURE.push('after-await-event-lint.mjs');
 PURE.push('offhand-anchor-audit.mjs'); // the grip GAP of every verified held item stays on the hand. Node-only: all avatar layers share one 640 canvas and one box, so relative registration is valid in source space. Proven red on the v544 art it replaces.

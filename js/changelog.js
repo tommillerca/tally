@@ -10,6 +10,10 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 558, date: '2026-09-10', title: 'The step race shows progress again', items: [
+  'The Step Race now shows progress for racers with recent syncs even when someone else is awaiting a sync. Your standing stays visible when your own sync is recent, and step gaps appear when both you and the racer above have recent syncs.',
+  ] },
+
   { n: 557, date: '2026-09-10', title: 'The Studio opens properly', items: [
     'The Studio was unusable: the button that opens the sticker tray sat underneath the bottom navigation, and the picture blocked scrolling, so there was no way to reach it. Both are fixed.',
   ] },
