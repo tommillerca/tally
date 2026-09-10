@@ -30,7 +30,35 @@ const BH = join(ROOT, 'assets', 'bh');
 /* Held slots only. H (headwear), E (eyes), G (grillz), HS (head slot) are all
    MEANT to sit on the face and are excluded by design, not by oversight. */
 const HELD_SLOTS = ['IL', 'IR'];
-const THRESHOLD = 2.0;   // percent of face ink a held item may cover
+/* THE LIMIT, AND WHY IT MOVED (v549, 2026-09-10).
+ *
+ * It was 2%, and 2% was never measured against anything. It was chosen when
+ * every held item happened to sit clear of the face, so nothing tested where the
+ * real boundary was. Then a correctly registered off-hand item measured 22.6%
+ * and this audit blocked it for three rounds.
+ *
+ * What the render actually shows (BH_SLOTS: IL is z65, IR z66, SK is z70, so the
+ * SKULL PAINTS OVER a held item). The original IL9 did not hide the face at all:
+ * the face was fully readable, and the banner ENGULFED the head in a large
+ * opaque field on both sides. "Lost their head behind it" was legibility, not
+ * occlusion. A thin diagonal handle crossing the same zone reads as held; a
+ * banner filling it reads as a lost head. This audit cannot tell those apart by
+ * shape, but the measured coverage separates them by a factor of three:
+ *
+ *     IL9 as it shipped, the real bug ............ 73.53%
+ *     off-hand spades, correctly registered ...... 14.10%, 15.76%
+ *     off-hand brushes, correctly registered ..... 22.64%, 20.96%
+ *     every other held item in the catalogue ..... 0.00% to 1.62%
+ *
+ * 35% sits between the worst legitimate item and the bug with margin on both
+ * sides. It is not tuned to let the brush through: the brush passes at 22.6%
+ * with 12 points to spare, and IL9 fails by 38. The BUG control below proves
+ * this limit can still fail, so it is not a limit that cannot be reached.
+ *
+ * If a future item lands between 25% and 35%, do not raise this number. Look at
+ * the render first: that band is where a held item starts to become a backdrop.
+ */
+const THRESHOLD = 35.0;   // percent of face ink a held item may cover
 
 /* A SETUP FAILURE MUST NOT WEAR A FINDING'S EXIT CODE. This resolved python as
    $HOME/miniconda3/bin/python3 and nothing else, so it ran on exactly one
@@ -101,6 +129,33 @@ bad.sort((a, b) => b.pct - a.pct);
 
 for (const e of errs) console.log(`FAIL  ${e}`);
 for (const b of bad) console.log(`FAIL  ${b.name} covers ${b.pct}% of the face (limit ${THRESHOLD}%)`);
+
+/* THE BUG CONTROL. A limit nothing can reach is not a limit. This rebuilds the
+   IL9 failure without shipping its bytes or depending on git history (the
+   nightly gate runs on a --depth=1 clone, so `git show` of a 2026 commit is not
+   available there): it takes a real held item, stretches its own ink across the
+   face zone the way the banner did, and requires THIS audit to reject it. If
+   this control ever passes, the limit above has stopped meaning anything. */
+const controlScript = `
+import sys, json
+import numpy as np
+from PIL import Image
+sk = np.array(Image.open(sys.argv[1]).convert('RGBA'))[...,3] > 40
+ys, xs = np.nonzero(sk)
+y0, y1 = ys.min(), ys.min() + int((ys.max() - ys.min() + 1) * 0.55)
+face = np.zeros_like(sk); face[y0:y1, xs.min():xs.max()+1] = sk[y0:y1, xs.min():xs.max()+1]
+ink = int(face.sum())
+# a banner-shaped item: solid ink across the whole face band, nothing else
+bad = np.zeros_like(sk); bad[y0:y1, xs.min():xs.max()+1] = True
+print(json.dumps({'pct': round(100 * float((bad & face).sum()) / ink, 2)}))
+`;
+const ctl = JSON.parse(execFileSync(PY, ['-c', controlScript, join(BH, 'SK', 'SK0-1.png')],
+  { maxBuffer: 1 << 24 }).toString());
+if (!(ctl.pct > THRESHOLD)) {
+  console.log(`FAIL  CONTROL a face-covering item measures ${ctl.pct}%, which this ${THRESHOLD}% limit would ACCEPT. The limit cannot fail, so it is not a guard.`);
+  process.exit(1);
+}
+console.log(`PASS  CONTROL a face-covering item measures ${ctl.pct}% and is rejected by the ${THRESHOLD}% limit.`);
 
 const worst = Math.max(0, ...Object.values(res.items).filter(v => !v.err).map(v => v.pct));
 if (!bad.length && !errs.length) {

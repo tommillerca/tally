@@ -17513,8 +17513,15 @@ async function renderCharacter(wrap, tab, opts = {}) {
          re-renders the screen and the cell is gone, so it is a no-op there. */
       cell.addEventListener('click', () => setTimeout(() => { if (cell.isConnected) hydratePackArt(cell, '.ward-art[data-art]'); }, ARM_COOLOFF_MS + 20));
       const warning = `Tap again: takes off ${wornGear.name}, ${gearLabel(wornGear).replace(/\+/g, '-')}`;
+      /* THE TELL IS THE DASHED EDGE, NOT A LABEL. v548 printed "2 taps" on every
+         one of these tiles. Tom, 2026-09-10: "wardobe saying '2 taps' everywhere
+         is such a useless and confusing text in the wardrobe. what was the point
+         of that". He is right: the words say what the CONTROL wants, not what
+         happens to the player, and repeating them across a grid is noise. The
+         contract still reads before the first tap through the dashed border, and
+         the first tap still names exactly what would come off. The screen reader
+         label below keeps the sentence, where repetition costs nothing. */
       cell.classList.add('ward-two-tap');
-      cell.insertAdjacentHTML('beforeend', '<span class="ward-arm-cue">2 taps</span>');
       cell.setAttribute('aria-label', `${cell.getAttribute('aria-label') || cell.title || cell.textContent.trim()}. ${warning}`);
       cell.title = `${cell.title}. ${warning}`;
       armToConfirm(cell, `Tap again: takes off ${wornGear.name}, ${gearLabel(wornGear).replace(/\+/g, '-')}`, () => doEquip(cell), {
@@ -24597,7 +24604,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v548'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v549'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

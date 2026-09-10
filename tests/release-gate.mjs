@@ -375,7 +375,9 @@ PURE.push('settings-safety-audit.mjs'); // Settings/file-import loss review, dur
 PURE.push('progress-playtest-audit.mjs'); // Frozen Progress lane: badge abort/retry, real charts, sleep and detail handlers; no sockets.
 PURE.push('leaderboard-honesty-audit.mjs'); // Staleness copy across crew, leaderboard, podium and race; Node only.
 PURE.push('breed-two-tap-audit.mjs'); // Real #doBreed handler driven through a full two-tap breed; roster 4->3.
-PURE.push('after-await-event-lint.mjs'); // No async listener may read currentTarget after an await.
+PURE.push('after-await-event-lint.mjs');
+PURE.push('offhand-anchor-audit.mjs'); // the grip GAP of every verified held item stays on the hand. Node-only: all avatar layers share one 640 canvas and one box, so relative registration is valid in source space. Proven red on the v544 art it replaces.
+ // No async listener may read currentTarget after an await.
 PURE.push('boneyard-zoom-audit.mjs'); // Real view boot/teardown and scoped camera policy; device pinch verification owed.
 PURE.push('lab-conflict-audit.mjs'); // Offline pet/slot collisions, encrypted reconnect, retained receipts and honest recovery copy; Node only.
 PURE.push('lab-lock-recovery-audit.mjs'); // Lab fence recovers after a mid-transaction crash, incl. nickname-first and auto-equip.
