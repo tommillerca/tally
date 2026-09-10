@@ -29,7 +29,7 @@ export const NEXT_CHANGES = [
  * The dot: changelogLatest reads CHANGES, so a silent build moves no "new since
  * you last looked" dot. That is the point -- there is nothing for a player to
  * go and read. */
-export const SILENT_BUILDS = [551];
+export const SILENT_BUILDS = [551, 552];
 
 export const CHANGES = [
 

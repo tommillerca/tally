@@ -1,5 +1,104 @@
 # What each patch note claims, and what backs it
 
+## v552 (2026-09-10)
+
+SILENT BUILD, declared in `SILENT_BUILDS` (js/changelog.js). The Studio stays unlisted at
+Tom's instruction, and the other two changes are corrections to things shipped hours ago,
+so nothing here is announced. This section is the only record of v552.
+
+### The confirm bar floats only once there is something to confirm
+
+Tom, 2026-09-10: "you regressed on wardrobe somehow and now when you go to the floating
+wear it is back it's really annoying."
+
+Not a regression: it is v550 doing exactly what the R9 order asked. Before v550 the bar
+appeared only AFTER a look was chosen, which is why the second step was undiscoverable
+("transmog is unreachable, and one early return hides the second step"). v550 made it
+render at rest. What v550 got wrong was leaving it STICKY at rest, so an inert, disabled
+bar hovered over the paper-doll grid for the entire visit, covering the PANTS and SOCKS
+tiles while offering nothing.
+
+Presence and floating are now separate. At rest the bar sits in the flow at the end of
+`.mog-dock`, below the look grid, still saying what the next step is. The moment a look is
+chosen it becomes `position: sticky; bottom: 0` and comes to the thumb, which is the only
+reason the sticky behaviour was written.
+
+1. PROOF: wardrobe-noise-audit.mjs | REACH: both halves are asserted, so neither can be
+   lost to the other: the resting rule must be `position: static` and must NOT be sticky,
+   and the `.armed` rule must be `position: sticky; bottom: 0`. The existing ARRIVAL and
+   PREVIEW rows still execute the production renderer and still require the resting bar to
+   be present, unarmed, disabled and carrying no commit action, so this fix cannot be
+   "corrected" by deleting the bar again and reopening the v550 bug.
+
+### The Studio entry moved into the fit rail, with Tom's camera
+
+Tom: the Wardrobe header is "a mess of misaligned buttons with different fonts sizes
+placements etc obviously including your entry into the studio, for now move the studio
+button somewhere."
+
+v551 hung it on its own right-aligned line as a bare underlined link, which was one more
+alignment to get wrong. It is now a `.fit-chip` in the rail beside "+ Save this fit" and
+"Take it all off": the same height, radius, border, font and gap, because it is the same
+class, not because two rules happen to agree. `.fit-chip.studio` adds the icon's size and
+nothing else, and the audit fails if it starts declaring anything more.
+
+The full header rejig Tom asked for is NOT done here. This is the "for now move it"
+half only.
+
+### Two icons, Tom's own PixelLab art
+
+`assets/icons-pix/camera.png` (Studio) and `assets/icons-pix/lab.png` (Laboratory), both
+48x48 RGBA, installed byte-for-byte as supplied and registered in `PIX_CUR`.
+
+The Laboratory room previously drew `pixCur('potion', 48)`. `potion` is the SHARED vial
+that `revenant-draught` and `spectral-fury` also point at, so a room and a consumable were
+one picture. Measured against the shipped tier before going in: camera 43 colours with ink
+42x33, lab 44 colours with ink 42x45, against potion.png's 38 colours and 28x42 ink in the
+same 48px box. Neither is an outlier.
+
+2. PROOF: studio-audit.mjs, stable-rooms-top-audit.mjs, icon-inventory-audit.mjs | REACH:
+   the entry markup is executed from source and must be a `.fit-chip studio` button that
+   still says what it opens, with controls proving a promoted `btn primary` and a return to
+   the old bare `studio-link` both go red; it must sit between the save and strip chips in
+   the rail, and the old `wardrobe-studio-entry` markup must be gone rather than orphaned.
+   The real click handler is executed and must reach `#/studio`. Both PNGs must exist on
+   disk and be registered in PIX_CUR. The Stable rooms audit pins the Laboratory tile's
+   `src` per tile across 18 rendered cases, so a silent swap back to the shared vial goes
+   red. Not proven here: rendered prominence and touch reach, which are the operator
+   render recorded below.
+
+### Operator verification
+
+PURE **165/165, red=0**, node v22.22.2. Three reds were found and fixed on the way, and
+all three were the real thing rather than drift:
+
+- `unit.test.js` R23 F8 and `wardrobe-noise-audit`'s FITS rows execute the real fit rail,
+  which now reaches `pixCur` and `ICONS.camera`. Both died on `pixCur is not defined`. The
+  collaborators are supplied and both rows now assert the chip is there and in the right
+  place, so the stubs are checks and not holes.
+- `stable-rooms-top-audit` pinned the Laboratory tile to `potion.png` across 18 cases and
+  caught the icon swap, which is exactly its job. Re-pinned to `lab.png` with the reason.
+- `claim-evidence-lint` refused v552 for having no CLAIMS section, which is the guard added
+  in v551 doing what it was written for.
+
+Rendered and MEASURED at 430x932 in the real app:
+
+- The three chips now share one row: "+ Save this fit" at x=16, "The Studio" at x=140,
+  "Take it all off" at x=275, all at y=321, all 44px tall, all 13px, all 12px radius.
+  That is the alignment, measured, not asserted.
+- At rest the confirm bar is `position: static` at y=1547 on a 932px viewport, so it is
+  out of the paper doll's way entirely; the PANTS and SOCKS tiles it used to cover are
+  visible again.
+- On choosing a look it is `position: sticky` at y=754 of 932, its Wear it control is
+  inside the viewport, and a tap at the control's centre hit-tests to `BUTTON.btn mog-go`.
+- The Stable rooms serve `badge-signpost.png`, `lab.png` and `paw.png` at 48x48. The
+  Laboratory draws the fusion chamber.
+
+NOT done here, and Tom asked for it: the full Wardrobe header rejig above the paper doll.
+The level pill, the bone count, the looks pill and the fits count are still four different
+treatments at four different alignments. Only the Studio entry was moved.
+
+
 
 
 ## v551 (2026-09-10)

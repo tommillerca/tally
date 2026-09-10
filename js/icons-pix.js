@@ -99,6 +99,12 @@ const PIX_CUR = {
      as one. He picked the cold pot on 2026-08-24, and cold is the right one for
      that slot: the card next to it says "Empty pot". */
   cauldron: 'cauldron', potion: 'potion',
+  /* Tom's own 48px PixelLab art, 2026-09-10. `lab` is the Laboratory ROOM, which
+     used to borrow `potion` above and so drew the same picture as a consumable.
+     `camera` is the Studio. Both measured against the shipped set before they
+     went in: 43 and 44 colours against potion.png's 38, ink 42x33 and 42x45 in a
+     48px box, so neither is an outlier for this tier. */
+  lab: 'lab', camera: 'camera',
   tombstone: 'tombstone',
   /* keyed by the icons-pack id, so badgePixHtml can look it up directly. */
   'badge-skull': 'badge-skull', 'badge-trophy': 'badge-trophy',

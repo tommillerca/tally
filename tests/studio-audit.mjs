@@ -1,7 +1,7 @@
 // PURE: real PNG decode, Canvas rasterisation and encoding in Node. No browser,
 // server or screen. Native permission sheets and visual quality remain unproven.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
@@ -216,36 +216,69 @@ export async function checkStudio() {
   studioPlan(boundaryLook);
   assert.match(app, /tab === 'studio'\) done = renderStudio\(el\)/);
   assert.match(app, /#wardrobeStudio[^\n]+location.hash = '#\/studio'/);
-  // Source/handler guard for the quiet entry. Actual visual prominence and hit
-  // testing remain the operator's browser proof, not a claim from this DOM double.
+  /* THE ENTRY MOVED, 2026-09-10. Tom: the Wardrobe header is "a mess of
+     misaligned buttons with different fonts sizes placements etc obviously
+     including your entry into the studio, for now move the studio button
+     somewhere". v551 hung it on its own right-aligned line as a bare underlined
+     link, which was one more alignment to get wrong. It is now a .fit-chip in
+     the fit rail beside "+ Save this fit" and "Take it all off".
+     The contract this grades changed with it, and is STRICTER, not looser: the
+     old rows asserted a bare text link in isolation; these assert it shares the
+     rail's own class, so it cannot drift into its own font, height or spacing
+     without going red. Visual prominence and hit testing are still the
+     operator's browser proof, never a claim from this DOM double. */
   const entryLine = app.split('\n').find(line => line.includes('id="wardrobeStudio"'));
-  const entry = tab => vm.runInNewContext(entryLine.trim().slice(2, -1), { tab });
-  const wardrobeEntry = entry('wardrobe');
-  const quietEntry = html => {
-    assert.match(html, /^<div class="wardrobe-studio-entry"><button class="studio-link" id="wardrobeStudio">The Studio<\/button><\/div>$/);
-    assert.doesNotMatch(html, /hidden|disabled|badge|primary|\bbtn\b|<details/);
+  const entry = vm.runInNewContext('`' + entryLine.trim() + '`', {
+    pixCur: () => '<img class="ico-pix" src="assets/icons-pix/camera.png" width="24" height="24" alt="">',
+    ICONS: { camera: () => '<svg class="ico"></svg>' },
+  });
+  const railEntry = html => {
+    // It IS a fit chip: same class as the two controls beside it, so it inherits
+    // their height, radius, font and gap rather than carrying its own.
+    assert.match(html, /^<button class="fit-chip studio" id="wardrobeStudio" type="button">/, 'the entry must be a .fit-chip in the rail');
+    assert.match(html, /<\/button>$/);
+    assert.ok(html.includes('The Studio'), 'the entry must still say what it opens');
+    assert.doesNotMatch(html, /hidden|disabled|badge|primary|<details/, 'the entry stays a plain chip');
   };
-  quietEntry(wardrobeEntry);
-  assert.throws(() => quietEntry(wardrobeEntry.replace('studio-link', 'btn primary')), /AssertionError/, 'CONTROL loud primary entry must fail');
-  assert.throws(() => quietEntry(''), /AssertionError/, 'CONTROL missing entry must fail');
-  for (const tab of ['today', 'shop', 'crates', 'talents']) assert.equal(entry(tab), '');
+  railEntry(entry);
+  assert.throws(() => railEntry(entry.replace('fit-chip studio', 'btn primary')), /AssertionError/, 'CONTROL a promoted primary button must fail');
+  assert.throws(() => railEntry(entry.replace('fit-chip studio', 'studio-link')), /AssertionError/, 'CONTROL leaving the rail vocabulary must fail');
+  assert.throws(() => railEntry(''), /AssertionError/, 'CONTROL missing entry must fail');
   assert.equal((app.match(/id="wardrobeStudio"/g) || []).length, 1);
-  assert.match(app, /\n    \$\{tab === 'wardrobe' \? '[^\n]+id="wardrobeStudio"[^\n]+\n    <div id="chContent">/);
+  /* IT LIVES IN THE RAIL, not back in the header. Anchored on the two controls
+     it must line up with, so moving it out of that row goes red. */
+  const rail = app.slice(app.indexOf('data-fit-save="1"'), app.indexOf('data-fit-reset="1"'));
+  assert.ok(rail.includes('id="wardrobeStudio"'), 'the entry must sit between the save and strip chips in the fit rail');
+  assert.doesNotMatch(app, /wardrobe-studio-entry/, 'the old header line must be gone, not left orphaned');
   assert.doesNotMatch(source('index.html'), /#\/studio|wardrobeStudio/);
-  const handler = app.split('\n').find(line => line.includes("$('#wardrobeStudio', body)?.addEventListener"));
+  const handler = app.split('\n').find(line => line.includes("$('#wardrobeStudio', content)?.addEventListener"));
   const navigation = { hash: '#/bonehead' }; let enter;
-  vm.runInNewContext(handler, { body: {}, location: navigation, $: selector => {
+  vm.runInNewContext(handler, { content: {}, location: navigation, $: selector => {
     assert.equal(selector, '#wardrobeStudio'); return { addEventListener(event, fn) { assert.equal(event, 'click'); enter = fn; } };
   } });
   enter(); assert.equal(navigation.hash, '#/studio', 'actual entry handler reaches the registered Studio route');
   const css = source('app.css');
+  /* .studio-link is now only the Studio's OWN back control, so its quiet rule is
+     still graded; the entry's styling is graded by the class it shares above. */
   const quietStyle = text => {
     const rule = text.match(/\.studio-link \{([^}]+)\}/)?.[1] || '';
     for (const declaration of ['width: auto;', 'min-height: 44px;', 'font: inherit;', 'font-size: var(--fs-2);', 'color: var(--text-2);', 'background: transparent;', 'border: 0;', 'box-shadow: none;', 'text-transform: none;']) assert.ok(rule.includes(declaration), declaration);
-    assert.match(text, /\.wardrobe-studio-entry \{ display: flex; justify-content: flex-end; \}/);
   };
   quietStyle(css);
-  assert.throws(() => quietStyle(css.replace('background: transparent; border: 0; box-shadow: none; text-transform: none;', 'background: var(--accent);')), /AssertionError/, 'CONTROL accent-filled entry must fail');
+  assert.throws(() => quietStyle(css.replace('background: transparent; border: 0; box-shadow: none; text-transform: none;', 'background: var(--accent);')), /AssertionError/, 'CONTROL accent-filled back control must fail');
+  // The chip may size the icon and NOTHING else: everything that aligns it comes
+  // from .fit-chip. A chip that started carrying its own padding or font would be
+  // the drift this whole move exists to stop.
+  const chipRule = css.match(/\.fit-chip\.studio img, \.fit-chip\.studio svg \{([^}]+)\}/)?.[1] || '';
+  assert.ok(chipRule.includes('width: 22px') && chipRule.includes('height: 22px'), 'the chip sizes its icon');
+  assert.doesNotMatch(css, /\.fit-chip\.studio \{/, 'the chip must not redeclare what .fit-chip already gives it');
+  // Both of Tom's own 48px icons are on disk and registered, so pixCur can serve them.
+  const pix = source('js/icons-pix.js');
+  for (const key of ['lab', 'camera']) {
+    assert.match(pix, new RegExp(`${key}: '${key}'`), `${key} must be registered in PIX_CUR`);
+    assert.ok(existsSync(new URL(`../assets/icons-pix/${key}.png`, import.meta.url)), `assets/icons-pix/${key}.png must exist`);
+  }
+  assert.match(app, /pixCur\('lab', 48\)[\s\S]{0,200}<b>Laboratory<\/b>/, 'the Laboratory room draws the fusion chamber, not the shared potion vial');
   const bridge = source('native/ios/App/App/StudioSave.swift');
   assert.match(bridge, /requestAuthorization\(for: \.addOnly\)/);
   assert.match(bridge, /addResource\(with: \.photo, data: data/);

@@ -122,7 +122,12 @@ function grade(html, expected) {
     const icon = picture.children[0];
     assert.equal(icon.tag, expected.fallback ? 'svg' : 'img');
     assert.equal(icon.attrs.width, '48'); assert.equal(icon.attrs.height, '48');
-    if (!expected.fallback) assert.equal(icon.attrs.src, `assets/icons-pix/${['badge-signpost', 'potion', 'paw'][i]}.png`);
+    /* 2026-09-10: the Laboratory took Tom's own fusion-chamber art. It used to
+       borrow `potion`, which is the SHARED vial two ectoplasm potions also point
+       at, so the room and a consumable drew one picture. The room's icon is
+       still pinned per tile here, so a silent swap back, or a room quietly
+       losing its own art to a shared key, still goes red. */
+    if (!expected.fallback) assert.equal(icon.attrs.src, `assets/icons-pix/${['badge-signpost', 'lab', 'paw'][i]}.png`);
     if (i === 1) assert.equal(tile.children.some(n => hasClass(n, 'new-dot')), expected.dot, 'attention follows unseen results');
   }
   assert.equal(row.children.length, 3, 'exactly three tiles share the row');
