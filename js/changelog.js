@@ -9,6 +9,10 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 543, date: '2026-09-09', title: 'The step race shows everyone again', items: [
+    'Every racer in the step race shows their figure and an honest progress track, even when a friend has not shared an outfit.',
+  ] },
+
   { n: 542, date: '2026-09-09', title: 'The Laboratory and the Stable, played hard', items: [
     'Shiny pets now hold the same Base collection cell in the Kennel and Stable loss warnings, even with an unsupported saved colour.',
     'Destroying a plain Base pet no longer says it is your last colour copy when a shiny pet still holds that cell. Losing a shiny appearance still gets its own warning.',

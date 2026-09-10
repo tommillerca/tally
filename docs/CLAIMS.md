@@ -1,5 +1,10 @@
 # What each patch note claims, and what backs it
 
+## v543 (2026-09-09)
+
+Changelog item: Every racer in the step race shows their figure and an honest progress track, even when a friend has not shared an outfit.
+
+1. PROOF: steprace-live-browser-audit.mjs | REACH: Tom, on the live build: "the steprace still isnt showing the progress bar and player profile pic on live", after saying of an earlier operator screenshot "leaderboard looks fine in your screenshot but doesnt look like that on live". CAUSE: the race row passed a friend's stored outfit straight to avatarLayersHtml, so a friend whose profile carries no valid body or skull rendered no figure at all; the harness fixture gave every friend a complete outfit, which is why the operator's capture looked healthy and Tom's phone did not. FIX: the row falls back to B0-1/SK0-1 and marks the figure a placeholder with its own aria-label, and the track reads 0 with "Progress comparison unavailable until recent syncs" rather than drawing a bar from steps it does not have. NO STEP COUNT IS INVENTED; this project has nine prior instances of a count reporting the render rather than the data. VERIFIED BY THE OPERATOR IN A REAL BROWSER (the builder's sandbox cannot bind a listener): Chromium headless=shell, 393x852 at DPR 2, all five crew states PASS on painted avatars and measured honest tracks, including the degraded state that is Tom's actual report. leaderboard-honesty-audit.mjs holds at 49 passed. LIMIT: a friend who has NEVER synced cannot appear in the server's race query at all, so the degraded case exercised is a stale partial profile, not a never-synced one.
 
 ## v542 (2026-09-09)
 
