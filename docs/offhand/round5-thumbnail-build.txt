@@ -1,0 +1,12 @@
+assets/bh/thumb/192/IL/IL17-1.png: regenerated using build-bh-thumbs.wanted(), changed=True
+assets/bh/thumb/384/IL/IL17-1.png: regenerated using build-bh-thumbs.wanted(), changed=True
+assets/bh/thumb/trim/IL/IL17-1.png: regenerated using build-bh-thumbs.wanted(), changed=False
+assets/bh/thumb/192/IL/IL17-2.png: regenerated using build-bh-thumbs.wanted(), changed=True
+assets/bh/thumb/384/IL/IL17-2.png: regenerated using build-bh-thumbs.wanted(), changed=True
+assets/bh/thumb/trim/IL/IL17-2.png: regenerated using build-bh-thumbs.wanted(), changed=True
+assets/bh/thumb/192/IL/IL10-1.png: regenerated using build-bh-thumbs.wanted(), changed=True
+assets/bh/thumb/384/IL/IL10-1.png: regenerated using build-bh-thumbs.wanted(), changed=True
+assets/bh/thumb/trim/IL/IL10-1.png: regenerated using build-bh-thumbs.wanted(), changed=False
+assets/bh/thumb/192/IL/IL10-2.png: regenerated using build-bh-thumbs.wanted(), changed=True
+assets/bh/thumb/384/IL/IL10-2.png: regenerated using build-bh-thumbs.wanted(), changed=True
+assets/bh/thumb/trim/IL/IL10-2.png: regenerated using build-bh-thumbs.wanted(), changed=False

@@ -1,5 +1,17 @@
 # What each patch note claims, and what backs it
 
+## vNEXT
+
+Changelog item: The off-hand brushes and spades are held properly now.
+
+1. PROOF: MANUAL operator's frozen Round 5 shipping-avatar comparison against correctly held IL7-1 Blue Katana, plus `facegate-audit.mjs` for the source face-coverage constraint | REACH: IL17-1/2 at (+24,+32), IL10-1/2 at (+22,+86), relative to the preserved original 640 masters. The operator reports searching under the facegate constraint and choosing these offsets by rendered comparison at 393x852 DPR 2. The earlier four rendered search rounds (operator rounds 1, 2, 3 and 4, individually unnamed in the order) selected Round 4's visually approved candidate, which facegate rejected at 28.53% brush coverage against a 2% limit. Round 5 supersedes that candidate and the v544 alignment claim below. No new version stamp or release is made here.
+
+Local [pixel proof](offhand/round5-pixel-proof.txt) and [reproducible source verifier](offhand/round5-verify-translation.py) establish exact translation and unchanged surviving RGBA values, not rendered grip. Local source face coverage is 0.00% for both spades and 1.62%/1.61% for the brushes, below 2%; the operator's table said 1.64% for both brushes. Exact offsets are preserved. Round 5's zero-loss assertion cannot hold for the original spades: 7 and 10 export-dust pixels at alpha <=30 leave the frame. The plan's explicit dust-loss allowance is used; no pixel above alpha 30 is lost. The surviving alpha>0 ink boxes and complete alpha>30 ink boxes move by exactly the requested offsets. The complete original alpha>0 boxes cannot do so because the dust is clipped. Both brushes lose zero pixels. Derived 192, 384 and trim thumbnails use the project's generator.
+
+Rendered acceptance is attributed to the operator's frozen instruction. Existing [brush 1 before](offhand/oh-before-IL10-1.png), [brush 2 before](offhand/oh-before-IL10-2.png), [spade 1 before](offhand/oh-before-IL17-1.png), [spade 2 before](offhand/oh-before-IL17-2.png) and [katana control](offhand/oh-before-IL7-1.png) are historical operator captures. Existing after images are not certified Round 5 captures. No independent final screenshot or numeric rendered gap is claimed. See the [Round 5 advisory](offhand/round5-report.md) for current proof output, deviations and capture limitations.
+
+Validation: `node tests/unit.test.js` exited 0 with `384 passed, 0 failed`; `node tests/facegate-audit.mjs` exited 0. All 159 unique PURE entries enumerated from `tests/release-gate.mjs` exited 0, including thumbnail freshness. [Enumeration and exits](offhand/round5-pure-results.txt). Fresh browser capture exited 1 on `listen EPERM`; the PURE result does not claim browser proof. The zero-loss requirement remains unmet only for the explicitly reported export dust.
+
 ## v543 (2026-09-09)
 
 Changelog item: Every racer in the step race shows their figure and an honest progress track, even when a friend has not shared an outfit.

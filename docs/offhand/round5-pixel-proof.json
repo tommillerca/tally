@@ -1,0 +1,398 @@
+[
+  {
+    "item": "IL17-1",
+    "offset_from_original": [
+      24,
+      32
+    ],
+    "lost_pixels": [
+      [
+        628,
+        255,
+        [
+          23,
+          23,
+          23,
+          11
+        ]
+      ],
+      [
+        629,
+        255,
+        [
+          31,
+          31,
+          31,
+          8
+        ]
+      ],
+      [
+        628,
+        256,
+        [
+          0,
+          0,
+          0,
+          3
+        ]
+      ],
+      [
+        629,
+        256,
+        [
+          63,
+          63,
+          63,
+          4
+        ]
+      ],
+      [
+        630,
+        256,
+        [
+          0,
+          0,
+          0,
+          2
+        ]
+      ],
+      [
+        630,
+        257,
+        [
+          85,
+          85,
+          85,
+          3
+        ]
+      ],
+      [
+        631,
+        257,
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ],
+    "lost_alpha_gt_0": 7,
+    "lost_alpha_gt_30": 0,
+    "surviving_rgba_multiset_unchanged": true,
+    "saved_pixels_exact": true,
+    "boxes": {
+      "0": {
+        "original": [
+          362,
+          38,
+          632,
+          360
+        ],
+        "surviving": [
+          362,
+          38,
+          582,
+          360
+        ],
+        "after": [
+          386,
+          70,
+          606,
+          392
+        ]
+      },
+      "30": {
+        "original": [
+          364,
+          40,
+          543,
+          358
+        ],
+        "surviving": [
+          364,
+          40,
+          543,
+          358
+        ],
+        "after": [
+          388,
+          72,
+          567,
+          390
+        ]
+      }
+    },
+    "facegate_pct": 0.0,
+    "after_sha256": "1115a12413f9bfbbfb3469b98801fecee7383d12d4601c746a803b4ebc3210c6"
+  },
+  {
+    "item": "IL17-2",
+    "offset_from_original": [
+      24,
+      32
+    ],
+    "lost_pixels": [
+      [
+        639,
+        226,
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      [
+        636,
+        227,
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      [
+        637,
+        227,
+        [
+          85,
+          85,
+          85,
+          3
+        ]
+      ],
+      [
+        638,
+        227,
+        [
+          45,
+          45,
+          30,
+          17
+        ]
+      ],
+      [
+        636,
+        228,
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      [
+        638,
+        228,
+        [
+          45,
+          45,
+          30,
+          17
+        ]
+      ],
+      [
+        639,
+        228,
+        [
+          34,
+          34,
+          34,
+          30
+        ]
+      ],
+      [
+        638,
+        229,
+        [
+          0,
+          0,
+          0,
+          3
+        ]
+      ],
+      [
+        639,
+        229,
+        [
+          25,
+          25,
+          25,
+          20
+        ]
+      ],
+      [
+        639,
+        231,
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ],
+    "lost_alpha_gt_0": 10,
+    "lost_alpha_gt_30": 0,
+    "surviving_rgba_multiset_unchanged": true,
+    "saved_pixels_exact": true,
+    "boxes": {
+      "0": {
+        "original": [
+          362,
+          38,
+          640,
+          359
+        ],
+        "surviving": [
+          362,
+          38,
+          544,
+          359
+        ],
+        "after": [
+          386,
+          70,
+          568,
+          391
+        ]
+      },
+      "30": {
+        "original": [
+          364,
+          40,
+          542,
+          357
+        ],
+        "surviving": [
+          364,
+          40,
+          542,
+          357
+        ],
+        "after": [
+          388,
+          72,
+          566,
+          389
+        ]
+      }
+    },
+    "facegate_pct": 0.0,
+    "after_sha256": "62d14913a12c417b08b5fe496d170d7a4302ec3c3628d3b67e5367f8770b03c1"
+  },
+  {
+    "item": "IL10-1",
+    "offset_from_original": [
+      22,
+      86
+    ],
+    "lost_pixels": [],
+    "lost_alpha_gt_0": 0,
+    "lost_alpha_gt_30": 0,
+    "surviving_rgba_multiset_unchanged": true,
+    "saved_pixels_exact": true,
+    "boxes": {
+      "0": {
+        "original": [
+          344,
+          0,
+          604,
+          365
+        ],
+        "surviving": [
+          344,
+          0,
+          604,
+          365
+        ],
+        "after": [
+          366,
+          86,
+          626,
+          451
+        ]
+      },
+      "30": {
+        "original": [
+          346,
+          1,
+          602,
+          363
+        ],
+        "surviving": [
+          346,
+          1,
+          602,
+          363
+        ],
+        "after": [
+          368,
+          87,
+          624,
+          449
+        ]
+      }
+    },
+    "facegate_pct": 1.62,
+    "after_sha256": "8658c6d67f2f7eb1b44a3db8141758f8f9a5c993548a8de38975d68f3056bf5d"
+  },
+  {
+    "item": "IL10-2",
+    "offset_from_original": [
+      22,
+      86
+    ],
+    "lost_pixels": [],
+    "lost_alpha_gt_0": 0,
+    "lost_alpha_gt_30": 0,
+    "surviving_rgba_multiset_unchanged": true,
+    "saved_pixels_exact": true,
+    "boxes": {
+      "0": {
+        "original": [
+          344,
+          0,
+          603,
+          364
+        ],
+        "surviving": [
+          344,
+          0,
+          603,
+          364
+        ],
+        "after": [
+          366,
+          86,
+          625,
+          450
+        ]
+      },
+      "30": {
+        "original": [
+          346,
+          1,
+          601,
+          362
+        ],
+        "surviving": [
+          346,
+          1,
+          601,
+          362
+        ],
+        "after": [
+          368,
+          87,
+          623,
+          448
+        ]
+      }
+    },
+    "facegate_pct": 1.61,
+    "after_sha256": "3ae256d97c43917b8894ee5bd17da2b7f23f8beeea2e6b37d8d572debfb44e0a"
+  }
+]
