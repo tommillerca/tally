@@ -62,6 +62,9 @@ const ctx = vm.createContext({ ...art, ...football, ...pets, ...loot, ...syncHea
   },
   $$: selector => { assert(buttons[selector], selector); return [buttons[selector]]; },
   body: {}, popSound: () => {}, render: () => {}, toast: () => {}, saveSettings: () => {},
+  /* R9 added a dressing haptic inside the extracted region; the stub needs it or
+     the CONTROL row fails on the harness rather than on the app. */
+  haptic: { tap: () => {}, heavy: () => {} },
   refreshPetWear: async () => { ctx.S.petWear = await loot.petWear(); },
   // Capture the remote figure contract at the renderer boundary.
   petPortraitHtml: (id, px, shiny, opts) => { petCalls.push({ id, shiny, opts: clean(opts) }); return '<pet>'; },

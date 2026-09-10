@@ -70,10 +70,14 @@ try {
        disclosure can no longer be evicted by routine toast spam. Same
        behaviour this row has always guarded (no backlog lecture), new source
        text. Re-pointed at the assertion, deliberately, rather than deleted:
-       deleting the loop must still go red. */
+       deleting the loop must still go red.
+       v548 (R9-F18): the cap now also spares ACTION receipts, so a Wardrobe
+       confirmation cannot be evicted by startup chatter either. Same guarded
+       behaviour, new source text, re-pointed the same way and for the same
+       reason. Deleting the loop must still go red. */
     ['red-toast-cap-deleted', s => replaceOnce(s,
-      `    while (toastQ.filter(item => !item.error).length > 4) {
-      toastQ.splice(toastQ.findIndex(item => !item.error), 1);`,
+      `    while (toastQ.filter(item => !item.error && !item.action).length > 4) {
+      toastQ.splice(toastQ.findIndex(item => !item.error && !item.action), 1);`,
       '    if (false) {'), 'FAIL M5 toast'],
   ];
   for (const [name, mutate, message] of variants) {

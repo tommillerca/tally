@@ -65,6 +65,41 @@ exit 0
 - The verification-tail guard changes from the superseded 40-coin/comment contract to the authorized 340-coin/comment contract. Its unrelated missing-acorn subprocess proof remains unchanged. Other guard thresholds are retained.
 
 #### Proof output and guard comparison
+## v548
+
+R9 Wardrobe feedback. Codex could not run the browser guard (`listen EPERM`), so
+the operator ran it and ran the red proof: against pre-fix `js/app.js` and
+`app.css` the same audit fails 9 rows, and the `doll pixels` control PASSES in
+both runs, so the audit is not simply failing everything. Final run 49/49
+COMPLETE, exit 0.
+
+Changelog item: Putting a piece on updates its slot picture and says it is on. Taking it off says it is off.
+
+1. PROOF: wardrobe-feedback-audit.mjs | REACH: R9-F9 and R9-F11. `restageWardrobe` repainted the doll and the rings inside one slot's grid and never the slot tile above it, so the tile kept its `+` until a different slot was tapped. Measured on pre-fix code: `slot pixels: changed=0, ink=0` on hat, top and pants. After: `changed=5334, ink=17310`. The `doll pixels: changed=5924` control passes in BOTH runs, which is what makes the slot-tile rows mean something.
+
+Changelog item: Tiles that take off statted gear show that they need two taps, and the first tap tells you what will come off.
+
+2. PROOF: wardrobe-feedback-audit.mjs | REACH: R9-M11 and R9-M14. An arming tile and a non-arming one were identical in `class`, `aria-label`, `title`, `role` and inner HTML; only `data-armWired="1"` differed and no CSS rule referenced it, so the two-tap contract was invisible until after the first tap. One tap on a two-tap tile emitted nothing at all: pre-fix `one immediate announcement: {"messages":[],"buzz":[]}`.
+
+Changelog item: Dressing gives a light tap, and Wardrobe confirmations take priority over startup chatter.
+
+3. PROOF: wardrobe-feedback-audit.mjs | REACH: R9-F14 and R9-F18. Pre-fix `dressing haptic: []` on every slot: the only control in the room that vibrated was `Take it all off`. The announcement now arrives at ~30ms and the F18 rows pin that an active error survives a burst of routine toasts and that the action receipt follows it.
+
+Changelog item: Deleting a saved fit asks you to confirm first.
+
+4. PROOF: wardrobe-feedback-audit.mjs | REACH: R9-M-C. Melting a garment cost two taps, a confirm, a toast and a haptic; deleting a saved outfit was one tap and nothing. The ceremony was spent on destruction and withheld from the destructive act with no undo.
+
+### Operator note: a borrowed row was removed, and why
+
+The suite asserted the shared `tests/ui-audit.js` `uiAudit()`. That row is RED on
+CLEAN MAIN with the identical four problems (`#coinBtn opened hub tab shop,
+expected crates`, `#charBtn opened hub tab crates, expected wardrobe`,
+`#dropToShop` and `#spireToMap` MISSING on today), measured 2026-09-10 by running
+`uiAudit()` on origin/main with no lane changes present. It is drift between
+`tests/ui-audit.js` and the app, it is not this lane's regression, and borrowing
+it meant this suite could never go green for reasons outside its own subject. The
+drift is real and is being tracked separately; it is NOT fixed here.
+
 ## R9 Round 2 audit fixture (2026-09-10)
 
 Frozen plan SHA256 verified: `c1c5ad88b1edbc7bb878b211c6ed2f5f3eb208aa1a1862a002b386bd2e3302b5`.
@@ -86,7 +121,6 @@ node tests/unit.test.js
 384 passed, 0 failed
 exit 0
 
-<<<<<<< HEAD
 PURE census from tests/release-gate.mjs: 161 unique entries (minimum required: 156)
 Full sequential run: 160/161 exit 0; r6-guards-audit.mjs exit 1
 Cause: vNEXT used a quoted changelog item instead of the required Changelog item: line.
@@ -488,7 +522,6 @@ The first render must fail affordability assertions, the final render must pass,
 ```
 
 </details>
-=======
 node tests/wardrobe-feedback-audit.mjs
 AUDIT PLAN wardrobe-feedback-audit.mjs: 50 rows
 BLOCKED/INCOMPLETE after 0/50 rows: Error: listen EPERM: operation not permitted 127.0.0.1
@@ -521,7 +554,6 @@ commit, push, publication, original-checkout edit or production redesign was
 performed. Changelog and version stamps remain unchanged for this audit-only
 repair. This report is advisory and does not claim completed browser proof.
 
->>>>>>> 2824173f (round 2: fixture + declared rows)
 ## v546 (2026-09-10)
 
 R9 frozen work order, SHA256 d8b35d96060bbc02e9b623e195236dfa2b469aff0f17819aa4b9554ad82a7f99. Implementation is local and pending independent review. No commit, push or publication.

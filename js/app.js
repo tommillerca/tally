@@ -1229,7 +1229,7 @@ const BADGE_ICON = {
  * a forgotten armed button can never be triggered by a later stray tap, and it
  * restores the original label whatever happens. */
 const ARM_COOLOFF_MS = 3200;
-function armToConfirm(btn, confirmLabel, onConfirm, { cooloff = ARM_COOLOFF_MS } = {}) {
+function armToConfirm(btn, confirmLabel, onConfirm, { cooloff = ARM_COOLOFF_MS, onArm = null, commitHaptic = true } = {}) {
   if (!btn || btn.dataset.armWired === '1') return;
   btn.dataset.armWired = '1';
   let t = null;
@@ -1249,12 +1249,13 @@ function armToConfirm(btn, confirmLabel, onConfirm, { cooloff = ARM_COOLOFF_MS }
       btn.dataset.armed = '1';
       btn.classList.add('arming');
       btn.innerHTML = esc(confirmLabel);
+      onArm?.();
       clearTimeout(t);
       t = setTimeout(restore, cooloff);
       return;
     }
     clearTimeout(t);
-    haptic.heavy();   // the second tap commits: every spend/destroy thumps once
+    if (commitHaptic) haptic.heavy();   // spends and destruction thump once
     /* DISARM AFTER THE SPEND, NEVER BEFORE IT. restore() used to run here, above
        the await, so the button was back in its unarmed state inside the same
        frame and a synchronous tap burst simply re-armed and committed again:
@@ -3792,10 +3793,20 @@ const toastQ = [];
 let toastBusy = false;
 let activeToast = null;
 let toastGeneration = 0;
-function toast(msg, ms = 2200, { error = false } = {}) {
+function toast(msg, ms = 2200, { error = false, action = false } = {}) {
   if (error && (activeToast?.msg === msg || toastQ.some(job => job.error && job.msg === msg))) return;
-  const job = { msg, ms, error };
-  if (error) {
+  const job = { msg, ms, error, action };
+  if (action && !error) {
+    // Direct Wardrobe feedback supersedes routine chatter and stale receipts.
+    // Keep write failures: an active error finishes before the latest action.
+    for (let i = toastQ.length - 1; i >= 0; i--) if (!toastQ[i].error) toastQ.splice(i, 1);
+    toastQ.push(job);
+    if (toastBusy && !activeToast?.error) {
+      clearTimeout(toastTimer);
+      toastGeneration++;
+      toastBusy = false;
+    }
+  } else if (error) {
     // Failure notices cannot be evicted by the four-message routine backlog.
     const firstRoutine = toastQ.findIndex(item => !item.error);
     toastQ.splice(firstRoutine < 0 ? toastQ.length : firstRoutine, 0, job);
@@ -3806,8 +3817,8 @@ function toast(msg, ms = 2200, { error = false } = {}) {
     }
   } else {
     toastQ.push(job);
-    while (toastQ.filter(item => !item.error).length > 4) {
-      toastQ.splice(toastQ.findIndex(item => !item.error), 1);
+    while (toastQ.filter(item => !item.error && !item.action).length > 4) {
+      toastQ.splice(toastQ.findIndex(item => !item.error && !item.action), 1);
     }
   }
   if (!toastBusy) nextToast();
@@ -17121,7 +17132,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div class="pd-stats">${STAT_META.map(statChip).join('')}</div>
       <div class="sect-h" style="margin-top:10px">${esc(GEAR_SLOTS.includes(slot) ? GEAR_SLOT_LABELS[slot] : slotMeta.label)} · pick your fit</div>
       <div class="ward-grid" data-wslot="${slot}">
-        ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">None</button>`}
+        ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">${eq[slot] ? 'Take off' : 'None'}</button>`}
         ${fams.map(fam => {
           const i = famArt(fam);
           /* A FAMILY OF ONE IS THE TILE THAT SHIPPED, byte for byte. No badge,
@@ -17352,31 +17363,44 @@ async function renderCharacter(wrap, tab, opts = {}) {
         }
         const res = await applyFit(chip.dataset.fit);
         if (!res.ok) {
-          toast(res.reason === 'dust' ? `That fit needs ${res.need.toLocaleString()} dust, you have ${res.have.toLocaleString()}.` : 'Could not wear that fit.', 2800);
+          toast(res.reason === 'dust' ? `That fit needs ${res.need.toLocaleString()} dust, you have ${res.have.toLocaleString()}.` : 'Could not wear that fit.', 2800, { action: true });
           return;
         }
         S.lookPreview = null;
+        haptic.tap();
         levelSound(S.sounds); pushProfileSoon();
-        toast(res.cost ? `${res.name} on. −${res.cost} dust.` : `${res.name} on.`, 2000);
+        toast(res.cost ? `${res.name} on. −${res.cost} dust.` : `${res.name} on.`, 2000, { action: true });
         renderCharacter(wrap, 'wardrobe', { instant: true });
       });
     });
     $$('[data-fit-del]', content).forEach(x => x.addEventListener('click', async e => {
       e.stopPropagation();
-      await deleteFit(x.dataset.fitDel);
-      S.fitEdit = null; popSound(S.sounds);
-      renderCharacter(wrap, 'wardrobe', { instant: true });
+      const fit = (await fits()).find(f => f.id === x.dataset.fitDel);
+      if (!fit) return;
+      const review = openSheet(`
+        <div class="sheet-head"><h2>Delete "${esc(fit.name)}"?</h2></div>
+        <div class="sheet-body"><p class="note">This saved fit will be gone. Your pieces stay in your Backpack.</p></div>
+        <div class="t1-foot"><button class="btn ghost sheet-close">Cancel</button><button class="btn danger-ish" data-fit-delete-confirm>Delete fit</button></div>`, { cls: 't1', name: 'Delete fit' });
+      $('[data-fit-delete-confirm]', review).addEventListener('click', async ev => {
+        if (ev.currentTarget.disabled) return;
+        ev.currentTarget.disabled = true;
+        await deleteFit(fit.id);
+        history.back();
+        S.fitEdit = null; popSound(S.sounds); haptic.heavy();
+        toast(`Deleted "${fit.name}".`, 2000, { action: true });
+        renderCharacter(wrap, 'wardrobe', { instant: true });
+      });
     }));
     // one string, said from both the ghosted chip and captureFit's own `full` (QA round 23 F8)
     const fitsFullMsg = `You can keep ${MAX_FITS} fits. Bin one first.`;
     $('[data-fit-save]', content)?.addEventListener('click', async () => {
-      if (fitList.length >= MAX_FITS) { toast(fitsFullMsg, 2800); return; }
+      if (fitList.length >= MAX_FITS) { toast(fitsFullMsg, 2800, { action: true }); return; }
       openTextSheet({ title: 'Name this fit', value: `Fit ${fitList.length + 1}`, cta: 'Save fit' }, async name => {
         if (!name) return;
         const res = await captureFit(name);
-        if (!res.ok) { toast(res.reason === 'full' ? fitsFullMsg : 'Could not save that fit.', 2800); return; }
+        if (!res.ok) { toast(res.reason === 'full' ? fitsFullMsg : 'Could not save that fit.', 2800, { action: true }); return; }
         levelSound(S.sounds);
-        toast(`Saved "${res.fit.name}". Tap it any time to put it back on.`, 2600);
+        toast(`Saved "${res.fit.name}". Tap it any time to put it back on.`, 2600, { action: true });
         renderCharacter(wrap, 'wardrobe', { instant: true });
       });
     });
@@ -17394,7 +17418,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const n = res.slots.length, g = res.gear.length;
       toast(n
         ? `${n} piece${n === 1 ? '' : 's'} off${g ? `, ${g} with stats on ${g === 1 ? 'it' : 'them'}` : ''}. Nothing is lost, it is all in your Backpack.`
-        : 'Cleared. Nothing is lost, it is all in your Backpack.', 3400);
+        : 'Cleared. Nothing is lost, it is all in your Backpack.', 3400, { action: true });
       renderCharacter(wrap, 'wardrobe', { instant: true });
     });
     /* Trim the transparent padding off every paper-doll slot, the same way the
@@ -17439,8 +17463,27 @@ async function renderCharacter(wrap, tab, opts = {}) {
        names the gear. wornGear is this render's read of the slot and every path
        that changes gear re-renders, so it is current. A tap that displaces
        nothing stays one tap: a confirm on a free swap is friction. */
+    const refreshSlot = async eqNow => {
+      look = eqNow;
+      const rawNow = await equipped({ raw: true });
+      if (rawNow[slot]) rawEq[slot] = rawNow[slot]; else delete rawEq[slot];
+      tm = await transmogMap();
+      const tile = $(`.pd-slot[data-pd="${slot}"]`, content);
+      if (!tile) return false;
+      const staging = document.createElement('div');
+      staging.innerHTML = pdSlot(slot);
+      const fresh = staging.firstElementChild;
+      wirePd(fresh);
+      await hydratePackArt(fresh, '.pd-art[data-art]');
+      tile.replaceWith(fresh);
+      return true;
+    };
     const doEquip = async cell => {
+      const id = cell.dataset.equip || null;
+      const before = await equipped();
       await equip(slot, cell.dataset.equip || null);
+      haptic.tap();
+      toast(id ? `${BH_BY_ID[id]?.name || slotMeta.label} on.` : `${BH_BY_ID[before[slot]]?.name || slotMeta.label} off.`, 2000, { action: true });
       S.lookPreview = null;
       popSound(S.sounds); pushProfileSoon();
       /* GEAR CAME OFF, so this is a gear change and takes the gear path, the
@@ -17451,9 +17494,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (wornGear) { renderCharacter(wrap, 'wardrobe', { instant: true }); return; }
       // Update IN PLACE. This used to call renderCharacter(), which rebuilt the
       // whole screen for one garment: every image element in every cell was
-      // destroyed and re-created, so each tap flashed the entire page. Only two
-      // things actually change when you equip something, so only those two move.
+      // destroyed and re-created, so each tap flashed the entire page. Update
+      // the doll, the selected rings and the slot tile together.
       const done = await restageWardrobe(content, slot);
+      if (done) await refreshSlot(await equipped());
       if (!done) renderCharacter(wrap, 'wardrobe', { instant: true });   // fall back rather than leave it stale
     };
     /* ONE WIRING FUNCTION, so W5's arm-then-confirm is true on a rail tile too.
@@ -17468,7 +17512,15 @@ async function renderCharacter(wrap, tab, opts = {}) {
          the art once the cool-off has put the canvas back. A confirmed tap
          re-renders the screen and the cell is gone, so it is a no-op there. */
       cell.addEventListener('click', () => setTimeout(() => { if (cell.isConnected) hydratePackArt(cell, '.ward-art[data-art]'); }, ARM_COOLOFF_MS + 20));
-      armToConfirm(cell, `Tap again: takes off ${wornGear.name}, ${gearLabel(wornGear).replace(/\+/g, '-')}`, () => doEquip(cell));
+      const warning = `Tap again: takes off ${wornGear.name}, ${gearLabel(wornGear).replace(/\+/g, '-')}`;
+      cell.classList.add('ward-two-tap');
+      cell.insertAdjacentHTML('beforeend', '<span class="ward-arm-cue">2 taps</span>');
+      cell.setAttribute('aria-label', `${cell.getAttribute('aria-label') || cell.title || cell.textContent.trim()}. ${warning}`);
+      cell.title = `${cell.title}. ${warning}`;
+      armToConfirm(cell, `Tap again: takes off ${wornGear.name}, ${gearLabel(wornGear).replace(/\+/g, '-')}`, () => doEquip(cell), {
+        commitHaptic: false,
+        onArm: () => { haptic.tap(); toast(warning, 3200, { action: true }); },
+      });
     };
     $$('[data-equip]', content).forEach(wireEquip);
     /* THE RAIL IS DOM STATE, NOT APP STATE, on purpose. It is opened and closed
@@ -17577,10 +17629,13 @@ async function renderCharacter(wrap, tab, opts = {}) {
         $('[data-fbwear]', content)?.addEventListener('click', async e => {
           const id = e.currentTarget.dataset.fbwear;
           await equip(slot, id);
+          haptic.tap();
+          toast(`${BH_BY_ID[id].name} on.`, 2000, { action: true });
           S.lookPreview = null;
           popSound(S.sounds); pushProfileSoon();
           // same in-place swap the grid's own equip uses, and the same fallback
           if (!(await restageWardrobe(content, slot))) { renderCharacter(wrap, 'wardrobe', { instant: true }); return; }
+          await refreshSlot(await equipped());
           eq[slot] = rawEq[slot] = id;
           relabel(); refreshBar();
         });
@@ -17689,13 +17744,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (committed) {
         const pill = $('.ward-dust', wrap);
         if (pill) pill.innerHTML = `${ICONS.dust(16)} ${dustBal.toLocaleString()}`;
-        const tile = $(`.pd-slot[data-pd="${slot}"]`, content);
-        if (tile) {
-          tile.outerHTML = pdSlot(slot);
-          const fresh = $(`.pd-slot[data-pd="${slot}"]`, content);
-          wirePd(fresh);
-          hydratePackArt(fresh, '.pd-art[data-art]');
-        }
+        if ($(`.pd-slot[data-pd="${slot}"]`, content)) await refreshSlot(look);
       }
     }
     // Tap a look to try it on: free, instant, no commitment. Dust is only spent
@@ -17727,7 +17776,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const val = btn.dataset.lookApply;
       const res = val === '' ? await clearTransmog(slot) : await applyTransmog(slot, val);
       if (!res.ok) {
-        toast(res.reason === 'dust' ? `Need ${res.need.toLocaleString()} dust, you have ${res.have.toLocaleString()}.` : 'Could not change that look.', 2600);
+        toast(res.reason === 'dust' ? `Need ${res.need.toLocaleString()} dust, you have ${res.have.toLocaleString()}.` : 'Could not change that look.', 2600, { action: true });
         return;
       }
       S.lookPreview = null;
@@ -17739,8 +17788,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
          (paid-once), but the player could not tell the purchase went through. */
       $('.mog-dock > .mog-bar', content)?.classList.remove('armed');
       btn.disabled = true;
+      if (!Number(btn.dataset.lookPrice || 0)) haptic.tap();
       levelSound(S.sounds); pushProfileSoon();
-      toast(res.cost ? `Look changed. −${res.cost} dust.` : 'Look changed.', 2000);
+      toast(res.cost ? `Look changed. −${res.cost} dust.` : 'Look changed.', 2000, { action: true });
       restageLook({ committed: true });
     }
     // tapping a gear cell INSPECTS it (preview): the panel below shows its stats +
@@ -17749,8 +17799,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const g = GEAR_BY_ID[cell.dataset.equipgear];
       if (!g) return;
       if (S.wardrobePreview === g.id && gearLo[slot] !== g.id) {
-        if (wLevel < g.minLevel) { toast(`Locked: reach level ${g.minLevel} to wear ${g.name}.`, 2800); return; }
+        if (wLevel < g.minLevel) { toast(`Locked: reach level ${g.minLevel} to wear ${g.name}.`, 2800, { action: true }); return; }
         await equipGear(slot, g.id);
+        haptic.tap();
+        toast(`${g.name} on.`, 2000, { action: true });
         await refreshSlimedSlots();   // keep the Bonehead's slime glow in step
         S.lookPreview = null;
         popSound(S.sounds); pushProfileSoon();
@@ -17766,6 +17818,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const g = GEAR_BY_ID[btn.dataset.equipgearCommit];
       if (!g || wLevel < g.minLevel) return;
       await equipGear(slot, g.id);
+      haptic.tap();
+      toast(`${g.name} on.`, 2000, { action: true });
       await refreshSlimedSlots();   // keep the Bonehead's slime glow in step
       S.lookPreview = null;
       levelSound(S.sounds); pushProfileSoon();
@@ -24543,7 +24597,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v547'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v548'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
@@ -27344,6 +27398,7 @@ async function restageWardrobe(content, slot) {
        falls through to exactly the comparison it always used. */
     const ids = c.dataset.famIds ? c.dataset.famIds.split(' ') : [c.dataset.equip || ''];
     c.classList.toggle('equipped', ids.includes(wanted));
+    if (c.dataset.equip === '') c.textContent = wanted ? 'Take off' : 'None';
   }
   /* AND IT DRAWS THE VARIANT IT IS RINGING. The tile's data-equip is the piece
      it is showing, so it also has to move, or the next tap on the family tile
