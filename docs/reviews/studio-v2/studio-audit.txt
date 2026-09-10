@@ -1,0 +1,24 @@
+MEASURE decoded PNG: {"body":{"x":65,"y":340,"width":822,"height":1120},"safeAreaPercent":76.30667219229176,"pet":{"x":660,"y":1114,"width":350,"height":346},"petGround":1460,"figureFeet":1460}
+COLOURS smallest 180px Crew: 22979 in, 3749 out
+COLOURS smallest 180px Rattles: 12403 in, 2894 out
+COLOURS smallest 180px Knuckles: 9235 in, 2585 out
+COLOURS smallest 180px Big Femur: 5498 in, 1700 out
+COLOURS smallest 180px The Gravekeeper: 11373 in, 2940 out
+COLOURS smallest 180px Two-Ton Tibia: 17824 in, 3636 out
+COLOURS smallest 180px Skullcracker: 7739 in, 2187 out
+COLOURS smallest 180px The Bonecollector: 11794 in, 2885 out
+COLOURS smallest 180px Ribcage Ricky: 12790 in, 2807 out
+COLOURS smallest 180px The Marrow King: 17315 in, 3501 out
+COLOURS smallest 180px The Hollow King: 7904 in, 1904 out
+COLOURS smallest 180px Gravemaw: 10498 in, 2417 out
+COLOURS smallest 180px The Tallboy: 26045 in, 4931 out
+COLOURS smallest 180px Ossuary Prime: 9916 in, 2805 out
+COLOURS smallest 180px Rattle Lord: 6052 in, 2043 out
+COLOURS smallest 180px The Marrowmancer: 17462 in, 3465 out
+COLOURS smallest 180px Bonefather: 6968 in, 1764 out
+COLOURS smallest 180px Calcite the Cruel: 14496 in, 3587 out
+PASS Studio: real 1080x1920 PNG, deterministic bytes (751bcd3b4910ffe1a2079785a7c49cec71b7975853c9b6a07a594d82df39788e), registered z-order pixels, shiny pixels, controls and save-byte handoff.
+PASS entry: Wardrobe-only, reachable handler, quiet style contract; picture first; collapsed tray; fixed caption buttons; old-shell screenshot mode and hidden native Save; unavailable save guard retains preview.
+PASS CONTROL: loud/missing/accent-filled entry, flush-to-bottom information, reversed z-order, base pet, free text, health payloads, missing assets, invalid PNG and denied saves rejected.
+UNPROVEN: visual review, real browser controls and native Photos/file-picker execution.
+

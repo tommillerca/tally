@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 import { importAuditPackage } from './lib/audit-dependencies.mjs';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, PET_SLOTS, bhAsset, petWornItems } from '../data/boneheadz.js';
-import { composeStudio, studioPlan, assertStudioSafe, assertStudioPng, STUDIO_FRAMES, STUDIO_CAPTIONS } from '../js/studio.js';
+import { composeStudio, studioPlan, assertStudioSafe, assertStudioPng, STUDIO_FRAMES, STUDIO_CAPTIONS, STUDIO_POSITIONS, STUDIO_MARK_POSITIONS, STUDIO_MONSTERS, STUDIO_TEXT_STICKERS, studioCrewAppearance, studioInk } from '../js/studio.js';
 import { saveStudioImage, studioSaveMode } from '../js/studio-save.js';
 import { mountStudio } from '../js/studio-screen.js';
 
@@ -19,12 +19,14 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 export async function checkStudio() {
   const { createCanvas, loadImage, GlobalFonts } = await importAuditPackage('@napi-rs/canvas');
   assert.ok(GlobalFonts.registerFromPath(root + 'assets/fonts/bangers.woff2', 'StudioBangers'), 'required font decodes');
+  assert.ok(GlobalFonts.registerFromPath(root + 'assets/fonts/boldpixels.woff2', 'StudioDialogue'));
   const runtime = { createCanvas, loadImage: src => loadImage(root + src), ready: async () => {},
     encode: async c => new Blob([await c.encode('png')], { type: 'image/png' }) };
   const outfit = Object.fromEntries(BH_SLOTS.filter(s => !['BG', 'C'].includes(s.code))
     .map(s => [s.code, s.default || BH_ITEMS.find(i => i.slot === s.code)?.id]).filter(([, id]) => id));
   const look = { outfit, pet: { id: 'C1', shiny: true, morph: 'base', wear: null }, friendCode: 'BONE-ABCD-EFGH' };
   const plain = await composeStudio(look, {}, runtime);
+  assert.ok(plain.bounds.find(b => b.id === 'body').height > 1000, 'V2 figure must grow materially inside the unchanged safe band');
   const first = await bytes(plain.blob);
   const second = await bytes((await composeStudio(look, {}, runtime)).blob);
   assert.deepEqual(first, second, 'same input must produce byte-stable PNG');
@@ -86,12 +88,15 @@ export async function checkStudio() {
   const petSlots = dressed.plan.layers.filter(l => l.group === 'pet').map(l => l.slot);
   assert.deepEqual(petSlots, ['C', ...[...PET_SLOTS].sort((a,b) => a.z-b.z).filter(s => wear[s.code]).map(s => s.code)]);
   assert.ok(petSlots.length > 2);
-  for (const b of dressed.bounds) assert.ok(b.x >= 65 && b.x + b.width <= 1015 && b.y + b.height <= 1250);
+  // v2 deliberately replaces the 1250 ground with feet-aligned larger figures.
+  assertStudioSafe(dressed.bounds);
+  assert.ok(Math.abs(dressed.bounds.find(b => b.id === 'pet').y + dressed.bounds.find(b => b.id === 'pet').height - dressed.feetY) < .001);
 
   // Pixel order proof with overlapping opaque layers. Sources are replaced only
   // here; the production stacking, trimming, layout and PNG encoder all run.
   const colours = new Map(plain.plan.layers.map((l, i) => [l.src, `rgb(${20+i*9},${40+i*5},${70+i*3})`]));
   const synthetic = { ...runtime, loadImage: async src => {
+    if (!colours.has(src)) return runtime.loadImage(src);
     const c = createCanvas(640, 640), x = c.getContext('2d'); x.fillStyle = colours.get(src); x.fillRect(0, 0, 640, 640); return c;
   } };
   const opaque = await composeStudio(look, {}, synthetic);
@@ -100,6 +105,96 @@ export async function checkStudio() {
   const hat = plain.plan.layers.find(l => l.slot === 'H');
   const expected = createCanvas(1,1).getContext('2d'); expected.fillStyle = colours.get(hat.src); expected.fillRect(0,0,1,1);
   assert.deepEqual(cx.getImageData(750, 1100, 1, 1).data, expected.getImageData(0,0,1,1).data, 'highest body slot covers lower slots and pet');
+
+  // Capture the compositor's actual draw calls at their actual transforms onto
+  // transparent PNGs. Encode, decode, then measure ink, not planned rectangles.
+  const measureComposition = async (compose, input, opts) => {
+    const draws = [];
+    const measuredRuntime = { ...runtime, createCanvas(w, h) {
+      const c = createCanvas(w, h);
+      if (w === 1080 && h === 1920) {
+        const cx = c.getContext('2d'), original = cx.drawImage.bind(cx);
+        cx.drawImage = (...args) => {
+          const isolated = createCanvas(w, h), ic = isolated.getContext('2d');
+          ic.imageSmoothingEnabled = cx.imageSmoothingEnabled;
+          ic.setTransform(cx.getTransform()); ic.drawImage(...args);
+          draws.push({ canvas: isolated, input: args[0], smoothing: cx.imageSmoothingEnabled });
+          original(...args);
+        };
+      }
+      return c;
+    } };
+    const result = await compose(input, opts, measuredRuntime);
+    const measured = [];
+    for (const draw of draws) {
+      const png = await runtime.encode(draw.canvas), decoded = await loadImage(await bytes(png));
+      const c = createCanvas(1080, 1920); c.getContext('2d').drawImage(decoded, 0, 0);
+      measured.push({ ...draw, decoded: c, ink: studioInk(c) });
+    }
+    return { result, measured };
+  };
+  const measured = await measureComposition(composeStudio, look, {});
+  const [petPixels, bodyPixels] = measured.measured;
+  assert.ok(bodyPixels.ink.height > 1000);
+  assert.ok(bodyPixels.ink.width * bodyPixels.ink.height / (950 * 1270) > .7);
+  assert.ok(Math.abs(petPixels.ink.y + petPixels.ink.height - measured.result.feetY) <= 1);
+  assertStudioSafe(measured.measured.map((m, i) => ({ id: `decoded-${i}`, ...m.ink })));
+  console.log('MEASURE decoded PNG:', JSON.stringify({ body: bodyPixels.ink,
+    safeAreaPercent: 100 * bodyPixels.ink.width * bodyPixels.ink.height / (950 * 1270),
+    pet: petPixels.ink, petGround: petPixels.ink.y + petPixels.ink.height,
+    figureFeet: measured.result.feetY }));
+  for (const bubblePosition of STUDIO_POSITIONS) for (const markPosition of STUDIO_MARK_POSITIONS) {
+    const r = await composeStudio(look, { bubblePosition, markPosition, caption: 'personality', includeFriendCode: true }, runtime);
+    assertStudioSafe([...r.bounds, ...r.information]);
+    assert.ok(r.information.find(b => b.id === 'caption').y < 600, 'bubble leaves the lower third');
+    assert.notEqual(digest(await bytes(r.blob)), digest(first));
+  }
+  const fixtureFriend = { name: 'Cam', playerId: 'private-id', profile: { outfit, weight: 80, steps: 10000, food: ['private'], level: 99 } };
+  const crew = studioCrewAppearance([fixtureFriend]);
+  assert.deepEqual(crew, [{ label: 'Cam', outfit: Object.fromEntries(Object.entries(outfit).filter(([k]) => !['BG', 'C'].includes(k))) }]);
+  const sticker = { kind: 'crew', outfit: crew[0].outfit, x: 540, y: 900, size: 180, flip: false };
+  for (const key of ['weight', 'steps', 'food', 'profile', 'health', 'name', 'playerId']) {
+    assert.throws(() => studioPlan(look, { stickers: [{ ...sticker, [key]: 100 }] }), /Unsupported/);
+    assert.throws(() => studioPlan(look, { stickers: [{ ...sticker, outfit: { ...outfit, [key]: 100 } }] }), /Unsupported/);
+  }
+  for (const transform of [{ size: 179 }, { size: 651 }, { size: NaN }, { x: Infinity }, { flip: 1 }, { rotation: 15 }, { scaleX: 2 }, { tint: '#FF0000' }]) {
+    assert.throws(() => studioPlan(look, { stickers: [{ ...sticker, ...transform }] }), /Invalid|Unsupported/);
+  }
+  assert.throws(() => studioPlan(look, { stickers: Array(13).fill(sticker) }), /12 stickers/);
+  assert.throws(() => studioPlan(look, { stickers: [{ ...sticker, kind: 'monster', id: 'invented' }] }), /Unknown/);
+  const colourSet = canvas => {
+    const rgba = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data, colours = new Set();
+    for (let i = 0; i < rgba.length; i += 4) if (rgba[i+3] > 14) colours.add(Array.from(rgba.slice(i, i+4)).join(','));
+    return colours;
+  };
+  for (const entry of [sticker, ...STUDIO_MONSTERS.map(id => ({ kind: 'monster', id, x: 540, y: 900, size: 180, flip: false }))]) {
+    const r = await measureComposition(composeStudio, look, { stickers: [entry] });
+    const last = r.measured.at(-1), inputColours = colourSet(last.input), outputColours = colourSet(last.decoded);
+    assert.equal(last.smoothing, false, 'nearest-neighbour art sampling');
+    assert.ok(outputColours.size <= inputColours.size, 'downsample introduces no colour-count inflation');
+    assert.ok([...outputColours].every(c => inputColours.has(c)), 'nearest-neighbour output palette is a subset of the stacked input');
+    console.log(`COLOURS smallest 180px ${entry.id || 'Crew'}: ${inputColours.size} in, ${outputColours.size} out`);
+  }
+  const aSticker = { kind: 'monster', id: STUDIO_MONSTERS[0], x: 500, y: 850, size: 400, flip: false };
+  const bSticker = { kind: 'text', id: 'feed', x: 500, y: 850, size: 400, flip: false };
+  const forward = await composeStudio(look, { stickers: [aSticker, bSticker] }, runtime);
+  const backward = await composeStudio(look, { stickers: [bSticker, aSticker] }, runtime);
+  assert.notEqual(digest(await bytes(forward.blob)), digest(await bytes(backward.blob)), 'array order changes overlapping encoded pixels');
+  const unflipped = await measureComposition(composeStudio, look, { stickers: [aSticker] });
+  const flipped = await measureComposition(composeStudio, look, { stickers: [{ ...aSticker, flip: true }] });
+  const unflipLayer = unflipped.measured.at(-1).decoded, flipLayer = flipped.measured.at(-1).decoded;
+  assert.notEqual(digest(await bytes(unflipped.result.blob)), digest(await bytes(flipped.result.blob)), 'flip changes actual PNG');
+  const mirror = createCanvas(1080, 1920), mx = mirror.getContext('2d');
+  mx.translate(1000, 0); mx.scale(-1, 1); mx.drawImage(unflipLayer, 0, 0);
+  assert.deepEqual(mx.getImageData(0, 0, 1080, 1920).data, flipLayer.getContext('2d').getImageData(0, 0, 1080, 1920).data, 'horizontal flip mirrors the real pixels exactly');
+  for (const size of [180, 650]) for (const [x,y] of [[0,0],[1080,1920]]) {
+    const r = await composeStudio(look, { stickers: [{ ...aSticker, x, y, size }] }, runtime);
+    assertStudioSafe(r.bounds);
+  }
+  for (const id of Object.keys(STUDIO_TEXT_STICKERS)) {
+    const r = await composeStudio(look, { stickers: [{ ...bSticker, id, size: 650, flip: true }] }, runtime);
+    assertStudioSafe(r.bounds); assert.notEqual(digest(await bytes(r.blob)), digest(first));
+  }
 
   let delivered;
   const native = { btoa: s => Buffer.from(s, 'binary').toString('base64'), Capacitor: { isNativePlatform: () => true,
@@ -135,28 +230,53 @@ export async function checkStudio() {
   const elements = new Map(); let markup;
   const el = { set innerHTML(html) {
     markup = html;
-    for (const [, id] of html.matchAll(/id="([^"]+)"/g)) elements.set(id, { disabled: false, hidden: false, decode: async () => {} });
+    for (const [, id] of html.matchAll(/id="([^"]+)"/g)) elements.set(id, { disabled: false, hidden: new RegExp(`id="${id}"[^>]*\\bhidden`).test(html), style: {}, attributes: {}, decode: async () => {},
+      setAttribute(k, v) { this.attributes[k] = v; }, setPointerCapture() {}, focus() {},
+      showModal() { this.open = true; }, close() { this.open = false; },
+      getBoundingClientRect() { return { left: 0, top: 0, width: 1080, height: 1920 }; } });
   }, querySelector: selector => elements.get(selector.slice(1)) };
   const q = id => elements.get(id), draft = { includeFriendCode: true };
   const jobs = []; let shown, savedBlob, back = false;
-  const mount = () => mountStudio(el, { look, ownedBackdrops: new Set([bg.id]), draft, onBack: () => { back = true; },
+  const mount = () => mountStudio(el, { look, crew, ownedBackdrops: new Set([bg.id]), draft, onBack: () => { back = true; },
     compose(l, o) { const job = composeStudio(l, o, runtime).then(r => { shown = r; return r; }); jobs.push(job); return job; },
     async save(blob) { savedBlob = blob; return { status: 'saved' }; } });
   const settle = async () => { for (let i = 0; i < 20; i++) { await Promise.all(jobs); await new Promise(r => setImmediate(r)); if (!q('studioSave').disabled) return; } throw Error('Studio did not finish rendering'); };
   // Use full valid defaults, as the app does.
   Object.assign(draft, { backdrop: null, includePet: true, caption: 'notes', frame: null });
   const dispose = mount(); await settle(); assert.equal(draft.includeFriendCode, false);
-  assert.ok(markup.indexOf('id="studioBackdrop"') < markup.indexOf('class="studio-preview"'), 'an active option precedes the tall preview');
-  assert.match(markup, /Choose a caption<select id="studioCaption">/);
+  // v2 picture leads; controls deliberately move into the collapsed tray.
+  assert.ok(markup.indexOf('id="studioPreview"') < markup.indexOf('id="studioTray"'));
+  assert.ok(q('studioTrayBody').hidden);
+  assert.doesNotMatch(markup, /<select|type="checkbox"|studioFrame/);
   assert.doesNotMatch(markup, /<textarea|type="text"|My caption/);
   assert.match(markup, /<h1[^>]*>The Studio<\/h1>\s*<button class="studio-link" id="studioBack">/);
-  q('studioCode').onchange({ target: { checked: true } });
+  q('studioCode').onclick();
   assert.ok(q('studioSave').disabled); assert.ok(q('studioPreview').hidden); await settle();
   assert.ok(shown.plan.text.some(t => t.id === 'friend-code'));
-  q('studioBackdrop').onchange({ target: { value: bg.id } }); await settle(); assert.equal(shown.plan.layers[0].slot, 'BG');
-  q('studioPet').onchange({ target: { checked: false } }); await settle(); assert.ok(!shown.plan.layers.some(l => l.group === 'pet'));
-  q('studioCaption').onchange({ target: { value: 'home' } }); await settle(); assert.ok(shown.plan.text.some(t => t.text === STUDIO_CAPTIONS.home));
+  q('studioBackdrop').onclick(); await settle(); assert.equal(shown.plan.layers[0].slot, 'BG');
+  q('studioPet').onclick(); await settle(); assert.ok(!shown.plan.layers.some(l => l.group === 'pet'));
+  q('studioCaption').onclick(); await settle(); q('studioCaption').onclick(); await settle(); assert.ok(shown.plan.text.some(t => t.text === STUDIO_CAPTIONS.home));
   await q('studioSave').onclick(); assert.equal(savedBlob, shown.blob);
+  q('studioTrayToggle').onclick(); assert.equal(q('studioTrayBody').hidden, false);
+  q('studioTrayToggle').onpointerdown({ clientY: 100, pointerId: 1 });
+  q('studioTrayToggle').onpointerup({ clientY: 160, pointerId: 1 });
+  q('studioTrayToggle').onclick(); assert.equal(q('studioTrayBody').hidden, true, 'swipe down collapses without click reopening');
+  q('studioText-feed').onclick(); await settle(); assert.equal(draft.stickers.length, 1);
+  q('studioFlip').onclick(); await settle(); assert.equal(draft.stickers[0].flip, true);
+  q('studioSmaller').onclick(); await settle(); assert.equal(draft.stickers[0].size, 360);
+  q('studioLarger').onclick(); await settle(); assert.equal(draft.stickers[0].size, 400);
+  q('studioLeft').onclick(); await settle(); assert.equal(draft.stickers[0].x, 510);
+  const box = shown.bounds.find(b => b.id === 'sticker-0');
+  q('studioStage').onpointerdown({ clientX: box.x + box.width / 2, clientY: box.y + box.height / 2, pointerId: 2 });
+  q('studioStage').onpointermove({ clientX: 700, clientY: 1000 }); q('studioStage').onpointerup(); await settle();
+  assert.equal(draft.stickers[0].x, 700); assert.equal(draft.stickers[0].y, 1000);
+  q('studioRemove').onclick(); await settle(); assert.equal(draft.stickers.length, 0);
+  q('studioCrew-0').onclick(); await settle();
+  assert.deepEqual(Object.keys(draft.stickers[0]).sort(), ['flip', 'kind', 'outfit', 'size', 'x', 'y']);
+  assert.deepEqual(draft.stickers[0].outfit, crew[0].outfit);
+  q('studioRemove').onclick(); await settle();
+  q('studioMonster-0').onclick(); await settle(); assert.equal(draft.stickers[0].id, STUDIO_MONSTERS[0]);
+  q('studioRemove').onclick(); await settle();
   q('studioBack').onclick(); assert.ok(back);
   dispose(); const disposeAgain = mount(); await settle(); assert.equal(draft.includeFriendCode, false); disposeAgain();
 
@@ -165,9 +285,13 @@ export async function checkStudio() {
   const oldShell = { Capacitor: { isNativePlatform: () => true, Plugins: {} } };
   const endOldShell = mountStudio(el, { look, ownedBackdrops: new Set(), env: oldShell, onBack() {}, compose: async () => plain });
   await new Promise(r => setImmediate(r));
-  assert.match(markup, /Preview is available in this app build\. Saving needs a newer app build/);
+  assert.match(markup, /Use a screenshot for now/);
   assert.doesNotMatch(markup, /saving asks for permission/);
-  assert.match(q('studioStatus').textContent, /Preview ready.*newer app build/);
+  assert.match(q('studioStatus').textContent, /take a screenshot/);
+  assert.ok(q('studioSave').hidden);
+  q('studioClean').onclick(); assert.ok(q('studioCleanView').open);
+  assert.equal(q('studioCleanImage').src, q('studioPreview').src);
+  q('studioCleanView').onclick(); assert.equal(q('studioCleanView').open, false);
   assert.equal(q('studioSave').disabled, false);
   await q('studioSave').onclick();
   assert.match(q('studioStatus').textContent, /cannot save.*newer app build.*draft/);
@@ -183,7 +307,7 @@ export async function checkStudio() {
   const end = mountStudio(el, { look, ownedBackdrops: new Set([bg.id]), onBack() {}, compose: deferredCompose,
     save: async () => { saveCalls++; if (outcome === 'denied') throw Error('denied'); return {status: outcome}; } });
   const tick = () => new Promise(r => setImmediate(r));
-  q('studioCode').onchange({ target: { checked: true } });
+  q('studioCode').onclick();
   await q('studioSave').onclick(); assert.equal(saveCalls, 0);
   resolveRender(plain); await tick();
   assert.equal(composeCalls, 2); assert.ok(q('studioSave').disabled, 'obsolete preview cannot save');
@@ -192,14 +316,14 @@ export async function checkStudio() {
   q('studioRetry').onclick(); resolveRender(code); await tick();
   await q('studioSave').onclick(); assert.match(q('studioStatus').textContent, /cancelled/);
   outcome = 'denied'; await q('studioSave').onclick(); assert.match(q('studioStatus').textContent, /denied.*draft/);
-  q('studioCode').onchange({ target: { checked: false } }); end(); resolveRender(plain); await tick();
+  q('studioCode').onclick(); end(); resolveRender(plain); await tick();
   assert.equal(saveCalls, 2); assert.ok(q('studioPreview').hidden, 'disposed completion cannot reveal');
 
   const app = source('js/app.js');
   const boundary = app.slice(app.indexOf('const studioDraft ='), app.indexOf("function openCharacter(tab = 'wardrobe')"));
   let boundaryLook;
   const context = vm.createContext({
-    STUDIO_DEFAULTS: {}, equipped: async () => ({ B: 'B0-1', SK: 'SK0-1', C: 'C1' }),
+    STUDIO_DEFAULTS: {}, studioCrew: [], studioCrewOwner: null, equipped: async () => ({ B: 'B0-1', SK: 'SK0-1', C: 'C1' }),
     equippedPetInstance: async () => ({ sp: 'C1', shiny: true, morph: 'base', level: 99, steps: 10000 }),
     petWear: async () => wear, petWornItems,
     social: { socialMe: async () => ({ friendCode: look.friendCode, weight: 80, name: 'Not exported' }) },
@@ -257,6 +381,12 @@ export async function checkStudio() {
     assert.equal(selector, '#wardrobeStudio'); return { addEventListener(event, fn) { assert.equal(event, 'click'); enter = fn; } };
   } });
   enter(); assert.equal(navigation.hash, '#/studio', 'actual entry handler reaches the registered Studio route');
+  const crewProjection = app.split('\n').find(l => l.includes('studioCrew = studioCrewAppearance(data.friends'));
+  const crewContext = vm.createContext({ me: { friendCode: look.friendCode }, studioCrewOwner: null, data: { reached: true, friends: [fixtureFriend] }, studioCrewAppearance, studioCrew: [] });
+  vm.runInContext(crewProjection, crewContext);
+  assert.deepEqual(crewContext.studioCrew, crew);
+  assert.doesNotMatch(boundary, /listFriends|fetch\(/, 'Studio adds no Crew request');
+  assert.match(boundary, /crew: me\?\.friendCode === studioCrewOwner \? studioCrew : \[\]/);
   const css = source('app.css');
   /* .studio-link is now only the Studio's OWN back control, so its quiet rule is
      still graded; the entry's styling is graded by the class it shares above. */
@@ -291,6 +421,6 @@ export async function checkStudio() {
     assert.ok(source('sw.js').includes(`'./js/${file}'`));
     assert.doesNotMatch(source('js/' + file), /navigator\.share|speechLine\(|S\.shinyPets/);
   }
-  return `PASS Studio: real 1080x1920 PNG, deterministic bytes (${digest(first)}), registered z-order pixels, shiny pixels, controls and save-byte handoff.\nPASS entry: Wardrobe-only, reachable handler, quiet style contract; Backdrop before preview; fixed caption picker; old-shell Save reports unavailable and retains preview.\nPASS CONTROL: loud/missing/accent-filled entry, flush-to-bottom information, reversed z-order, base pet, free text, health payloads, missing assets, invalid PNG and denied saves rejected.\nUNPROVEN: visual review, real browser controls and native Photos/file-picker execution.\n`;
+  return `PASS Studio: real 1080x1920 PNG, deterministic bytes (${digest(first)}), registered z-order pixels, shiny pixels, controls and save-byte handoff.\nPASS entry: Wardrobe-only, reachable handler, quiet style contract; picture first; collapsed tray; fixed caption buttons; old-shell screenshot mode and hidden native Save; unavailable save guard retains preview.\nPASS CONTROL: loud/missing/accent-filled entry, flush-to-bottom information, reversed z-order, base pet, free text, health payloads, missing assets, invalid PNG and denied saves rejected.\nUNPROVEN: visual review, real browser controls and native Photos/file-picker execution.\n`;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) console.log(await checkStudio());

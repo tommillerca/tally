@@ -1,0 +1,17 @@
+ok    SETUP the changelog was parsed and has entries to grade  315 entries
+ok    SETUP the newest entry (v550) has items to grade  3 items
+ok    SETUP docs/CLAIMS.md exists  found
+ok    CLAIMS docs/CLAIMS.md carries no merge conflict markers  clean
+ok    CLAIMS every silent build still carries its own section in docs/CLAIMS.md  1 silent build(s) recorded
+ok    CLAIMS docs/CLAIMS.md has a section for v550  found
+ok    CLAIMS every item in the newest entry is answered  3 answered of 3 claims
+ok    PROOF every claim names an audit that exists and the gate actually runs  3 claims backed
+ok    REACH no claim in a shipped entry is GATED, PENDING-DEPLOY or NEEDS-PEER  all 3 reachable
+ok    REACH the route is written out, not left as a word  every route spelled out
+
+    WHAT v550 CLAIMS, AND WHAT BACKS IT:
+      1. executes the production `mogBarHtml` before selection and verifies t  <- transmog-reach-audit.mjs
+      1. `wardrobeLookCounts` counts collected catalogue item ids instead of   <- transmog-reach-audit.mjs
+      1. source disclosure is visible in the gear inspection before its melt   <- transmog-reach-audit.mjs
+
+claim-evidence: clean

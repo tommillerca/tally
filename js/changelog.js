@@ -5,6 +5,8 @@
 // Pending train notes. The operator assigns a build number and moves these
 // into CHANGES when assembling the release. No version stamp is advanced here.
 export const NEXT_CHANGES = [
+  // SILENT Studio v2 pending operator numbering. Keep unlisted in player patch notes.
+  // Larger figures, speech-bubble positions, placed monster/Crew/text stickers, screenshot mode.
 ];
 
 /* BUILDS THAT SHIP WITH NO PLAYER-FACING NOTE.
@@ -29,7 +31,7 @@ export const NEXT_CHANGES = [
  * The dot: changelogLatest reads CHANGES, so a silent build moves no "new since
  * you last looked" dot. That is the point -- there is nothing for a player to
  * go and read. */
-export const SILENT_BUILDS = [551, 552];
+export const SILENT_BUILDS = [551, 552, 553];
 
 export const CHANGES = [
 

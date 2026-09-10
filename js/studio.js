@@ -2,6 +2,7 @@
 // cross this boundary. No state, health queries, clock, randomness or animation.
 import { BH_SLOTS, BH_BY_ID, PET_SLOTS, bhAsset, petWornItems } from '../data/boneheadz.js';
 import { morphAsset, isMorph } from './pets.js';
+import { LOOKS } from './bosses.js';
 import { footballTints, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
 
 export const STUDIO_SIZE = Object.freeze({ width: 1080, height: 1920 });
@@ -13,7 +14,29 @@ export const STUDIO_CAPTIONS = Object.freeze({
   home: 'I live here now.',
 });
 export const STUDIO_DEFAULTS = Object.freeze({ backdrop: null, includePet: true,
-  caption: 'notes', includeFriendCode: false, frame: null });
+  caption: 'notes', bubblePosition: 'left', markPosition: 'bottom', stickers: Object.freeze([]), includeFriendCode: false, frame: null });
+export const STUDIO_POSITIONS = Object.freeze(['left', 'right']);
+export const STUDIO_MARK_POSITIONS = Object.freeze(['top', 'bottom', 'right']);
+export const STUDIO_TEXT_STICKERS = Object.freeze({ gym: 'BONEHEADZ GYM.', feed: 'FEED THE BONES.', home: 'I LIVE HERE NOW.' });
+export const STUDIO_MONSTERS = Object.freeze(Object.keys(LOOKS));
+export const STUDIO_STICKER_MIN = 180;
+export const STUDIO_STICKER_MAX = 650;
+
+// Project at the social boundary, before the compositor ever sees a snapshot.
+export function studioCrewAppearance(friends) {
+  return friends.map(f => ({ label: String(f.alias || f.name || f.handle || 'Crew friend'),
+    outfit: Object.fromEntries(BH_SLOTS.filter(s => !['BG', 'C'].includes(s.code))
+      .map(s => [s.code, f.profile?.outfit?.[s.code]])
+      .filter(([slot, id]) => typeof id === 'string' && BH_BY_ID[id]?.slot === slot)) }));
+}
+
+// Coordinates are centres in export pixels. Array order is back to front.
+export function studioStickerBox(ink, sticker) {
+  const scale = sticker.size / Math.max(ink.width, ink.height);
+  const width = ink.width * scale, height = ink.height * scale;
+  return { x: Math.max(STUDIO_SAFE.left, Math.min(STUDIO_SAFE.right - width, sticker.x - width / 2)),
+    y: Math.max(STUDIO_SAFE.top, Math.min(STUDIO_SAFE.bottom - height, sticker.y - height / 2)), width, height };
+}
 const fail = message => { throw new Error(message); };
 function keys(value, allowed, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) fail(`Invalid ${label}.`);
@@ -33,6 +56,24 @@ export function studioPlan(look, options = {}) {
   for (const flag of ['includePet', 'includeFriendCode']) if (typeof opts[flag] !== 'boolean') fail(`Invalid ${flag}.`);
   if (!Object.hasOwn(STUDIO_CAPTIONS, opts.caption)) fail('Choose a Studio caption. Free text is unavailable.');
   if (opts.frame !== null) fail('Frames await art review.');
+  if (!STUDIO_POSITIONS.includes(opts.bubblePosition)) fail('Choose a bubble position.');
+  if (!STUDIO_MARK_POSITIONS.includes(opts.markPosition)) fail('Choose a mark position.');
+  if (!Array.isArray(opts.stickers) || opts.stickers.length > 12) fail('Choose up to 12 stickers.');
+  const stickers = opts.stickers.map(s => {
+    keys(s, ['kind', 'id', 'outfit', 'x', 'y', 'size', 'flip'], 'sticker');
+    if (![s.x, s.y, s.size].every(Number.isFinite) || s.size < STUDIO_STICKER_MIN || s.size > STUDIO_STICKER_MAX || typeof s.flip !== 'boolean') fail('Invalid sticker transform.');
+    if (s.kind === 'text') {
+      if (!Object.hasOwn(STUDIO_TEXT_STICKERS, s.id) || s.outfit) fail('Unknown text sticker.');
+      return { ...s, text: STUDIO_TEXT_STICKERS[s.id] };
+    }
+    if (!['monster', 'crew'].includes(s.kind)) fail('Unknown sticker kind.');
+    if (s.kind === 'monster' && (!Object.hasOwn(LOOKS, s.id) || s.outfit)) fail('Unknown monster sticker.');
+    if (s.kind === 'crew' && s.id !== undefined) fail('Crew stickers carry appearance only.');
+    const outfit = s.kind === 'monster' ? LOOKS[s.id] : s.outfit;
+    const layers = studioPlan({ outfit }, { includePet: false }).layers.filter(l => l.group === 'body');
+    // No tint, filter or recolour is applied to placed Cam art.
+    return { ...s, layers: layers.map(l => ({ ...l, tints: [] })) };
+  });
   const layers = [];
   if (opts.backdrop !== null) layers.push({ slot: 'BG', group: 'backdrop', z: 0, src: bhAsset(itemFor(opts.backdrop, 'BG')) });
   for (const slot of [...BH_SLOTS].sort((a, b) => a.z - b.z)) {
@@ -63,14 +104,13 @@ export function studioPlan(look, options = {}) {
     for (const w of worn) layers.push({ slot: w.slot, group: 'pet', z: PET_SLOTS.find(s => s.code === w.slot).z,
       src: bhAsset(w), tints: footballTints(w) });
   }
-  const text = [{ id: 'brand', text: 'BONEHEADZ', x: 90, baseline: 1390, size: 70 }];
-  if (opts.caption !== 'none') text.push({ id: 'caption', text: STUDIO_CAPTIONS[opts.caption], x: 90, baseline: 1450, size: 38 });
+  const text = [];
+  if (opts.caption !== 'none') text.push({ id: 'caption', text: STUDIO_CAPTIONS[opts.caption] });
   if (opts.includeFriendCode) {
     if (!/^BONE-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(look.friendCode || '')) fail('Your friend code is unavailable.');
-    text.push({ id: 'friend-code', text: look.friendCode, x: 90, baseline: 1510, size: 38 });
+    text.push({ id: 'friend-code', text: look.friendCode, x: 90, baseline: 1520, size: 38 });
   }
-  // Pets have their own registered stack, behind the body, as BH_SLOTS.C.z says.
-  return { layers, text, frame: null };
+  return { layers, text, stickers, bubblePosition: opts.bubblePosition, markPosition: opts.markPosition, frame: null };
 }
 
 export function assertStudioSafe(elements) {
@@ -116,6 +156,8 @@ export function studioBrowserRuntime() {
       if (!fontReady) fontReady = (async () => {
         const font = new FontFace('StudioBangers', 'url(assets/fonts/bangers.woff2)');
         document.fonts.add(await font.load());
+        const dialogue = new FontFace('StudioDialogue', 'url(assets/fonts/boldpixels.woff2)');
+        document.fonts.add(await dialogue.load());
       })().catch(error => { fontReady = null; throw error; });
       await fontReady;
     },
@@ -132,7 +174,7 @@ export async function composeStudio(look, options = {}, runtime = studioBrowserR
     if (!assets.has(src)) assets.set(src, runtime.loadImage(src).catch(() => fail(`Download required art and retry: ${src}`)));
     return assets.get(src);
   };
-  const required = [...new Set(plan.layers.flatMap(l => [l.src, l.mask, ...(l.tints || []).map(t => t.mask)]).filter(Boolean))];
+  const required = [...new Set([...plan.layers, ...plan.stickers.flatMap(s => s.layers || []), { src: 'assets/brand/wordmark.png' }].flatMap(l => [l.src, l.mask, ...(l.tints || []).map(t => t.mask)]).filter(Boolean))];
   // Sequential decode bounds the cold-load memory spike from 2048px pet clothing.
   for (const src of required) await load(src);
   const canvas = runtime.createCanvas(1080, 1920), ctx = canvas.getContext('2d');
@@ -142,13 +184,15 @@ export async function composeStudio(look, options = {}, runtime = studioBrowserR
     const img = await load(bg.src), scale = Math.max(1080 / img.width, 1920 / img.height);
     ctx.drawImage(img, (1080 - img.width * scale) / 2, (1920 - img.height * scale) / 2, img.width * scale, img.height * scale);
   }
-  const stack = async group => {
-    const layers = plan.layers.filter(l => l.group === group);
+  const stack = async (group, input = plan.layers) => {
+    const layers = input.filter(l => l.group === group);
     if (!layers.length) return null;
     const size = Math.max(...(await Promise.all(layers.map(l => load(l.src)))).map(i => Math.max(i.width, i.height)));
     const c = runtime.createCanvas(size, size), cctx = c.getContext('2d');
+    cctx.imageSmoothingEnabled = false;
     for (const l of layers) {
       const layer = runtime.createCanvas(size, size), lc = layer.getContext('2d');
+      lc.imageSmoothingEnabled = false;
       lc.drawImage(await load(l.src), 0, 0, size, size);
       if (l.mask) { lc.globalCompositeOperation = 'destination-in'; lc.drawImage(await load(l.mask), 0, 0, size, size); lc.globalCompositeOperation = 'source-over'; }
       // Existing catalogue colour overlays only, identical to the wardrobe's
@@ -165,33 +209,110 @@ export async function composeStudio(look, options = {}, runtime = studioBrowserR
   };
   const body = await stack('body'), pet = await stack('pet');
   if (!body) fail('No Bonehead art.');
-  const ground = 1250, bounds = [];
-  const seat = (figure, group, left, maxWidth, maxHeight) => {
-    const b = figure.ink, scale = Math.min(maxWidth / b.width, maxHeight / b.height);
-    const width = b.width * scale, height = b.height * scale;
-    const x = left + (maxWidth - width) / 2, y = ground - height;
-    ctx.drawImage(figure.canvas, b.x, b.y, b.width, b.height, x, y, width, height);
-    bounds.push({ id: group, x, y, width, height });
+  const ground = 1460, bounds = [], information = [];
+  ctx.imageSmoothingEnabled = false; // nearest-neighbour, no interpolated art colours
+  const paint = (figure, box, flip = false) => {
+    const b = figure.ink;
+    ctx.save(); ctx.translate(box.x + (flip ? box.width : 0), box.y); ctx.scale(flip ? -1 : 1, 1);
+    ctx.drawImage(figure.canvas, b.x, b.y, b.width, b.height, 0, 0, box.width, box.height); ctx.restore();
   };
-  if (pet) seat(pet, 'pet', 710, 280, 400);
-  seat(body, 'body', pet ? 120 : 190, 700, 910);
-  // Solid information band, separate from character ink. Frame slot remains empty.
-  ctx.fillStyle = '#F3EFE7'; ctx.fillRect(65, 1300, 950, 240);
-  ctx.fillStyle = '#2A2D28'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  const information = [];
-  for (const t of plan.text) {
-    ctx.font = `${t.size}px StudioBangers`;
+  const bodyScale = Math.min(850 / body.ink.width, 1120 / body.ink.height);
+  const bodyBox = { id: 'body', x: 65, y: ground - body.ink.height * bodyScale,
+    width: body.ink.width * bodyScale, height: body.ink.height * bodyScale };
+  // Ground by the feet, not a sword or other accessory extending below them.
+  const feet = await stack('body', plan.layers.filter(l => l.slot === (plan.layers.some(l => l.slot === 'FW') ? 'FW' : 'B')));
+  const feetY = bodyBox.y + ((feet.ink.y + feet.ink.height) * body.canvas.width / feet.canvas.width - body.ink.y) * bodyScale;
+  if (pet) {
+    const scale = Math.min(350 / pet.ink.width, 460 / pet.ink.height);
+    const box = { id: 'pet', x: 1010 - pet.ink.width * scale, y: feetY - pet.ink.height * scale,
+      width: pet.ink.width * scale, height: pet.ink.height * scale };
+    paint(pet, box); bounds.push(box);
+  }
+  paint(body, bodyBox); bounds.push(bodyBox);
+
+  // Port of talkBoxHtml's .talkbox + .hero-bubble at 3 export px per CSS px.
+  // app.css: size 11, line-height 1.55, tracking .02em, padding .88/.94em,
+  // border 2, radius 13, shadow 4/5; tail 10/7 at 42%/45%, 12 degrees.
+  const caption = plan.text.find(t => t.id === 'caption');
+  if (caption) {
+    const unit = 3, font = 33, padX = font * .94, padY = font * .88, lineH = font * 1.55;
+    ctx.font = `${font}px StudioDialogue`; ctx.letterSpacing = `${font * .02}px`;
+    const lines = []; let line = '';
+    for (const word of caption.text.split(' ')) {
+      const next = line ? line + ' ' + word : word;
+      if (line && ctx.measureText(next).width > 350) { lines.push(line); line = word; } else line = next;
+    }
+    lines.push(line);
+    const width = Math.max(...lines.map(l => ctx.measureText(l).width)) + padX * 2 + 12;
+    const height = lines.length * lineH + padY * 2 + 12;
+    const x = plan.bubblePosition === 'left' ? 95 : 985 - width, y = 440;
+    ctx.save();
+    ctx.translate(x + width / 2, y + height / 2);
+    ctx.rotate((plan.bubblePosition === 'left' ? -2 : 2) * Math.PI / 180);
+    ctx.translate(-x - width / 2, -y - height / 2);
+    const rounded = (dx, dy, fill, stroke) => {
+      const inset = stroke ? unit : 0;
+      ctx.beginPath(); ctx.roundRect(x + dx + inset, y + dy + inset, width - inset * 2, height - inset * 2, 13 * unit - inset);
+      ctx.fillStyle = fill; ctx.fill();
+      if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2 * unit; ctx.stroke(); }
+    };
+    rounded(4 * unit, 5 * unit, 'rgba(0,0,0,.55)');
+    rounded(0, 0, '#16151d', '#3b393d');
+    const tail = (radius, inset, fraction, fill) => {
+      const right = plan.bubblePosition === 'left';
+      ctx.save(); ctx.translate(right ? x + width - 6 + (inset - radius / 2) * unit : x + 6 - (inset - radius / 2) * unit, y + 6 + (height - 12) * fraction + radius * unit);
+      ctx.scale(right ? 1 : -1, 1); ctx.rotate(12 * Math.PI / 180);
+      ctx.beginPath(); ctx.moveTo(-radius * unit / 2, -radius * unit); ctx.lineTo(radius * unit / 2, 0); ctx.lineTo(-radius * unit / 2, radius * unit); ctx.closePath();
+      ctx.fillStyle = fill; ctx.fill(); ctx.restore();
+    };
+    tail(10, 14, .42, '#3b393d'); tail(7, 8, .45, '#16151d');
+    ctx.fillStyle = '#f2e9d7'; ctx.textBaseline = 'middle';
+    lines.forEach((l, i) => ctx.fillText(l, x + 6 + padX, y + 6 + padY + lineH * (i + .5)));
+    ctx.restore();
+    information.push({ id: 'caption', x: plan.bubblePosition === 'left' ? x - 12 : x - 57, y: y - 12, width: width + 84, height: height + 36 });
+    ctx.letterSpacing = '0px';
+  }
+  const markImg = await load('assets/brand/wordmark.png');
+  const markCanvas = runtime.createCanvas(markImg.width, markImg.height);
+  markCanvas.getContext('2d').drawImage(markImg, 0, 0);
+  const mark = { canvas: markCanvas, ink: studioInk(markCanvas) };
+  const markWidth = plan.markPosition === 'right' ? 340 : 480;
+  const markHeight = markWidth * mark.ink.height / mark.ink.width;
+  const markBox = { id: 'brand', x: plan.markPosition === 'right' ? 660 : 300,
+    y: plan.markPosition === 'bottom' ? 1475 - markHeight : plan.markPosition === 'top' ? 280 : 800,
+    width: markWidth, height: markHeight };
+  paint(mark, markBox); information.push(markBox);
+  for (const t of plan.text.filter(t => t.id === 'friend-code')) {
+    ctx.font = `${t.size}px StudioBangers`; ctx.textBaseline = 'alphabetic';
     const m = ctx.measureText(t.text);
     const box = { id: t.id, x: t.x - m.actualBoundingBoxLeft, y: t.baseline - m.actualBoundingBoxAscent,
       width: m.actualBoundingBoxLeft + m.actualBoundingBoxRight, height: m.actualBoundingBoxAscent + m.actualBoundingBoxDescent };
-    assertStudioSafe([box]);
-    if (bounds.some(b => box.x < b.x + b.width && box.x + box.width > b.x && box.y < b.y + b.height && box.y + box.height > b.y)) fail('Studio text overlaps character ink.');
-    information.push(box); ctx.fillText(t.text, t.x, t.baseline);
+    ctx.fillStyle = '#F3EFE7'; ctx.fillRect(box.x - 6, box.y - 6, box.width + 12, box.height + 12);
+    ctx.fillStyle = '#2A2D28'; ctx.fillText(t.text, t.x, t.baseline);
+    information.push({ ...box, x: box.x - 6, y: box.y - 6, width: box.width + 12, height: box.height + 12 });
   }
-  assertStudioSafe(information);
+  for (const [index, sticker] of plan.stickers.entries()) {
+    let figure;
+    if (sticker.kind === 'text') {
+      const c = runtime.createCanvas(800, 170), cc = c.getContext('2d');
+      cc.font = '76px StudioBangers'; cc.textBaseline = 'middle';
+      const width = Math.ceil(cc.measureText(sticker.text).width) + 52;
+      cc.fillStyle = '#2A2D28'; cc.fillRect(8, 10, width, 144);
+      cc.fillStyle = '#FD6857'; cc.fillRect(3, 3, width - 6, 138);
+      cc.strokeStyle = '#2A2D28'; cc.lineWidth = 6; cc.strokeRect(3, 3, width - 6, 138);
+      // Fixed screenprint speckle on our text card only, never on Cam's art.
+      cc.fillStyle = 'rgba(42,45,40,.15)';
+      for (let i = 0; i < 700; i++) cc.fillRect(8 + (i * 37 % (width - 16)), 8 + (i * 53 % 128), 2, 2);
+      cc.fillStyle = '#2A2D28'; cc.fillText(sticker.text, 24, 74);
+      figure = { canvas: c, ink: studioInk(c) };
+    } else figure = await stack('body', sticker.layers);
+    const box = { id: `sticker-${index}`, ...studioStickerBox(figure.ink, sticker) };
+    paint(figure, box, sticker.flip); bounds.push(box);
+  }
+  assertStudioSafe([...bounds, ...information]);
   const blob = await runtime.encode(canvas);
   await assertStudioPng(blob);
-  return { blob, plan, information, bounds };
+  return { blob, plan, information, bounds, feetY };
 }
 
 export async function assertStudioPng(blob) {
