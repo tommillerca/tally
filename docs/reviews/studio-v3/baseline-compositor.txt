@@ -2,6 +2,7 @@
 // cross this boundary. No state, health queries, clock, randomness or animation.
 import { BH_SLOTS, BH_BY_ID, PET_SLOTS, bhAsset, petWornItems } from '../data/boneheadz.js';
 import { morphAsset, isMorph } from './pets.js';
+import { LOOKS } from './bosses.js';
 import { footballTints, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
 
 export const STUDIO_SIZE = Object.freeze({ width: 1080, height: 1920 });
@@ -17,15 +18,7 @@ export const STUDIO_DEFAULTS = Object.freeze({ backdrop: null, includePet: true,
 export const STUDIO_POSITIONS = Object.freeze(['left', 'right']);
 export const STUDIO_MARK_POSITIONS = Object.freeze(['top', 'bottom', 'right']);
 export const STUDIO_TEXT_STICKERS = Object.freeze({ gym: 'BONEHEADZ GYM.', feed: 'FEED THE BONES.', home: 'I LIVE HERE NOW.' });
-export const STUDIO_CREATURES = Object.freeze({
-  'The Wanderer': 'assets/bh/wanderer/wanderer.png',
-  'The Mimic': 'assets/bh/mimic/mimic.png',
-  'The Glutton': 'assets/bh/glutton/idle.png',
-  Gwart: 'assets/gwart/gwart.png',
-});
-export const STUDIO_MONSTERS = Object.freeze(Object.keys(STUDIO_CREATURES));
-export const STUDIO_OUTLINE = 12;
-export const STUDIO_SHADOW = Object.freeze({ x: 8, y: 10 });
+export const STUDIO_MONSTERS = Object.freeze(Object.keys(LOOKS));
 export const STUDIO_STICKER_MIN = 180;
 export const STUDIO_STICKER_MAX = 650;
 
@@ -39,77 +32,11 @@ export function studioCrewAppearance(friends) {
 
 // Coordinates are centres in export pixels. Array order is back to front.
 export function studioStickerBox(ink, sticker) {
-  const requestedScale = sticker.size / Math.max(ink.width, ink.height);
-  let scale = requestedScale;
-  const angle = (sticker.rotation || 0) * Math.PI / 180;
-  const c = Math.abs(Math.cos(angle)), s = Math.abs(Math.sin(angle));
-  // A 650px square at 45 degrees plus the 12px rim and hard shadow is
-  // 952px wide. Uniformly cap only that geometric edge case to fit 950px.
-  scale = Math.min(scale,
-    (STUDIO_SAFE.right - STUDIO_SAFE.left - STUDIO_OUTLINE * 2 - STUDIO_SHADOW.x) / (ink.width * c + ink.height * s),
-    (STUDIO_SAFE.bottom - STUDIO_SAFE.top - STUDIO_OUTLINE * 2 - STUDIO_SHADOW.y) / (ink.width * s + ink.height * c));
-  const fittedSize = scale < requestedScale ? scale * Math.max(ink.width, ink.height) : sticker.size;
-  const artWidth = Math.ceil((ink.width * c + ink.height * s) * scale - 1e-9);
-  const artHeight = Math.ceil((ink.width * s + ink.height * c) * scale - 1e-9);
-  const width = artWidth + STUDIO_OUTLINE * 2 + STUDIO_SHADOW.x;
-  const height = artHeight + STUDIO_OUTLINE * 2 + STUDIO_SHADOW.y;
-  return { x: Math.round(Math.max(STUDIO_SAFE.left, Math.min(STUDIO_SAFE.right - width, sticker.x - width / 2))),
-    y: Math.round(Math.max(STUDIO_SAFE.top, Math.min(STUDIO_SAFE.bottom - height, sticker.y - height / 2))), width, height,
-    artWidth, artHeight, fittedSize };
+  const scale = sticker.size / Math.max(ink.width, ink.height);
+  const width = ink.width * scale, height = ink.height * scale;
+  return { x: Math.max(STUDIO_SAFE.left, Math.min(STUDIO_SAFE.right - width, sticker.x - width / 2)),
+    y: Math.max(STUDIO_SAFE.top, Math.min(STUDIO_SAFE.bottom - height, sticker.y - height / 2)), width, height };
 }
-
-// Inverse-map output pixel centres directly to source pixels. Canvas transforms
-// can antialias rotated edges even with smoothing disabled. Copying RGBA avoids
-// that backend-dependent interpolation, including at arbitrary twist angles.
-export function studioRasterSticker(figure, sticker, runtime) {
-  const box = studioStickerBox(figure.ink, sticker);
-  const key = [sticker.size, sticker.rotation || 0, sticker.flip].join(':');
-  if (figure.raster?.key === key) return { ...figure.raster, box };
-  const { width, height, artWidth, artHeight } = box, pad = STUDIO_OUTLINE;
-  const art = runtime.createCanvas(width, height), ac = art.getContext('2d');
-  const pixels = ac.createImageData(width, height);
-  const src = figure.pixels ||= figure.canvas.getContext('2d').getImageData(0, 0, figure.canvas.width, figure.canvas.height).data;
-  const b = figure.ink, scale = box.fittedSize / Math.max(b.width, b.height);
-  const angle = (sticker.rotation || 0) * Math.PI / 180, co = Math.cos(angle), si = Math.sin(angle);
-  for (let y = 0; y < artHeight; y++) for (let x = 0; x < artWidth; x++) {
-    const dx = x + .5 - artWidth / 2, dy = y + .5 - artHeight / 2;
-    const sx = Math.floor(b.x + b.width / 2 + (dx * co + dy * si) / scale * (sticker.flip ? -1 : 1));
-    const sy = Math.floor(b.y + b.height / 2 + (-dx * si + dy * co) / scale);
-    if (sx < b.x || sy < b.y || sx >= b.x + b.width || sy >= b.y + b.height) continue;
-    const from = (sy * figure.canvas.width + sx) * 4, to = ((y + pad) * width + x + pad) * 4;
-    pixels.data.set(src.subarray(from, from + 4), to);
-  }
-  ac.putImageData(pixels, 0, 0);
-  // Exact integer disk dilation of nonzero alpha. Sliding row windows keep it
-  // O(radius * pixels), rather than painting one disk per opaque pixel.
-  const mask = new Uint8Array(width * height), dilated = new Uint8Array(mask.length);
-  for (let i = 0; i < mask.length; i++) mask[i] = pixels.data[i * 4 + 3] ? 1 : 0;
-  for (let dy = -pad; dy <= pad; dy++) {
-    const radius = Math.floor(Math.sqrt(pad * pad - dy * dy));
-    for (let y = Math.max(0, -dy); y < Math.min(height, height - dy); y++) {
-      const row = y * width, out = (y + dy) * width;
-      let count = 0;
-      for (let x = 0; x <= radius && x < width; x++) count += mask[row + x];
-      for (let x = 0; x < width; x++) {
-        if (count) dilated[out + x] = 1;
-        if (x - radius >= 0) count -= mask[row + x - radius];
-        if (x + radius + 1 < width) count += mask[row + x + radius + 1];
-      }
-    }
-  }
-  const decoration = runtime.createCanvas(width, height), dc = decoration.getContext('2d');
-  const border = dc.createImageData(width, height);
-  const put = i => { border.data.set([42, 45, 40, 255], i * 4); };
-  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) if (dilated[y * width + x]) {
-    put(y * width + x);
-    if (x + STUDIO_SHADOW.x < width && y + STUDIO_SHADOW.y < height)
-      put((y + STUDIO_SHADOW.y) * width + x + STUDIO_SHADOW.x);
-  }
-  dc.putImageData(border, 0, 0);
-  figure.raster = { key, art, decoration, mask, dilated };
-  return { ...figure.raster, box };
-}
-
 const fail = message => { throw new Error(message); };
 function keys(value, allowed, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) fail(`Invalid ${label}.`);
@@ -133,20 +60,16 @@ export function studioPlan(look, options = {}) {
   if (!STUDIO_MARK_POSITIONS.includes(opts.markPosition)) fail('Choose a mark position.');
   if (!Array.isArray(opts.stickers) || opts.stickers.length > 12) fail('Choose up to 12 stickers.');
   const stickers = opts.stickers.map(s => {
-    keys(s, ['kind', 'id', 'outfit', 'x', 'y', 'size', 'flip', 'rotation'], 'sticker');
-    if (!Number.isFinite(s.rotation ?? 0)) fail('Invalid sticker rotation.');
+    keys(s, ['kind', 'id', 'outfit', 'x', 'y', 'size', 'flip'], 'sticker');
     if (![s.x, s.y, s.size].every(Number.isFinite) || s.size < STUDIO_STICKER_MIN || s.size > STUDIO_STICKER_MAX || typeof s.flip !== 'boolean') fail('Invalid sticker transform.');
     if (s.kind === 'text') {
       if (!Object.hasOwn(STUDIO_TEXT_STICKERS, s.id) || s.outfit) fail('Unknown text sticker.');
       return { ...s, text: STUDIO_TEXT_STICKERS[s.id] };
     }
     if (!['monster', 'crew'].includes(s.kind)) fail('Unknown sticker kind.');
-    if (s.kind === 'monster') {
-      if (!Object.hasOwn(STUDIO_CREATURES, s.id) || s.outfit) fail('Unknown monster sticker.');
-      return { ...s, layers: [{ src: STUDIO_CREATURES[s.id], group: 'creature' }] };
-    }
+    if (s.kind === 'monster' && (!Object.hasOwn(LOOKS, s.id) || s.outfit)) fail('Unknown monster sticker.');
     if (s.kind === 'crew' && s.id !== undefined) fail('Crew stickers carry appearance only.');
-    const outfit = s.outfit;
+    const outfit = s.kind === 'monster' ? LOOKS[s.id] : s.outfit;
     const layers = studioPlan({ outfit }, { includePet: false }).layers.filter(l => l.group === 'body');
     // No tint, filter or recolour is applied to placed Cam art.
     return { ...s, layers: layers.map(l => ({ ...l, tints: [] })) };
@@ -317,34 +240,6 @@ export function studioBrowserRuntime() {
   };
 }
 
-// The tray and placed art share exactly the same source stack and treatment.
-export async function studioStickerFigure(sticker, runtime = studioBrowserRuntime(), load = src => runtime.loadImage(src)) {
-  await runtime.ready();
-  const s = studioPlan({ outfit: {} }, { includePet: false, stickers: [sticker] }).stickers[0];
-  if (s.kind === 'text') {
-    const c = runtime.createCanvas(800, 170), cc = c.getContext('2d');
-    cc.font = '76px StudioBangers'; cc.textBaseline = 'middle';
-    cc.fillStyle = '#F3EFE7'; cc.fillText(s.text, 12, 85);
-    return { canvas: c, ink: studioInk(c) };
-  }
-  const images = [];
-  for (const layer of s.layers) images.push(await load(layer.src));
-  if (s.kind === 'monster') {
-    const image = images[0], c = runtime.createCanvas(image.width, image.height);
-    c.getContext('2d').drawImage(image, 0, 0);
-    return { canvas: c, ink: studioInk(c) };
-  }
-  const size = Math.max(...images.map(i => Math.max(i.width, i.height)));
-  const c = runtime.createCanvas(size, size), cc = c.getContext('2d'); cc.imageSmoothingEnabled = false;
-  for (let i = 0; i < images.length; i++) {
-    const layer = runtime.createCanvas(size, size), lc = layer.getContext('2d'); lc.imageSmoothingEnabled = false;
-    lc.drawImage(images[i], 0, 0, size, size);
-    if (s.layers[i].mask) { lc.globalCompositeOperation = 'destination-in'; lc.drawImage(await load(s.layers[i].mask), 0, 0, size, size); }
-    cc.drawImage(layer, 0, 0);
-  }
-  return { canvas: c, ink: studioInk(c) };
-}
-
 export async function composeStudio(look, options = {}, runtime = studioBrowserRuntime()) {
   const plan = studioPlan(look, options);
   await runtime.ready();
@@ -357,8 +252,7 @@ export async function composeStudio(look, options = {}, runtime = studioBrowserR
   const required = [...new Set([...plan.layers, ...plan.stickers.flatMap(s => s.layers || []), { src: 'assets/brand/wordmark.png' }].flatMap(l => [l.src, l.mask, ...(l.tints || []).map(t => t.mask)]).filter(Boolean))];
   // Sequential decode bounds the cold-load memory spike from 2048px pet clothing.
   for (const src of required) await load(src);
-  const canvas = runtime.createCanvas(1080, 1920);
-  let ctx = canvas.getContext('2d');
+  const canvas = runtime.createCanvas(1080, 1920), ctx = canvas.getContext('2d');
   ctx.fillStyle = '#F3EFE7'; ctx.fillRect(0, 0, 1080, 1920);
   const bg = plan.layers.find(l => l.group === 'backdrop');
   if (bg) {
@@ -415,29 +309,24 @@ export async function composeStudio(look, options = {}, runtime = studioBrowserR
   paint(body, bodyBox); bounds.push(bodyBox);
   oc.drawImage(body.canvas, body.ink.x, body.ink.y, body.ink.width, body.ink.height, bodyBox.x, bodyBox.y, bodyBox.width, bodyBox.height);
 
-  const baseCanvas = runtime.createCanvas(1080, 1920);
-  baseCanvas.getContext('2d').drawImage(canvas, 0, 0);
-  const figures = [];
   for (const [index, sticker] of plan.stickers.entries()) {
-    const figure = await studioStickerFigure(options.stickers[index], runtime, load);
-    figures.push(figure);
-    const raster = studioRasterSticker(figure, sticker, runtime), box = { id: `sticker-${index}`, ...raster.box };
-    ctx.drawImage(raster.decoration, box.x, box.y);
-    ctx.drawImage(raster.art, box.x, box.y); bounds.push(box);
+    let figure;
+    if (sticker.kind === 'text') {
+      const c = runtime.createCanvas(800, 170), cc = c.getContext('2d');
+      cc.font = '76px StudioBangers'; cc.textBaseline = 'middle';
+      const width = Math.ceil(cc.measureText(sticker.text).width) + 52;
+      cc.fillStyle = '#2A2D28'; cc.fillRect(8, 10, width, 144);
+      cc.fillStyle = '#FD6857'; cc.fillRect(3, 3, width - 6, 138);
+      cc.strokeStyle = '#2A2D28'; cc.lineWidth = 6; cc.strokeRect(3, 3, width - 6, 138);
+      // Fixed screenprint speckle on our text card only, never on Cam's art.
+      cc.fillStyle = 'rgba(42,45,40,.15)';
+      for (let i = 0; i < 700; i++) cc.fillRect(8 + (i * 37 % (width - 16)), 8 + (i * 53 % 128), 2, 2);
+      cc.fillStyle = '#2A2D28'; cc.fillText(sticker.text, 24, 74);
+      figure = { canvas: c, ink: studioInk(c) };
+    } else figure = await stack('body', sticker.layers);
+    const box = { id: `sticker-${index}`, ...studioStickerBox(figure.ink, sticker) };
+    paint(figure, box, sticker.flip); bounds.push(box);
   }
-  // Record the information layer while painting the final export. Live gestures
-  // reuse these decoded surfaces without loading, encoding or running placement.
-  const foreground = runtime.createCanvas(1080, 1920), fc = foreground.getContext('2d'), main = ctx;
-  ctx = new Proxy(main, {
-    get(target, key) {
-      const value = target[key];
-      if (typeof value !== 'function') return value;
-      if (['getImageData', 'measureText', 'getTransform'].includes(key)) return value.bind(target);
-      return (...args) => { fc[key](...args); return value.apply(target, args); };
-    },
-    set(target, key, value) { target[key] = value; fc[key] = value; return true; },
-  });
-  ctx.imageSmoothingEnabled = false;
   // Port of talkBoxHtml's .talkbox + .hero-bubble at 3 export px per CSS px.
   // app.css: size 11, line-height 1.55, tracking .02em, padding .88/.94em,
   // border 2, radius 13, shadow 4/5; tail 10/7 at 42%/45%, 12 degrees.
@@ -549,19 +438,7 @@ export async function composeStudio(look, options = {}, runtime = studioBrowserR
   assertStudioSafe([...bounds, ...information]);
   const blob = await runtime.encode(canvas);
   await assertStudioPng(blob);
-  const renderLive = (target, stickers) => {
-    const cx = target.getContext('2d'); cx.imageSmoothingEnabled = false;
-    cx.clearRect(0, 0, 1080, 1920); cx.drawImage(baseCanvas, 0, 0);
-    const liveBounds = bounds.filter(b => !b.id.startsWith('sticker-'));
-    stickers.forEach((sticker, index) => {
-      if (!figures[index]) return;
-      const r = studioRasterSticker(figures[index], sticker, runtime), b = { id: `sticker-${index}`, ...r.box };
-      cx.drawImage(r.decoration, b.x, b.y); cx.drawImage(r.art, b.x, b.y); liveBounds.push(b);
-    });
-    cx.drawImage(foreground, 0, 0);
-    return liveBounds;
-  };
-  return { blob, plan, information, bounds, feetY, markContrast, renderLive, figures };
+  return { blob, plan, information, bounds, feetY, markContrast };
 }
 
 export async function assertStudioPng(blob) {

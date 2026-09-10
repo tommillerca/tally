@@ -1,0 +1,387 @@
+[
+  {
+    "antipattern": "broken-image",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/js/studio-screen.js",
+    "line": 28,
+    "snippet": "<img id=\"studioPreview\" alt=\"Your Studio image preview\" hidden draggable=\"false\">"
+  },
+  {
+    "antipattern": "broken-image",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/js/studio-screen.js",
+    "line": 63,
+    "snippet": "<img id=\"studioCleanImage\" alt=\"Your finished Studio picture. Tap to return.\" draggable=\"false\">"
+  },
+  {
+    "antipattern": "side-tab",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 6005,
+    "snippet": "border-left: 3px solid var(--accent)"
+  },
+  {
+    "antipattern": "side-tab",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 6217,
+    "snippet": "border-left: 2px solid var(--danger)"
+  },
+  {
+    "antipattern": "side-tab",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 11872,
+    "snippet": "border-left: 2px solid var(--line-strong)"
+  },
+  {
+    "antipattern": "side-tab",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 3243,
+    "snippet": "border-left-width: 4px"
+  },
+  {
+    "antipattern": "side-tab",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 4135,
+    "snippet": "border-right-width: 10px"
+  },
+  {
+    "antipattern": "side-tab",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 4136,
+    "snippet": "border-right-width: 7px"
+  },
+  {
+    "antipattern": "side-tab",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 4589,
+    "snippet": "border-left-width: 4px"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 869,
+    "snippet": "animation: bhbounce"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 1778,
+    "snippet": "animation: bhbounce"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 789,
+    "snippet": "cubic-bezier(0.34, 1.56, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 869,
+    "snippet": "cubic-bezier(0.34, 1.56, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 1082,
+    "snippet": "cubic-bezier(0.34, 1.56, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 1189,
+    "snippet": "cubic-bezier(0.34, 1.56, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 1696,
+    "snippet": "cubic-bezier(0.34, 1.6, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 1778,
+    "snippet": "cubic-bezier(0.34, 1.56, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 2119,
+    "snippet": "cubic-bezier(.34, 1.56, .64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 2682,
+    "snippet": "cubic-bezier(0.34, 1.56, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 2714,
+    "snippet": "cubic-bezier(0.34, 1.2, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 3081,
+    "snippet": "cubic-bezier(0.34, 1.8, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 3751,
+    "snippet": "cubic-bezier(0.3, 1.25, 0.55, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 3757,
+    "snippet": "cubic-bezier(0.3, 1.25, 0.55, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 4017,
+    "snippet": "cubic-bezier(0.2, 1.4, 0.4, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 4029,
+    "snippet": "cubic-bezier(0.2, 1.3, 0.4, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 4109,
+    "snippet": "cubic-bezier(0.2, 1.4, 0.4, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 4148,
+    "snippet": "cubic-bezier(0.34, 1.6, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 4152,
+    "snippet": "cubic-bezier(0.34, 1.8, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 4208,
+    "snippet": "cubic-bezier(0.34, 1.56, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 4330,
+    "snippet": "cubic-bezier(0.34, 1.6, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 4404,
+    "snippet": "cubic-bezier(0.34, 1.6, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 4505,
+    "snippet": "cubic-bezier(0.34, 1.6, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 4511,
+    "snippet": "cubic-bezier(0.34, 1.6, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 4555,
+    "snippet": "cubic-bezier(0.34, 1.6, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 5830,
+    "snippet": "cubic-bezier(0.34, 1.6, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 7519,
+    "snippet": "cubic-bezier(0.34, 1.6, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 8771,
+    "snippet": "cubic-bezier(.22, 1.2, .36, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 8997,
+    "snippet": "cubic-bezier(0.34, 1.6, 0.64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 9491,
+    "snippet": "cubic-bezier(.34, 1.4, .64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 9934,
+    "snippet": "cubic-bezier(.34, 1.56, .64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 9959,
+    "snippet": "cubic-bezier(.34, 1.56, .64, 1)"
+  },
+  {
+    "antipattern": "bounce-easing",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 10285,
+    "snippet": "cubic-bezier(.34, 1.56, .64, 1)"
+  },
+  {
+    "antipattern": "layout-transition",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 377,
+    "snippet": "transition: width"
+  },
+  {
+    "antipattern": "layout-transition",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 723,
+    "snippet": "transition: width"
+  },
+  {
+    "antipattern": "layout-transition",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 777,
+    "snippet": "transition: width"
+  },
+  {
+    "antipattern": "layout-transition",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 887,
+    "snippet": "transition: width"
+  },
+  {
+    "antipattern": "layout-transition",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 955,
+    "snippet": "transition: width"
+  },
+  {
+    "antipattern": "layout-transition",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 1025,
+    "snippet": "transition: width"
+  },
+  {
+    "antipattern": "layout-transition",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 1756,
+    "snippet": "transition: width"
+  },
+  {
+    "antipattern": "layout-transition",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 3236,
+    "snippet": "transition: width"
+  },
+  {
+    "antipattern": "layout-transition",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 9242,
+    "snippet": "transition: height, padding"
+  },
+  {
+    "antipattern": "layout-transition",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 9249,
+    "snippet": "transition: max-height"
+  },
+  {
+    "antipattern": "layout-transition",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 9685,
+    "snippet": "transition: min-height, height"
+  },
+  {
+    "antipattern": "side-tab",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 3151,
+    "snippet": ".pit-floor , inset box-shadow 3px stripe (top)"
+  },
+  {
+    "antipattern": "side-tab",
+    "severity": "warning",
+    "file": "/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/studio-v3/app.css",
+    "line": 11464,
+    "snippet": ".gd-grp .gd-e[open] , inset box-shadow 3px stripe (left)"
+  }
+]

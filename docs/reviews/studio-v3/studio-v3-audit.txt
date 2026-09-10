@@ -1,0 +1,17 @@
+PASS four named creatures use original static art
+SAFE SIZE square at 45 degrees: 649.1240251292506
+PASS CONTROL 12px disk dilation follows alpha, including concavity and holes
+ROTATION {"name":"The Wanderer","input":4129,"zero":1405,"worst":{"angle":26,"count":1349}}
+ROTATION {"name":"The Mimic","input":1024,"zero":332,"worst":{"angle":0,"count":332}}
+ROTATION {"name":"The Glutton","input":5448,"zero":2305,"worst":{"angle":70,"count":2233}}
+ROTATION {"name":"Gwart","input":9012,"zero":1597,"worst":{"angle":0,"count":1597}}
+ROTATION {"name":"Crew","input":22979,"zero":3780,"worst":{"angle":14,"count":3672}}
+ROTATION {"name":"gym","input":184,"zero":164,"worst":{"angle":3,"count":157}}
+ROTATION {"name":"feed","input":181,"zero":165,"worst":{"angle":59,"count":156}}
+ROTATION {"name":"home","input":182,"zero":162,"worst":{"angle":36,"count":157}}
+PASS every offered kind preserves source palette through scale, mirror and arbitrary twist
+EXPORT {"inkPercent":45.092996270203066,"largestComponentBoxPercent":76.30667219229176,"largest":{"count":431169,"x":65,"y":340,"width":822,"height":1120},"outside":0,"opaqueLetterContrast":12.637812847638706,"backingAgainstPlainPage":12.171577677581052,"decodedSha256":"d7f8895c6fd5b7df8c7dd7179c75cc4e2cc24a73fc26630b2a20e2736e25ddd9"}
+PASS decoded no-sticker export is byte-identical to input compositor; geometry and backing preserved
+HANDLERS stored move, live pixels, pinch 400->600, twist 0->90, rebase, cancel, capture loss, bin, keyboard all exercised
+PASS production pointer and keyboard routes change stored transforms and decoded pixels before release
+5 passed, 0 failed. Interaction feel is unproven and operator-owned.

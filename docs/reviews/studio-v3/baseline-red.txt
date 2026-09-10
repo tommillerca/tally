@@ -1,0 +1,46 @@
+FAIL four named creatures use original static art Expected values to be strictly deep-equal:
++ actual - expected
+
+  [
++   'Rattles',
++   'Knuckles',
++   'Big Femur',
++   'The Gravekeeper',
++   'Two-Ton Tibia',
++   'Skullcracker',
++   'The Bonecollector',
++   'Ribcage Ricky',
++   'The Marrow King',
++   'The Hollow King',
++   'Gravemaw',
++   'The Tallboy',
++   'Ossuary Prime',
++   'Rattle Lord',
++   'The Marrowmancer',
++   'Bonefather',
++   'Calcite the Cruel'
+-   'The Wanderer',
+-   'The Mimic',
+-   'The Glutton',
+-   'Gwart'
+  ]
+
+FAIL CONTROL 12px disk dilation follows alpha, including concavity and holes Expected values to be strictly equal:
+
+undefined !== 12
+
+FAIL every offered kind preserves source palette through scale, mirror and arbitrary twist Expected values to be strictly equal:
++ actual - expected
+
++ 'undefined'
+- 'function'
+
+EXPORT {"inkPercent":45.092996270203066,"largestComponentBoxPercent":76.30667219229176,"largest":{"count":431169,"x":65,"y":340,"width":822,"height":1120},"outside":0,"opaqueLetterContrast":12.637812847638706,"backingAgainstPlainPage":12.171577677581052,"decodedSha256":"d7f8895c6fd5b7df8c7dd7179c75cc4e2cc24a73fc26630b2a20e2736e25ddd9"}
+PASS decoded no-sticker export is byte-identical to input compositor; geometry and backing preserved
+FAIL production pointer and keyboard routes change stored transforms and decoded pixels before release onlostpointercapture
++ actual - expected
+
++ 'undefined'
+- 'function'
+
+1 passed, 4 failed. Interaction feel is unproven and operator-owned.

@@ -1,0 +1,19 @@
+ok    SETUP the changelog was parsed and has entries to grade  316 entries
+ok    SETUP the newest entry (v555) has items to grade  6 items
+ok    SETUP docs/CLAIMS.md exists  found
+ok    CLAIMS docs/CLAIMS.md carries no merge conflict markers  clean
+ok    CLAIMS docs/CLAIMS.md has a section for v555  found
+ok    CLAIMS every item in the newest entry is answered  6 answered of 6 claims
+ok    PROOF every claim names an audit that exists and the gate actually runs  6 claims backed
+ok    REACH no claim in a shipped entry is GATED, PENDING-DEPLOY or NEEDS-PEER  all 6 reachable
+ok    REACH the route is written out, not left as a word  every route spelled out
+
+    WHAT v555 CLAIMS, AND WHAT BACKS IT:
+      1. shipped across v551 to v554 and recorded in this file  <- studio-audit.mjs
+      2. shipped in v552. The resting rule must be  <- wardrobe-noise-audit.mjs
+      3. shipped in v550. Executes the production  <- transmog-reach-audit.mjs
+      4. shipped in v550. `wardrobeLookCounts` counts  <- transmog-reach-audit.mjs
+      5. shipped in v552.  <- stable-rooms-top-audit.mjs, icon-inventory-a
+      6. shipped in v550. The disclosure is asserted to appear  <- studio-audit.mjs
+
+claim-evidence: clean
