@@ -264,6 +264,215 @@ Raw before/after logs, the extracted census, the runner, initial results and the
 </details>
 
 
+## vNEXT
+
+Frozen R8 Shop CSS work order. Pending notes match `NEXT_CHANGES` in `js/changelog.js`; no version stamp is advanced. Source proof does not certify rendered appearance.
+
+Changelog item: Shop prices you can afford keep their filled coin or dust colors and dark digits; prices beyond your wallet are hollow.
+
+1. PROOF: r8-shop-css-audit.mjs, r8-shop-css-browser-audit.mjs | REACH: R8-L1/L2/L3. Shared rack sizing no longer applies aura-only background, border or text colors to price buttons. Source AFFORDABLE is RED against the original CSS and GREEN after the split. The original single-revert suggestion would also discard the shared 44px target sizing, so the minimal correction separates sizing from aura state colors. The inaccurate numeric contrast comment is replaced with the actual state contract. Browser contrast and emphasis remain BLOCKED: `node tests/r8-shop-css-browser-audit.mjs` exits 1 on `listen EPERM: operation not permitted 127.0.0.1`. The operator must run the final and baseline CSS cases; no rendered RED or final contrast ratio is claimed here.
+
+Changelog item: Bumbleseal and her accessories show hollow prices when you are short of coins.
+
+2. PROOF: r8-shop-css-audit.mjs, r8-shop-css-browser-audit.mjs | REACH: R8-A35 styling half. The existing `data-short="1"` now shares the rack `.cant` declarations. Source SHORT is RED before the rule, GREEN after, and its removal is rejected by the mutation control. The browser guard compares Bumbleseal's real button at 250,000 and 40 coins, with a `--remove-short` mutation case; execution and rendered mutation RED remain BLOCKED by the listener denial. Purchase haptics are not fixed: `js/app.js:1256` calls `haptic.heavy()` before the refusal branch at `js/app.js:11115-11124`, outside this lane's scope.
+
+Changelog item: Disabled ghost buttons keep their muted text and subdued shadow.
+
+3. PROOF: r8-shop-css-audit.mjs, r8-shop-css-browser-audit.mjs | REACH: R8-L4. `.btn.ghost:disabled` shares the disabled declarations with enough specificity to beat `.btn.ghost`, including the later sticker shadow. Source GHOST is RED before and GREEN after, and removing the selector is rejected. The browser guard compares screenshots of one ghost button with identical content and geometry, changing only disabled state, with a stable-image control. Rendered visibility remains BLOCKED.
+
+Unresolved scope deviation, R8-W11: the price versus `owned` text is produced by `costTag` at `js/app.js:16949`, from `lookPriceMap` built at lines 16921-16923. The cited CSS rules only style that text. `transmogPrice` at `js/loot.js:2784-2790` distinguishes paid appearance application from cosmetic ownership. CSS cannot correct that distinction accessibly or change the fee. Proposed follow-up for the authorized JS lane: distinguish the owned cosmetic from any remaining wear/application fee in the renderer, preserving the actual transaction price unless the operator separately authorizes an economy change. No pseudo-element text substitution or hidden fee is introduced, and no W11 changelog fix is claimed.
+
+Validation advisory (local checkout, 2026-09-10):
+
+- Frozen plan SHA256 verified: `974b005404544f37807a9e5f3c2b954fdd7856d82aba46cb663c22024d33d575`.
+- Files changed: `app.css`, `tests/r8-shop-css-audit.mjs` (new), `tests/r8-shop-css-browser-audit.mjs` (new), `tests/release-gate.mjs`, `docs/CLAIMS.md`, `js/changelog.js`.
+- Agreed proof: `node tests/unit.test.js`, exit 0, `384 passed, 0 failed`.
+- Source RED against the original CSS: `4 passed, 3 failed`, exit 1 (AFFORDABLE, SHORT, GHOST). Final source guard: `7 passed, 0 failed`, exit 0. Removing only the `data-short` selector in a temporary CSS copy: `6 passed, 1 failed`, exit 1 (SHORT). The disabled-ghost removal control also rejects its mutation.
+- Every one of the 160 unique PURE entries enumerated from the actual `PURE` declaration and its mutations in `tests/release-gate.mjs` was run as `node tests/<file>`, serially. All exited 0. The minimum of 156 was enforced before running. Full enumeration follows. This is PURE proof, not a full browser release gate.
+- `node tests/release-gate.mjs --coverage-only`, exit 0: `coverage: 417 audits on disk, 128 fast, 129 full, 160 skipped`. Here `skipped` is the gate's label for the PURE tier during coverage-only inspection; all 160 were separately executed above.
+- Denied action: `node tests/r8-shop-css-browser-audit.mjs`, exit 1, `BLOCKED ... Error: listen EPERM: operation not permitted 127.0.0.1`. Zero rendered assertions ran. Rendered baseline RED, final contrast/emphasis, ghost visibility and short-selector mutation RED remain operator work.
+- Additional advisory check: Impeccable's mechanical detector exited 2 with 53 findings in existing CSS outside the changed rules. No design expansion was made to address them. `git diff --check` and browser-audit syntax validation passed.
+- Deviations: split shared sizing from aura-only colors instead of deleting the shared rule; defer W11 for the renderer/transaction distinction explained above; defer the commit haptic per the explicit scope correction. Proposed haptic follow-up: make the authorized JS lane emit the commit vibration only after an accepted purchase, with a refusal test covering both taps. `js/app.js` and version stamps are unchanged. No commit, push, publish or original-checkout edit was performed.
+
+Operator render commands, from this checkout (all still UNPROVEN here):
+
+```sh
+git show HEAD:app.css > /tmp/r8-shop-baseline.css
+node tests/r8-shop-css-browser-audit.mjs --css /tmp/r8-shop-baseline.css
+node tests/r8-shop-css-browser-audit.mjs
+node tests/r8-shop-css-browser-audit.mjs --remove-short
+```
+
+The first render must fail affordability assertions, the final render must pass, and the selector-removal render must fail Bumbleseal's emphasis assertion. An infrastructure failure is not a regression RED. Keep the baseline CSS before any future commit changes HEAD. Screenshot comparisons run at 393x852, DPR 2, on the real Shop, with animation disabled for stable sampling. The ghost case is a generic control inserted into a Shop card, not a claim that the three production call sites were driven.
+
+<details>
+<summary>160 PURE suites, each exited 0</summary>
+
+```text
+0  node tests/version-align-lint.mjs
+0  node tests/no-debug-markers-lint.mjs
+0  node tests/store-copy-lint.mjs
+0  node tests/r8-shop-css-audit.mjs
+0  node tests/migration-guard-audit.mjs
+0  node tests/sync-observability-audit.mjs
+0  node tests/sync-identity-audit.mjs
+0  node tests/sync-native-audit.mjs
+0  node tests/lab-density-audit.mjs
+0  node tests/crew-outfit-audit.mjs
+0  node tests/dock-line-audit.mjs
+0  node tests/whatsnew-boot-audit.mjs
+0  node tests/wardrobe-noise-audit.mjs
+0  node tests/sync-clientpath-audit.mjs
+0  node tests/sync-authpath-audit.mjs
+0  node tests/sync-path-audit.mjs
+0  node tests/wardrobe-playtest-audit.mjs
+0  node tests/lab-room2-audit.mjs
+0  node tests/stable-stale-disclosure-audit.mjs
+0  node tests/breed-last-colour-audit.mjs
+0  node tests/stable-loss-disclosure-audit.mjs
+0  node tests/lab-health-recovery-audit.mjs
+0  node tests/lab-integration-audit.mjs
+0  node tests/lab-ui-audit.mjs
+0  node tests/laboratory-audit.mjs
+0  node tests/lab-foundation-audit.mjs
+0  node tests/pet-stress-guard.mjs
+0  node tests/crew-pet-node-guard.mjs
+0  node tests/transmog-receipt-audit.mjs
+0  node tests/today-reads-lint.mjs
+0  node tests/kitchen-atomic-audit.mjs
+0  node tests/backup-encoder-audit.mjs
+0  node tests/backup-key-audit.mjs
+0  node tests/backup-version-audit.mjs
+0  node tests/backup-conflict-audit.mjs
+0  node tests/unit.test.js
+0  node tests/log-xp-farm-audit.mjs
+0  node tests/drip-badge-audit.mjs
+0  node tests/xp-key-provenance-lint.mjs
+0  node tests/facegate-audit.mjs
+0  node tests/garden-appetite-guard.mjs
+0  node tests/pit.test.js
+0  node tests/quest-daymore-audit.mjs
+0  node tests/quest-pick-audit.mjs
+0  node tests/first-fight-audit.mjs
+0  node tests/stat-source-audit.mjs
+0  node tests/bastions-rep-sim.mjs
+0  node tests/analytics-tag-audit.mjs
+0  node tests/icon-inventory-audit.mjs
+0  node tests/version-stamp-audit.mjs
+0  node tests/boneyard-supply-audit.mjs
+0  node tests/loot-fallback-audit.mjs
+0  node tests/guard-hygiene-lint.mjs
+0  node tests/guard-provenance-lint.mjs
+0  node tests/feedback-status-lint.mjs
+0  node tests/rack-theme-lint.mjs
+0  node tests/rack-rotate-audit.mjs
+0  node tests/pet-accessory-lint.mjs
+0  node tests/pet-pool-audit.mjs
+0  node tests/manifest-exports-audit.mjs
+0  node tests/xp-curve-audit.mjs
+0  node tests/live-api-register-lint.mjs
+0  node tests/claim-evidence-lint.mjs
+0  node tests/thumb-freshness-lint.mjs
+0  node tests/render-sink-lint.mjs
+0  node tests/lapse-witness-audit.mjs
+0  node tests/spawn-claim-atomic-audit.mjs
+0  node tests/wardrobe-family-audit.mjs
+0  node tests/football-kit-audit.mjs
+0  node tests/restore-latch-audit.mjs
+0  node tests/first-pet-audit.mjs
+0  node tests/shop-economy-audit.mjs
+0  node tests/recovery-status-audit.mjs
+0  node tests/currency-revision-lint.mjs
+0  node tests/inv-tombstone-audit.mjs
+0  node tests/take-and-pay-audit.mjs
+0  node tests/c6-price-audit.mjs
+0  node tests/pet-morph-animation-audit.mjs
+0  node tests/pet-palette-audit.mjs
+0  node tests/fontscale-audit.mjs
+0  node tests/wheel-look-audit.mjs
+0  node tests/wheel-easing-audit.mjs
+0  node tests/storage-boot-audit.mjs
+0  node tests/crate-cadence-audit.mjs
+0  node tests/r4-app-p1-audit.mjs
+0  node tests/water-retry-audit.mjs
+0  node tests/cloud-off-audit.mjs
+0  node tests/r4-silence-audit.mjs
+0  node tests/silence-disclosure-audit.mjs
+0  node tests/health-disclosure-audit.mjs
+0  node tests/paddock-pack-audit.mjs
+0  node tests/numbers-honesty-audit.mjs
+0  node tests/locale-numbers-audit.mjs
+0  node tests/audit-output-audit.mjs
+0  node tests/branch-graveyard-audit.mjs
+0  node tests/store-runtime-audit.mjs
+0  node tests/r47-rest-audit.mjs
+0  node tests/r47-economy-audit.mjs
+0  node tests/submission-build-audit.mjs
+0  node tests/harness-environment-audit.mjs
+0  node tests/guard-debts-audit.mjs
+0  node tests/submission-preflight-audit.mjs
+0  node tests/pet-state-audit.mjs
+0  node tests/pet-family-audit.mjs
+0  node tests/crew-pet-audit.mjs
+0  node tests/coins-merge-tie-audit.mjs
+0  node tests/routine-race-audit.mjs
+0  node tests/dayone-topup-audit.mjs
+0  node tests/dish-worth-audit.mjs
+0  node tests/pet-C-node-guard.mjs
+0  node tests/r48-state-audit.mjs
+0  node tests/r46-logging-audit.mjs
+0  node tests/r46-diary-audit.mjs
+0  node tests/zero-calorie-seam-audit.mjs
+0  node tests/audit-completion-audit.mjs
+0  node tests/machine-character-audit.mjs
+0  node tests/n3-deadpaths-audit.mjs
+0  node tests/m5-prove-red.mjs
+0  node tests/lookup-guard-lint.mjs
+0  node tests/restore-state-audit.mjs
+0  node tests/restore-debt-edges-audit.mjs
+0  node tests/restore-debt-audit.mjs
+0  node tests/p1-r48-rest-audit.mjs
+0  node tests/pet-a11y-audit.mjs
+0  node tests/kennel-copy-audit.mjs
+0  node tests/breed-lock-audit.mjs
+0  node tests/device-loss-audit.mjs
+0  node tests/multidevice-earnings-audit.mjs
+0  node tests/response-bodies-audit.mjs
+0  node tests/p1-merge-audit.mjs
+0  node tests/quest-wheel-budget-audit.mjs
+0  node tests/kitchen-delivery-audit.mjs
+0  node tests/map-playtest-audit.mjs
+0  node tests/p1-dens-audit.mjs
+0  node tests/crew-yard-row-audit.mjs
+0  node tests/pet-rarity-audit.mjs
+0  node tests/stable-rooms-top-audit.mjs
+0  node tests/today-playtest-audit.mjs
+0  node tests/crew-playtest-audit.mjs
+0  node tests/firstrun-audit.mjs
+0  node tests/settings-safety-audit.mjs
+0  node tests/progress-playtest-audit.mjs
+0  node tests/leaderboard-honesty-audit.mjs
+0  node tests/breed-two-tap-audit.mjs
+0  node tests/after-await-event-lint.mjs
+0  node tests/boneyard-zoom-audit.mjs
+0  node tests/lab-conflict-audit.mjs
+0  node tests/lab-lock-recovery-audit.mjs
+0  node tests/r3-rest-audit.mjs
+0  node tests/collection-cell-audit.mjs
+0  node tests/r6-merge-audit.mjs
+0  node tests/r6-guards-audit.mjs
+0  node tests/r6-app-audit.mjs
+0  node tests/crew-capture-node-audit.mjs
+0  node tests/pet-parity-guard.mjs
+0  node tests/verify-tail-audit.mjs
+0  node tests/cloud-optout-transport-audit.mjs
+0  node tests/r4-restore-audit.mjs
+0  node tests/reachable-density-audit.mjs
+0  node tests/native-shell-comment-audit.mjs
+```
+
+</details>
+
 ## v544 (2026-09-10)
 
 Changelog item: The off-hand brushes and spades are held properly now.

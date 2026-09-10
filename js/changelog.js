@@ -5,6 +5,9 @@
 // Pending train notes. The operator assigns a build number and moves these
 // into CHANGES when assembling the release. No version stamp is advanced here.
 export const NEXT_CHANGES = [
+  'Shop prices you can afford keep their filled coin or dust colors and dark digits; prices beyond your wallet are hollow.',
+  'Bumbleseal and her accessories show hollow prices when you are short of coins.',
+  'Disabled ghost buttons keep their muted text and subdued shadow.',
 ];
 
 export const CHANGES = [
