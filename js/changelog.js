@@ -5,10 +5,13 @@
 // Pending train notes. The operator assigns a build number and moves these
 // into CHANGES when assembling the release. No version stamp is advanced here.
 export const NEXT_CHANGES = [
-  'The step race keeps player figures and a neutral track visible while syncs are delayed, uses a placeholder for missing outfits, and gives zero steps zero progress.',
 ];
 
 export const CHANGES = [
+
+  { n: 543, date: '2026-09-09', title: 'The step race shows everyone again', items: [
+    'Every racer in the step race shows their figure and an honest progress track, even when a friend has not shared an outfit.',
+  ] },
 
   { n: 542, date: '2026-09-09', title: 'The Laboratory and the Stable, played hard', items: [
     'Shiny pets now hold the same Base collection cell in the Kennel and Stable loss warnings, even with an unsupported saved colour.',
