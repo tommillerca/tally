@@ -2709,6 +2709,19 @@ export async function collectedLooks() {
   for (const gid of await ownedGearIds()) { const g = GEAR_BY_ID[gid]; if (g) out.add(g.artId); }
   return out;
 }
+// Count collected item ids, independent of family tiles. Alternatives use the
+// same occupied gear-slot baseline as the Dressing Room picker.
+export function wardrobeLookCounts(looks, rawEq, gearLo = {}) {
+  const catalogue = BH_ITEMS.filter(i => !i.default);
+  const collected = catalogue.filter(i => looks.has(i.id));
+  const alternatives = collected.filter(i => {
+    if (!GEAR_SLOTS.includes(i.slot)) return false;
+    const base = gearLo[i.slot] ? GEAR_BY_ID[gearLo[i.slot]]?.artId : rawEq[i.slot];
+    return !!BH_BY_ID[base] && i.id !== base;
+  }).length;
+  return { collected: collected.length, total: catalogue.length, alternatives };
+}
+
 export async function collectLook(artId) {
   if (!artId) return;
   await kvUpdate('looks', cur => {
@@ -2780,6 +2793,15 @@ export async function markPaid(slot, artId) {
    would be selling a no-op, so the price is 0 and the button says free.
    THE PRICE LIVES HERE, not in the UI. applyTransmog calls transmogPrice itself,
    so a button merely LABELLED free would have shown free and still charged. */
+// Called only for a quoted zero price. Keep the price's precedence: reset/hide,
+// current appearance, no statted gear, then an existing paid receipt.
+export function transmogZeroLabel(artId, current, hasGear) {
+  if (!artId || artId === TRANSMOG_HIDE) return 'Free';
+  if (current === artId) return 'Wearing';
+  if (!hasGear) return 'Free: no stats';
+  return 'Paid';
+}
+
 export async function transmogPrice(slot, artId) {
   if (!artId || artId === TRANSMOG_HIDE) return 0;
   const tm = await transmogMap();

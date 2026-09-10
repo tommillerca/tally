@@ -28,6 +28,11 @@
  *            its containing block; inside .mog-panel it can only float while the
  *            panel is already on screen, which is the bug this replaces.
  *
+ * FIXTURE BOUNDS (R9): no 430x932 is graded. SETTLED uses a four-tile
+ * fixture; a pass cannot reproduce or refute R8-W24's five-of-twelve overlap.
+ * Select TRY before grading the commit. The old SETUP failure at v545 was
+ * an audit omission: no look had been selected, so no active commit existed.
+ *
  * PROVE-RED: delete the `.mog-dock > .look-bar.mog-bar` rule in app.css (or the
  * wrapper in renderCharacter): REACH goes red at both sizes with the button at
  * ~1810, FLOATING with it. Not run in the session that wrote it (the machine was
@@ -66,6 +71,14 @@ for (const [w, h] of [[375, 667], [390, 844]]) {
   await page.evaluate(() => document.querySelector('[data-tab="wardrobe"]')?.click()); await sleep(1800);
   await page.evaluate(s => document.querySelector(`.pd-slot[data-pd="${s}"]`)?.click(), SLOT); await sleep(1800);
   await settle(page);
+  const selected = await page.evaluate(id => {
+    const tile = document.querySelector(`.mog-panel [data-look="${id}"]`);
+    if (!tile) return false;
+    tile.click(); return true;
+  }, TRY);
+  if (!selected) { ok(`${w}x${h} SETUP selectable look exists`, false); continue; }
+  await settle(page);
+  await page.waitForSelector('.mog-dock > .mog-bar [data-look-apply]');
 
   const top = await page.evaluate(() => {
     const sc = document.getElementById('chBody')?.closest('.screen');
@@ -106,8 +119,8 @@ for (const [w, h] of [[375, 667], [390, 844]]) {
     return { tiles: tiles.length, covered: tiles.filter(x => !x).length, barTop: Math.round(br.top), gridBottom: Math.round(gr.bottom),
       btnHit: !!hit && (hit === btn || btn.contains(hit)), scrollTop: sc ? Math.round(sc.scrollTop) : null };
   });
-  ok(`${w}x${h} SETTLED at full scroll the bar sits under the grid and covers no look tile; Wear it still tappable`,
-    !bottom.missing && bottom.tiles > 0 && bottom.covered === 0 && bottom.barTop >= bottom.gridBottom && bottom.btnHit,
+  ok(`${w}x${h} SETTLED at full scroll the bar sits under the grid and covers no look tile in this four-tile fixture; Wear it still tappable`,
+    !bottom.missing && bottom.tiles === 4 && bottom.covered === 0 && bottom.barTop >= bottom.gridBottom && bottom.btnHit,
     JSON.stringify(bottom));
 }
 

@@ -40,10 +40,10 @@ import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, gearDustValue, gearSt
   removeInstance, breedParents, transmogCost, TRANSMOG_HIDE,
   nickProblem, cleanNick, NICK_MAX,
   RACK_RARITY_PRICE, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_REROLL_LADDER,
-  rollCosmetic, crateEligible,
+  rollCosmetic, crateEligible, wardrobeLookCounts,
   eggRow, grantEgg, hatchEgg, addPetInstance, petInstances, pickRandomPet } from '../js/loot.js';
 import { MORPHS, MORPH_WEIGHT, isMorph, rollMorph, ownedPairs, PET_ASSIGN, MORPH_ART, morphAsset, ownedCellCount } from '../js/pets.js';
-import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset, PET_SLOTS } from '../data/boneheadz.js';
+import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset, bhFamilies, PET_SLOTS } from '../data/boneheadz.js';
 import {
   rollSeeds, harvestYield, SEED_ODDS, PLOTS_FREE, PLOTS_MAX, PLOT_PRICES, plotPrice,
   SEED_IDS, seedName, isRareSeed, growMinutes, GROW_MIN, GROW_MIN_RARE,
@@ -5319,11 +5319,31 @@ test('R23 F8: the fits cap is printed and the save chip stays, ghosted, with its
   const h = app.indexOf('<div class="ward-head">');
   const hEnd = app.indexOf("</div>` : tab === 'shop'", h);
   assert.ok(h > 0 && hEnd > h, 'the ward-head template moved: re-anchor this slice');
-  const head = n => new Function('lvl', 'coinBal', 'dustBal', 'ownedCount', 'boost', 'ICONS', 'sparkIco', 'looksFamHave', 'looksFamAll', 'looksPieces', 'esc', 'fitCount', 'MAX_FITS',
+  // R9 round 2: the header now consumes stored-id/alternative counts. The old
+  // family bindings threw before F8 could check its fits cap. Two colourways in
+  // one family distinguish the new data count from the old rendered-tile count.
+  const catalogue = BH_ITEMS.filter(i => !i.default);
+  const pair = [...bhFamilies(catalogue.filter(i => i.slot === 'H')).values()]
+    .find(items => items.length > 1).slice(0, 2);
+  assert.equal(bhFamilies(pair).size, 1, 'fixture must have two ids in one family');
+  const counts = wardrobeLookCounts(new Set(pair.map(i => i.id)), { H: pair[0].id });
+  assert.deepEqual(counts, { collected: 2, total: catalogue.length, alternatives: 1 });
+  const head = (n, lookCounts = counts) => new Function('lvl', 'coinBal', 'dustBal', 'ownedCount', 'boost', 'ICONS', 'sparkIco', 'lookCounts', 'esc', 'fitCount', 'MAX_FITS',
     'return `' + app.slice(h, hEnd) + '</div>`;')(
-    { level: 1, name: 'x' }, 0, 0, 0, 0, { coin: () => '', dust: () => '', bone: () => '', boltIco: () => '' }, () => '', 0, 0, 0, String, n, MAX);
+    { level: 1, name: 'x' }, 0, 0, 0, 0, { coin: () => '', dust: () => '', bone: () => '', boltIco: () => '' }, () => '', lookCounts, String, n, MAX);
   assert.match(head(5), /<span class="bh-pill ward-fits">5\/6 fits<\/span>/, 'the header does not print 5/6 fits');
   assert.match(head(6), /<span class="bh-pill ward-fits">6\/6 fits<\/span>/, 'the header does not print 6/6 fits');
+  const expectLooks = (html, collected, alternatives) => assert.ok(
+    html.includes(` ${collected}/${catalogue.length} collected looks &middot; ${alternatives} other looks to try</button>`),
+    'the looks pill must print stored ids and alternatives, not family tiles');
+  expectLooks(head(5), 2, 1);
+  expectLooks(head(6, wardrobeLookCounts(new Set([pair[0].id]), { H: pair[0].id })), 1, 0);
+  // PROVE-RED: the pre-R9 pill reported family totals and pieces. This exact
+  // legacy copy must fail the same assertion, even with plausible nonzero data.
+  const legacy = head(5).replace(/2\/\d+ collected looks &middot; 1 other looks to try/,
+    `1/${bhFamilies(catalogue).size} looks &middot; 2 pieces`);
+  assert.throws(() => expectLooks(legacy, 2, 1), assert.AssertionError);
+  assert.throws(() => expectLooks(head(5, { ...counts, collected: 1 }), 2, 1), assert.AssertionError);
 
   // the explaining string: defined once, used by the ghosted chip AND by captureFit's `full`
   assert.equal((app.match(/You can keep \$\{MAX_FITS\} fits\. Bin one first\./g) || []).length, 1, 'the cap string must be defined once, as fitsFullMsg');
@@ -5756,16 +5776,60 @@ test('R22-W4 route() clears S.lookPreview on navigation, and both hub paths reac
    .armed with a live "Wear it" until restageLook decoded the doll; (b) the v1
    tile printed a bare number; (c) the only scrollIntoView on the screen went to
    the gear card, not the Dressing Room. */
-test('R22-W13 the bar disarms on commit, every price tag carries the unit, a doll-slot tap arrives at the panel', () => {
+test('R22-W13 the bar disarms on commit, every price tag carries the unit, a doll-slot tap arrives at the panel', async () => {
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
   // (a) same tick as the receipt, before the async restage
   const apply = app.slice(app.indexOf('async function applyLook(btn)'), app.indexOf("$$('[data-equipgear]', content)"));
   const ok = apply.indexOf('S.lookPreview = null;'), disarm = apply.indexOf("classList.remove('armed')"), dis = apply.indexOf('btn.disabled = true;'), restage = apply.indexOf('restageLook({ committed: true })');
   assert.ok(ok > 0 && disarm > ok && dis > ok && restage > dis, 'applyLook must drop .armed and disable the button before restageLook({ committed: true }) (QA round 22 W13a)');
-  // An idle slot has no bar. A real pending change arms the bar.
-  assert.match(app, /class="look-bar mog-bar\$\{changed \? ' armed' : ''\}"/, 'the bar is armed only while a change is selected');
-  const bar = app.slice(app.indexOf('const mogBarHtml ='), app.indexOf('const fbWornItem ='));
-  assert.match(bar, /if \(!changed\) return '';/, 'nothing selected renders no confirm bar');
+  // R9 round 2: absence was the wrong proxy for disarming and encoded the
+  // unreachable second step. Execute the renderer: idle stays visible and
+  // disabled, a choice arms/enables it, and the actual commit disarms it again.
+  const barStart = app.indexOf('const mogBarHtml =');
+  const barEnd = app.indexOf('\n\n    /* ================= THE COLOURWAY', barStart);
+  assert.ok(barStart > 0 && barEnd > barStart, 're-anchor the bar renderer');
+  const bar = app.slice(barStart, barEnd);
+  const renderBar = (changed, source = bar) => vm.runInNewContext(`${source}; mogBarHtml()`, {
+    mogOn: true, mogState: () => ({ sel: changed ? 'H10-3' : '', cost: 6, afford: true, changed }),
+    wornGear: null, nameOf: () => 'Hat', esc: String, dustIco: '', dustBal: 20,
+  });
+  const expectIdle = html => {
+    assert.match(html, /class="look-bar mog-bar"/, 'idle bar renders without armed');
+    assert.match(html, /<button[^>]* disabled>Wear it<\/button>/, 'idle commit is disabled');
+    assert.doesNotMatch(html, /data-look-apply=/, 'idle control has no commit action');
+  };
+  expectIdle(renderBar(false));
+  const selected = renderBar(true);
+  assert.match(selected, /class="look-bar mog-bar armed"/);
+  assert.match(selected, /<button[^>]*data-look-apply="H10-3"[^>]*>Wear it<\/button>/);
+  assert.doesNotMatch(selected, /\bdisabled\b/, 'affordable selected look enables commit');
+  // PROVE-RED: restore the exact pre-R9 early return in memory. The arrival
+  // assertion must fail, while the selected-state control still renders.
+  const legacyBar = bar.replace('const { sel, cost, afford, changed } = mogState();',
+    "const { sel, cost, afford, changed } = mogState(); if (!changed) return '';");
+  assert.throws(() => expectIdle(renderBar(false, legacyBar)), assert.AssertionError);
+  assert.equal(renderBar(true, legacyBar), selected);
+  const classes = new Set(['armed']), btn = { dataset: { lookApply: 'H10-3' }, disabled: false };
+  const state = { lookPreview: 'H10-3' };
+  let restaged = false, taps = 0;
+  // v548 gave a free commit a haptic tap. Executing the real handler needs the
+  // real collaborator: without it this row dies on `haptic is not defined`.
+  await vm.runInNewContext(`${apply}; applyLook(btn)`, {
+    btn, S: state, slot: 'H', content: {},
+    applyTransmog: async () => ({ ok: true, cost: 6 }),
+    $: () => ({ classList: { remove: cls => classes.delete(cls) } }),
+    haptic: { tap: () => { taps++; }, heavy: () => {} },
+    levelSound() {}, pushProfileSoon() {}, toast() {},
+    restageLook: () => {
+      assert.equal(state.lookPreview, null);
+      assert.equal(classes.has('armed'), false, 'commit disarms before async restage');
+      assert.equal(btn.disabled, true, 'commit disables before async restage');
+      restaged = true;
+    },
+  });
+  assert.equal(restaged, true, 'successful commit must reach restage');
+  assert.equal(taps, 1, 'an unpriced commit taps (v548); a priced one does not');
+  expectIdle(renderBar(false));
   // (b) no bare price span is left: every priced look tag goes through costTag (dust unit)
   assert.doesNotMatch(app, /<span class="look-cost">\$\{/, 'a bare `12` price tag survives; use costTag (QA round 22 W13b)');
   // 3 since 2026-09-05: the v2 grid prices a lone tile and a family tile separately

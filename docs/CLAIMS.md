@@ -1,5 +1,136 @@
 # What each patch note claims, and what backs it
 
+## v550 (2026-09-10)
+
+### Operator verification, 2026-09-10 (this is the release record)
+
+Rebased from the lane's v545 base onto v549 and restamped to v550. Everything below
+was run by the operator on this checkout, not reported by the builder.
+
+Full PURE tier: **164/164, red=0**, node v22.22.2. The first run reported 8 red; 6
+were a fresh worktree with no `node_modules` (acorn/esprima suites exit 1 with
+`DID NOT RUN: missing dependency`, so they never fake green), and both remaining
+reds were real and are fixed here:
+
+- `unit.test.js` R22-W13 died on `haptic is not defined`. The rewritten row executes
+  the real `applyLook`, and v548 added `haptic.tap()` to the unpriced path after this
+  lane's base. The collaborator is now supplied and the tap is asserted, so the stub
+  is a check rather than a hole.
+- `transmog-reach-audit.mjs` NEW PLAYER asserted a 40-coin welcome. v546 raised
+  `DAYONE_TOPUP` to 340. The expectation was stale against the shipped grant, not a
+  behaviour change; it now reads 340.
+
+The two audits the builder could not resolve were verified as R9 integration failures,
+not pre-existing reds, by running them on clean `origin/main` first: both green there,
+both red in the lane.
+
+- `wardrobe-noise-audit.mjs` ARRIVAL and PREVIEW required the bar to be ABSENT at rest.
+  Absence was the audit's proxy for "quiet", and it is the very early return this order
+  removes, so the assertion encoded the bug. The quiet contract is now asserted directly:
+  at rest the bar is unarmed, its control disabled, and it exposes no commit action.
+  PROVEN RED against the pre-R9 app on exactly those two rows (3 passed, 2 failed), with
+  the three untouched rows still green, so the rewrite is not a rubber stamp.
+- `r48-state-audit.mjs` extracted the Dressing Room panel using an end anchor that
+  included the line FOLLOWING it (`      })()}\n      ${mogBarHtml()}`), so inserting the
+  acquisition links between them broke the extraction. The anchor now ends at the panel's
+  own closure. Verified on clean `origin/main` that the old and new anchors select the
+  BYTE-IDENTICAL region (both end at offset 1099458), so this is a boundary repair and
+  not a change of scope. 14/14.
+
+Browser proof, which the builder could not run at all (`listen EPERM` denied its socket):
+`node tests/wardrobe-commit-reach-audit.mjs` **8/8 PASSED, exit 0**, headless shell, at
+375x667 and 390x844. REACH, FLOATING, PARENT and SETTLED all pass at both.
+
+Rendered at **430x932**, the viewport the audit deliberately does not grade and the one
+Tom's device uses. On arrival, before any choice: the bar is on screen at y=769 of 932,
+reads "You keep every piece you own / You get Choose a look below / You pay nothing",
+its Wear it control is `disabled` with no `data-look-apply`. After choosing a look it
+arms, enables, carries `data-look-apply="H10-3"`, and a tap at its centre hit-tests to
+`BUTTON.btn mog-go`. Both acquisition links render ("Open Backpack", "Cosmetic Shop").
+The header pill reads `16/624 collected looks · 2 other looks to try`.
+
+
+### Round 2, current review result
+
+Frozen order SHA256: `79578d61a7972aee7d082b6de035595f7f0101b505a962ae5f522bacd3d303ba`, verified against the supplied plan file. Starting checkout: `031aab81`. This round changes only `tests/unit.test.js` and `docs/CLAIMS.md`. The approved product changes, audit registration, changelog and v546 stamps remain intact. No commit, push or publication was performed.
+
+R23 F8 now supplies `lookCounts` to the production header template. Its fixture contains two stored colourway ids from one family: the rendered pill must show two collected looks and one alternative, with the individual-item catalogue denominator. A one-id fixture must show one collected look and zero alternatives. The existing five/six fits cap and ghosted save-chip assertions remain. R22-W13 executes the production bar renderer for idle and selected states, then the production successful commit handler. Idle renders a disabled Wear it without `armed`; an affordable choice enables and arms it; commit removes `armed` and disables the control before restaging. Price-unit and doll-slot navigation assertions remain.
+
+Both tests explain the replaced expectations in the test file and carry negative controls for the historical pill copy and early return. A separate temporary replay extracted these same rewritten tests and ran them against `git show 1410163e:js/app.js`. F8's historical template was supplied its old fixture bindings (one family, catalogue family total, two pieces), so its failure is the new copy/count assertion, not a missing variable. W13 used the original bar unchanged. Neither comparison edited checkout source.
+
+```text
+Before: node tests/unit.test.js
+382 passed, 2 failed
+
+After: node tests/unit.test.js
+384 passed, 0 failed
+
+EXPECTED RED R23 F8: the looks pill must print stored ids and alternatives, not family tiles
+EXPECTED RED R22-W13: idle bar renders without armed
+
+Full registered PURE tier: 159/161 passed, 2 failed, 0 unproven
+```
+
+The agreed unit command exits 0. Full PURE execution used `/tmp/r9-round2-pure.mjs`, which evaluates the PURE registration block in `tests/release-gate.mjs`, runs every listed suite from this checkout with four workers, and runs any declared SERIAL entries alone. The release-gate CLI has no PURE-only switch and starts a server before running suites; this temporary runner avoids that unrelated browser/server setup. It does not change registration or skip a PURE suite. Logs and per-suite exit codes are under `/tmp/r9-round2-pure/`; the transcript is `/tmp/r9-round2-pure.log`. The unit and prove-red transcripts are `/tmp/r9-round2-unit-after.log` and `/tmp/r9-round2-prove-red.log`.
+
+Remaining blockers: `wardrobe-noise-audit.mjs` reports 3 passed, 2 failed because ARRIVAL and PREVIEW still require the idle/reverted/committed bar to disappear. `r48-state-audit.mjs` exits 1 at its extraction boundary: the new acquisition paragraph separates the panel closure from `${mogBarHtml()}`, which its old end anchor requires to be adjacent. The start comment still exists. Both audits pass with a temporary copy of the pre-R9 app (5/5 and 14/14 respectively), confirming these are integration failures exposed by R9, not unrelated pre-existing reds.
+
+Proposed scope deviation, not applied: authorize updating those two additional audit files. The wardrobe-noise arrival/revert/commit assertions should require a visible disabled unarmed bar while retaining click-wiring and no-rebuild checks. R48 should end its panel extraction at the panel closure itself; that exact change passes all 14 rows against the current app in a temporary comparison tree. The frozen order authorizes the two named unit rewrites and ownership of the new R9 test, but does not include these additional audits. The full PURE tier remains red pending that scope extension; no assertion was waived or production behavior reverted.
+
+No action was denied by tooling in this round. Browser proof was not rerun; the Round 1 socket denial and viewport/fixture bounds below remain applicable. The owner accepted the melt interpretation in Round 2: gear is consumed, its earned look remains. No further melting change is proposed. This report is advisory for independent review, not release acceptance.
+
+### Round 1 historical evidence
+
+The following records the prior implementation and its then-current failures and proposed deviations. Round 2 above supersedes the unit failures, test-ownership proposal and unresolved melt interpretation.
+
+Frozen order: `r9-transmog-reach.md`, SHA256 `f4cefe7776c85cb064a2f9afb048d8533c2c1d716683d1217364cce93efc4dff`. Source baseline: `1410163e7b004f98db6dfeacf8028b7bc81389e7`. This is an implementation report for independent review, not release acceptance. No commit, push or publication was performed.
+
+Changelog item: Wear it now shows the next step before you choose a look. Free changes, the look you are wearing, and paid looks have distinct labels.
+
+1. PROOF: transmog-reach-audit.mjs | REACH: executes the production `mogBarHtml` before selection and verifies the disabled Wear it control has no apply action. A changed selection still enables the action; an inactive panel still returns no bar. Executes production `costTag` with each of the four zero-price reasons: reset/hide (Free), current appearance (Wearing), no statted gear (Free: no stats), and a paid receipt (Paid). The reset and hide tiles render their free reason in their existing captions. Real `transmogPrice` and `applyTransmog` execute over in-memory IndexedDB, checking the paid amount, repeat-free application and intact inventory/loadout. These are Node render/service checks, not browser layout measurements.
+
+Changelog item: The Wardrobe counts collected looks and other looks to try, with links to the Backpack and cosmetic Shop.
+
+1. PROOF: transmog-reach-audit.mjs | REACH: `wardrobeLookCounts` counts collected catalogue item ids instead of rendered colourway families. Its second count uses the same occupied gear-slot baseline as the picker, excluding the baseline itself and empty slots. The demo now reports 14/624 collected looks and 0 other looks to try; 253 was a family-tile denominator. The route handler invokes the existing Backpack and Shop navigation for both buttons, including the picker area for empty gear slots. No currency, gear or collection is granted by these changes.
+
+Diagnosis established before source edits: `boot` selects the separate `tally-demo` database for `?demo`. `seedDemo` adds 340 coins, 14 cosmetics, a golden crate and a daily crate, but no Bone Dust, statted gear or saved fits. Executing its actual inventory/economy prefix in the new guard confirms coins=340, dust=0, gear=0, fits=0, crates=2, alternatives=0. Adding dust alone cannot change this: `slotArts` requires an already collected appearance different from the occupied slot's baseline, and `transmogPrice` deliberately returns zero without statted gear. A fresh real player likewise starts without dust, gear or fits. Executing `initLootIfNeeded` proves delivery of 40 coins and both welcome crates. `openCrate` can deliver cosmetics and, for gear-slot art, takes a 30% statted-variant branch with a player-level cap; these are random rewards, not guaranteed immediate gear. The Shop's existing Rack offers cosmetic acquisition. Thus neither save is permanently locked out, but both share an initially empty picker and poor onward guidance. The scoped product fix exposes those existing routes. The demo seed and the free-without-stats pricing rule are preserved; there is no promise of immediately priced transmog tiles or a new cash checkout.
+
+Changelog item: Melting explains what is consumed and that its look stays yours before you confirm.
+
+1. PROOF: transmog-reach-audit.mjs | REACH: source disclosure is visible in the gear inspection before its melt action and in the Salvage Bench before either its empty or populated branch. The Bone Dust explanation is unconditional. The pre-confirmation worn-gear label also says the look remains. The receipt no longer carries the first explanation of retention. The real melt service preserves the appearance and pays dust while consuming the gear. Guide copy now distinguishes preview, paid application, paid reuse, reset/hide and the no-stats case. Single garments are called pieces; saved outfits retain fit.
+
+Proof results:
+
+- `node tests/transmog-reach-audit.mjs`: **16 passed, 0 failed**, exit 0. Registered in the PURE list in `tests/release-gate.mjs`.
+- The identical final guard against copies of baseline `app.js` and `loot.js`: **6 passed, 10 failed**, exit 1. Arrival and all four zero-price label rows fail; active-selection, inactive-panel, price arithmetic, welcome-kit, payment and retention controls pass. The first pre-edit run of the shorter guard was also red: 5 passed, 8 failed. Temporary baseline files were created under `/tmp`; this checkout's source was not reverted.
+- Baseline `node /tmp/r9-frozen-baseline/tests/unit.test.js`, run from this checkout with the original app and loot source copies: **384 passed, 0 failed**, exit 0. An earlier run from the temporary directory failed its Python palette dependency import (`scipy`); rerunning from the normal checkout resolved that environment difference.
+- Agreed command `node tests/unit.test.js`: **382 passed, 2 failed**, exit 1. Full output is reproduced below. Neither failure is concealed or waived.
+- `node tests/wardrobe-commit-reach-audit.mjs`: blocked before browser launch, exit 1, `Error: listen EPERM: operation not permitted 127.0.0.1`. The environment denied the local listening socket. No browser row passed in this run.
+- Release gate coverage-only: exit 0, `coverage: 418 audits on disk, 127 fast, 130 full, 161 skipped`. This checks registration, not execution of the complete release gate.
+- JavaScript syntax checks, version-stamp audit (4 checks), version alignment at v546, and `git diff --check`: exit 0.
+
+Agreed proof output:
+
+```text
+FAIL R23 F8: the fits cap is printed and the save chip stays, ghosted, with its rule reachable
+  lookCounts is not defined
+FAIL R22-W13 the bar disarms on commit, every price tag carries the unit, a doll-slot tap arrives at the panel
+  nothing selected renders no confirm bar
+
+382 passed, 2 failed
+```
+
+The reach audit now selects TRY before measuring the active commit. It explicitly grades only 375x667 and 390x844, never 430x932. SETTLED requires exactly four tiles. Any later pass has that fixture bound and cannot refute R8-W24's five-of-twelve overlap. Current screenshot, hit-test and overlap acceptance remain unproven because the server socket was denied.
+
+Constraints and deviations for review:
+
+- The literal rule that nothing earned is ever permanently lost conflicts with existing `disenchantGear`, which permanently consumes gear and removes worn stats. This implementation preserves the earned appearance and makes the existing loss explicit before consent. It does not implement reversible melting. Proposed follow-up if the literal rule is mandatory: authorize a separate gear recovery and storage design before accepting the work. No false claim that melting destroys nothing is added.
+- The agreed unit suite cannot be green while its existing R22-W13 assertion requires the precise early return this order removes. R23 F8 constructs the header with a fixed list of old count bindings and does not supply the new `lookCounts` result. `tests/unit.test.js` is outside this lane's test ownership and remains untouched. Proposed reviewer action: update those two fixtures/assertions to the approved behavior, then rerun the agreed command. No production workaround was added merely to satisfy stale source expectations.
+- Necessary adjacent app wiring adds the acquisition buttons/listeners near the picker and imports the two loot helpers. Named copy sites include the collection pill, garment heading, guide and Salvage Bench outside the narrow numbered ranges. The four protected original line sites (1231, 17443, 17462, 27331), `app.css`, and `assets/bh/**` are unchanged.
+- No demo-only grants, new effects, upsell copy, pricing changes or stat-selling path were added. Version stamps and the changelog advance locally to v546 only.
+
+Files changed: `js/app.js`, `js/loot.js`, `tests/wardrobe-commit-reach-audit.mjs`, new `tests/transmog-reach-audit.mjs`, `tests/release-gate.mjs`, `docs/CLAIMS.md`, `js/changelog.js`, `sw.js`, `version.json`.
+
 ## v549
 
 Off-hand registration, sixth attempt and the first one measured against the right

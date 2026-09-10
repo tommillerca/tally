@@ -29,7 +29,10 @@ function between(source, start, end) {
   return source.slice(a, b);
 }
 const lookSetup = between(app, '    const wornGear = gearLo[slot]', '    /* ================= THE COLOURWAY RAIL');
-const lookPanel = between(app, '        /* TRANSMOG. Offered', '      })()}\n      ${mogBarHtml()}');
+// R9, 2026-09-10: the end anchor used to include the line that FOLLOWED the
+// panel, so inserting the acquisition links between the panel's closure and
+// ${mogBarHtml()} broke the extraction. The panel ends at its own closure.
+const lookPanel = between(app, '        /* TRANSMOG. Offered', '      })()}\n');
 async function dressingRoom(id, replace, asset = art.bhAsset, gearId = null) {
   dbmod.useDbName(`r48-art-${++seq}`);
   await dbmod.importAll({ app: 'tally', version: 3, log: [], kv: [
