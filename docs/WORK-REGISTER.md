@@ -4,7 +4,7 @@ Live status of everything Tom has asked for that is not yet live and verified.
 I own this file. It is updated when work is ASKED, DELEGATED, DIES, or LANDS.
 A dead or parked lane still counts as outstanding.
 
-Last updated: 2026-09-10 (v554 live)
+Last updated: 2026-09-10 (v559 live)
 
 ## In flight
 
@@ -12,7 +12,9 @@ Last updated: 2026-09-10 (v554 live)
 |---|---|---|---|---|
 | 1 | **Playtest slate, runs 10-14** | mostly ME (see note) | **STARTED at 12-A** | Census of all 122 browser audits running now |
 | 2 | **Wardrobe header rejig** — four misaligned single-item lines, four chip treatments | Codex, building | **PAUSED at Tom's request** | Park the tree, do not review until Tom lifts it |
-| 3 | **Step race: no progress bars** — root cause confirmed on production D1 | me | **AWAITING TOM'S GO** | Dispatch once approved |
+| 3 | ~~Step race: no progress bars~~ | me | **LANDED v558**, live | Closed. Bars 0/11 to 7/11 on the real board |
+| 12 | **Device report** — move the machine-answerable half of the phone hour off Tom and into a self-report screen | **Codex, running** | **DELEGATED 2026-09-10** | Lane `device-report`, spec in scratchpad. I verify on the simulator; Codex cannot bind sockets |
+| 13 | **The 28 real browser-audit reds** — causes for each | me | **OPEN**, run 12-A's deliverable | 121 graded: GREEN 76, RED 40, UNPROVEN 5. `gate-audit` defect already named |
 
 ## Approved and not started
 
@@ -28,6 +30,7 @@ Last updated: 2026-09-10 (v554 live)
 | 6 | `tests/ui-audit.js` drift | Red on clean main: `#coinBtn` opens shop not crates, `#charBtn` opens crates not wardrobe, `#dropToShop` and `#spireToMap` missing |
 | 7 | Duplicate v544 changelog entry | Two entries dated 09-10 and 09-09 |
 | 8 | Studio: native save | iOS Photos / Android picker unproven; needs an attended native build. Screenshot mode ships as the interim path |
+| 14 | `@capacitor/haptics` NOT INSTALLED | `native/capabilities.json` declares it a deliberate `known_gap`. Every tap, payout and impact is silent on native and nothing errors. Fixing needs the dep plus `npx cap sync` plus an iOS and Android rebuild and store upload: the native lane, attended, Tom's call |
 | 10 | Studio wordmark contrast | CLOSED by v554: 1.02:1 -> 12.40:1, measured on the export |
 | 11 | Studio: bubble/mark placement on other outfits | The occupancy search resolved both onto clean ground for ONE render. Untested across outfits and backdrops |
 | 9 | Wardrobe header | Still a mess. Item 2 is the fix, paused |
