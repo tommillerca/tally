@@ -1,0 +1,16 @@
+IL17-1: every saved RGBA pixel matches HEAD translated by (0,40) PASS
+IL17-2: every saved RGBA pixel matches HEAD translated by (0,40) PASS
+IL10-1: every saved RGBA pixel matches HEAD translated by (-40,45) PASS
+IL10-2: every saved RGBA pixel matches HEAD translated by (-40,45) PASS
+IL1-1: byte-identical to HEAD PASS
+IL1-2: byte-identical to HEAD PASS
+IL1-3: byte-identical to HEAD PASS
+IL2: byte-identical to HEAD PASS
+IL5: byte-identical to HEAD PASS
+IL9: byte-identical to HEAD PASS
+IL7-1: byte-identical to HEAD PASS
+js/app.js: off-limits file byte-identical to HEAD PASS
+js/pets.js: off-limits file byte-identical to HEAD PASS
+js/loot.js: off-limits file byte-identical to HEAD PASS
+js/db.js: off-limits file byte-identical to HEAD PASS
+js/social.js: off-limits file byte-identical to HEAD PASS

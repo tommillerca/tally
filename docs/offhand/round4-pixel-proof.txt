@@ -1,0 +1,28 @@
+PREFLIGHT IL17-1 offset=(0,40) pixels lost alpha>0=0 alpha>30=0 detail=[]
+PREFLIGHT IL17-2 offset=(0,40) pixels lost alpha>0=0 alpha>30=0 detail=[]
+PREFLIGHT IL10-1 offset=(-40,45) pixels lost alpha>0=0 alpha>30=0 detail=[]
+PREFLIGHT IL10-2 offset=(-40,45) pixels lost alpha>0=0 alpha>30=0 detail=[]
+IL17-1 ink alpha>0: (362, 38, 632, 360) -> (362, 78, 632, 400); exact offset=(0,40) PASS
+IL17-1 ink alpha>30: (364, 40, 543, 358) -> (364, 80, 543, 398); exact offset=(0,40) PASS
+IL17-1 surviving RGBA multiset unchanged=True; all visible RGBA unchanged=True; saved pixel bytes exact=True; lost alpha>0=0 alpha>30=0
+IL17-2 ink alpha>0: (362, 38, 640, 359) -> (362, 78, 640, 399); exact offset=(0,40) PASS
+IL17-2 ink alpha>30: (364, 40, 542, 357) -> (364, 80, 542, 397); exact offset=(0,40) PASS
+IL17-2 surviving RGBA multiset unchanged=True; all visible RGBA unchanged=True; saved pixel bytes exact=True; lost alpha>0=0 alpha>30=0
+IL10-1 ink alpha>0: (344, 0, 604, 365) -> (304, 45, 564, 410); exact offset=(-40,45) PASS
+IL10-1 ink alpha>30: (346, 1, 602, 363) -> (306, 46, 562, 408); exact offset=(-40,45) PASS
+IL10-1 surviving RGBA multiset unchanged=True; all visible RGBA unchanged=True; saved pixel bytes exact=True; lost alpha>0=0 alpha>30=0
+IL10-2 ink alpha>0: (344, 0, 603, 364) -> (304, 45, 563, 409); exact offset=(-40,45) PASS
+IL10-2 ink alpha>30: (346, 1, 601, 362) -> (306, 46, 561, 407); exact offset=(-40,45) PASS
+IL10-2 surviving RGBA multiset unchanged=True; all visible RGBA unchanged=True; saved pixel bytes exact=True; lost alpha>0=0 alpha>30=0
+THUMB 192/IL/IL17-1.png regenerated via project wanted(); bytes_changed=True
+THUMB 384/IL/IL17-1.png regenerated via project wanted(); bytes_changed=True
+THUMB trim/IL/IL17-1.png regenerated via project wanted(); bytes_changed=False
+THUMB 192/IL/IL17-2.png regenerated via project wanted(); bytes_changed=True
+THUMB 384/IL/IL17-2.png regenerated via project wanted(); bytes_changed=True
+THUMB trim/IL/IL17-2.png regenerated via project wanted(); bytes_changed=False
+THUMB 192/IL/IL10-1.png regenerated via project wanted(); bytes_changed=True
+THUMB 384/IL/IL10-1.png regenerated via project wanted(); bytes_changed=True
+THUMB trim/IL/IL10-1.png regenerated via project wanted(); bytes_changed=False
+THUMB 192/IL/IL10-2.png regenerated via project wanted(); bytes_changed=True
+THUMB 384/IL/IL10-2.png regenerated via project wanted(); bytes_changed=True
+THUMB trim/IL/IL10-2.png regenerated via project wanted(); bytes_changed=False

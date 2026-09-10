@@ -1,0 +1,69 @@
+SOURCE-ONLY: not evidence of rendered registration; historical assertions retained.
+PASS CONTROL Manhattan dilation and ring boundary 149 FAIL / 150 PASS
+IL SAMPLE 38/38, core=3584, ring=3028, box=[438,228,502,292]
+PASS IL1-1 core=46 ring=203 floor=150
+PASS IL1-2 core=46 ring=203 floor=150
+PASS IL1-3 core=46 ring=203 floor=150
+PASS IL2 core=46 ring=205 floor=150
+PASS IL3-1 core=445 ring=1248 floor=150
+PASS IL3-2 core=421 ring=1244 floor=150
+PASS IL4-1 core=3486 ring=2510 floor=150
+PASS IL4-2 core=3486 ring=2510 floor=150
+PASS IL4-3 core=3486 ring=2510 floor=150
+PASS IL5 core=960 ring=2414 floor=150
+PASS IL6-1 core=119 ring=762 floor=150
+PASS IL6-2 core=125 ring=755 floor=150
+PASS IL6-3 core=125 ring=762 floor=150
+PASS IL6-4 core=125 ring=762 floor=150
+PASS IL7-1 core=536 ring=1095 floor=150
+PASS IL7-2 core=553 ring=1095 floor=150
+PASS IL7-3 core=543 ring=1095 floor=150
+PASS IL8-1 core=221 ring=1105 floor=150
+PASS IL8-2 core=195 ring=1102 floor=150
+PASS IL9 core=3581 ring=2262 floor=150
+PASS IL10-1 core=36 ring=691 floor=150
+PASS IL10-2 core=37 ring=694 floor=150
+PASS IL11-1 core=1009 ring=1000 floor=150
+PASS IL11-2 core=992 ring=993 floor=150
+PASS IL11-3 core=998 ring=986 floor=150
+PASS IL12-1 core=91 ring=1024 floor=150
+PASS IL12-2 core=293 ring=1127 floor=150
+PASS IL13 core=136 ring=1121 floor=150
+PASS IL14 core=665 ring=795 floor=150
+PASS IL15 core=339 ring=763 floor=150
+PASS IL16-1 core=60 ring=216 floor=150
+PASS IL16-2 core=63 ring=219 floor=150
+PASS IL16-3 core=60 ring=218 floor=150
+PASS IL17-1 core=104 ring=635 floor=150
+PASS IL17-2 core=119 ring=630 floor=150
+PASS IL18-1 core=110 ring=567 floor=150
+PASS IL18-2 core=94 ring=567 floor=150
+PASS IL18-3 core=95 ring=567 floor=150
+IL: 38/38 pass
+IR SAMPLE 24/24, core=3776, ring=3062, box=[136,384,200,448]
+PASS IR1 core=576 ring=917 floor=150
+PASS IR2 core=277 ring=1219 floor=150
+PASS IR3-1 core=463 ring=601 floor=150
+PASS IR3-2 core=489 ring=601 floor=150
+PASS IR4 core=502 ring=795 floor=150
+PASS IR5-1 core=140 ring=236 floor=150
+PASS IR5-2 core=147 ring=236 floor=150
+PASS IR5-3 core=147 ring=236 floor=150
+PASS IR6 core=180 ring=1165 floor=150
+PASS IR7-1 core=1158 ring=1085 floor=150
+PASS IR7-2 core=1156 ring=1085 floor=150
+PASS IR7-3 core=1156 ring=1085 floor=150
+PASS IR8-1 core=234 ring=435 floor=150
+PASS IR8-2 core=239 ring=434 floor=150
+PASS IR9-1 core=482 ring=613 floor=150
+PASS IR9-2 core=465 ring=613 floor=150
+PASS IR9-3 core=465 ring=613 floor=150
+PASS IR10-1 core=684 ring=1174 floor=150
+PASS IR10-2 core=686 ring=1170 floor=150
+PASS IR10-3 core=681 ring=1172 floor=150
+PASS IR11-1 core=477 ring=870 floor=150
+PASS IR11-2 core=471 ring=863 floor=150
+PASS IR11-3 core=490 ring=884 floor=150
+PASS IR11-4 core=458 ring=872 floor=150
+IR: 24/24 pass
+source-composite diagnostic (not rendered registration): 0 FAILED

@@ -9,6 +9,14 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 544, date: '2026-09-10', title: 'Held properly at last', items: [
+    'The off-hand brushes and spades are held properly now.',
+  ] },
+
+  { n: 544, date: '2026-09-09', title: 'Held properly at last', items: [
+    'The off-hand brushes and spades are held properly now.',
+  ] },
+
   { n: 543, date: '2026-09-09', title: 'The step race shows everyone again', items: [
     'Every racer in the step race shows their figure and an honest progress track, even when a friend has not shared an outfit.',
   ] },

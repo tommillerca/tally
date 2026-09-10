@@ -1,0 +1,16 @@
+PREFLIGHT IL17-1 offset=(+24,+32) lost alpha>0=7; alpha>30=0; pixels=[(628, 255, (23, 23, 23, 11)), (629, 255, (31, 31, 31, 8)), (628, 256, (0, 0, 0, 3)), (629, 256, (63, 63, 63, 4)), (630, 256, (0, 0, 0, 2)), (630, 257, (85, 85, 85, 3)), (631, 257, (0, 0, 0, 1))]
+PREFLIGHT IL17-2 offset=(+24,+32) lost alpha>0=10; alpha>30=0; pixels=[(639, 226, (0, 0, 0, 1)), (636, 227, (0, 0, 0, 1)), (637, 227, (85, 85, 85, 3)), (638, 227, (45, 45, 30, 17)), (636, 228, (0, 0, 0, 1)), (638, 228, (45, 45, 30, 17)), (639, 228, (34, 34, 34, 30)), (638, 229, (0, 0, 0, 3)), (639, 229, (25, 25, 25, 20)), (639, 231, (0, 0, 0, 1))]
+PREFLIGHT IL10-1 offset=(+22,+86) lost alpha>0=0; alpha>30=0; pixels=[]
+PREFLIGHT IL10-2 offset=(+22,+86) lost alpha>0=0; alpha>30=0; pixels=[]
+PASS IL17-1 alpha>0 surviving bbox=(362, 38, 582, 360) + (+24,+32) = (386, 70, 606, 392); original bbox=(362, 38, 632, 360)
+PASS IL17-1 alpha>30 surviving bbox=(364, 40, 543, 358) + (+24,+32) = (388, 72, 567, 390); original bbox=(364, 40, 543, 358)
+PASS IL17-1 surviving RGBA multiset unchanged; exact saved RGBA bytes; lost alpha>0=7, alpha>30=0; facegate=0.00% (limit 2%)
+PASS IL17-2 alpha>0 surviving bbox=(362, 38, 544, 359) + (+24,+32) = (386, 70, 568, 391); original bbox=(362, 38, 640, 359)
+PASS IL17-2 alpha>30 surviving bbox=(364, 40, 542, 357) + (+24,+32) = (388, 72, 566, 389); original bbox=(364, 40, 542, 357)
+PASS IL17-2 surviving RGBA multiset unchanged; exact saved RGBA bytes; lost alpha>0=10, alpha>30=0; facegate=0.00% (limit 2%)
+PASS IL10-1 alpha>0 surviving bbox=(344, 0, 604, 365) + (+22,+86) = (366, 86, 626, 451); original bbox=(344, 0, 604, 365)
+PASS IL10-1 alpha>30 surviving bbox=(346, 1, 602, 363) + (+22,+86) = (368, 87, 624, 449); original bbox=(346, 1, 602, 363)
+PASS IL10-1 surviving RGBA multiset unchanged; exact saved RGBA bytes; lost alpha>0=0, alpha>30=0; facegate=1.62% (limit 2%)
+PASS IL10-2 alpha>0 surviving bbox=(344, 0, 603, 364) + (+22,+86) = (366, 86, 625, 450); original bbox=(344, 0, 603, 364)
+PASS IL10-2 alpha>30 surviving bbox=(346, 1, 601, 362) + (+22,+86) = (368, 87, 623, 448); original bbox=(346, 1, 601, 362)
+PASS IL10-2 surviving RGBA multiset unchanged; exact saved RGBA bytes; lost alpha>0=0, alpha>30=0; facegate=1.61% (limit 2%)

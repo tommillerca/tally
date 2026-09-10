@@ -1,0 +1,5 @@
+Source-only facegate comparison using its unchanged zone and alpha > 40. Not rendered occlusion proof.
+IL10-1: original 0.74% -> candidate 68.65%; limit 2%
+IL10-2: original 0.76% -> candidate 68.65%; limit 2%
+IL17-1: original 0.62% -> candidate 36.51%; limit 2%
+IL17-2: original 0.7% -> candidate 36.74%; limit 2%
