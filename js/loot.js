@@ -9,7 +9,7 @@ import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { COMMON_INGREDIENT_IDS } from './cooking.js';
 import { dateKey } from './nutrition.js';
 import { LAB_RULES, LAB_PRICES, LAB_DEFAULTS, labInput, labMorph, labDistribution, labPreview, labCapacity, labDayProjection, labReconciliation, labEqual, labRefuse, resolveLabOutcome, validateLabSave } from './laboratory.js';
-import { isMorph, MORPH_LABEL, morphAsset, isKnownPet, legalPicks, petLevel, MORPHS, PET_TREES } from './pets.js';
+import { isMorph, MORPH_LABEL, morphAsset, isKnownPet, legalPicks, petLevel, MORPHS, PET_TREES, petCellKey } from './pets.js';
 
 // Use the same colour identity as the art. Shinies and CX never wear morph art.
 export function petColourName(inst) {
@@ -1698,8 +1698,7 @@ function labUiReason(reason) {
     'op-conflict':'restore-conflict'})[reason] || reason;
 }
 const labReply = result => result?.ok === false ? {...result, reason:labUiReason(result.reason)} : result;
-const labCellKey = p => /^C[1-6]$/.test(p?.sp) && labMorph(p.morph)
-  ? `${p.sp}|${p.shiny ? 'base' : labMorph(p.morph)}` : null;
+const labCellKey = petCellKey;
 const labPlain = p => !p.bankedSteps && !p.nickname && !p.lineage && !p.bond && !p.talents.length && !p.equipped;
 const labTalentNames = p => p.talents.map(id => Object.values(PET_TREES).flatMap(t=>t.flatMap(r=>r.opts)).find(n=>n.id===id)?.name || id);
 function labNeededFor(sp, morph, roster, s) {
@@ -2048,11 +2047,16 @@ function petDestructionQuote(s, rows, iid, keepIid = null) {
   const bankedSteps = (s.petLvlSteps?.[iid] || 0) + (equipped ? Math.max(0, meter - (s.petStepCredit ?? meter)) : 0);
   const next = roster.filter(p => p.iid !== iid);
   const replacement = equipped ? (next.find(p => p.iid === keepIid) || bestInstance(next, inst.sp) || next.find(selectablePetInstance)) : null;
+  const lastCell = petLastColourLoss(inst, roster);
   return {iid, keepIid, inst, bankedSteps, nickname:s.petNick?.[iid] || '', bond:s.petBonds?.[iid] || 0,
     talents:s.pettalents?.[iid] || [], equipped,
     replacement:replacement ? {iid:replacement.iid, name:s.petNick?.[replacement.iid] || petInstanceName(replacement)} : null,
-    lastColour:roster.filter(p => p.sp === inst.sp && petColourName(p) === petColourName(inst)).length === 1,
-    lastCell:petLastColourLoss(inst, roster),
+    // Ordinary grid colours are backed by every holder of their cell, shiny
+    // included. A shiny's own appearance still deserves its separate warning.
+    lastColour:inst.shiny || !labCellKey(inst)
+      ? roster.filter(p => p.sp === inst.sp && petColourName(p) === petColourName(inst)).length === 1 : lastCell,
+    lastAppearance:!!labCellKey(inst) && roster.filter(p => p.sp === inst.sp && petColourName(p) === petColourName(inst)).length === 1,
+    lastCell,
     dust:petDustValue(BH_BY_ID[inst.sp] || {}) + (inst.shiny ? 15 : 0) + (inst.lineage || 0) * 8};
 }
 export async function quotePetDestruction(iid, keepIid = null) {

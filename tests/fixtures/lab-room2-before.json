@@ -175,5 +175,28 @@
     "buttons": [
       "<button class=\"btn\" data-lab-buy=\"2\" >"
     ]
+  },
+  "6": {
+    "source": "Synthetic negative CONTROL derived from historical finding 6 in docs/PLAYTEST-LAB.md. Illustrative disclosure and placeholder IIDs, not an original JSON capture.",
+    "disclosure": "Base Drizzle will be destroyed for 60 Bone Dust. Tap again to confirm.",
+    "equipped": "replacement",
+    "remaining": [
+      {
+        "iid": "replacement"
+      }
+    ]
+  },
+  "15": {
+    "source": "Synthetic negative CONTROL derived from historical finding 15 in docs/PLAYTEST-LAB.md. The warning is quoted; IIDs are placeholders. The ambiguous warning also occurs in the current capture.",
+    "disclosure": "This is your last copy of this colour.",
+    "cells": [
+      "C1|base"
+    ],
+    "remaining": [
+      {
+        "iid": "shiny-keeper",
+        "shiny": true
+      }
+    ]
   }
 }

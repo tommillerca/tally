@@ -1,0 +1,2 @@
+154/156 PURE files exit 0 after complete census and affected-audit reruns
+Exceptions: lab-room2-audit.mjs exit=1, stable-loss-disclosure-audit.mjs exit=1

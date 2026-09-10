@@ -1,0 +1,4 @@
+  (pacing: avg 6.0 turns, max 8, 100% decisive)
+  (effort vs gear: high-effort won 100/100)
+
+100 passed, 0 failed

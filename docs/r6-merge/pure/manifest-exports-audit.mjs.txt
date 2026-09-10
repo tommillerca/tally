@@ -1,0 +1,31 @@
+ok    REACH  read 53 source(s) from js/
+ok    REACH  6 file(s) name data/boneheadz.js
+ok    REACH  every one of those 6 yielded a parsed import list
+ok    REACH  24 imported name(s) to grade
+
+ok    BH_SLOTS                   js/app.js js/game.js js/loot.js
+ok    BH_ITEMS                   js/app.js js/gear.js js/loot.js js/paddock-cards.js
+ok    BH_ITEMS_WITH_UNRELEASED   js/app.js
+ok    BH_BY_ID                   js/app.js js/loot.js js/pets.js
+ok    bhAsset                    js/app.js js/paddock-cards.js
+ok    PET_CROP                   js/app.js js/paddock-cards.js
+ok    PET_SLOTS                  js/app.js js/loot.js
+ok    PET_HERO_REF               js/app.js
+ok    PET_HERO_HOUSE             js/app.js
+ok    PET_HERO_REL               js/app.js
+ok    PET_SHOP                   js/app.js js/loot.js
+ok    PET_SHOT_PAD               js/app.js
+ok    petShotArt                 js/app.js
+ok    petWornLayers              js/app.js js/paddock-cards.js
+ok    petWornTints               js/app.js js/paddock-cards.js
+ok    petWornItems               js/app.js
+ok    petCanWear                 js/app.js
+ok    BH_THUMB_RE                js/app.js
+ok    BH_THUMB_TIERS             js/app.js
+ok    bhThumb                    js/app.js js/paddock-cards.js
+ok    bhTierFor                  js/app.js js/paddock-cards.js
+ok    THUMB_FALLBACK             js/app.js js/paddock-cards.js
+ok    bhFamilyKey                js/app.js
+ok    bhFamilies                 js/app.js
+
+MANIFEST EXPORTS AUDIT: all 24 names imported across js/ are exported by the manifest.

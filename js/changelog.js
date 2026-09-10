@@ -9,6 +9,24 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 542, date: '2026-09-09', title: 'The Laboratory and the Stable, played hard', items: [
+    'Shiny pets now hold the same Base collection cell in the Kennel and Stable loss warnings, even with an unsupported saved colour.',
+    'Destroying a plain Base pet no longer says it is your last colour copy when a shiny pet still holds that cell. Losing a shiny appearance still gets its own warning.',
+    'Backups can reconcile duplicate offline incubator purchases, keep both purchase receipts, refund the duplicate price once, and continue backing up other progress.',
+    'The breeding scroll audit now distinguishes an unselected fixture from a missing loss warning; browser proof is pending.',
+    'The Stable stale-quote audit now enters quick confirmation and checks nickname changes and equipped-only pending health credit.',
+    'The Breed loss audit now runs the breed handler and exposes the known missing-investment disclosure.',
+    'The Laboratory room audit now counts all 16 declared findings, including equipped replacement and shiny collection disclosure.',
+    'The Laboratory recovery checks now require the health-writing audit for finding 1.',
+    'The Laboratory evidence now labels its current capture separately from the historical pre-fix observations.',
+    'Breeding refuses changed loss disclosures and asks you to review the current training steps again.',
+    'The Stable Laboratory door counts saved waiting operations, including experiments still in flight.',
+    'Feeding an invested pet into breeding requires typing DESTROY, matching the Laboratory review.',
+    'Destruction warnings name the collection cell a shiny pet holds as Base.',
+    'Incubator purchases are disabled when they would add no experiment uses today.',
+    'Interrupted experiments keep the Today and post-hatch invitations into the Laboratory available.',
+  ] },
+
   { n: 541, date: '2026-09-09', title: 'Off-hand art back to where it was', items: [
     'The off-hand toothbrush and spade artwork is restored to its state before the rejected adjustment. The underlying hand misalignment remains open and unfixed.',
   ] },

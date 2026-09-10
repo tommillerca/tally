@@ -1,0 +1,9 @@
+{
+  "source": "git HEAD in this checkout, copied to a temporary fixture",
+  "head": "3a403423999f542ee08cb4758d619f946e3c9c6f",
+  "files": {
+    "js/db.js": "e573b377115dad62b2d519cad9844944535f977da037edc97b01bf2d1e9ca568",
+    "js/social.js": "bea00f2e6d440aca5d7cfac819c4a4587c2b15c88ef038e14d03b9ab8e2d714b"
+  },
+  "exit": 1
+}

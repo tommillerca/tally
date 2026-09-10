@@ -1,0 +1,4 @@
+PASS item 2: both comments disclose 40 coins cannot afford the unchanged 300-coin anchor
+item 5 dependency hidden: exit 97
+UNPRV acorn  DID NOT RUN: missing dependency acorn. Install from this checkout root: npm ci --include=dev
+PASS item 5: actual write-contract missing acorn is UNPROVEN

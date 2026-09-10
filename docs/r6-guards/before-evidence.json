@@ -1,0 +1,44 @@
+{
+  "source": "git HEAD:docs/playtest-lab/evidence.json, read before any product edits (none made in this lane)",
+  "phase": "previously-unlabelled-post-fix-capture",
+  "note": "These excerpts demonstrate why the historical pre-fix prose cannot be read as the current capture. This is not original pre-fix evidence.",
+  "excerpts": [
+    {
+      "id": "intent-health-lock",
+      "statuses": [
+        "ready",
+        "ready",
+        "ready"
+      ]
+    },
+    {
+      "id": "stable-equipped",
+      "typed": false,
+      "disclosure": "Base Drizzle · Lv 1 will be destroyed for 60 Bone Dust. 0 banked steps and lineage 0 are lost. It is equipped. Base Drizzle will take its place. This cannot be undone. Tap again to confirm.",
+      "equipped": "p96"
+    },
+    {
+      "id": "stable-shiny-last-copy",
+      "typed": true,
+      "disclosure": "<p>This is your last copy of this colour. <b>Base Drizzle · Lv 1</b> is destroyed and does not come back.</p><p>0 banked steps and lineage 0 are lost.</p><p>Destroying it pays <b>60 Bone Dust</b>.</p>",
+      "equipped": null
+    },
+    {
+      "id": "stable-named-bonded",
+      "typed": false,
+      "disclosure": "BISCUIT (Base Drizzle · Lv 1) will be destroyed for 60 Bone Dust. 0 banked steps and lineage 0 are lost. The nickname BISCUIT is lost. Bond 4/5 is lost. This cannot be undone. Tap again to confirm.",
+      "equipped": null
+    },
+    {
+      "id": "completionist",
+      "status": "All 36 colours owned. No matching pair preserves both your collection and pet investment. You may review a risky pair and its exact losses, or hatch more copies first."
+    },
+    {
+      "id": "one-spare",
+      "status": "No matching pair preserves both your collection and pet investment. You may review a risky pair and its exact losses, or hatch more copies first."
+    },
+    {
+      "id": "old-receipt"
+    }
+  ]
+}

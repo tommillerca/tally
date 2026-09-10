@@ -1,0 +1,6 @@
+PASS ARRIVAL selected slot has no confirm bar, including an existing transmog
+PASS PREVIEW inserts and wires an armed dock bar, clears on revert/commit, and reappears without rebuilding
+PASS FITS current-fit copy is verbatim inside closed house-style help
+PASS FITS legacy warning stays verbatim inside the same closed help
+PASS LEGACY sibling bar is absent until changed and keeps its live action
+WARDROBE NOISE: 5 passed, 0 failed. Node only; pixel review owed.

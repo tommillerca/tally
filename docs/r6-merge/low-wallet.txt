@@ -1,0 +1,11 @@
+CHECK direction=0 replace=false unrelatedSurvived=true refusal=none counts={"foods":1,"log":1,"weights":1,"skipped":[],"notices":[{"code":"duplicate-incubator-purchase","slot":2,"opId":"r6-buy-b","keptOpId":"r6-buy-a","refund":20000,"message":"Incubator 2 purchase r6-buy-b could not become a second copy of the same slot. Both purchase receipts were kept; its full price of 20,000 coins was refunded once. Incubator 2 remains available."}]}
+CHECK direction=1 replace=false unrelatedSurvived=true refusal=none counts={"foods":1,"log":1,"weights":1,"skipped":[],"notices":[{"code":"duplicate-incubator-purchase","slot":2,"opId":"r6-buy-b","keptOpId":"r6-buy-a","refund":20000,"message":"Incubator 2 purchase r6-buy-b could not become a second copy of the same slot. Both purchase receipts were kept; its full price of 20,000 coins was refunded once. Incubator 2 remains available."}]}
+CHECK direction=0 replace=true unrelatedSurvived=true refusal=none counts={"foods":1,"log":1,"weights":1,"skipped":[],"notices":[{"code":"duplicate-incubator-purchase","slot":2,"opId":"r6-buy-b","keptOpId":"r6-buy-a","refund":20000,"message":"Incubator 2 purchase r6-buy-b could not become a second copy of the same slot. Both purchase receipts were kept; its full price of 20,000 coins was refunded once. Incubator 2 remains available."}]}
+CHECK direction=1 replace=true unrelatedSurvived=true refusal=none counts={"foods":1,"log":1,"weights":1,"skipped":[],"notices":[{"code":"duplicate-incubator-purchase","slot":2,"opId":"r6-buy-b","keptOpId":"r6-buy-a","refund":20000,"message":"Incubator 2 purchase r6-buy-b could not become a second copy of the same slot. Both purchase receipts were kept; its full price of 20,000 coins was refunded once. Incubator 2 remains available."}]}
+CHECK cloud push=true CAS conflicts=1 failure=null
+PASS recovery on both original device databases without erase; refund replay and spending preserved
+PASS third-device convergence with a new canonical receipt
+PASS replace=false refund/import rollback and immutable receipt controls
+PASS replace=true refund/import rollback and immutable receipt controls
+PASS both directions keep a separately earned slot 3 without premature wallet refusal
+PASS two-device guard

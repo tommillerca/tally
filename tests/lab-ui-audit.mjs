@@ -419,7 +419,11 @@ await check('Today row requires all gates, keeps hide, and never advertises mere
   const html = ui.labTodayHtml(state(),ctx);
   rejectsMutation(html,html.replace('data-lab-open','broken'),h => { assert.match(h,/data-lab-open/); assert.match(h,/data-lab-hide/); assert.match(h,/Two matching spare pets are consumed/); });
   for (const change of [{ current:false },{ priorDay:false },{ hidden:true }]) assert.equal(ui.labTodayHtml(state(),{...ctx,...change}),'');
-  for (const change of [{ remaining:0 },{ hasSafeUsefulPair:false },{ status:'unknown' },{ status:'unavailable' },{ collectionCount:36 }]) assert.equal(ui.labTodayHtml(state(change),ctx),'');
+  for (const change of [{ remaining:0 },{ hasSafeUsefulPair:false },{ status:'unavailable' },{ collectionCount:36 }]) assert.equal(ui.labTodayHtml(state(change),ctx),'');
+  const recovery=ui.labTodayHtml(state({status:'unknown',remaining:0}),ctx);
+  rejectsMutation(recovery,'',h=>{assert.match(h,/data-lab-open/);assert.match(h,/status check/);assert.match(h,/data-lab-hide/);});
+  assert.match(ui.labTodayHtml(state({status:'unknown',remaining:0}),{...ctx,priorDay:false}),/data-lab-open/);
+  for(const change of [{current:false},{hidden:true}]) assert.equal(ui.labTodayHtml(state({status:'unknown',remaining:0}),{...ctx,...change}),'');
   assert.match(source,/setUi\(\{ todayHidden: true \}\)/); assert.match(source,/setUi\(\{ todayHidden: false \}\)/);
 });
 await check('interrupted fight and unknown save copy name the action without inventing a result', () => {

@@ -19,3 +19,22 @@ assert.match(typed.disclosure,/50,000 banked steps and lineage 2/);assert.match(
 assert.match(typed.disclosure,/Bond 4\/5 is lost/);assert.match(typed.disclosure,/last copy/);
 typed.cancel();assert.equal((await D.kvGet('pettalents')).a[0],talent.id);
 console.log('PASS CONTROL: typed Destroy retains training and lineage warnings and names talent, nickname and bond losses');
+
+// R6-G2: same-colour keeper preserves the cell, so this exercises the Breed
+// typed confirmation. The warning must still name every investment consumed.
+// The shared harness renders the app lane's real loss quote before clicking.
+roster=[pet('keeper'),pet('feed','base',{lineage:2})];
+await seed(roster,{petEquipped:'keeper',equipped:{C:'C1'},petLvlSteps:{keeper:0,feed:50000},
+  pettalents:{__iidV:2,feed:[talent.id]},petNick:{feed:'BISCUIT'},petBonds:{feed:4}});
+const breed=await stable(roster,'breed');await breed.click();
+assert.ok(breed.sheets.length===1 || breed.button.dataset.armed==='1','SETUP breed confirmation must open or arm');
+assert.equal((await D.kvGet('petInst')).length,2,'first tap must not consume the feed pet');
+const lossChecks=[
+  ['banked steps',/50,000 banked steps/],['nickname',/nickname BISCUIT is lost/],
+  ['bond',/Bond 4\/5 is lost/],['talents',/Chosen talents are lost/],
+  ['talent name',new RegExp(talent.name)],['lineage',/lineage 2/],
+];
+const missing=lossChecks.filter(([,pattern])=>!pattern.test(breed.disclosure)).map(([name])=>name);
+console.log(`OBSERVED R6-S3 breed confirmation: ${breed.disclosure}`);
+console.log(`${missing.length?'FAIL':'PASS'} R6-S3 Breed discloses every consumed investment: missing=${missing.join(', ')||'none'}`);
+assert.deepEqual(missing,[],'R6-S3: Breed confirmation must disclose all consumed investment');

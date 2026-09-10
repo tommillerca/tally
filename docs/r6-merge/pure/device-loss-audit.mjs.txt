@@ -1,0 +1,15 @@
+PASS CONTROL 965-row account and reachable 180,368-byte encrypted backup
+PASS R54-2 965 rows to 6 with retained identity: reachable backup restores 960 diary rows
+PASS R54-2 965 rows to 6 without a key: recovery is offered before onboarding
+PASS CONTROL unreadable vault is not a new player; recovered key can restore
+PASS R54-1 950 rows to 6 in a level-12 session: zero welcome rewards and zero welcome toasts
+PASS R54-1 store disappears during game initialization: kit still cannot pay
+PASS R54-1 replayed onboarding cannot write new settings over known save loss
+PASS CONTROL healthy boot and explicitly new player still receive one kit total
+PASS R50-3 explicit restore replaces all 25 local diary rows and restores 168,680 coins
+PASS CONTROL failed explicit download retries with replacement intent at boot
+PASS CONTROL normal pull remains a merge
+PASS R54-2 failed phrase restore keeps the known-loss gate closed
+PASS R54-1 real DataError IOError shape fires the global out-of-storage message
+PASS R54-1 real DataError IOError shape fires Add out-of-storage message and preserves input
+device-loss: 14/14 passed; 0 failed

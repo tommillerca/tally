@@ -1,0 +1,38 @@
+PASS CONTROL: typed Destroy identifies BISCUIT and names the nickname and bond it removes
+PASS CONTROL: typed Destroy retains training and lineage warnings and names talent, nickname and bond losses
+OBSERVED R6-S3 breed confirmation: BISCUIT (Base Drizzle · Lv 7) is destroyed for good and your keeper gains a lineage rank. Tap again to confirm.
+FAIL R6-S3 Breed discloses every consumed investment: missing=banked steps, nickname, bond, talents, talent name, lineage (expected red, app lane)
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: R6-S3: Breed confirmation must disclose all consumed investment; known app-lane defect
++ actual - expected
+
++ [
++   'banked steps',
++   'nickname',
++   'bond',
++   'talents',
++   'talent name',
++   'lineage'
++ ]
+- []
+
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/r6-guards/tests/stable-loss-disclosure-audit.mjs:40:8 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: [
+    'banked steps',
+    'nickname',
+    'bond',
+    'talents',
+    'talent name',
+    'lineage'
+  ],
+  expected: [],
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.22.2

@@ -2,6 +2,7 @@
 // node docs/playtest-lab/run.mjs
 // Real services and extracted production renderers; no sockets or browser.
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {readFileSync, writeFileSync} from 'node:fs';
 import vm from 'node:vm';
 import '../../tests/mem-idb.mjs';
@@ -221,5 +222,13 @@ try {
   process.env.TZ='Asia/Tokyo';s=await L.laboratory.snapshot();assert.equal(s.remaining,1);await animate(await quote(roster.slice(2,4)));
   process.env.TZ='America/Los_Angeles';s=await L.laboratory.snapshot();record('timezone-return',{status:s.status,copy:ui.labStateCopy(s),remaining:s.remaining});assert.equal(s.status,'clock-backwards');
 } finally {globalThis.Date=RealDate;if(oldTZ===undefined)delete process.env.TZ;else process.env.TZ=oldTZ;}
-writeFileSync(process.env.LAB_EVIDENCE_OUT || new URL('evidence.json',import.meta.url),JSON.stringify(evidence,null,2)+'\n');
+writeFileSync(process.env.LAB_EVIDENCE_OUT || new URL('evidence.json',import.meta.url),JSON.stringify({
+  capturePhase:'post-fix-recapture',
+  capturedAt:new Date().toISOString(),
+  narrative:{path:'docs/PLAYTEST-LAB.md',phase:'historical-pre-fix-observations',
+    warning:'Ranked findings describe the original 2026-09-08 observations, not this capture. See the current disposition table in that report.'},
+  scope:'Node real services and extracted renderer/handler probes. No browser, pixels, real touch, native health or device durability proof. Review commits in this exploratory probe may bypass typed input; dedicated audits grade consent.',
+  sourceSha256:Object.fromEntries(['js/app.js','js/loot.js','js/pets.js','js/laboratory.js','js/db.js'].map(file=>[file,createHash('sha256').update(readFileSync(new URL('../../'+file,import.meta.url))).digest('hex')])),
+  groups:evidence,
+},null,2)+'\n');
 console.log(`Completed ${evidence.length} evidence groups; ${checks} recipe checks. No app mutations.`);

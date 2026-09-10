@@ -19,10 +19,35 @@ await ui.submit();assert.equal((await D.kvGet('petInst')).length,2);
 ui.type('DESTROY');await ui.submit();await ui.submit();
 assert.equal((await D.kvGet('petInst')).length,1);assert.equal(await D.kvGet('bonedust'),60);
 console.log('PASS CONTROL: stale review refuses, re-presents 1,100 steps, clears consent, then destroys exactly once');
-// Pending health credit must be quoted too, even without the credit service yet.
-await seed(roster,{petEquipped:'a',equipped:{C:'C1'}});
+// CONTROL: a genuinely unequipped spare takes the quick path. A nickname
+// arriving between taps stales its quote and requires a fresh typed review.
+await seed(roster,{petEquipped:'b',equipped:{C:'C1'}});
 const quick=await stable(roster);await quick.click();
-await D.db.put('health',{date:dateKey(),steps:1000});await quick.click();
-assert.equal((await D.kvGet('petInst')).length,2);assert.match(quick.disclosure,/1,000 banked steps/);
-quick.cancel();assert.equal(await D.kvGet('bonedust',0),0);
-console.log('PASS CONTROL: quick confirmation also rejects newly arrived, uncredited health steps');
+assert.equal(quick.button.dataset.armed,'a','SETUP quick path must arm the selected spare');
+assert.equal(quick.sheets.length,0,'SETUP first tap must not open a typed review');
+assert.equal(quick.button.destructionQuote.equipped,false);
+await L.setPetNick('a','BISCUIT');await quick.click();
+assert.equal((await D.kvGet('petInst')).length,2);
+assert.equal(await D.kvGet('bonedust',0),0);
+assert.equal(quick.button.dataset.armed,undefined);
+assert.equal(quick.sheets.length,1);
+assert.match(quick.disclosure,/nickname BISCUIT is lost/);
+assert.match(quick.review.nodes['#pdStatus'].textContent,/changed/);
+assert.equal(quick.review.nodes['#pdGo'].disabled,true);
+await quick.submit();assert.equal((await D.kvGet('petInst')).length,2);
+quick.type('DESTROY');await quick.submit();
+assert.equal((await D.kvGet('petInst')).length,1);
+assert.equal(await D.kvGet('bonedust'),60);
+console.log('PASS CONTROL: armed quick quote rejects a new nickname, preserves the pet, then requires fresh typed consent');
+// A pending health delta belongs only to the equipped companion. It must not
+// invent investment on the unequipped spare or block its valid quick quote.
+await seed(roster,{petEquipped:'b',equipped:{C:'C1'}});
+const health=await stable(roster);await health.click();
+assert.equal(health.button.dataset.armed,'a');assert.equal(health.sheets.length,0);
+await D.db.put('health',{date:dateKey(),steps:1000});
+assert.equal((await L.quotePetDestruction('a')).quote.bankedSteps,0);
+assert.equal((await L.quotePetDestruction('b')).quote.bankedSteps,1000);
+await health.click();
+assert.deepEqual((await D.kvGet('petInst')).map(p=>p.iid),['b']);
+assert.equal(health.sheets.length,0);assert.equal(await D.kvGet('bonedust'),60);
+console.log('PASS CONTROL: 1,000 pending health steps belong to equipped b; unequipped a completes the quick path');

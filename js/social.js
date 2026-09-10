@@ -1175,7 +1175,8 @@ export async function pullBackup({ slot = null, replace = false } = {}) {
     const counts = await importAll(snapshot, { replace });
     const version = data.version ?? data.updatedAt;
     if (slot !== 'daily' && Number.isSafeInteger(version)) await kvSet('backupVersion', version);
-    return { restored: true, counts, updatedAt: data.updatedAt, version };
+    return { restored: true, counts, updatedAt: data.updatedAt, version,
+      ...(counts.notices?.length ? { notices: counts.notices } : {}) };
   } catch (e) { return { restored: false, reason: String(e && e.message || e) }; }
 }
 

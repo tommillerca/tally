@@ -5,6 +5,7 @@
  * audit, then restore the fixed files and run again. See r2-proof.md.
  */
 import './mem-idb.mjs';
+import {seed,stable} from './lib/pet-destruction-harness.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as loot from '../js/loot.js';
@@ -86,16 +87,11 @@ await test('R44-14 armed breeding button and toast keep the spare identity', asy
   // A duplicate exercises the quick path. A last colour now requires typing,
   // covered by breed-last-colour-audit (frozen work order, 2026-09-08).
   const roster = [frost, ember, {...ember, iid:'ember-spare'}];
-  useDbName(`kennel-breed-${++sequence}`);
-  for (const [key,value] of Object.entries({petInst:roster, petLvlV:2, petLvlSteps:bank,
-    pettalents:{__iidV:2}, petStepCredit:0, petEquipped:null})) await kvSet(key,value);
-  const events = {}, messages = [];
-  const btn = { dataset: {}, textContent: 'Feed in', classList: { add() {} },
-    addEventListener: (name, fn) => { events[name] = fn; } };
-  await run(cut("    $('#doBreed', body)?.addEventListener", "    $$('[data-petpick2]'"), {
-    $: () => btn, body: {}, insts: [frost, ember], sel: ['frost', 'ember'], offSp: 'frost', bank,
-    toast: message => messages.push(message), setTimeout: () => {} });
-  await events.click({ currentTarget: btn });
+  await seed(roster,{petLvlSteps:bank});
+  const ui=await stable(roster,'breed');
+  await ui.click();
+  const {button:btn,messages}=ui;
+  assert.equal(btn.dataset.armed,'1','CONTROL ordinary duplicate arms');
   assert(btn.textContent.includes('Ember Drizzle · Lv 1'), 'armed breed button omitted colour/level');
   assert(messages.some(m => m.includes('Ember Drizzle · Lv 1 is destroyed for good')), 'breed toast omitted colour/level');
 });

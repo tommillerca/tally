@@ -144,13 +144,13 @@ if (process.argv.includes('--prove-red')) {
 }
 for (const [name, options, counts, dot] of [
   ['populated ready', { insts: pets, labStock: { status: 'ready', remaining: 1, unseen: [] } }, ['5 pets', '1 today', `4 of ${total}`], false],
-  ['waiting wins over capacity', { insts: pets, picks: 1, labStock: { status: 'ready', remaining: 3, unseen: [{}, {}] } }, ['5 pets', '2 waiting', `4 of ${total}`], true],
+  ['waiting wins over capacity', { insts: pets, picks: 1, labStock: { status: 'ready', remaining: 3, waiting: 2, unseen: [] } }, ['5 pets', '2 waiting', `4 of ${total}`], true],
   ['empty first visit', { labStock: { status: 'ready', remaining: 3, unseen: [] } }, ['0 pets', '3 today', `0 of ${total}`], false],
   ['empty null engine', {}, ['0 pets', 'Unavailable', `0 of ${total}`], false],
   ['populated null engine', { insts: pets }, ['5 pets', 'Unavailable', `4 of ${total}`], false],
   ['daily limit', { insts: pets, labStock: { status: 'ready', remaining: 0, unseen: [] } }, ['5 pets', '0 today', `4 of ${total}`], false],
-  ['unavailable snapshot', { labStock: { status: 'unavailable', remaining: 0, unseen: [] } }, ['0 pets', '0 waiting', `0 of ${total}`], false],
-  ['recovering with results', { labStock: { status: 'unknown', remaining: 0, unseen: [{}] } }, ['0 pets', '1 waiting', `0 of ${total}`], true],
+  ['unavailable snapshot', { labStock: { status: 'unavailable', remaining: 0, unseen: [] } }, ['0 pets', 'Check status', `0 of ${total}`], false],
+  ['recovering with results', { labStock: { status: 'unknown', remaining: 0, waiting: 1, unseen: [] } }, ['0 pets', '1 waiting', `0 of ${total}`], true],
   ['single pet and lab entry hint', { insts: pets.slice(0, 1), picks: 1, opts: { labAction: 'melt' } }, ['1 pet', 'Unavailable', `1 of ${total}`], false],
 ]) {
   for (const fallback of [false, true]) grade(render({ ...options, fallback }), { counts, dot, fallback });

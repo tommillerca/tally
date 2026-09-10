@@ -1,3 +1,4 @@
+import { requireLabFindingCoverage } from './lib/lab-finding-coverage.mjs';
 import { auditOutputPath } from './lib/audit-output.mjs';
 /* THE RELEASE GATE.
  *
@@ -376,6 +377,11 @@ PURE.push('boneyard-zoom-audit.mjs'); // Real view boot/teardown and scoped came
 PURE.push('lab-conflict-audit.mjs'); // Offline pet/slot collisions, encrypted reconnect, retained receipts and honest recovery copy; Node only.
 PURE.push('lab-lock-recovery-audit.mjs'); // Lab fence recovers after a mid-transaction crash, incl. nickname-first and auto-equip.
 PURE.push('r3-rest-audit.mjs'); // R3-8 backup body, R3-4 refusal copy, R3-5 destroy gate, R3-6 dead guard.
+PURE.push('collection-cell-audit.mjs'); // R6-C1/C5: shared cell identity, hostile seven-cell roster and real Stable warning strings.
+PURE.push('r6-merge-audit.mjs'); // R6-E2: both offline buyers, import directions/modes, two wallet sizes, refund replay and encrypted 409 recovery; no sockets.
+PURE.push('r6-guards-audit.mjs'); // CONTROL: missing finding coverage and scroll fixture state cannot disappear.
+PURE.push('r6-app-audit.mjs'); // R6: rendered Breed consent, durable room counts, cell names, incubator availability and interrupted invitations; Node services/DOM doubles.
+PURE.push('crew-capture-node-audit.mjs'); // Fixture routing only; rendered Crew geometry belongs to BROWSER.
 PURE.push('pet-parity-guard.mjs'); // Every species reports an identical multiplier and tilt; red on the 1.00-1.36 spread.
 PURE.push('verify-tail-audit.mjs'); // Frozen tail: honest anchor comments and missing-acorn exit 97.
 PURE.push('cloud-optout-transport-audit.mjs'); // All-request counter and direct opt-out paths; browser autoSync conflict remains disclosed.
@@ -383,6 +389,9 @@ PURE.push('r4-restore-audit.mjs'); // R4-7/R4-9: quota-bounded history, exact un
 PURE.push('reachable-density-audit.mjs'); // R4-21: guards the shared reachability METER with dense/sparse controls; shipped spacing is a deferred MODEL finding.
 PURE.push('native-shell-comment-audit.mjs'); // R4-21: remote iOS shell cannot claim a wrapped web build; mutation controls.
 const BROWSER = [
+  'crew-bars-browser-audit.mjs', // Operator browser and approved baseline required; no auto-launch.
+  'crew-pets-browser-audit.mjs', // Operator browser and approved baseline required; no auto-launch.
+  'crew-icons-browser-audit.mjs', // Operator browser required; rendered size, ink, opacity and occlusion.
   'boneyard-scroll-audit.mjs', // P1: rendered intro reachability at 100/150%, main-button hit tests, scroll preservation and dock exclusion.
   'today-dock-pixels-audit.mjs', // Dock exclusion: all-tab captures, row tap and lost-exclusion control, plus native bounce evidence. Pixel continuity remains manual/UNPROVEN; the former opaque-RGB predicate certified the black-line bug.
 
@@ -691,6 +700,7 @@ const HELPERS = new Set([
 const onDisk = (await readdir(here))
   .filter(f => /\.(mjs|js)$/.test(f) && !HELPERS.has(f))
   .sort();
+requireLabFindingCoverage(onDisk, PURE);
 /* TWO TIERS, BECAUSE THE ALTERNATIVE IS THEATRE EITHER WAY.
    The hand-written list above was the only thing the gate ran, and 43 other
    audits sat in tests/ never executed: guards against a dust exploit, a Glutton

@@ -1,0 +1,8 @@
+RED direction=0 replace=false unrelatedSurvived=false refusal=laboratory-restore-conflict counts=undefined
+RED direction=1 replace=false unrelatedSurvived=false refusal=laboratory-restore-conflict counts=undefined
+RED direction=0 replace=true unrelatedSurvived=false refusal=laboratory-restore-conflict counts=undefined
+RED direction=1 replace=true unrelatedSurvived=false refusal=laboratory-restore-conflict counts=undefined
+RED cloud push=false CAS conflicts=1 failure={"at":1788997152568,"reason":"laboratory-restore-conflict"}
+RED: 5 required recovery assertions fail on original code (defects positively asserted)
+
+Process exit: 1

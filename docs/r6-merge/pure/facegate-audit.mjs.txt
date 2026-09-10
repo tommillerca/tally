@@ -1,0 +1,5 @@
+face zone [198,66,389,174], 16020 ink px, 62 held items
+
+PASS  every held item clears the face. Worst is 1.82% of a 2% limit.
+
+facegate clean
