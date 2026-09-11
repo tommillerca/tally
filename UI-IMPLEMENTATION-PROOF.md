@@ -144,3 +144,84 @@ Final complete PURE pass: **170 green, 0 red, 0 unproven**, 170 suites executed.
 Agreed proof in the final pass: **node tests/unit.test.js**, exit **0**, final output **390 passed, 0 failed**. Full output: /tmp/ui-1b-pure-final/unit.test.js.log. Final per-suite names and direct exit codes: /tmp/ui-1b-pure-final/results.json. Exact enumeration: /tmp/ui-1b-pure-final/inventory.json. Runner output: /tmp/ui-1b-pure-final.log. All 169 inherited suites and the new Pit guard are green on this pass, including icon inventory, map playtest, guard hygiene and r6-guards-audit.
 
 node --check js/app.js and git diff --check passed before the final PURE pass. No production or test source was changed during that pass; only this evidence record was completed afterward. Browser checks are excluded from these counts and remain unproven as described above.
+
+# Screen 1C: Crew, frozen work order, 2026-09-10
+
+Authority: plan SHA256 9c6cf7adc07fe947af69d3346aac642981053dea4084f7a21cfd7d5019427f21 verified against the supplied plan file. Read IMPLEMENTATION.md in full and the reference CSS/JS. MOCK.html was not read. All implementation paths resolve within this checkout. Screens 1A and 1B are preserved.
+
+## Changes and source boundary
+
+- js/app.js: renderFriends markup and paintFanSel presentation only, plus APP_BUILD v564. Separate identity and action rows; existing pixel star at 48px with real aria-pressed state; dense stats remain in the existing full profile; search placeholder simplified. Race precedes the still-visible podium; discovery and code sharing precede community/history. All original control IDs, handlers, states and the webdriver fixture seam remain. No changes to the fan card/art helpers, applyFan, swiping, filter/sort logic, profile, race/leaderboard hydration or shared figure machinery.
+- app.css: scoped Crew rules listed below. Disabled the existing fan-only base scrim with an appended Crew override. Solid dark nameplates, artwork, card transforms, pet placement and animation rules remain unchanged. The scrim removal intentionally changes visible fan art by removing an overlay; it does not change figure geometry or layers. No arena selector or shared figure rule is changed.
+- js/changelog.js, sw.js, version.json: v564 stamps and one matching changelog item. No figure or arena presentation rules.
+- docs/CLAIMS.md: matching exact Changelog item and numbered PROOF/REACH row. Documentation only.
+- tests/crew-ui-1c-audit.mjs: new Node source guard and mutation controls, no production effects.
+- tests/release-gate.mjs: register the new guard in PURE. No suite removed or weakened.
+- UI-IMPLEMENTATION-PROOF.md: append this advisory evidence record.
+
+The fan's bounded mounting code is untouched: all friend records retain cards, only the seven seated stages mount crewCardArtHtml, and off-seat stages clear their children. No additional art mounting path was introduced. Pet instance, shiny, morph and wear remain passed through the original renderer. This is source evidence of preserving the existing bound, not a measured runtime memory claim.
+
+## Exact selector inventory
+
+Added: `#cfanDeck .cfan-stage::after`, disabling the Crew-only gradient scrim with content: none and background: none. The original declaration remains untouched to preserve the pre-Studio CSS boundary. This is the only changed selector over figure artwork, deliberately removing the forbidden overlay. It cannot select the fight arena.
+
+Added overrides:
+
+1. `#cfanSel`: selected-friend panel surface.
+2. `#cfanSel .cfan-identity`: identity row layout.
+3. `#cfanSel .cfan-star`: 46px target, centered content.
+4. `#cfanSel .cfan-star img`: 48px pixel asset.
+5. `#cfanSel .cfan-star:not(.on) img`: visibly distinct off state.
+6. `#cfanSel .cfan-star.on`: selected border/background state.
+7. `#cfanSel .cfan-sel-nm`: name wrapping.
+8. `#cfanSel .cfan-status`: secondary truthful recency.
+9. `#cfanSel .cfan-acts`: separate two-column action row.
+10. `#cfanSel .cfan-acts .btn`: action size and scalable type.
+11. `#cfanSel .cfan-acts .btn.gift`: approved gold action treatment.
+12. `#cfanSearchRow`: toolbar wrapping.
+13. `#cfanSearchRow input`: simplified input treatment.
+14. `#cfanOnline`: online button treatment.
+15. `#cfanOnline.on`: active filter treatment.
+16. `#cfanClear`: in-flow 44px clear control, preventing overlap with Online.
+17. `#cfanSnapshot`: secondary operational detail, still visible when relevant.
+
+All added selectors are rooted in IDs emitted only by renderFriends. Their descendants contain identity, icons, text and controls, not Bonehead or pet layers. They cannot select Pit or fight content. Existing `.cfan-sel-tx` is reused inside the identity row. Existing `.cfan-chips`, `.cfan-chip`, `.cfan-chip.lvl` and `.cfan-chip.pet` markup is removed only from the selected panel; level/title remain on cards and full stats remain in profiles. The old selectors are not globally edited. IDs moved in document order without selector changes: raceCard, deliveriesCard, newcomersCard, crewCodeBig, crewShare, crewCopy, crewWhatsNew. Existing thanks/community renderers also move intact.
+
+## Deviations and factual limitations
+
+- Omit Crew since as authorized. GET /friends exposes `since: r.ts`, but requestFriendship can overwrite ts on an already-accepted reciprocal request, and /friends/accept unconditionally resets ts on repeat acceptance. It cannot reliably establish original friendship creation. No backend field or substitute date added. The initial source-reading statement that no timestamp was exposed was corrected after tracing the server writers.
+- Preserve existing small-Crew search thresholds, actionable notification cards, race disclosure behavior, pending request presentation, discovery expansion and history controls. The mock's samples and generic sheets are not imported. The actual friend list is not reduced.
+- The order describes only kinChips as a pre-existing figure finding. The baseline static audit actually has one failing COVERAGE row listing six sites: original lines 20428, 21465, 21501, 21504, 21505 and 21530. The final static run has the same six sites at lines 20425, 21462, 21498, 21501, 21502 and 21527. Both runs: 6 green rows, 1 red row. Zero additional findings. No pre-existing failure fixed.
+
+## Proof and blocked actions
+
+New source guard before implementation: node tests/crew-ui-1c-audit.mjs, exit 1, "identity must have its own row". After implementation, source assertions pass. Its undersized-target mutation initially matched an unrelated earlier CSS rule and failed to trigger; the mutation now targets the exact #cfanSel rule. Both mutation controls now pass by rejecting their broken inputs. This guard proves source structure and declared dimensions, not rendered overlap or visible ink.
+
+Static figure evidence: /tmp/ui-1c-figure-baseline.log and /tmp/ui-1c-figure-final.log. Executed the unchanged prefix of figure-audit before its SETUP GATE in a temporary test file, with baseline app source substituted for the baseline run. Both exit 1. The temporary test was removed. These are explicitly NOT full figure-audit runs.
+
+Impeccable mechanical detector exit 2; output /tmp/ui-1c-design-detect.json. Its existing warnings do not constitute browser proof. An attempted guard-hygiene-audit.mjs command failed because that filename does not exist; corrected to guard-hygiene-lint.mjs. No permission denial occurred.
+
+No browser audits, screenshots, socket binding, decoded-ink measurements, actual control operation, safe-area checks or hit tests attempted, per the work order's listen EPERM restriction. All browser acceptance scenarios remain UNPROVEN: 375px/390px/wider, long names, favourite states, filters, large Crew, loading/stale/empty/offline/error, requests, gift/cheer/cheer-back, profiles, race, podium/standings, code sharing and history. Full figure-audit and pit-figures-audit remain unproven here.
+
+No commit, push, merge, publish, deployment, production mutation, original-checkout write, art edit or native/ASC-SUBMISSION.md edit attempted. No impossible requirement was silently redesigned.
+
+Final PURE census, direct child exit codes and agreed unit proof follow below after execution. The inherited tier is 170; the new guard makes 171. Both the literal and every push/unshift site are enumerated as r6-guards-audit does. Exit 97 is UNPROVEN.
+
+
+Guard hygiene initially exited 1 because the new source guard checks the existing webdriver seam without operating browser controls. tests/guard-hygiene-lint.mjs now explicitly inventories crew-ui-1c-audit.mjs with its source-only limitation and separately owed browser coverage. This test-only classification has no figure/arena effect. No runtime guarantee is claimed or removed. The corrected lint is included in final PURE execution.
+
+Initial agreed command node tests/unit.test.js: exit 0, 390 passed, 0 failed. Detector reports 54 warnings, none in the appended Crew CSS. Syntax and diff whitespace checks passed before the final PURE run.
+
+
+First full PURE pass found studio-v4-audit red because deleting the legacy Crew scrim altered CSS before the Studio boundary. Corrected by restoring that exact legacy declaration and appending #cfanDeck .cfan-stage::after with content: none and background: none. The existing Studio guard is unchanged. The Crew guard now checks that explicit suppression. This is an implementation adjustment, not a visual deviation: the base overlay is still absent, with the solid nameplate preserved. All suites are rerun below against the corrected final source.
+
+
+## Final corrected verification
+
+Final complete PURE pass: **171 green, 0 red, 0 unproven**, overall exit **0**. Census: **78 literal entries + 93 push/unshift additions = 171**. All 170 inherited suites plus the new Crew guard executed. Enumeration uses the exact r6-guards-audit regexes and node:vm evaluation of the literal and additions. Every child exit is read directly from spawnSync.status, never through a pipe. No child ended by signal, and none exited 97.
+
+Agreed proof on final source: **node tests/unit.test.js**, exit **0**, output **390 passed, 0 failed**. Full output: /tmp/ui-1c-pure-final/unit.test.js.log. Final suite inventory: /tmp/ui-1c-pure-final/inventory.json. Per-suite direct exit codes: /tmp/ui-1c-pure-final/results.json. Runner log: /tmp/ui-1c-pure-final.log. The corrected Studio guard and guard hygiene are green. The new Crew guard also rejects removal of the explicit scrim suppression, in addition to the missing identity-row class and undersized target controls.
+
+The first pass logs remain under /tmp/ui-1c-pure-first and /tmp/ui-1c-pure-first.log: 170 green, 1 red, 0 unproven. The one red was the CSS-boundary finding described above. No production or test source changed during the final corrected pass; only this evidence record was completed afterward. The original fan art helpers, crewCardHtml, applyFan, full profile and fight through EOF compare unchanged against HEAD. Existing Crew browser-audit selectors remain compatible with the retained IDs/classes and those audit files are unchanged.
+
+These PURE counts exclude all browser checks. Rendered ink, overlap, safe-area behavior, operated controls and runtime mounting measurements remain UNPROVEN for independent review. Static figure coverage retains only the six baseline findings described above. No denied action, commit, push, merge or publish occurred.

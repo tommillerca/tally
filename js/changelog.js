@@ -10,6 +10,10 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 564, date: '2026-09-10', title: 'A clearer Crew', items: [
+    'Crew has separate friend actions, a larger favourite star, and the Step Race above the standings.',
+  ] },
+
   { n: 563, date: '2026-09-10', title: 'Faces in the Pit', items: [
     'The Pit has clearer sections and opponent portraits, with ranks beside the fight details.',
   ] },

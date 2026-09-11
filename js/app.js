@@ -12574,7 +12574,7 @@ async function renderFriends(el) {
            four cards is faster than typing. -->
       <div class="cfan-search" id="cfanSearchRow" hidden>
         <input id="cfanSearch" type="search" inputmode="search" autocomplete="off"
-               placeholder="Search your Crew by name or nickname" aria-label="Search your Crew">
+               placeholder="Search your Crew" aria-label="Search your Crew">
         <button class="cfan-clear" id="cfanClear" hidden aria-label="Clear search">${ICONS.close ? ICONS.close(14) : '&times;'}</button>
         <!-- Tom, 2026-08-08: "the player could filter it themself once they get to
              the tab, not as a default open." So the deck still OPENS on the bias
@@ -12620,8 +12620,10 @@ async function renderFriends(el) {
       <div id="cheersList"></div>
     </div>
 
-    ${thanksBannerHtml()}
-    ${communityBannerHtml()}
+    <!-- THE WEEKLY RACE: the thing with a clock on it stays above the archive
+         half of the tab. -->
+    <details class="glutton-banner race-banner" id="raceCard" hidden></details>
+
     <button class="card lb-open" id="crewLeaderboard">
       <div class="card-title">LEADERBOARD</div>
       <!-- never greet the card with an empty box: it says something before the
@@ -12633,10 +12635,6 @@ async function renderFriends(el) {
       <span class="ul-chev">›</span>
     </button>
 
-    <!-- THE WEEKLY RACE: the thing with a clock on it stays above the archive
-         half of the tab. -->
-    <details class="glutton-banner race-banner" id="raceCard" hidden></details>
-
     <div class="card">
       <div class="card-title">ADD A FRIEND</div>
       <div id="friendsList"></div>
@@ -12646,19 +12644,11 @@ async function renderFriends(el) {
       </div>
     </div>
 
-    <div class="card" id="deliveriesCard" hidden>
-      <div class="card-title">DELIVERIES</div>
-      <p class="note" style="margin:0 0 10px">Miss the popup and the gift still lands here. Nothing to claim: it is already yours.</p>
-      <div id="deliveriesList"></div>
-    </div>
-
     <div class="card" id="newcomersCard" hidden>
       <div class="card-title">WORTH ADDING</div>
       <p class="note" style="margin:0 0 10px">Boneheadz who are actually playing and are not in your Crew yet.</p>
       <div id="newcomersList"></div>
     </div>
-
-    ${whatsNewCard}
 
     <div class="card">
       <div class="card-title">YOUR FRIEND CODE</div>
@@ -12668,7 +12658,17 @@ async function renderFriends(el) {
         <button class="btn small" id="crewShare">Share my code</button>
         <button class="btn small ghost" id="crewCopy">Copy</button>
       </div>
-    </div>`;
+    </div>
+
+    ${thanksBannerHtml()}
+    ${communityBannerHtml()}
+    <div class="card" id="deliveriesCard" hidden>
+      <div class="card-title">DELIVERIES</div>
+      <p class="note" style="margin:0 0 10px">Miss the popup and the gift still lands here. Nothing to claim: it is already yours.</p>
+      <div id="deliveriesList"></div>
+    </div>
+
+    ${whatsNewCard}`;
 
   /* ONE WATERMARK READ, SHARED BY BOTH INBOXES, and it has to be this way now
      that there are two of them. Each painter used to read the watermark and then
@@ -12979,18 +12979,15 @@ async function renderFriends(el) {
     const f = fanFriend(centerId);
     if (!box) return;
     if (!f) { box.hidden = true; return; }
-    const p = f.profile || {};
     const ol = onlineLabel(f.lastSeen);
-    const gearN = p.gearCount ?? (p.gear ? p.gear.length : 0);
+    // The payload since value is overwritten by repeated accept/add requests.
+    // It cannot establish friendship creation; keep only truthful recency.
     box.innerHTML = `
-      <button class="cfan-star${favs.has(f.playerId) ? ' on' : ''}" id="cfanStar" aria-label="Star this friend">${ICONS.star(!!favs.has(f.playerId))}</button>
-      <div class="cfan-sel-tx">
-        <button class="cfan-sel-nm" id="cfanView">${nameWithAlias(f)}${ol.text ? ` <em>${esc(ol.text)}</em>` : ''}</button>
-        <div class="cfan-chips">
-          <span class="cfan-chip lvl">LV ${p.level || 1}</span>
-          ${p.badges ? `<span class="cfan-chip">${p.badges} badges</span>` : ''}
-          ${gearN ? `<span class="cfan-chip">${gearN} gear</span>` : ''}
-          ${p.pet ? `<span class="cfan-chip pet">Pet LV ${p.pet.level || 1}</span>` : ''}
+      <div class="cfan-identity">
+        <button class="cfan-star${favs.has(f.playerId) ? ' on' : ''}" id="cfanStar" aria-label="Star this friend" aria-pressed="${favs.has(f.playerId)}">${ICONS.star(48)}</button>
+        <div class="cfan-sel-tx">
+          <button class="cfan-sel-nm" id="cfanView">${nameWithAlias(f)}</button>
+          ${ol.text ? `<small class="cfan-status">${esc(ol.text)}</small>` : ''}
         </div>
       </div>
       <div class="cfan-acts">
@@ -13002,7 +12999,7 @@ async function renderFriends(el) {
       await kvSet('crewFaves', [...favs]);
       toast(favs.has(f.playerId) ? `${f.alias || f.name} starred: sorted to the front of the fan.` : 'Unstarred.', 2400);
       const sb = $('#cfanStar', box);
-      if (sb) { sb.classList.toggle('on', favs.has(f.playerId)); sb.innerHTML = ICONS.star(!!favs.has(f.playerId)); }
+      if (sb) { sb.classList.toggle('on', favs.has(f.playerId)); sb.setAttribute('aria-pressed', String(favs.has(f.playerId))); }
       resortFan(); paintFaves(); applyFan();   // cards glide to their new seats
     });
     $('#cfanView', box).addEventListener('click', () => openFriendProfile(f, paint));
@@ -24670,7 +24667,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v563'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v564'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

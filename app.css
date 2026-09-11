@@ -12092,3 +12092,24 @@ button.t3-price::before {
 #pitBody > .t3-row > .pit-opponent-portrait { position: relative; display: block; width: 52px; height: 52px; overflow: hidden; border-radius: 12px; background: var(--surface-2); }
 #pitBody > .t3-row > .pit-opponent-portrait > .tz-head { border: 0; }
 #pitBody > .t3-row > .pit-opponent-portrait > img { display: block; width: 100%; height: 100%; object-fit: contain; }
+
+/* Approved Crew 1C. IDs belong only to renderFriends, never the fight arena.
+   Fan geometry, solid plates and bounded art mounting remain unchanged. */
+#cfanSel { display: block; padding: 12px 0; background: none; border: 0; box-shadow: none; }
+#cfanSel .cfan-identity { display: flex; align-items: center; gap: 12px; }
+#cfanSel .cfan-star { width: 46px; height: 46px; place-content: center; border: 1px solid var(--line); box-shadow: none; }
+#cfanSel .cfan-star img { width: 48px; height: 48px; max-width: none; grid-area: 1 / 1; pointer-events: none; }
+#cfanSel .cfan-star:not(.on) img { filter: grayscale(1); opacity: .65; }
+#cfanSel .cfan-star.on { background: var(--surface-2); border-color: var(--gold); }
+#cfanSel .cfan-sel-nm { display: block; width: 100%; overflow-wrap: anywhere; }
+#cfanSel .cfan-status { display: block; margin-top: 4px; color: var(--text-3); font-size: var(--fs-0); }
+#cfanSel .cfan-acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 14px; }
+#cfanSel .cfan-acts .btn { min-height: 44px; font-size: var(--fs-4); }
+#cfanSel .cfan-acts .btn.gift { background: var(--gold); color: var(--ink); }
+#cfanSearchRow { flex-wrap: wrap; }
+#cfanSearchRow input { width: 0; min-height: 44px; border-radius: 11px; box-shadow: none; font-size: var(--fs-2); background: var(--surface); }
+#cfanOnline { min-height: 44px; border-radius: 10px; box-shadow: none; background: var(--surface); }
+#cfanOnline.on { color: var(--accent); border-color: var(--accent); }
+#cfanClear { position: static; flex: none; width: 44px; height: 44px; }
+#cfanSnapshot { font-size: var(--fs-0); color: var(--text-3); }
+#cfanDeck .cfan-stage::after { content: none; background: none; }

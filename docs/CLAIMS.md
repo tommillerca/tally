@@ -1,5 +1,11 @@
 # What each patch note claims, and what backs it
 
+## v564 (2026-09-10)
+
+Changelog item: Crew has separate friend actions, a larger favourite star, and the Step Race above the standings.
+
+1. PROOF: crew-ui-1c-audit.mjs | REACH: Crew source layout, favourite state, existing action bindings and race/podium order. Browser geometry, ink, controls and all live states remain unproven.
+
 ## v563 (2026-09-10)
 
 Changelog item: The Pit has clearer sections and opponent portraits, with ranks beside the fight details.

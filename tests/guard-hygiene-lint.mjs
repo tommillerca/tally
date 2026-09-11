@@ -182,6 +182,10 @@ ok('PARSES every audit is something Node will actually execute',
    FIXED ONE? Delete its line. The row fails on a stale entry too, so the
    inventory cannot quietly rot into a list nobody maintains. */
 const SEAM_ONLY_KNOWN = [
+  // Crew 1C is explicitly a PURE source contract. It checks preservation of the
+  // existing webdriver fixture, not runtime interaction. Browser fan/layout
+  // audits remain separately required and are unproven in the socket sandbox.
+  'crew-ui-1c-audit.mjs',
   // Frozen capture work order: this PURE audit proves the fixture hooks themselves.
   // Browser reachability/geometry remain in crew-*-browser-audit, never claimed here.
   'crew-capture-node-audit.mjs',
