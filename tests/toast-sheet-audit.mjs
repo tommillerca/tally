@@ -46,13 +46,14 @@
  *            fix could most plausibly break).
  * and once, globally
  *   SEAT     with no sheet open the toast still sits at its shipped 96px seat.
+ *            Graded on Crew, not Today: Today carries its own v578 override.
  *            An override that leaks moves EVERY toast in the app.
  *
  * PROVEN RED, 2026-09-07, one mutation per throwaway copy:
  *   CLEAR   delete the `body:has(#sheets .sheet)` rule from app.css
  *           -> FAIL at 375x667 with the six overlaps quoted above (green at
  *           393x852, see HONEST LIMIT).
- *   SEAT    make the override unconditional -> FAIL, Today's toast is top-seated.
+ *   SEAT    make the override unconditional -> FAIL, Crew's toast is top-seated.
  *
  * Run: node tests/toast-sheet-audit.mjs [url]
  */
@@ -145,9 +146,13 @@ for (const [W, H] of SIZES) {
   await sleep(7200);   // the 6000ms toast has to expire or the next row reads its tail
 }
 
-/* ---- SEAT: with no sheet up, nothing moved ---- */
+/* ---- SEAT: with no sheet up, nothing moved ----
+   Crew, not Today. Today grew its OWN toast override in v578 (the pill was
+   landing on the five door tiles; see toast-today-audit), so a 96px seat on
+   Today is no longer the shipped truth and this row would grade the wrong
+   screen. Crew has neither override and is the plain case. */
 await setWidth(page, 393, 852);
-await page.evaluate(() => { location.hash = '#/today'; });
+await page.evaluate(() => { location.hash = '#/friends'; });
 await sleep(2400);
 const home = await page.evaluate(async () => {
   window.__toast('Logged.', 6000);

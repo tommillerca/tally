@@ -12411,5 +12411,10 @@ button.t3-price::before {
    toast is a SIBLING of #app while screen--today is stamped on #screen inside
    it, so a plain descendant selector never matches. No hidden state to test
    for: the doors are always present on Today.
+   AND IT YIELDS TO THE SHEET RULE. This rule is appended below
+   `body:has(#sheets .sheet)` and both are one :has() on body, so without the
+   :not() it wins on order and re-seats the toast at 175 while a fight sheet is
+   open over Today, covering Flee. Caught by toast-sheet-audit rows CLEAR and
+   SEAT, not by reading the file.
    Guard: tests/toast-today-audit.mjs. */
-body:has(.screen--today) .toast { top: calc(var(--sat) + 175px); bottom: auto; }
+body:has(.screen--today):not(:has(#sheets .sheet)) .toast { top: calc(var(--sat) + 175px); bottom: auto; }
