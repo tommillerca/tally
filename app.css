@@ -12418,3 +12418,13 @@ button.t3-price::before {
    SEAT, not by reading the file.
    Guard: tests/toast-today-audit.mjs. */
 body:has(.screen--today):not(:has(#sheets .sheet)) .toast { top: calc(var(--sat) + 175px); bottom: auto; }
+
+/* 2026-09-11 grounding correction. Supersedes the historical 2026-08-08
+   105px/45% claim and v578 geometry claim above (prefix is hash-frozen).
+   Screen 1E raised the character and pet 16px but left the cast behind.
+   Equipped art padding varies; hero-ground.js now derives the cast centre
+   from the rendered alpha, including the shared shift and sharing offset.
+   Keep --bh-shift on each figure, never inherited from the scene. */
+#bhStage > .hero-char { --bh-shift: var(--hero-left-shift, 0px); transform: translateX(var(--bh-shift)); }
+#bhStage.sharing > .hero-char { --bh-shift: calc(var(--hero-left-shift, 0px) - var(--fig) * 0.0662); }
+#bhStage > .hero-companion { --bh-shift: var(--hero-left-shift, 0px); transform: translateX(var(--bh-shift)); }

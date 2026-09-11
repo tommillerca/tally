@@ -1,3 +1,4 @@
+import { groundHero } from './hero-ground.js';
 import { classifyPlugin, knownGap, readback, startDeviceSession, openDeviceReport } from './device-report.js';
 import { mountStudio } from './studio-screen.js';
 import { STUDIO_DEFAULTS, studioCrewAppearance } from './studio.js';
@@ -5141,6 +5142,7 @@ async function renderToday(el) {
      is where the unopened crates are, which is what people come back for. */
   /* the colour the wallpaper runs up off the top in: see paintHeroEdge */
   paintHeroEdge(eq.BG);
+  groundHero(document.getElementById('bhStage'));
   $('#bhStage').addEventListener('click', e => {
     if (e.target.closest('button')) return;
     openCharacter('crates');

@@ -1,0 +1,4 @@
+{"look":"bare","layers":["B0-1","SK0-1"],"n":75947,"left":133,"right":506,"bottom":591,"padding":49}
+{"look":"FW1","layers":["B0-1","FW1","SK0-1"],"n":80946,"left":133,"right":506,"bottom":602,"padding":38}
+{"look":"FW3","layers":["B0-1","FW3","SK0-1"],"n":80685,"left":133,"right":506,"bottom":602,"padding":38}
+{"look":"FW7-1","layers":["B0-1","FW7-1","SK0-1"],"n":79504,"left":133,"right":506,"bottom":596,"padding":44}
