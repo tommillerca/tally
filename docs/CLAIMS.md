@@ -5382,6 +5382,14 @@ The deleted kitchen disclaimer was the only explicit production copy found stati
 
 Limitation: existing open records do not identify a live owner tab. Boot recovery treats them as interrupted; simultaneous use of the same fight in multiple tabs is not distinguished from a terminated session. Recovery after a setup failure in the current session requires restarting, as stated in the unresolved copy.
 
+## v578
+
+Changelog item: Your Bonehead has a proper shadow at his feet again instead of floating. Messages on Today no longer sit on top of the five room doors.
+1. PROOF: `node tests/toast-today-audit.mjs` row SHADOW, green in `docs/v578/guard-green.txt` at 45.0%. Proven red with the v578 alpha rule deleted, the exact live v575 state, at 29.0% against the 36% bar, in `docs/v578/guard-red.txt`. Graded by A/B-ing the element on one page rather than against nearby ground. | REACH: Today's hero scene at 375x812 only. Other viewports and the Wardrobe paperdoll are unmeasured here.
+2. PROOF: `node tests/toast-today-audit.mjs` rows CONTROL and CLEAR, green in `docs/v578/guard-green.txt`. Proven red with the Today override deleted, in `docs/v578/guard-red.txt`: toast 26.3,651.5 322.5x64.5 covering Trends, Backpack, Stable, Kitchen and The Pit. The complete enumerated PURE tier (180) is recorded in `docs/v578/`. | REACH: Today at 375x812 only. The toast's seat on every other screen is graded by `toast-map-audit` row SEAT and `toast-sheet-audit`; other viewports are unmeasured here.
+
+Deviations: the first diagnosis of the shadow, that `.hero-fade` at z-index 4 was erasing `.hero-cast.c-bh` at z-index 1, was measured FALSE and is recorded rather than quietly dropped. Raising the element above the fade makes it WEAKER, not stronger (.55 alpha 29.0% -> 24.5%, .78 alpha 45.0% -> 41.6%), so the stacking ships unchanged and only the alpha moved. The first cut of the SHADOW row compared the sole line against clear ground 200px to the side and passed at 33.7% on the broken build, because `.hero-char` carries its own drop-shadow; it was replaced with an A/B of the element on the same page before this claim was written.
+
 ## v573
 
 Changelog item: Backpack gives pets more room, highlights the selected tab and tucks item explanations into details. Pet melting has a deliberate entry outside talents, and Laboratory pair warnings explain the required colours.

@@ -19,7 +19,10 @@
  *    at z-index 1 while .hero-fade spans the whole scene at z-index 4, so the
  *    fade had been erasing the only ground cue the figure has. The element was
  *    in the DOM and measurable the whole time, which is why a geometry-only
- *    check never caught it: this row reads PIXELS.
+ *    check never caught it: this row reads PIXELS. NOTE the first diagnosis
+ *    (the fade was erasing it, raise the z-index) was measured FALSE: at
+ *    z-index 5 the same alpha reads weaker, not stronger. The alpha is the
+ *    whole fix and the stacking is untouched.
  *
  * ROWS
  *   VISIBLE  the toast is on the glass, full size, inside the viewport. CLEAR
@@ -28,17 +31,19 @@
  *   CONTROL  the five door tiles are present and hit-testable. Without this,
  *            CLEAR passes against a screen that never drew them.
  *   CLEAR    the settled toast rect intersects none of the door tiles.
- *   SHADOW   the ground DARKENS under the soles. Sampled from the decoded
- *            screenshot, not from getComputedStyle: the bug was a painted
- *            element that rendered nothing, so only pixels can grade it. The
- *            row compares the luminance at the shadow's centre against the
- *            same row's clear ground 200px to the side, on the SAME frame.
+ *   SHADOW   the shadow element actually PAINTS. Two frames of the same page,
+ *            the element hidden then shown, differenced at its centre. Sampled
+ *            from decoded screenshots, not getComputedStyle: the bug was a
+ *            painted element that rendered nothing, so only pixels grade it.
+ *            NOT a comparison against nearby ground: the first cut of this row
+ *            did that and passed at 33.7% on the broken build, because
+ *            .hero-char's own drop-shadow darkens that plate regardless.
  *
  * PROVEN RED, 2026-09-11, one mutation per throwaway cp -R copy:
  *   CLEAR   delete the `body:has(.screen--today)` rule from app.css
  *           -> FAIL, toast 672.0-716.3 intersects 5 tiles
- *   SHADOW  restore `#bhStage > .hero-cast.c-bh { z-index: 1 }`
- *           -> FAIL, dip 0 (61 vs 61), the exact live v575 state
+ *   SHADOW  delete the v578 rule entirely (the exact live v575 state)
+ *           -> FAIL, the element contributes 29.0%, under the 36% bar
  *   VISIBLE hide #toast via injected CSS -> FAIL
  *
  * Run: node tests/toast-today-audit.mjs [url]
@@ -103,37 +108,56 @@ ok('CLEAR a live toast covers none of the door tiles', m.doors.length === 5 && h
 if (!m.cast) {
   ok('SHADOW the ground darkens under the soles', false, '.hero-cast.c-bh is not in the DOM');
 } else {
-  /* Decoded in a THROWAWAY page via canvas, the same no-dependency pattern
+  /* A/B THE ELEMENT ITSELF, not the ground under the figure.
+     The first cut of this row compared the shadow's centre against clear ground
+     200px to the side and passed at 33.7% on the BROKEN build, because
+     .hero-char carries `drop-shadow(0 10px 12px rgba(0,0,0,.4))` and the scene
+     a radial vignette, so the plate under the soles is darker whether or not
+     .hero-cast paints at all. That row graded the figure's own filter and would
+     have shipped the bug a second time.
+     Two frames of the SAME page, the element hidden then shown, differenced at
+     its centre, isolate this element's contribution and nothing else. On the
+     live v575 stacking the element is fully covered by .hero-fade, so the two
+     frames are identical and the delta is 0.
+     Decoded in a THROWAWAY page via canvas, the no-dependency pattern
      boot-flash-audit and crate-exit-flicker-audit use. */
-  const shot = await page.screenshot({ encoding: 'base64' });
-  const probe = await browser.newPage();
-  await probe.goto('data:text/html,<body></body>');
   const cy = Math.round((m.cast.y + m.cast.h / 2) * DPR);
   const cx = Math.round((m.cast.x + m.cast.w / 2) * DPR);
-  /* Clear ground on the SAME row: 200 CSS px to whichever side stays on the
-     plate. The shadow is 46% of the scene wide, so 200px clears its falloff. */
-  const off = 200 * DPR;
-  const px = await probe.evaluate(async (data, cx, cy, off) => {
-    const img = new Image();
-    img.src = 'data:image/png;base64,' + data;
-    await img.decode();
-    const c = document.createElement('canvas');
-    c.width = img.width; c.height = img.height;
-    const g = c.getContext('2d', { willReadFrequently: true });
-    g.drawImage(img, 0, 0);
-    const d = g.getImageData(0, 0, c.width, c.height).data;
-    const lum = (x, y) => { const i = (y * c.width + x) * 4; return (d[i] + d[i + 1] + d[i + 2]) / 3; };
-    const gx = cx + off < c.width - 4 ? cx + off : cx - off;
-    return { centre: lum(cx, cy), ground: lum(gx, cy), gx };
-  }, shot, cx, cy, off);
+  const setCast = vis => page.evaluate(v => {
+    document.querySelector('.hero-cast.c-bh').style.visibility = v;
+  }, vis);
+  await setCast('hidden'); await sleep(400);
+  const without = await page.screenshot({ encoding: 'base64' });
+  await setCast('visible'); await sleep(400);
+  const with_ = await page.screenshot({ encoding: 'base64' });
+  const probe = await browser.newPage();
+  await probe.goto('data:text/html,<body></body>');
+  const px = await probe.evaluate(async (a, b, cx, cy) => {
+    const lumAt = async (data) => {
+      const img = new Image();
+      img.src = 'data:image/png;base64,' + data;
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      /* Mean over a 9x9 patch, so one anti-aliased pixel cannot decide it. */
+      let sum = 0, n = 0;
+      for (let y = cy - 4; y <= cy + 4; y++) for (let x = cx - 4; x <= cx + 4; x++) {
+        const i = (y * c.width + x) * 4; sum += (d[i] + d[i + 1] + d[i + 2]) / 3; n++;
+      }
+      return sum / n;
+    };
+    return { off: await lumAt(a), on: await lumAt(b) };
+  }, without, with_, cx, cy);
   await probe.close().catch(() => {});
-  const { centre, ground, gx } = px;
-  const dip = ground > 0 ? (ground - centre) / ground : 0;
-  /* 0.25 is well under the 0.44 measured on the fix and well over the 0.00 the
-     live v575 bug produced, so it separates the two states without pinning the
-     exact alpha. */
-  ok('SHADOW the ground darkens under the soles', dip >= 0.25,
-    `centre lum ${centre.toFixed(1)} at ${cx},${cy}; clear ground ${ground.toFixed(1)} at ${gx},${cy}; dip ${(dip * 100).toFixed(1)}%`);
+  const dip = px.off > 0 ? (px.off - px.on) / px.off : 0;
+  /* 0.36 sits between the 29.0% the SHIPPED .55 alpha contributes (what Tom
+     was looking at) and the 45.0% measured on the fix. Not a pinned alpha: any
+     value that reads as contact rather than smudge clears it. */
+  ok('SHADOW the contact shadow reads as contact, not a smudge', dip >= 0.36,
+    `soles lum ${px.off.toFixed(1)} with the shadow element hidden, ${px.on.toFixed(1)} with it shown at ${cx},${cy}; the element contributes ${(dip * 100).toFixed(1)}%`);
 }
 
 await browser.close();

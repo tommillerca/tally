@@ -1,0 +1,13 @@
+=== MUTATION: v578 alpha rule deleted (the live v575 shadow state) ===
+ok    VISIBLE the toast itself is on the glass  toast 26.3,175.1 322.5x64.5 in 375x812
+ok    CONTROL Today drew its five door tiles  Trends 16,652.8 63.8x65.8 | Backpack 2 85.8,652.8 63.8x65.8 | Stable 155.6,652.8 63.8x65.8 | Kitchen 225.4,652.8 63.8x65.8 | The Pit ! 295.2,652.8 63.8x65.8
+ok    CLEAR a live toast covers none of the door tiles  toast 26.3,175.1 322.5x64.5, doors from 652.8
+ok    SHADOW the contact shadow reads as contact, not a smudge  soles lum 60.2 with the shadow element hidden, 35.2 with it shown at 338,1078; the element contributes 41.6%
+OK  toast-today-audit
+
+=== MUTATION: Today toast override deleted (the live v575 seat) ===
+ok    VISIBLE the toast itself is on the glass  toast 26.3,651.6 322.5x64.5 in 375x812
+ok    CONTROL Today drew its five door tiles  Trends 16,652.8 63.8x65.8 | Backpack 2 85.8,652.8 63.8x65.8 | Stable 155.6,652.8 63.8x65.8 | Kitchen 225.4,652.8 63.8x65.8 | The Pit ! 295.2,652.8 63.8x65.8
+FAIL  CLEAR a live toast covers none of the door tiles  toast 26.3,651.6 322.5x64.5 covers Trends, Backpack 2, Stable, Kitchen, The Pit !
+ok    SHADOW the contact shadow reads as contact, not a smudge  soles lum 60.2 with the shadow element hidden, 35.2 with it shown at 338,1078; the element contributes 41.6%
+FAILED  toast-today-audit

@@ -12377,19 +12377,22 @@ button.t3-price::before {
 #chContent .bp-item-details summary { min-height: 44px; padding: 12px 0; font-size: var(--fs-1); cursor: pointer; }
 .bh-hero.mini.bp-identity .bh-stage.lg { width: 120px; height: 120px; }
 
-/* v578: the contact shadow was being painted over. .hero-cast.c-bh is the
-   MEASURED sole-line shadow from 2026-08-08 (centre lands on the soles within
-   1px) at z-index 1, but .hero-fade spans the whole scene at z-index 4, so the
-   fade has been erasing the only ground cue the figure has. Tom, 2026-09-11:
-   "he is still clearly not down on the ground with his own shadow." Only the
-   stacking changes: position, size and alpha are the measured values. */
-#bhStage > .hero-cast.c-bh { z-index: 5;
-  /* The .55 alpha was measured in 2026-08 against the UNFADED ground. The fade
-     now sits under the shadow too and has already taken the plate from lum 79
-     to 61 at this row, so the same alpha reads as a 28% dip instead of the
-     contact it was authored as. Re-measured on the render at 375x812 with the
-     fade in place: .78 puts the centre back near the authored contrast.
-     Geometry is untouched. */
+/* v578: the contact shadow reads, instead of washing out. Tom, 2026-09-11:
+   "he is still clearly not down on the ground with his own shadow."
+   .hero-cast.c-bh's GEOMETRY is the measured 2026-08 sole line and is untouched
+   here; its .55 alpha was measured against the ground as it stood then, and
+   .hero-fade and the scene vignette have darkened that plate since, so the same
+   alpha now lands as a smudge. Measured 2026-09-11 at 375x812, the element's own
+   contribution at the sole line (the same frame with it hidden, then shown):
+     .55 (shipped)   29.0%   <- what Tom was looking at
+     .78             45.0%
+   The first cut of this fix also raised the element above .hero-fade on the
+   theory that the fade was erasing it. Measured, that is FALSE and it is the
+   wrong direction: at z-index 5 the same alpha reads WEAKER (.55 -> 24.5%,
+   .78 -> 41.6%), because the fade's warm wash over the shadow is part of what
+   separates it from the plate. Stacking is left exactly as it shipped.
+   Guard: tests/toast-today-audit.mjs, row SHADOW. */
+#bhStage > .hero-cast.c-bh {
   background: radial-gradient(ellipse at 50% 50%, rgba(24, 27, 20, .78) 0%, rgba(24, 27, 20, 0) 70%); }
 
 /* AND IT MUST NOT LAND ON TODAY'S DOOR ROW. Same class of collision as the map
