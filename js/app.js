@@ -16736,7 +16736,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         </div>
       </div>
     </div>`}
-    <div class="ch-tabs" id="chTabs" role="tablist">
+    <div class="ch-tabs${tab === 'wardrobe' ? ' ward-navigation' : ''}" id="chTabs" role="tablist">
       ${/* role/aria-selected, matching the wn-tabs tablist above: with the solid
             accent fill gone the visual cues are a coral ring, a brighter label,
             a full-opacity icon and a sticker shadow, and none of those reach a
@@ -17129,57 +17129,34 @@ async function renderCharacter(wrap, tab, opts = {}) {
         ${fbBarHtml()}
       </div>`;
 
-    // SAVED FITS: a look you can put back on in one tap. Stats never move.
+    // The compact toolbar owns the expandable list. Everything stays in flow.
     const fitRail = `
-      <div class="fit-rail">
-        ${fitList.map((f, i) => {
-          // No art thumbnail: the source PNGs are full-body canvases with a lot of
-          // transparent padding, so at chip size they render as an empty square.
-          // A rarity pip off the fit's headline piece reads at any size.
-          const art = fitThumbArt(f);
-          const price = fitPrices[i];
-          return `<button class="fit-chip ${S.fitEdit === f.id ? 'editing' : ''}" data-fit="${f.id}" title="${esc(f.name)}">
-            <span class="fc-pip r-${art ? art.rarity : 'common'}"></span>
-            ${esc(f.name)}${price ? `<i class="fc-cost">${price} <span class="dust-ico">${ICONS.dust(11)}</span></i>` : ''}
-            ${S.fitEdit === f.id ? '<i class="fc-x" data-fit-del="' + f.id + '">' + ICONS.close(12) + '</i>' : ''}
-          </button>`;
-        }).join('')}
-        ${/* AT THE CAP THE CHIP STAYS, GHOSTED, AND A TAP EXPLAINS (QA round 23 F8).
-              It used to be removed outright, so "You can keep 6 fits. Bin one
-              first." (the handler below) was unreachable: captureFit can only
-              return `full` from a control that only rendered while not full.
-              aria-disabled, not disabled: a disabled button swallows the tap that
-              is supposed to toast the rule. "Replace which one" is design, not
-              built here. */''}
-        <button class="fit-chip add" data-fit-save="1"${fitList.length >= MAX_FITS ? ' aria-disabled="true"' : ''}>+ Save this fit</button>
-        ${/* THE STUDIO SITS IN THE ROW THAT ALREADY EXISTS. Tom, 2026-09-10: the
-              Wardrobe header is "a mess of misaligned buttons with different fonts
-              sizes placements etc obviously including your entry into the studio,
-              for now move the studio button somewhere". v551 hung it on its own
-              right-aligned line above this row as a bare underlined link, which is
-              one more alignment to get wrong. It is an action on your current look,
-              exactly like the two chips beside it, so it takes the same .fit-chip
-              and inherits their height, radius, font and spacing instead of
-              carrying its own. Camera icon is Tom's own 48px PixelLab art. */''}
+      <div class="fit-rail ward-toolbar">
+        <button class="fit-chip ward-fit-switcher" id="wardFitSwitcher" data-fit-switcher type="button" aria-expanded="${!!S.wardFitsOpen}" aria-controls="wardFitList"><span>Saved fits</span><small>${fitList.length}/${MAX_FITS} fits</small></button>
+        <button class="fit-chip add" data-fit-save="1"${fitList.length >= MAX_FITS ? ' aria-disabled="true"' : ''}>Save fit</button>
         <button class="fit-chip studio" id="wardrobeStudio" type="button">${pixCur('camera', 24) || ICONS.camera(18)}The Studio</button>
-        ${/* A player asked for one tap that clears the doll so a new outfit starts
-              from nothing, and Tom's call on 2026-08-22 is that it takes the
-              STATTED GEAR too. It UNEQUIPS and nothing else: every piece and every
-              roll stays owned and goes straight back on. See stripAll() in loot.js.
-              Only offered when there is something to take off, and the plan comes
-              from the same function that performs it so the two cannot drift. */''}
         ${stripPlan.slots.length || stripPlan.mogs.length
-          ? `<button class="fit-chip reset" data-fit-reset="1" title="Unequip everything, gear included. Nothing is lost: it all stays in your Backpack.">Take it all off</button>`
+          ? `<button class="fit-chip reset" data-fit-reset="1" title="Unequip everything, gear included. Nothing is lost: it all stays in your Backpack.">Take off</button>`
           : ''}
-      </div>
-      ${fitList.length ? `<details class="stable-help">
-        <summary>How fits work</summary>
-        <p class="note fit-note">Tap a fit to wear it. A fit brings its gear back to empty slots and never bumps gear you are already wearing. Long-press a fit to rename or bin it.</p>
-        ${/* v425: fits record gear now. An older fit has no gear map, so after
-            Take it all off it can only bring back part of the look; one quiet
-            line tells the player the re-save fixes it. No migration, no modal. */''}
-        ${fitList.some(f => !f.gear) ? `<p class="note fit-note">Fits saved a while ago remember only the look. Put one on, gear up, and save it again to keep the gear with it.</p>` : ''}
-      </details>` : ''}`;
+        <div class="ward-fit-list" id="wardFitList"${S.wardFitsOpen ? '' : ' hidden'}>
+          ${fitList.length ? fitList.map((f, i) => {
+            const art = fitThumbArt(f), price = fitPrices[i];
+            return `<div class="ward-fit-row">
+              <button class="fit-chip ${S.fitEdit === f.id ? 'editing' : ''}" data-fit="${f.id}" title="${esc(f.name)}" aria-label="Equip ${esc(f.name)}">
+                <span class="fc-pip r-${art ? art.rarity : 'common'}"></span>
+                <span class="ward-fit-name">${esc(f.name)}</span>${price ? `<i class="fc-cost">${price} <span class="dust-ico">${ICONS.dust(11)}</span></i>` : ''}
+              </button>
+              <button class="fit-chip" data-fit-rename="${f.id}" aria-label="Rename ${esc(f.name)}">Rename</button>
+              <button class="fit-chip" data-fit-del="${f.id}" aria-label="Delete ${esc(f.name)}">Delete</button>
+            </div>`;
+          }).join('') : '<p class="note">No saved fits yet. Save your current fit to find it here.</p>'}
+          ${fitList.length ? `<details class="stable-help">
+            <summary>How fits work</summary>
+            <p class="note fit-note">Tap a fit to wear it. A fit brings its gear back to empty slots and never bumps gear you are already wearing. Use Rename or Delete to manage it.</p>
+            ${fitList.some(f => !f.gear) ? `<p class="note fit-note">Fits saved a while ago remember only the look. Put one on, gear up, and save it again to keep the gear with it.</p>` : ''}
+          </details>` : ''}
+        </div>
+      </div>`;
 
     content.innerHTML = `
       ${fitRail}
@@ -17406,7 +17383,17 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; pieces marked with a bolt grant a talent. Rarer rolls hit harder. Melting a piece keeps its look forever.</p>' : ''}
       ${lockedCount ? `<p class="note" style="text-align:center;margin-top:10px">More ${slotMeta.label.toLowerCase()} pieces are out there. Keep hunting.</p>` : ''}`;
     $$('[data-look-source]', content).forEach(btn => btn.addEventListener('click', () => openCharacter(btn.dataset.lookSource)));
-    // --- saved fits: tap to wear, long-press for rename / bin ---
+    // --- saved fits: existing equip, rename and confirmed delete semantics ---
+    $('[data-fit-switcher]', content)?.addEventListener('click', e => {
+      S.wardFitsOpen = !S.wardFitsOpen;
+      e.currentTarget.setAttribute('aria-expanded', String(S.wardFitsOpen));
+      $('#wardFitList', content).hidden = !S.wardFitsOpen;
+    });
+    $$('[data-fit-rename]', content).forEach(button => button.addEventListener('click', () => {
+      S.fitEdit = button.dataset.fitRename;
+      const chip = $$('[data-fit]', content).find(c => c.dataset.fit === S.fitEdit);
+      chip?.click();
+    }));
     $$('[data-fit]', content).forEach(chip => {
       let held = false, t = null;
       const arm = () => { held = false; t = setTimeout(() => { held = true; S.fitEdit = S.fitEdit === chip.dataset.fit ? null : chip.dataset.fit; popSound(S.sounds); renderCharacter(wrap, 'wardrobe', { instant: true }); }, 520); };
@@ -24680,7 +24667,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v566'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v567'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

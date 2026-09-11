@@ -1,5 +1,11 @@
 # What each patch note claims, and what backs it
 
+## v567 (2026-09-11)
+
+Changelog item: Wardrobe has a compact fit toolbar with a saved-fit switcher and visible rename and delete actions.
+
+1. PROOF: wardrobe-ui-1f-audit.mjs | REACH: Compact toolbar rendering, saved-fit management and source locks. Browser geometry and hit targets are unproven. Identity regrouping is deferred to preserve the header geometry lock.
+
 ## v566 (2026-09-10)
 
 Changelog item: Today has a tighter hero layout, separate name and title, and matching News and Quests rows.

@@ -24,6 +24,8 @@ const SAFE_AREA_PX = 59;          // iPhone 14 Pro Dynamic Island
 
 // Where each control must land. Add a row whenever you add a control.
 const CONTROL_EXPECTATIONS = [
+  { id: 'wardFitSwitcher', on: 'bonehead', expect: { toggle: 'wardFitList' } },
+  // Per-fit equip, rename and confirmed delete need saved-fit fixtures in the Wardrobe driver.
   { id: 'wardrobeStudio', on: 'bonehead', expect: { hash: '#/studio' } },
   { id: 'studioBack', on: 'studio', expect: { hash: '#/bonehead', hubTab: 'wardrobe' } },
   // Studio option, retry and save handlers are driven by studio-audit.mjs.
@@ -75,9 +77,18 @@ export async function uiAudit({ routes = ['today', 'bonehead', 'shop', 'friends'
     if (c.open) { q(c.open)?.setAttribute('open', ''); await sleep(250); }
     const el = q('#' + c.id);
     if (!el) { problems.push(`control #${c.id} is MISSING on ${c.on}`); continue; }
+    const wasExpanded = el.getAttribute('aria-expanded') === 'true';
     el.click();
     await sleep(1700);
     checked.controls++;
+    if (c.expect.toggle) {
+      const list = q('#' + c.expect.toggle);
+      const expanded = el.getAttribute('aria-expanded') === 'true';
+      if (!list || expanded === wasExpanded || list.hidden === expanded) {
+        problems.push(`#${c.id} did not toggle its fit list and accessibility state together`);
+      }
+      el.click(); // restore the starting state before the next route
+    }
     if (c.expect.hash && location.hash !== c.expect.hash) {
       problems.push(`#${c.id} went to ${location.hash}, expected ${c.expect.hash}`);
     }

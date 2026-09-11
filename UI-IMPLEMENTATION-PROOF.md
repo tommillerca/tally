@@ -365,3 +365,72 @@ Additional boundary proof: inherited app.css prefix, readiness renderer/scoring 
 - Deviations: no functional or visual redesign. Browser geometry and controls require independent review. Existing title-table lookup is retained for the earned title, and absent social names use Your Bonehead. The new PURE guard increases the inherited 172-entry census to 173. All failures and fixture corrections are recorded above.
 
 Advisory evidence only. This does not claim browser approval or authorize publishing.
+
+# Wardrobe 1F advisory implementation evidence
+
+Frozen plan SHA256 verified: feef3f7a14ab4009f6d6f2568c5c6a8aadaad1075581d11efeafdbe4ab129cbe.
+The full IMPLEMENTATION.md and reference layout sources were read at the supplied authority path because the kit is absent from this checkout. MOCK.html was not opened. All source paths and edits resolve within this checkout.
+
+## Scope delivered and outstanding deviation
+
+This is a partial implementation of 1F, not acceptance of the whole screen. The compact toolbar, saved-fit switcher, explicit rename/delete access and navigation paint are implemented. Identity/title/currency regrouping and name/level alignment are deferred. The existing header already supplies one level chip and real currency/collection data, which remain unchanged. Moving its level chip onto the name row would change wrapping and could move the paperdoll for a reason other than toolbar height. That violates the narrower frozen hard lock unless proved otherwise. This limitation was reported during implementation, before changing the header. Proposed deviation: independent browser review establishes a header arrangement with the same total height, or the operator explicitly permits the measured header delta. No speculative header geometry was shipped.
+
+The reference uses a preview sheet for saved fits. The real implementation uses an inline, collapsed switcher panel inside the toolbar. Opening it expands document flow, never overlays the slots, and closing it restores the compact row. This is a disclosed presentation adaptation. All fit operations still use the existing real application handlers and sheets. Existing long-press editing remains available, in addition to explicit Rename and Delete buttons. Save fit still explains the real cap through aria-disabled; Studio keeps its camera and real route; Take off retains its availability gate and arm-then-confirm gear semantics.
+
+## Files changed and boundaries
+
+- js/app.js: Wardrobe-only navigation class; fit toolbar markup and its switcher/rename bindings; APP_BUILD v566 to v567. Header, collection counts, currency reads and all production gear/fit data functions are unchanged. New bindings only select toolbar descendants. No global scrolling, sheet manager, figure renderer, asset or lower-slot handler was changed.
+- app.css: append only the selectors enumerated below. The inherited CSS prefix is hash-checked byte-for-byte, including all 1A to 1E rules and paperdoll sizing. No inherited selector is edited.
+- sw.js, version.json, js/changelog.js: remaining version stamps advance to 567; one matching player-facing changelog item. No service-worker behavior changes.
+- docs/CLAIMS.md: matching Changelog item and numbered PROOF/REACH row, with the identity deferral and browser limits stated.
+- tests/wardrobe-ui-1f-audit.mjs: new PURE source/DOM-model guard. Hashes freeze the entire paperdoll-through-lower-markup range, lower equipment handlers and inherited CSS. It executes the real toolbar template at 0/1/6 fits and real event bindings for switcher, equip, rename and confirmed delete. These are source/behavior proofs, not visual or hit-target proof.
+- tests/wardrobe-noise-audit.mjs: update only the expected fit-help instruction from long-press instructions to the explicit Rename/Delete instructions. Existing quiet-state, paid-commit and legacy-fit-warning assertions remain.
+- tests/ui-audit.js: add the switcher to CONTROL_EXPECTATIONS and support checking its expanded state against actual list visibility, restoring the original state afterward. This browser check was written but not run. Per-fit actions need the independent Wardrobe browser driver with real saved-fit fixtures.
+- tests/release-gate.mjs: register the added guard; no inherited entry removed. The inherited 173 becomes 174.
+- UI-IMPLEMENTATION-PROOF.md: append this advisory record.
+
+## Every appended CSS selector
+
+1. #chTabs.ward-navigation > .ch-tab.on: background, border colour and inset underline only. Existing border widths, dimensions and navigation handlers remain.
+2. #chContent > .ward-toolbar: grid for the four toolbar controls and expandable list, 5px gaps, in-flow overflow and start alignment. It is a sibling preceding .mog-dock, not a wrapper around the locked area.
+3. #chContent > .ward-toolbar > .fit-chip: 44px minimum target, compact padding, gap, radius, type and line height. Direct children only.
+4. #chContent > .ward-toolbar > .ward-fit-switcher: two-line label/count alignment inside the toolbar button.
+5. #chContent > .ward-toolbar > .ward-fit-switcher > span: ellipsis confined to the button label.
+6. #chContent > .ward-toolbar > .ward-fit-switcher > small: count typography only.
+7. #chContent > .ward-toolbar > .fit-chip.arming: wraps the existing long gear-confirmation label within 100px. It remains visible and may grow toolbar height while armed.
+8. #chContent > .ward-toolbar > .ward-fit-list: full-width grid row for the expanded list. Native hidden state is preserved; no display override defeats it.
+9. #wardFitList > .ward-fit-row: columns for the real fit, Rename and Delete, with 7px row margins.
+10. #wardFitList > .ward-fit-row > .fit-chip: compact type and padding, retaining inherited 44px minimum targets.
+11. #wardFitList .ward-fit-name: long names ellipsize within their equip button; title and aria-label retain the full escaped name.
+12. #wardFitList > .ward-fit-row > [data-fit-del]: destructive text colour only.
+
+None can match paperdoll, pd-slot, pd-art, pd-bottom, stat or inventory descendants. The sole possible effect below the toolbar is the document-flow y displacement caused by toolbar height. No fixed/absolute overlays, parent dimensions, overflow clipping, art sizes, slot grid or scroll container were introduced or changed.
+
+## Geometry and blocked verification
+
+Actual paperdoll y delta: UNPROVEN. No measured zero or exact pixel equality is claimed. At the standard root font size, the unchanged rail padding is 2px top + 6px bottom and its bottom margin remains 4px. The new closed row has a 44px minimum. The old saved-fit help disclosure had a 44px summary, 2px total border and 8px top margin. Under normal sibling margin collapse, removing that closed disclosure from the surface predicts a 50px lift when saved fits exist, and 0px when no fits exist and both toolbar rows resolve to 44px. Conditional example against the supplied y374.9 baseline: y324.9 if that baseline has saved fits, closed help and the standard row height. This is source arithmetic, not the exact required browser measurement. Font scaling, an armed Take off label, an open list/help and the supplied baseline's unspecified fit state must be measured separately.
+
+The supplied x16, width343, height418, fourteen slots, first-slot66x78, last-slot80.5x69.5 and pd-art62x62 remain browser obligations. Their production markup, styles and lower handlers are untouched, but actual gear operation, lower-slot reachability, safe-area behavior and hit targets cannot be proved by hashes. No sockets, browser audits or screenshots were attempted, per the frozen work order's listen EPERM restriction. Independent review must operate all slots and toolbar actions at 375px, 390px and a wider phone, including long names and zero/full fits.
+
+## Proof observations before the final PURE pass
+
+New guard RED before implementation: exit 1, "compact saved-fit switcher missing". After implementation: exit 0. CONTROL mutations remove the switcher and alter the paperdoll markup; both are rejected. DOM doubles execute production event bindings and prove disclosure state, correct fit id routing, Rename sheet callback, no deletion before confirmation and only one delete for repeated confirmation. Lower markup/handlers and inherited CSS hashes pass.
+
+Initial agreed unit output: 389 passed, 1 failed. The failure was the inherited Studio guard expecting "The Studio", while the initial toolbar shortened it to "Studio". The production label was restored, with no change to the Studio guard. Initial shell output was followed by tail, so that shell's final status did not represent the unit child exit. It is not cited as direct exit-code proof. Final direct child status is recorded by the complete PURE run below.
+
+Wardrobe noise audit passed 5/5. Guard hygiene reported clean. node --check js/app.js and git diff --check passed. The mechanical design detector returned exit 2 with warnings in inherited source; its findings are outside the appended toolbar/navigation rules. It is not browser proof and was not used to change locked or unrelated UI. Output: /tmp/ui1f-detect.json.
+
+The figure audit STATIC prefix was executed against HEAD and current app.js without starting its browser setup. Both have six passing rows and exactly one failing coverage row. All six unregistered call sites' FULL text compares equal, not merely the number of failing rows. Current sites: 20425 (kinChips), 21462, 21498, 21501, 21502, 21527. No seventh site. Baseline/final full content and rows: /tmp/ui1f-figure-baseline.json and /tmp/ui1f-figure-final.json. Runner: /tmp/ui1f-static.cjs. Full figure, Pit 25/25 and readiness browser 7/7 remain unproven in this environment; their production code and inherited checks are unchanged.
+
+Denied actions: none. Blocked actions: browser geometry, browser audits, screenshots and real hit-target checks as specified by the work order. No commit, push, merge, publish, deployment, external-checkout write, native/ASC-SUBMISSION.md edit, Cam art edit or production data mutation was attempted. The work is advisory and awaits independent review.
+
+## Final current-tree proof results
+
+- Agreed proof: node tests/unit.test.js. Direct child exit 0. Final output: 390 passed, 0 failed. Full output: /tmp/ui1f-pure/unit.test.js.log.
+- LAST full PURE execution: 174 green, 0 red, 0 unproven. Runner exit 0. All inherited 173 entries passed, plus the new Wardrobe guard. No source changed during the run; only this evidence section was appended afterward.
+- Enumeration exactly follows tests/r6-guards-audit.mjs: evaluate the const PURE literal and every /^PURE\.(?:push|unshift)\([^;]+\);/gm match with node:vm. Census: 81 literal entries + 93 additions = 174. Both original expressions and the exact final ordered list are in /tmp/ui1f-pure/inventory.json.
+- Each command was spawned as node tests/<entry>. Exit codes were read directly from child close events, not through a pipeline or a trailing shell command. Exit 97 is classified as UNPROVEN. No null exit codes or signals occurred. Every command, code and duration: /tmp/ui1f-pure/results.json. Counts: /tmp/ui1f-pure/summary.json. Complete run output: /tmp/ui1f-pure.log. Runner: /tmp/ui1f-pure.cjs.
+- The new guard, Wardrobe noise, Studio, guard hygiene, all inherited 1A to 1E guards and r6-guards-audit passed in the final full run. These counts exclude prohibited browser audits.
+- Final files changed: UI-IMPLEMENTATION-PROOF.md; app.css; docs/CLAIMS.md; js/app.js; js/changelog.js; sw.js; tests/release-gate.mjs; tests/ui-audit.js; tests/wardrobe-noise-audit.mjs; tests/wardrobe-ui-1f-audit.mjs; version.json.
+- Denied actions: none. Browser checks remain blocked by the frozen order. No commit, push, merge or publish.
+- Outstanding deviations: header identity regrouping/name-level alignment deferred; saved fits expand inline instead of using a switcher sheet; exact rendered paperdoll y delta and lower-slot reachability remain unproven. The source-derived conditional delta above is not a measured result. This is advisory evidence for independent review, not full 1F acceptance.

@@ -10,6 +10,10 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 567, date: '2026-09-11', title: 'Compact fit controls', items: [
+    'Wardrobe has a compact fit toolbar with a saved-fit switcher and visible rename and delete actions.',
+  ] },
+
   { n: 566, date: '2026-09-10', title: 'A clearer Today', items: [
     'Today has a tighter hero layout, separate name and title, and matching News and Quests rows.',
   ] },
