@@ -50,7 +50,16 @@ await check('CONTROL smooth resampling preserves edge softness', async () => {
   const originalCss = read('docs/reviews/studio-v4/baseline-css.txt');
   assert.equal(css.split('.studio-preview {')[0], originalCss.split('.studio-preview {')[0],
     'pixel icon rendering and all CSS before Studio are unchanged');
-  assert.doesNotMatch(css.slice(css.indexOf('.studio-preview {')), /image-rendering:\s*pixelated/);
+  // Later unrelated pixel-art surfaces must not change the Studio contract.
+  const checkStudioSampling = text => {
+    const rules = [...text.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+    const studioRules = rules.filter(([,selector]) => /\.studio-[\w-]+/.test(selector));
+    assert.ok(studioRules.length > 0, 'Studio CSS census must not be empty');
+    for (const [, , declarations] of studioRules) assert.doesNotMatch(declarations, /image-rendering:\s*pixelated/);
+  };
+  checkStudioSampling(css);
+  assert.throws(() => checkStudioSampling(css + '\n.studio-preview img { image-rendering: pixelated; }'), assert.AssertionError);
+  checkStudioSampling(css + '\n.lab-slime { image-rendering: pixelated; }');
 });
 await check('one flat sticker list without group headings', () => {
   assert.equal((screen.match(/class="studio-sticker-grid studio-art-grid"/g)||[]).length, 1);

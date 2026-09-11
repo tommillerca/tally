@@ -18052,6 +18052,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
     const ownedPets = invAll.filter(r => r.kind === 'cos' && BH_BY_ID[r.itemId] && BH_BY_ID[r.itemId].slot === 'C').map(r => BH_BY_ID[r.itemId]);
     const pCountTotal = Object.values(pCounts).reduce((a, n) => a + n, 0);
     content.innerHTML = `
+      <button class="lab-banner" type="button" data-lab-open>
+        <span class="lab-slime" aria-hidden="true"></span>
+        <span class="lab-banner-copy"><b>THE LABORATORY</b><small>Spare pets become new colours.</small><span class="lab-banner-recipes">Recipes ›</span></span>
+      </button>
       <div class="lab-egg-help"><p>Hatch eggs to discover species. Keep spare pets of the same species for The Laboratory. Its recipes show the path to new colours.</p><p>New eggs hatch Base pets, with the existing rare shiny chance. Colours are now made in The Laboratory. Your pets and the colours already stored in your eggs stay yours.</p><button class="btn ghost" data-lab-open>Explore Laboratory recipes</button></div>
       ${(pendingLoot || []).length ? `<div class="t3-sect" style="margin-top:2px"><b>Boss loot · keep one per drop</b><i></i></div>
       ${pendingLoot.map((p, i) => `
@@ -24680,7 +24684,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v568'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v569'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

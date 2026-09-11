@@ -1,5 +1,11 @@
 # What each patch note claims, and what backs it
 
+## v569 (2026-09-11)
+
+Changelog item: Backpack opens the Laboratory through an animated slime banner, and Wardrobe makes more room above your Bonehead.
+
+1. PROOF: lab-banner-audit.mjs | REACH: Original slime PNG and JSON dimensions, all 240 frame coordinates, uniform CSS clocks, reduced motion, fixed art box, first Backpack entrance and existing Laboratory route. Recipes live on the Laboratory bench. Header gap arithmetic predicts paperdoll y 374.9px from measured 391.3px minus three reductions of 5.466667px. Browser geometry, pixels, tap targets and locked audits remain for independent review.
+
 ## v568 (2026-09-11)
 
 Changelog item: Backpack keeps empty inventory visible, groups crates and battle items into cards, and shows each egg with its own progress.

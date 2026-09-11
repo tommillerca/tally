@@ -10,6 +10,10 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 569, date: '2026-09-11', title: 'The Laboratory host', items: [
+    'Backpack opens the Laboratory through an animated slime banner, and Wardrobe makes more room above your Bonehead.',
+  ] },
+
   { n: 568, date: '2026-09-11', title: 'A clearer Backpack', items: [
     'Backpack keeps empty inventory visible, groups crates and battle items into cards, and shows each egg with its own progress.',
   ] },
