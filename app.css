@@ -12052,3 +12052,18 @@ button.t3-price::before {
 
 .studio-tray { position: relative; left: auto; bottom: auto; transform: none; width: min(100%, 430px); margin: 0 auto; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .studio-tray[data-open="true"] { position: fixed; left: 50%; bottom: calc(80px + var(--sab)); transform: translateX(-50%); width: min(600px, calc(100% - 32px)); padding: 12px; border: 2px solid #2A2D28; border-radius: var(--radius); background: var(--surface); box-shadow: 4px 5px 0 #2A2D28; }
+
+/* Approved 1A chrome. Keep header metrics, arena and figure rules intact. */
+.sheet-head.fight-header > .fight-title { flex: 1; }
+.sheet-head.fight-header > .sheet-close { flex-shrink: 0; }
+#fightBody > .fight-actions > .fight-act,
+#fightBody > .fight-endrow > .fight-act {
+  border-radius: 11px;
+  box-shadow: none;
+}
+#fightBody > .fight-actions > .fight-act:not(.glow):not(.sig):not(.petmove):not(.potion) {
+  background: var(--surface);
+  border-color: var(--line);
+}
+#fightBody > .fight-endrow > .fight-act.endturn { border-color: var(--ink); }
+#fightBody .fight-hud .fname { box-shadow: none; border-color: var(--line); }

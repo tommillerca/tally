@@ -10,6 +10,10 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 562, date: '2026-09-10', title: 'Cleaner fight controls', items: [
+    'Fight controls have cleaner styling, the pet HUD uses your pet’s given name, and ITEMS has a simpler label.',
+  ] },
+
   { n: 561, date: '2026-09-10', title: 'Quieter Wardrobe labels', items: [
     'Wardrobe tiles no longer show Free or Free: no stats. Wearing, Paid and Bone Dust prices remain visible.',
   ] },

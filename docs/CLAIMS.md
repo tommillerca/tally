@@ -1,5 +1,11 @@
 # What each patch note claims, and what backs it
 
+## v562 (2026-09-10)
+
+Changelog item: Fight controls have cleaner styling, the pet HUD uses your pet’s given name, and ITEMS has a simpler label.
+
+1. PROOF: fight-ui-1a-audit.mjs | REACH: Fight HUD nickname from the equipped instance, existing unnamed fallback, escaped label, simple ITEMS and live venue. Chrome-only CSS preserves geometry declarations. Browser figure coordinates and control hit tests remain unproven.
+
 ## v561 (2026-09-10)
 
 Changelog item: Wardrobe tiles no longer show Free or Free: no stats. Wearing, Paid and Bone Dust prices remain visible.

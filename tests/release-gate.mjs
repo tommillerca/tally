@@ -253,6 +253,7 @@ const coverageOnly = process.argv.includes('--coverage-only');
    the evidence in the failure line. */
 // Frozen loss-prevention work order, 2026-09-08: real UI and service controls, Node only.
 const PURE = [
+  'fight-ui-1a-audit.mjs', // Approved fight chrome and instance-name contract, node only.
   'device-report-audit.mjs', // Device observations: lookup, classifier, arithmetic and serialization.
   'r8-shop-css-audit.mjs', // Frozen R8 CSS source contracts and mutation controls; no rendered claims.
   'transmog-reach-audit.mjs', // R9: disabled second step, distinct free reasons, data counts, acquisition routes and retained appearances. No layout claim.

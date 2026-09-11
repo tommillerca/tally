@@ -24670,7 +24670,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v561'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v562'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
@@ -25560,7 +25560,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const fast = !!navigator.webdriver;
   const beatMs = fast ? 60 : 700;
   const fxMs = fast ? 30 : 300;
+  const fightPetNicks = await petNicks();
   const petBody = fight.pAux;                              // your pet as a real body
+  const fightPetName = fightPetNicks[fighter.petMeta?.iid] || petBody?.name || 'Pet';
   const petArtId = fighter.petMeta ? fighter.petMeta.id : null;
   const petArtMorph = fighter.petMeta ? (fighter.petMeta.morph || 'base') : 'base';
   const venue = foeCfg.venue || PIT_VENUES[foeCfg.mode === 'champ' ? 'champ' : foeCfg.mode === 'rung' ? foeCfg.rung : 'spar'] || 'The Pit';
@@ -25637,7 +25639,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     || foeCfg.mode === 'mimic' || foeCfg.mode === 'wanderer';  // boss with week = walked-to den (map); boss without week = remote den (pit)
   const seamOwner = {};   // identity token: which fight installed the test seams
   const wrap = openSheet(`
-    <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
+    <div class="sheet-head fight-header"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
     <div class="sheet-body fight-body" id="fightBody"></div>`,
     { cls: 'full', onClose: async () => {
       stopGluttonFoeAnim();
@@ -25756,7 +25758,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           <div class="bar fhp"><i id="youHp" style="width:100%"></i></div>
           <div class="microbars"><div class="bar fwind"><i id="youWind" style="width:100%"></i></div><div class="bar fhype"><i id="youHype" style="width:0%"></i></div></div>
           <div class="fstate" id="youState" hidden></div>
-          ${petBody ? `<div class="hud-pet" id="hudPet"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini" style="--pool:${Math.min(100, Math.round(petBody.d.maxHp / Math.max(1, player.d.maxHp) * 100))}%"><i id="petHp" style="width:100%"></i></div></div>` : ''}
+          ${petBody ? `<div class="hud-pet" id="hudPet"><span class="petname">${esc(fightPetName)}</span><div class="bar fhp mini" style="--pool:${Math.min(100, Math.round(petBody.d.maxHp / Math.max(1, player.d.maxHp) * 100))}%"><i id="petHp" style="width:100%"></i></div></div>` : ''}
         </div>
         <div class="hud-side foe">
           <div class="fname">${esc(foe.name)} <span id="foeHpN">${Math.round(foe.hp)}/${foe.d.maxHp}</span></div>
@@ -26667,7 +26669,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const canDrink = fight.active === 'p' && fight.ap >= 1 && !fight.over;
     if (stocked.length) {
       if (!fight.itemsOpen) {
-        html += `<button class="fight-act items" id="itemsOpen" ${canDrink ? '' : 'disabled'} style="grid-column:1/-1"><b>ITEMS x${held}</b><small>${stocked.length} kind${stocked.length === 1 ? '' : 's'} brewed · 1 AP to drink</small></button>`;
+        html += `<button class="fight-act items" id="itemsOpen" ${canDrink ? '' : 'disabled'} style="grid-column:1/-1"><b>ITEMS</b></button>`;
       } else {
         /* Open: the potions AND the way back, AND NOTHING ELSE.
            The door halved the CLOSED tray and left the OPEN one exactly as it
@@ -26686,7 +26688,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
            still measures its height from the arena floor, the End Turn row and
            the HUD, so the boss art is untouched. That is the whole reason the
            door exists and it stays intact. */
-        html = `<button class="fight-act items back" id="itemsBack" style="grid-column:1/-1"><b>&lsaquo; BACK TO MOVES</b><small>${held} item${held === 1 ? '' : 's'}</small></button>`;
+        html = `<button class="fight-act items back" id="itemsBack" style="grid-column:1/-1"><b>&lsaquo; BACK TO MOVES</b><small>${held} item${held === 1 ? '' : 's'} · 1 AP to drink</small></button>`;
         for (const p of stocked) {
           html += `<button class="fight-act potion" data-potion="${p.id}" ${canDrink ? '' : 'disabled'}><b>${p.icon} ${esc(p.name)}</b><small>x${potionInv[p.id]} · ${esc(potionShort(p))}</small></button>`;
         }
