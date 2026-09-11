@@ -14,6 +14,12 @@ Changelog item: Cosmetics that look the same stack into one tile with a count, i
 Changelog item: A confirmed tower claim keeps its full reward even when the save fails afterwards.
 4. PROOF: `node tests/v576-hunt-audit.mjs` over the production claim settlement branch: a server-confirmed spire takeover followed by a local cap refusal paid 40 coins instead of the earned 80, and the fight charge is now returned when local persistence fails. | REACH: the claim settlement branch in Node. The full path on a phone with real network loss is unmeasured.
 
+Changelog item: Your Bonehead stands on his shadow instead of hovering above it, whatever he is wearing.
+5. PROOF: `node tests/hero-ground-audit.mjs` rows CONTROL, GROUNDED and CENTRED, over 4 equipped looks at 375x812 and 430x932. Measures INK by compositing every layer's alpha with drop-shadow and animation disabled, never element rects, because the element rects were always correct and the figure floated anyway. On the fix, shadow centre lands within 0.06px of the soles and within 0.25px of the ink centre. Proven red against live v578 in `docs/v579/guard-red.txt`: 16 GROUNDED and 8 CENTRED failures, the soles 15.8px above the shadow and its centre 14.75px to their left. The offset is derived at render time, not pinned, because the sole line moves with the equipped art: measured 516 barefoot and 523 in footwear at the same viewport. | REACH: Today's hero scene, 4 looks, 2 viewports. Looks outside that set, and the big-pet sharing case at other widths, are unmeasured.
+
+Changelog item: Your Bonehead and your pet sit a little further left, with the space between them unchanged.
+6. PROOF: `node tests/hero-ground-audit.mjs` rows SHIFT, PET-UNMOVED and IN-FRAME. Both figures move 18.5px left of 18.75 asked, the gap between their ink edges changes by 1px, and every ink box stays inside the scene at both viewports. PET-UNMOVED compares the pet's ink bottom against the value measured on the SHIPPED build for the same species and viewport (C1 522/553, C6 532/564) and it is unchanged, which is the requirement Tom set: "make sure you dont fuck up the pet's position." Proven red against live in `docs/v579/guard-red.txt` with 16 SHIFT failures. | REACH: Today > the hero scene, over 4 equipped looks at 375x812 and 430x932. Looks outside that set, the big-pet sharing case at other widths, and every screen other than Today are unmeasured here.
+
 ## v577 (2026-09-11)
 
 Changelog item: The Backpack shows its selected tab highlight, styled item explanations and a larger pet again.

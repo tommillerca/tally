@@ -14,6 +14,8 @@ export const CHANGES = [
     'Tapping a slot on the paperdoll scrolls to that slot\'s items, and tapping it again brings you back.',
     'Cosmetics that look the same stack into one tile with a count, in the Wardrobe and in transmog.',
     'A confirmed tower claim keeps its full reward even when the save fails afterwards.',
+    'Your Bonehead stands on his shadow instead of hovering above it, whatever he is wearing.',
+    'Your Bonehead and your pet sit a little further left, with the space between them unchanged.',
   ] },
   { n: 578, date: '2026-09-11', title: 'Your Bonehead stands on the ground', items: [
     'Your Bonehead has a proper shadow at his feet again instead of floating.',

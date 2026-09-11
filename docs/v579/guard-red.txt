@@ -1,0 +1,195 @@
+=== GREEN: the fix ===
+PASS CONTROL 375x812 C1 bare composited=2,7 pixels=27141,4482
+PASS GROUNDED 375x812 C1 bare shadow=516.06 sole=516 delta=0.06
+PASS CENTRED 375x812 C1 bare shadow=176.75 ink=177
+PASS PET-UNMOVED 375x812 C1 bare pet=522 shipped=522 (character sole=516; a floating pet is not required to share it)
+PASS IN-FRAME 375x812 C1 bare ink=[{"n":27141,"drawn":2,"left":66,"right":288,"top":204,"bottom":516,"cx":177},{"n":4482,"drawn":7,"left":240,"right":329,"top":436,"bottom":522,"cx":284.5}] scene={"left":0,"right":375,"top":31,"bottom":640.765625}
+PASS SHIFT 375x812 C1 bare character=18.5 pet=18.5 expected=18.75 gapDelta=1
+PASS CONTROL 375x812 C1 FW1 composited=3,7 pixels=28915,4482
+PASS GROUNDED 375x812 C1 FW1 shadow=523.06 sole=523 delta=0.06
+PASS CENTRED 375x812 C1 FW1 shadow=176.75 ink=177
+PASS PET-UNMOVED 375x812 C1 FW1 pet=522 shipped=522 (character sole=523; a floating pet is not required to share it)
+PASS IN-FRAME 375x812 C1 FW1 ink=[{"n":28915,"drawn":3,"left":66,"right":288,"top":204,"bottom":523,"cx":177},{"n":4482,"drawn":7,"left":240,"right":329,"top":436,"bottom":522,"cx":284.5}] scene={"left":0,"right":375,"top":31,"bottom":640.765625}
+PASS SHIFT 375x812 C1 FW1 character=18.5 pet=18.5 expected=18.75 gapDelta=1
+PASS CONTROL 375x812 C1 FW3 composited=3,7 pixels=28813,4482
+PASS GROUNDED 375x812 C1 FW3 shadow=523.06 sole=523 delta=0.06
+PASS CENTRED 375x812 C1 FW3 shadow=176.75 ink=177
+PASS PET-UNMOVED 375x812 C1 FW3 pet=522 shipped=522 (character sole=523; a floating pet is not required to share it)
+PASS IN-FRAME 375x812 C1 FW3 ink=[{"n":28813,"drawn":3,"left":66,"right":288,"top":204,"bottom":523,"cx":177},{"n":4482,"drawn":7,"left":240,"right":329,"top":436,"bottom":522,"cx":284.5}] scene={"left":0,"right":375,"top":31,"bottom":640.765625}
+PASS SHIFT 375x812 C1 FW3 character=18.5 pet=18.5 expected=18.75 gapDelta=1
+PASS CONTROL 375x812 C1 FW7-1 composited=3,7 pixels=28396,4482
+PASS GROUNDED 375x812 C1 FW7-1 shadow=519.06 sole=519 delta=0.06
+PASS CENTRED 375x812 C1 FW7-1 shadow=176.75 ink=177
+PASS PET-UNMOVED 375x812 C1 FW7-1 pet=522 shipped=522 (character sole=519; a floating pet is not required to share it)
+PASS IN-FRAME 375x812 C1 FW7-1 ink=[{"n":28396,"drawn":3,"left":66,"right":288,"top":204,"bottom":519,"cx":177},{"n":4482,"drawn":7,"left":240,"right":329,"top":436,"bottom":522,"cx":284.5}] scene={"left":0,"right":375,"top":31,"bottom":640.765625}
+PASS SHIFT 375x812 C1 FW7-1 character=18.5 pet=18.5 expected=18.75 gapDelta=1
+PASS CONTROL 375x812 C6 bare composited=2,1 pixels=27147,10446
+PASS GROUNDED 375x812 C6 bare shadow=516.06 sole=516 delta=0.06
+PASS CENTRED 375x812 C6 bare shadow=151.55 ink=151.5
+PASS PET-UNMOVED 375x812 C6 bare pet=532 shipped=532 (character sole=516; a floating pet is not required to share it)
+PASS IN-FRAME 375x812 C6 bare ink=[{"n":27147,"drawn":2,"left":41,"right":262,"top":204,"bottom":516,"cx":151.5},{"n":10446,"drawn":1,"left":195,"right":324,"top":404,"bottom":532,"cx":259.5}] scene={"left":0,"right":375,"top":31,"bottom":640.765625}
+PASS SHIFT 375x812 C6 bare character=19 pet=19 expected=18.75 gapDelta=0
+PASS CONTROL 375x812 C6 FW1 composited=3,1 pixels=28920,10446
+PASS GROUNDED 375x812 C6 FW1 shadow=523.06 sole=523 delta=0.06
+PASS CENTRED 375x812 C6 FW1 shadow=151.55 ink=151.5
+PASS PET-UNMOVED 375x812 C6 FW1 pet=532 shipped=532 (character sole=523; a floating pet is not required to share it)
+PASS IN-FRAME 375x812 C6 FW1 ink=[{"n":28920,"drawn":3,"left":41,"right":262,"top":204,"bottom":523,"cx":151.5},{"n":10446,"drawn":1,"left":195,"right":324,"top":404,"bottom":532,"cx":259.5}] scene={"left":0,"right":375,"top":31,"bottom":640.765625}
+PASS SHIFT 375x812 C6 FW1 character=19 pet=19 expected=18.75 gapDelta=0
+PASS CONTROL 375x812 C6 FW3 composited=3,1 pixels=28811,10446
+PASS GROUNDED 375x812 C6 FW3 shadow=523.06 sole=523 delta=0.06
+PASS CENTRED 375x812 C6 FW3 shadow=151.55 ink=151.5
+PASS PET-UNMOVED 375x812 C6 FW3 pet=532 shipped=532 (character sole=523; a floating pet is not required to share it)
+PASS IN-FRAME 375x812 C6 FW3 ink=[{"n":28811,"drawn":3,"left":41,"right":262,"top":204,"bottom":523,"cx":151.5},{"n":10446,"drawn":1,"left":195,"right":324,"top":404,"bottom":532,"cx":259.5}] scene={"left":0,"right":375,"top":31,"bottom":640.765625}
+PASS SHIFT 375x812 C6 FW3 character=19 pet=19 expected=18.75 gapDelta=0
+PASS CONTROL 375x812 C6 FW7-1 composited=3,1 pixels=28402,10446
+PASS GROUNDED 375x812 C6 FW7-1 shadow=519.06 sole=519 delta=0.06
+PASS CENTRED 375x812 C6 FW7-1 shadow=151.55 ink=151.5
+PASS PET-UNMOVED 375x812 C6 FW7-1 pet=532 shipped=532 (character sole=519; a floating pet is not required to share it)
+PASS IN-FRAME 375x812 C6 FW7-1 ink=[{"n":28402,"drawn":3,"left":41,"right":262,"top":204,"bottom":519,"cx":151.5},{"n":10446,"drawn":1,"left":195,"right":324,"top":404,"bottom":532,"cx":259.5}] scene={"left":0,"right":375,"top":31,"bottom":640.765625}
+PASS SHIFT 375x812 C6 FW7-1 character=19 pet=19 expected=18.75 gapDelta=0
+PASS CONTROL 430x932 C1 bare composited=2,7 pixels=31154,4499
+PASS GROUNDED 430x932 C1 bare shadow=546.00 sole=546 delta=0.00
+PASS CENTRED 430x932 C1 bare shadow=202.00 ink=202
+PASS PET-UNMOVED 430x932 C1 bare pet=553 shipped=553 (character sole=546; a floating pet is not required to share it)
+PASS IN-FRAME 430x932 C1 bare ink=[{"n":31154,"drawn":2,"left":83,"right":321,"top":211,"bottom":546,"cx":202},{"n":4499,"drawn":7,"left":277,"right":366,"top":467,"bottom":553,"cx":321.5}] scene={"left":0,"right":430,"top":31,"bottom":672}
+PASS SHIFT 430x932 C1 bare character=21.5 pet=21.5 expected=21.5 gapDelta=1
+PASS CONTROL 430x932 C1 FW1 composited=3,7 pixels=33201,4499
+PASS GROUNDED 430x932 C1 FW1 shadow=552.00 sole=552 delta=0.00
+PASS CENTRED 430x932 C1 FW1 shadow=202.00 ink=202
+PASS PET-UNMOVED 430x932 C1 FW1 pet=553 shipped=553 (character sole=552; a floating pet is not required to share it)
+PASS IN-FRAME 430x932 C1 FW1 ink=[{"n":33201,"drawn":3,"left":83,"right":321,"top":211,"bottom":552,"cx":202},{"n":4499,"drawn":7,"left":277,"right":366,"top":467,"bottom":553,"cx":321.5}] scene={"left":0,"right":430,"top":31,"bottom":672}
+PASS SHIFT 430x932 C1 FW1 character=21.5 pet=21.5 expected=21.5 gapDelta=1
+PASS CONTROL 430x932 C1 FW3 composited=3,7 pixels=33092,4499
+PASS GROUNDED 430x932 C1 FW3 shadow=553.00 sole=553 delta=0.00
+PASS CENTRED 430x932 C1 FW3 shadow=202.00 ink=202
+PASS PET-UNMOVED 430x932 C1 FW3 pet=553 shipped=553 (character sole=553; a floating pet is not required to share it)
+PASS IN-FRAME 430x932 C1 FW3 ink=[{"n":33092,"drawn":3,"left":83,"right":321,"top":211,"bottom":553,"cx":202},{"n":4499,"drawn":7,"left":277,"right":366,"top":467,"bottom":553,"cx":321.5}] scene={"left":0,"right":430,"top":31,"bottom":672}
+PASS SHIFT 430x932 C1 FW3 character=21.5 pet=21.5 expected=21.5 gapDelta=1
+PASS CONTROL 430x932 C1 FW7-1 composited=3,7 pixels=32596,4499
+PASS GROUNDED 430x932 C1 FW7-1 shadow=549.00 sole=549 delta=0.00
+PASS CENTRED 430x932 C1 FW7-1 shadow=202.00 ink=202
+PASS PET-UNMOVED 430x932 C1 FW7-1 pet=553 shipped=553 (character sole=549; a floating pet is not required to share it)
+PASS IN-FRAME 430x932 C1 FW7-1 ink=[{"n":32596,"drawn":3,"left":83,"right":321,"top":211,"bottom":549,"cx":202},{"n":4499,"drawn":7,"left":277,"right":366,"top":467,"bottom":553,"cx":321.5}] scene={"left":0,"right":430,"top":31,"bottom":672}
+PASS SHIFT 430x932 C1 FW7-1 character=21.5 pet=21.5 expected=21.5 gapDelta=1
+PASS CONTROL 430x932 C6 bare composited=2,1 pixels=31155,12010
+PASS GROUNDED 430x932 C6 bare shadow=546.00 sole=546 delta=0.00
+PASS CENTRED 430x932 C6 bare shadow=174.98 ink=175
+PASS PET-UNMOVED 430x932 C6 bare pet=564 shipped=564 (character sole=546; a floating pet is not required to share it)
+PASS IN-FRAME 430x932 C6 bare ink=[{"n":31155,"drawn":2,"left":56,"right":294,"top":211,"bottom":546,"cx":175},{"n":12010,"drawn":1,"left":221,"right":360,"top":426,"bottom":564,"cx":290.5}] scene={"left":0,"right":430,"top":31,"bottom":672}
+PASS SHIFT 430x932 C6 bare character=21.5 pet=22 expected=21.5 gapDelta=1
+PASS CONTROL 430x932 C6 FW1 composited=3,1 pixels=33200,12010
+PASS GROUNDED 430x932 C6 FW1 shadow=552.00 sole=552 delta=0.00
+PASS CENTRED 430x932 C6 FW1 shadow=174.98 ink=175
+PASS PET-UNMOVED 430x932 C6 FW1 pet=564 shipped=564 (character sole=552; a floating pet is not required to share it)
+PASS IN-FRAME 430x932 C6 FW1 ink=[{"n":33200,"drawn":3,"left":56,"right":294,"top":211,"bottom":552,"cx":175},{"n":12010,"drawn":1,"left":221,"right":360,"top":426,"bottom":564,"cx":290.5}] scene={"left":0,"right":430,"top":31,"bottom":672}
+PASS SHIFT 430x932 C6 FW1 character=21.5 pet=22 expected=21.5 gapDelta=1
+PASS CONTROL 430x932 C6 FW3 composited=3,1 pixels=33093,12010
+PASS GROUNDED 430x932 C6 FW3 shadow=553.00 sole=553 delta=0.00
+PASS CENTRED 430x932 C6 FW3 shadow=174.98 ink=175
+PASS PET-UNMOVED 430x932 C6 FW3 pet=564 shipped=564 (character sole=553; a floating pet is not required to share it)
+PASS IN-FRAME 430x932 C6 FW3 ink=[{"n":33093,"drawn":3,"left":56,"right":294,"top":211,"bottom":553,"cx":175},{"n":12010,"drawn":1,"left":221,"right":360,"top":426,"bottom":564,"cx":290.5}] scene={"left":0,"right":430,"top":31,"bottom":672}
+PASS SHIFT 430x932 C6 FW3 character=21.5 pet=22 expected=21.5 gapDelta=1
+PASS CONTROL 430x932 C6 FW7-1 composited=3,1 pixels=32596,12010
+PASS GROUNDED 430x932 C6 FW7-1 shadow=549.00 sole=549 delta=0.00
+PASS CENTRED 430x932 C6 FW7-1 shadow=174.98 ink=175
+PASS PET-UNMOVED 430x932 C6 FW7-1 pet=564 shipped=564 (character sole=549; a floating pet is not required to share it)
+PASS IN-FRAME 430x932 C6 FW7-1 ink=[{"n":32596,"drawn":3,"left":56,"right":294,"top":211,"bottom":549,"cx":175},{"n":12010,"drawn":1,"left":221,"right":360,"top":426,"bottom":564,"cx":290.5}] scene={"left":0,"right":430,"top":31,"bottom":672}
+PASS SHIFT 430x932 C6 FW7-1 character=21.5 pet=22 expected=21.5 gapDelta=1
+
+=== RED: live v578 ===
+PASS CONTROL 375x812 C1 bare composited=2,7 pixels=27142,4495
+FAIL GROUNDED 375x812 C1 bare shadow=538.77 sole=516 delta=22.77
+FAIL CENTRED 375x812 C1 bare shadow=168.75 ink=195.5
+PASS PET-UNMOVED 375x812 C1 bare pet=522 shipped=522 (character sole=516; a floating pet is not required to share it)
+PASS IN-FRAME 375x812 C1 bare ink=[{"n":27142,"drawn":2,"left":85,"right":306,"top":204,"bottom":516,"cx":195.5},{"n":4495,"drawn":7,"left":259,"right":347,"top":436,"bottom":522,"cx":303}] scene={"left":0,"right":375,"top":31,"bottom":640.765625}
+FAIL SHIFT 375x812 C1 bare character=0 pet=0 expected=18.75 gapDelta=0
+PASS CONTROL 375x812 C1 FW1 composited=3,7 pixels=28912,4495
+FAIL GROUNDED 375x812 C1 FW1 shadow=538.77 sole=523 delta=15.77
+FAIL CENTRED 375x812 C1 FW1 shadow=168.75 ink=195.5
+PASS PET-UNMOVED 375x812 C1 FW1 pet=522 shipped=522 (character sole=523; a floating pet is not required to share it)
+PASS IN-FRAME 375x812 C1 FW1 ink=[{"n":28912,"drawn":3,"left":85,"right":306,"top":204,"bottom":523,"cx":195.5},{"n":4495,"drawn":7,"left":259,"right":347,"top":436,"bottom":522,"cx":303}] scene={"left":0,"right":375,"top":31,"bottom":640.765625}
+FAIL SHIFT 375x812 C1 FW1 character=0 pet=0 expected=18.75 gapDelta=0
+PASS CONTROL 375x812 C1 FW3 composited=3,7 pixels=28801,4495
+FAIL GROUNDED 375x812 C1 FW3 shadow=538.77 sole=523 delta=15.77
+FAIL CENTRED 375x812 C1 FW3 shadow=168.75 ink=195.5
+PASS PET-UNMOVED 375x812 C1 FW3 pet=522 shipped=522 (character sole=523; a floating pet is not required to share it)
+PASS IN-FRAME 375x812 C1 FW3 ink=[{"n":28801,"drawn":3,"left":85,"right":306,"top":204,"bottom":523,"cx":195.5},{"n":4495,"drawn":7,"left":259,"right":347,"top":436,"bottom":522,"cx":303}] scene={"left":0,"right":375,"top":31,"bottom":640.765625}
+FAIL SHIFT 375x812 C1 FW3 character=0 pet=0 expected=18.75 gapDelta=0
+PASS CONTROL 375x812 C1 FW7-1 composited=3,7 pixels=28392,4495
+FAIL GROUNDED 375x812 C1 FW7-1 shadow=538.77 sole=519 delta=19.77
+FAIL CENTRED 375x812 C1 FW7-1 shadow=168.75 ink=195.5
+PASS PET-UNMOVED 375x812 C1 FW7-1 pet=522 shipped=522 (character sole=519; a floating pet is not required to share it)
+PASS IN-FRAME 375x812 C1 FW7-1 ink=[{"n":28392,"drawn":3,"left":85,"right":306,"top":204,"bottom":519,"cx":195.5},{"n":4495,"drawn":7,"left":259,"right":347,"top":436,"bottom":522,"cx":303}] scene={"left":0,"right":375,"top":31,"bottom":640.765625}
+FAIL SHIFT 375x812 C1 FW7-1 character=0 pet=0 expected=18.75 gapDelta=0
+PASS CONTROL 375x812 C6 bare composited=2,1 pixels=27131,10445
+FAIL GROUNDED 375x812 C6 bare shadow=538.77 sole=516 delta=22.77
+PASS CENTRED 375x812 C6 bare shadow=168.75 ink=170.5
+PASS PET-UNMOVED 375x812 C6 bare pet=532 shipped=532 (character sole=516; a floating pet is not required to share it)
+PASS IN-FRAME 375x812 C6 bare ink=[{"n":27131,"drawn":2,"left":60,"right":281,"top":204,"bottom":516,"cx":170.5},{"n":10445,"drawn":1,"left":214,"right":343,"top":404,"bottom":532,"cx":278.5}] scene={"left":0,"right":375,"top":31,"bottom":640.765625}
+FAIL SHIFT 375x812 C6 bare character=0 pet=0 expected=18.75 gapDelta=0
+PASS CONTROL 375x812 C6 FW1 composited=3,1 pixels=28896,10445
+FAIL GROUNDED 375x812 C6 FW1 shadow=538.77 sole=523 delta=15.77
+PASS CENTRED 375x812 C6 FW1 shadow=168.75 ink=170.5
+PASS PET-UNMOVED 375x812 C6 FW1 pet=532 shipped=532 (character sole=523; a floating pet is not required to share it)
+PASS IN-FRAME 375x812 C6 FW1 ink=[{"n":28896,"drawn":3,"left":60,"right":281,"top":204,"bottom":523,"cx":170.5},{"n":10445,"drawn":1,"left":214,"right":343,"top":404,"bottom":532,"cx":278.5}] scene={"left":0,"right":375,"top":31,"bottom":640.765625}
+FAIL SHIFT 375x812 C6 FW1 character=0 pet=0 expected=18.75 gapDelta=0
+PASS CONTROL 375x812 C6 FW3 composited=3,1 pixels=28787,10445
+FAIL GROUNDED 375x812 C6 FW3 shadow=538.77 sole=523 delta=15.77
+PASS CENTRED 375x812 C6 FW3 shadow=168.75 ink=170.5
+PASS PET-UNMOVED 375x812 C6 FW3 pet=532 shipped=532 (character sole=523; a floating pet is not required to share it)
+PASS IN-FRAME 375x812 C6 FW3 ink=[{"n":28787,"drawn":3,"left":60,"right":281,"top":204,"bottom":523,"cx":170.5},{"n":10445,"drawn":1,"left":214,"right":343,"top":404,"bottom":532,"cx":278.5}] scene={"left":0,"right":375,"top":31,"bottom":640.765625}
+FAIL SHIFT 375x812 C6 FW3 character=0 pet=0 expected=18.75 gapDelta=0
+PASS CONTROL 375x812 C6 FW7-1 composited=3,1 pixels=28379,10445
+FAIL GROUNDED 375x812 C6 FW7-1 shadow=538.77 sole=519 delta=19.77
+PASS CENTRED 375x812 C6 FW7-1 shadow=168.75 ink=170.5
+PASS PET-UNMOVED 375x812 C6 FW7-1 pet=532 shipped=532 (character sole=519; a floating pet is not required to share it)
+PASS IN-FRAME 375x812 C6 FW7-1 ink=[{"n":28379,"drawn":3,"left":60,"right":281,"top":204,"bottom":519,"cx":170.5},{"n":10445,"drawn":1,"left":214,"right":343,"top":404,"bottom":532,"cx":278.5}] scene={"left":0,"right":375,"top":31,"bottom":640.765625}
+FAIL SHIFT 375x812 C6 FW7-1 character=0 pet=0 expected=18.75 gapDelta=0
+PASS CONTROL 430x932 C1 bare composited=2,7 pixels=31150,4494
+FAIL GROUNDED 430x932 C1 bare shadow=570.00 sole=546 delta=24.00
+FAIL CENTRED 430x932 C1 bare shadow=193.50 ink=223.5
+PASS PET-UNMOVED 430x932 C1 bare pet=553 shipped=553 (character sole=546; a floating pet is not required to share it)
+PASS IN-FRAME 430x932 C1 bare ink=[{"n":31150,"drawn":2,"left":105,"right":342,"top":211,"bottom":546,"cx":223.5},{"n":4494,"drawn":7,"left":299,"right":387,"top":467,"bottom":553,"cx":343}] scene={"left":0,"right":430,"top":31,"bottom":672}
+FAIL SHIFT 430x932 C1 bare character=0 pet=0 expected=21.5 gapDelta=0
+PASS CONTROL 430x932 C1 FW1 composited=3,7 pixels=33190,4494
+FAIL GROUNDED 430x932 C1 FW1 shadow=570.00 sole=552 delta=18.00
+FAIL CENTRED 430x932 C1 FW1 shadow=193.50 ink=223.5
+PASS PET-UNMOVED 430x932 C1 FW1 pet=553 shipped=553 (character sole=552; a floating pet is not required to share it)
+PASS IN-FRAME 430x932 C1 FW1 ink=[{"n":33190,"drawn":3,"left":105,"right":342,"top":211,"bottom":552,"cx":223.5},{"n":4494,"drawn":7,"left":299,"right":387,"top":467,"bottom":553,"cx":343}] scene={"left":0,"right":430,"top":31,"bottom":672}
+FAIL SHIFT 430x932 C1 FW1 character=0 pet=0 expected=21.5 gapDelta=0
+PASS CONTROL 430x932 C1 FW3 composited=3,7 pixels=33077,4494
+FAIL GROUNDED 430x932 C1 FW3 shadow=570.00 sole=553 delta=17.00
+FAIL CENTRED 430x932 C1 FW3 shadow=193.50 ink=223.5
+PASS PET-UNMOVED 430x932 C1 FW3 pet=553 shipped=553 (character sole=553; a floating pet is not required to share it)
+PASS IN-FRAME 430x932 C1 FW3 ink=[{"n":33077,"drawn":3,"left":105,"right":342,"top":211,"bottom":553,"cx":223.5},{"n":4494,"drawn":7,"left":299,"right":387,"top":467,"bottom":553,"cx":343}] scene={"left":0,"right":430,"top":31,"bottom":672}
+FAIL SHIFT 430x932 C1 FW3 character=0 pet=0 expected=21.5 gapDelta=0
+PASS CONTROL 430x932 C1 FW7-1 composited=3,7 pixels=32591,4494
+FAIL GROUNDED 430x932 C1 FW7-1 shadow=570.00 sole=549 delta=21.00
+FAIL CENTRED 430x932 C1 FW7-1 shadow=193.50 ink=223.5
+PASS PET-UNMOVED 430x932 C1 FW7-1 pet=553 shipped=553 (character sole=549; a floating pet is not required to share it)
+PASS IN-FRAME 430x932 C1 FW7-1 ink=[{"n":32591,"drawn":3,"left":105,"right":342,"top":211,"bottom":549,"cx":223.5},{"n":4494,"drawn":7,"left":299,"right":387,"top":467,"bottom":553,"cx":343}] scene={"left":0,"right":430,"top":31,"bottom":672}
+FAIL SHIFT 430x932 C1 FW7-1 character=0 pet=0 expected=21.5 gapDelta=0
+PASS CONTROL 430x932 C6 bare composited=2,1 pixels=31149,11964
+FAIL GROUNDED 430x932 C6 bare shadow=570.00 sole=546 delta=24.00
+PASS CENTRED 430x932 C6 bare shadow=193.50 ink=196.5
+PASS PET-UNMOVED 430x932 C6 bare pet=564 shipped=564 (character sole=546; a floating pet is not required to share it)
+PASS IN-FRAME 430x932 C6 bare ink=[{"n":31149,"drawn":2,"left":78,"right":315,"top":211,"bottom":546,"cx":196.5},{"n":11964,"drawn":1,"left":243,"right":382,"top":426,"bottom":564,"cx":312.5}] scene={"left":0,"right":430,"top":31,"bottom":672}
+FAIL SHIFT 430x932 C6 bare character=0 pet=0 expected=21.5 gapDelta=0
+PASS CONTROL 430x932 C6 FW1 composited=3,1 pixels=33192,11964
+FAIL GROUNDED 430x932 C6 FW1 shadow=570.00 sole=552 delta=18.00
+PASS CENTRED 430x932 C6 FW1 shadow=193.50 ink=196.5
+PASS PET-UNMOVED 430x932 C6 FW1 pet=564 shipped=564 (character sole=552; a floating pet is not required to share it)
+PASS IN-FRAME 430x932 C6 FW1 ink=[{"n":33192,"drawn":3,"left":78,"right":315,"top":211,"bottom":552,"cx":196.5},{"n":11964,"drawn":1,"left":243,"right":382,"top":426,"bottom":564,"cx":312.5}] scene={"left":0,"right":430,"top":31,"bottom":672}
+FAIL SHIFT 430x932 C6 FW1 character=0 pet=0 expected=21.5 gapDelta=0
+PASS CONTROL 430x932 C6 FW3 composited=3,1 pixels=33076,11964
+FAIL GROUNDED 430x932 C6 FW3 shadow=570.00 sole=553 delta=17.00
+PASS CENTRED 430x932 C6 FW3 shadow=193.50 ink=196.5
+PASS PET-UNMOVED 430x932 C6 FW3 pet=564 shipped=564 (character sole=553; a floating pet is not required to share it)
+PASS IN-FRAME 430x932 C6 FW3 ink=[{"n":33076,"drawn":3,"left":78,"right":315,"top":211,"bottom":553,"cx":196.5},{"n":11964,"drawn":1,"left":243,"right":382,"top":426,"bottom":564,"cx":312.5}] scene={"left":0,"right":430,"top":31,"bottom":672}
+FAIL SHIFT 430x932 C6 FW3 character=0 pet=0 expected=21.5 gapDelta=0
+PASS CONTROL 430x932 C6 FW7-1 composited=3,1 pixels=32590,11964
+FAIL GROUNDED 430x932 C6 FW7-1 shadow=570.00 sole=549 delta=21.00
+PASS CENTRED 430x932 C6 FW7-1 shadow=193.50 ink=196.5
+PASS PET-UNMOVED 430x932 C6 FW7-1 pet=564 shipped=564 (character sole=549; a floating pet is not required to share it)
+PASS IN-FRAME 430x932 C6 FW7-1 ink=[{"n":32590,"drawn":3,"left":78,"right":315,"top":211,"bottom":549,"cx":196.5},{"n":11964,"drawn":1,"left":243,"right":382,"top":426,"bottom":564,"cx":312.5}] scene={"left":0,"right":430,"top":31,"bottom":672}
+FAIL SHIFT 430x932 C6 FW7-1 character=0 pet=0 expected=21.5 gapDelta=0
