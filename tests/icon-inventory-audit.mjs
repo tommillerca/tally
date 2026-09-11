@@ -184,6 +184,7 @@ const EMITTERS = {
   'js/app.js:proteinChart':       ['chart', 'the protein history.'],
   'js/app.js:metricSpark':        ['chart', 'the wellness sparkline.'],
   'js/app.js:metricDetailChart':  ['chart', 'the expanded wellness metric.'],
+  'js/app.js:activityRecoveryHtml': ['chart', 'real activity mix bars with existing walking/hiking and strength pixel artwork.'],
   'js/app.js:readinessHtml':      ['chart', 'the readiness dial.'],
   'js/app.js:calorieRingCard':    ['chart', 'the calorie ring, drawn on Today AND on Trends from this one function.'],
   /* ---- scene, stage and character art: sized by layout, not by an icon size ---- */

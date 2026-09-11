@@ -10,6 +10,10 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 565, date: '2026-09-10', title: 'Clearer readiness', items: [
+    'Readiness has clearer metric tiles with heart, pulse and moon icons, dated readings and activity artwork.',
+  ] },
+
   { n: 564, date: '2026-09-10', title: 'A clearer Crew', items: [
     'Crew has separate friend actions, a larger favourite star, and the Step Race above the standings.',
   ] },

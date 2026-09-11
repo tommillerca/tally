@@ -12113,3 +12113,17 @@ button.t3-price::before {
 #cfanClear { position: static; flex: none; width: 44px; height: 44px; }
 #cfanSnapshot { font-size: var(--fs-0); color: var(--text-3); }
 #cfanDeck .cfan-stage::after { content: none; background: none; }
+
+/* Approved screen 1D: readiness metrics only. No figure or arena consumers. */
+.rd-card .rd-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; align-items: stretch; }
+.rd-card .rd-tile { min-width: 0; min-height: 148px; padding: 12px 9px; background: var(--surface); text-align: left; align-items: flex-start; gap: 0; }
+.rd-card .rd-tile::after { content: none; }
+.rd-card .rd-icon { height: 30px; display: flex; align-items: center; margin-bottom: 9px; flex: none; }
+.rd-card .rd-icon svg { width: 22px; height: 22px; display: block; }
+.rd-card .rd-icon img { object-fit: contain; }
+.rd-card .rd-tile .rl { font-size: var(--fs-micro); font-weight: 750; letter-spacing: .05em; }
+.rd-card .rd-tile .rv { font-size: calc(var(--fs-body) * 1.4375); font-weight: 750; line-height: 1.1; margin-top: 6px; }
+.rd-card .rd-tile .rv small { font-size: var(--fs-tiny); font-weight: 500; }
+.rd-card .rd-delta { font-size: var(--fs-tiny); margin-top: 7px; color: var(--text-2); line-height: 1.4; overflow-wrap: anywhere; }
+.rd-card .rd-delta i { font-size: inherit; }
+.rd-activities .rd-activity-icon { object-fit: contain; flex: none; }

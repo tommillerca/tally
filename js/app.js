@@ -11922,7 +11922,11 @@ function readinessHtml(r) {
   const arrow = (v, goodLow) => v == null ? '' : (goodLow
     ? (v < 0 ? `<i class="up">${ICONS.down(10)}${Math.abs(Math.round(v))}</i>` : v > 0 ? `<i class="warn">${ICONS.up(10)}${Math.round(v)}</i>` : '')
     : (v > 0 ? `<i class="up">${ICONS.up(10)}${Math.round(v)}</i>` : v < 0 ? `<i class="warn">${ICONS.down(10)}${Math.abs(Math.round(v))}</i>` : ''));
-  const tile = (mk, lab, val, unit, tr) => `<button class="rd-tile${mk ? '' : ' static'}"${mk ? ` data-metric="${mk}"` : ''}><span class="rl">${lab}</span><span class="rv">${val}<small>${unit}</small></span>${tr}</button>`;
+  // Approved 1D icons, local to readiness presentation.
+  const heartIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path shape-rendering="crispEdges" fill="#ff8b81" d="M3 5h6v2h2v2h2V7h2V5h6v2h2v8h-2v2h-2v2h-2v2h-2v2H9v-2H7v-2H5v-2H3v-2H1V7h2z"/><path shape-rendering="crispEdges" fill="#ffd9bf" d="M4 8h4v2H6v3H4z"/></svg>`;
+  const pulseIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="#7cc4ff" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" d="M2 13h5l3-8 4 15 3-9 2 2h3"/></svg>`;
+  const moonIcon = '<img class="ico pix-cur" src="assets/icons-pix/moon.png" width="26" height="26" alt="">';
+  const tile = (mk, lab, val, unit, tr) => `<button class="rd-tile${mk ? '' : ' static'}"${mk ? ` data-metric="${mk}"` : ''}><span class="rd-icon">${mk === 'restingHr' ? heartIcon : pulseIcon}</span><span class="rl">${lab}</span><span class="rv">${val}<small>${unit}</small></span><span class="rd-delta">${tr}</span></button>`;
   const hm = h => `${Math.floor(h)}h${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
   // Sleep tile: when the watch gave us a score, that's the headline (Tom wanted
   // the sleep score shown) with hours beneath, and it's tappable for the stage
@@ -11931,17 +11935,17 @@ function readinessHtml(r) {
   // night, say which night instead of passing it off as last night's.
   const slStale = !!(r.slDate && r.slDate !== dateKey());
   const sleepTile = (r.slScore != null && !slStale)
-    ? `<button class="rd-tile" data-sleepdetail="1"><span class="rl">Sleep score</span><span class="rv">${r.slScore}</span>${r.slL != null ? `<i>${hm(r.slL)}</i>` : ''}</button>`
+    ? `<button class="rd-tile" data-sleepdetail="1"><span class="rd-icon">${moonIcon}</span><span class="rl">Sleep score</span><span class="rv">${r.slScore}</span><span class="rd-delta">${r.slL != null ? hm(r.slL) : ''}</span></button>`
     : r.slL != null
-      ? `<button class="rd-tile" data-sleepdetail="1"><span class="rl">Sleep${slStale ? ` · ${r.slDate.slice(5)}` : ''}</span><span class="rv">${hm(r.slL)}</span>${slStale ? '<i class="warn">not last night</i>' : ''}</button>`
-      : `<button class="rd-tile static"><span class="rl">Sleep</span><span class="rv">&mdash;</span></button>`;
+      ? `<button class="rd-tile" data-sleepdetail="1"><span class="rd-icon">${moonIcon}</span><span class="rl">Sleep</span><span class="rv">${hm(r.slL)}</span><span class="rd-delta">${slStale ? `${r.slDate.slice(5)} · not last night` : ''}</span></button>`
+      : `<button class="rd-tile static"><span class="rd-icon">${moonIcon}</span><span class="rl">Sleep</span><span class="rv">·</span><span class="rd-delta">No reading</span></button>`;
   /* Same rule as the sleep tile above: if the newest reading is not from today,
      say which day it is from instead of passing it off as current. An undated
      tile is how a broken heart read hides in plain sight. */
   const dayTag = d => (d && d !== dateKey()) ? ` · ${d.slice(5)}` : '';
   const tiles = [
-    r.rhrL != null ? tile('restingHr', `Resting HR${dayTag(r.rhrDate)}`, Math.round(r.rhrL), 'bpm', arrow(r.rhrL - r.rhrB, true)) : '',
-    r.hrvL != null ? tile('hrv', `HRV${dayTag(r.hrvDate)}`, Math.round(r.hrvL), 'ms', arrow(r.hrvL - r.hrvB, false)) : '',
+    r.rhrL != null ? tile('restingHr', 'Resting HR', Math.round(r.rhrL), 'bpm', arrow(r.rhrL - r.rhrB, true) + dayTag(r.rhrDate)) : '',
+    r.hrvL != null ? tile('hrv', 'HRV', Math.round(r.hrvL), 'ms', arrow(r.hrvL - r.hrvB, false) + dayTag(r.hrvDate)) : '',
     sleepTile,
   ].filter(Boolean).join('');
   return `<div class="card rd-card">
@@ -11988,7 +11992,7 @@ async function openSleepDetail() {
   const bar = staged
     ? `<div class="sleep-bar">${stages.filter(s => s.m > 0).map(s => `<i style="flex:${s.m};background:${s.col}"></i>`).join('')}</div>
        <div class="sleep-legend">${stages.filter(s => s.m > 0).map(s => `<div class="sl-row"><span class="sl-dot" style="background:${s.col}"></span><span class="sl-k">${s.k}</span><span class="sl-m">${hm(s.m)}</span><span class="sl-p">${Math.round(s.m / tot * 100)}%</span></div>`).join('')}</div>`
-    : `<p class="note" style="margin:10px 0 0">Stage breakdown (deep / REM / core) needs an Apple Watch worn to bed. ${r.sleepAuto ? 'Your watch logged the hours but not the stages last night.' : 'This night was logged by hand.'}</p>`;
+    : `<p class="note" style="margin:10px 0 0">Stage breakdown (deep / REM / core) needs an Apple Watch worn to bed. ${r.sleepAuto ? 'Your watch logged the hours but not the stages this night.' : 'This night was logged by hand.'}</p>`;
   const bandCol = sc >= 80 ? 'var(--accent)' : sc >= 60 ? '#5fe6d0' : 'var(--gold)';
   const when = r.date === dateKey() ? 'Last night' : `Night of ${r.date}`;
   const html = `<button class="sheet-close" style="position:absolute;top:12px;right:14px;z-index:2">Close</button>
@@ -12030,7 +12034,7 @@ function activityRecoveryHtml(days) {
     const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
     if (!rows.length) return '';
     const max = rows[0][1];
-    return `<div class="card"><div class="card-title">YOUR ACTIVITIES · LAST 8 WEEKS</div>${rows.map(([t, c]) => `<div class="mix-row"><span class="mix-lab">${WORKOUT_LABEL[t] || t}</span><div class="mix-bar"><i style="width:${Math.round(c / max * 100)}%"></i></div><span class="mix-n">${c}</span></div>`).join('')}<p class="note" style="margin-top:9px">Your real workout mix, straight from your watch. New activities show up here on their own.</p></div>`;
+    return `<div class="card rd-activities"><div class="card-title">YOUR ACTIVITIES · LAST 8 WEEKS</div>${rows.map(([t, c]) => `<div class="mix-row">${['walking', 'hiking', 'strength'].includes(t) ? `<img class="ico pix-cur rd-activity-icon" src="assets/icons-pix/${t === 'strength' ? 'dumbbell' : 'boot'}.png" width="32" height="32" alt="">` : ''}<span class="mix-lab">${WORKOUT_LABEL[t] || t}</span><div class="mix-bar"><i style="width:${Math.round(c / max * 100)}%"></i></div><span class="mix-n">${c}</span></div>`).join('')}<p class="note" style="margin-top:9px">Your real workout mix, straight from your watch. New activities show up here on their own.</p></div>`;
   })();
 
   // With heart data, lead with the futuristic readiness dashboard.
@@ -24667,7 +24671,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v564'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v565'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

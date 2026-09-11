@@ -225,3 +225,70 @@ Agreed proof on final source: **node tests/unit.test.js**, exit **0**, output **
 The first pass logs remain under /tmp/ui-1c-pure-first and /tmp/ui-1c-pure-first.log: 170 green, 1 red, 0 unproven. The one red was the CSS-boundary finding described above. No production or test source changed during the final corrected pass; only this evidence record was completed afterward. The original fan art helpers, crewCardHtml, applyFan, full profile and fight through EOF compare unchanged against HEAD. Existing Crew browser-audit selectors remain compatible with the retained IDs/classes and those audit files are unchanged.
 
 These PURE counts exclude all browser checks. Rendered ink, overlap, safe-area behavior, operated controls and runtime mounting measurements remain UNPROVEN for independent review. Static figure coverage retains only the six baseline findings described above. No denied action, commit, push, merge or publish occurred.
+
+# Screen 1D readiness, frozen lane, v565 (2026-09-10)
+
+Authority: supplied work order SHA256 a3ee655774ef00a99110bd128b6f1e956af437998206bf9e3eabdfd1aa5f0199 verified. IMPLEMENTATION.md read in full, with reference/layout.css and reference/layout.js. The kit does not exist at its relative path here, so the named external kit was read only. MOCK.html was not read. All edits resolve within this checkout.
+
+## Files and boundaries
+
+- js/app.js: readinessHtml adds the approved heart/pulse SVG paths and existing moon PNG, and consistent icon/label/value/delta spans. Heart recency moves below the value; stale sleep retains date and "not last night". Missing sleep remains a non-actionable tile with an explicit No reading caption. Missing heart tiles and calibration retain existing behavior. Existing data-metric and data-sleepdetail bindings remain intact. The gauge and readinessScore are unchanged, with scoring bytes compared against HEAD. The existing sleep-sheet fallback sentence now says "this night" because it previously mislabeled stale unstaged watch readings. No teardown changes. Activity mix adds existing boot art for walking/hiking and dumbbell for strength. Other supported activities, real counts, ordering and history remain intact. APP_BUILD advances to v565. No figure call site is edited or added; a line-by-line comparison of figure call sites matches HEAD.
+- app.css: appended selectors only, enumerated below. No old CSS changed, preserving 1A, 1B, 1C and the Studio boundary.
+- sw.js: VERSION advances to tally-v565 and boot.png is precached for the newly used existing asset. Moon and dumbbell were already precached. Cache machinery is unchanged. This affects asset availability, not scoring or geometry.
+- version.json: tally-v565 metadata only.
+- js/changelog.js: fourth version stamp, n:565, and the player-facing note only.
+- docs/CLAIMS.md: exact matching Changelog item and numbered PROOF/REACH row. No runtime effects.
+- tests/readiness-ui-1d-audit.mjs: Node VM executes the real scoring and readiness renderer with test-only inputs, checks the locked score tuple, calibration, no-heart result, tile anatomy, stale dates, icon paths, retained action attributes and declared tile minimum height. A missing-icon mutation must fail. This does not prove browser controls or geometry.
+- tests/release-gate.mjs: adds this new PURE guard without removing inherited entries. No runtime effects.
+- UI-IMPLEMENTATION-PROOF.md: this advisory evidence record only.
+
+## Every touched CSS selector
+
+1. .rd-card .rd-tiles: equal grid columns, 7px gaps, stretched heights.
+2. .rd-card .rd-tile: 148px minimum height, flat surface, left alignment and consistent padding.
+3. .rd-card .rd-tile::after: suppresses the legacy decorative top stripe.
+4. .rd-card .rd-icon: common 30px icon row and 9px spacing.
+5. .rd-card .rd-icon svg: approved 22px SVG size.
+6. .rd-card .rd-icon img: contained pixel moon.
+7. .rd-card .rd-tile .rl: common label type.
+8. .rd-card .rd-tile .rv: common value type and spacing.
+9. .rd-card .rd-tile .rv small: real unit type.
+10. .rd-card .rd-delta: common delta/recency type and wrapping.
+11. .rd-card .rd-delta i: existing delta arrows inherit the common size.
+12. .rd-activities .rd-activity-icon: contained 32px existing pixel assets.
+
+All selectors require readiness-only roots. Their descendants are metric text/icons or activity icons, with no figure or arena content. CSS cannot alter the scoring function. No global selector, figure sizing, art file, battle layout, historical navigation or shared handler was modified.
+
+## Proof, failures and limitations
+
+New guard before implementation: node tests/readiness-ui-1d-audit.mjs exited 1, "icon label value delta anatomy". After implementation it exits 0 and rejects the missing-icon mutation. It evaluates the real score tuple as 72 / 96 / 47 / 49 / 72. This is Node proof, not the seven-row browser audit or its seedHealth seam. tests/readiness-audit.mjs is unchanged.
+
+Guard hygiene initially failed because the console evidence did not contain an uppercase CONTROL label. Corrected the evidence label for the existing mutation assertion, without changing or exempting lint rules; guard-hygiene-lint.mjs then exited 0. A patch script stopped at an unmatched release-gate registration string; corrected to insert in the literal. The temporary static figure runner initially exceeded Node's git output buffer, then exposed replacement-string expansion in its source injection. Both runner defects were corrected before accepting any result.
+
+Static figure audit only: executed the unchanged prefix before SETUP GATE with baseline and final app source. Both exit 1 with 6 green rows and the same ONE failing coverage row containing SIX identical call-site contents. Baseline lines: 20425, 21462, 21498, 21501, 21502, 21527. Final lines: 20429, 21466, 21502, 21505, 21506, 21531. These are the work order's six pre-existing sites shifted by inherited and current source line changes. Logs: /tmp/ui-1d-figure-baseline.log and /tmp/ui-1d-figure-final.log. Temporary audit source removed. No seventh site introduced and no baseline finding fixed.
+
+No browser audits, socket binding, screenshots, safe-area or decoded-ink measurements attempted, per the frozen restriction. Readiness browser 7/7, Pit figures 25/25, full figure audit, live controls, tile heights/overflow at 375px/390px/wider, historical navigation and complete sheet dismissal remain UNPROVEN for independent review. No permissions were denied. No commit, push, merge, publish, production data mutation, external-checkout edit, native/ASC-SUBMISSION.md edit or art change attempted.
+
+Reference clarification: the kit's approved moon is assets/icons-pix/moon.png, not an SVG. The existing asset is used exactly. The existing live sleep-score headline and supported activities remain, rather than copying example values or limiting activities to the mock. No impossible requirement was silently redesigned; no functional deviation proposed. Existing health guidance is retained without additions.
+
+Final PURE enumeration and direct exit results will be appended after execution. The inherited tier has 171 entries; the new guard makes 172. Enumeration includes the literal plus every push/unshift using exactly the r6-guards-audit regexes and VM evaluation. Exit 97 counts as UNPROVEN.
+
+Initial agreed unit proof exited 1: 389 passed, 1 failed. The fontscale census correctly rejected four newly declared fixed pixel font sizes. Converted those four to rem equivalents without changing the intended default sizes; no guard weakened. The in-progress first PURE run was interrupted (exit 130) and is not a final census. Process inspection with ps was denied by the sandbox; cancellation succeeded through the existing command session. This was the only permission denial. Final full PURE is restarted against the corrected source.
+
+The fontscale follow-up also requires named ramp tokens, not raw rem values. Final declarations use --fs-micro, --fs-tiny and calc(var(--fs-body) * 1.4375). The second prematurely started PURE pass was also interrupted, exit 130; neither partial pass is claimed.
+
+The next PURE pass found icon-inventory-audit.mjs red: activityRecoveryHtml is now an image emitter and requires inventory classification. Added its exact EMITTERS row as a chart with existing activity artwork. This additional test-file change has no runtime, scoring, figure or arena effect and does not weaken its discovery assertion. The pass was interrupted (exit 130) to restart all entries after this required registration.
+
+A later PURE entry, studio-v4-audit.mjs, rejected the two pixelated declarations because its source guard scans all CSS after the Studio boundary, including unrelated scoped readiness styles. Reused the existing .ico.pix-cur class on the moon/activity PNGs and removed the two new image-rendering declarations. Its existing declaration is unchanged and retains the exact requested pixel treatment. The two readiness selectors now only declare containment (and activity flex sizing). No Studio code, test, existing selector or baseline changed. This is an implementation adjustment, not a visual deviation. That pass was interrupted, exit 130; all entries are restarted after the correction.
+
+## Final verification on corrected source
+
+- Full PURE: **172 green, 0 red, 0 unproven**, overall exit **0**. Census is **79 literal entries + 93 push/unshift additions = 172**. All 171 inherited entries plus the new readiness guard executed. Direct spawnSync.status values were recorded, without pipes. No exit 97, null status or signal in this completed run.
+- Agreed proof: **node tests/unit.test.js**, direct exit **0**, final output **390 passed, 0 failed**.
+- Full unit output: /tmp/ui-1d-pure/unit.test.js.log. Exact literal, additions and resulting inventory: /tmp/ui-1d-pure/inventory.json. Per-entry exits: /tmp/ui-1d-pure/results.json. Runner output: /tmp/ui-1d-pure.log. Runner source: /tmp/ui-1d-pure.cjs.
+- New guard is green and its missing-icon mutation is rejected. Fontscale, icon inventory, Studio v4, inherited 1A/1B/1C guards and guard hygiene all green in the final complete run. No production/test source changed during that run. Only this evidence record was completed afterward.
+- git diff --check passed. Changed files are exactly js/app.js, app.css, sw.js, version.json, js/changelog.js, docs/CLAIMS.md, tests/readiness-ui-1d-audit.mjs, tests/icon-inventory-audit.mjs, tests/release-gate.mjs and UI-IMPLEMENTATION-PROOF.md.
+- Final denied action: ps process inspection, operation not permitted. It did not block completion. Browser verification remains unproven under the work order's socket restriction. No commit, push, merge or publish attempted.
+- Deviations: no functional or visual redesign. Use the reference's actual PNG moon; preserve existing live sleep-score behavior and unsupported-icon activity labels. Reuse existing pixel-image styling and named scalable type tokens to satisfy repository contracts. Four interrupted PURE passes are retained as partial logs under /tmp/ui-1d-pure-interrupted* and are excluded from the final count. The known six static figure findings remain, with unchanged contents.
+
+This is advisory evidence for independent review, not browser approval or publish authorization.

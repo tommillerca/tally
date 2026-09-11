@@ -1,5 +1,11 @@
 # What each patch note claims, and what backs it
 
+## v565 (2026-09-10)
+
+Changelog item: Readiness has clearer metric tiles with heart, pulse and moon icons, dated readings and activity artwork.
+
+1. PROOF: readiness-ui-1d-audit.mjs | REACH: Real scoring and rendered metric markup, stale dates and local icon treatment. Browser geometry, controls and sheet dismissal remain unproven.
+
 ## v564 (2026-09-10)
 
 Changelog item: Crew has separate friend actions, a larger favourite star, and the Step Race above the standings.
