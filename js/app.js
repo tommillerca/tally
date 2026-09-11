@@ -16431,7 +16431,7 @@ async function renderBonehead(el) {
   const title = (me && me.name)
     || (pick && buildDisplayName(pick.adj, pick.noun, pick.num))
     || 'Your Bonehead';
-  el.innerHTML = `<h1 class="page-h1 hub-title">${esc(title)}</h1><div id="chBody"></div>`;
+  el.innerHTML = `<h1 class="page-h1 hub-title"><span class="hub-name">${esc(title)}</span><span class="ward-lv" hidden></span></h1><div id="chBody"></div>`;
   await renderCharacter(el, tab);
 }
 
@@ -16702,10 +16702,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
   body.innerHTML = `
     ${tab === 'wardrobe' ? `
     <div class="ward-head">
-      <span class="ward-lv">Lv ${lvl.level}</span>
-      <span class="ward-rank">${esc(lvl.name)}</span>
+      <span class="ward-rank">${esc(myTitle || todayEarnedTitle(lvl))}</span>
+      <div class="ward-wallet">
       <span class="bh-pill">${ICONS.coin(16)} ${coinBal.toLocaleString()}</span>
       <span class="bh-pill ward-dust">${ICONS.dust(16)} ${dustBal.toLocaleString()}</span>
+      </div>
+      <div class="ward-collection">
       <span class="bh-pill">${ICONS.bone(14)} ${ownedCount} found</span>
       ${boost ? `<span class="bh-pill">${ICONS.boltIco(14)} x${boost}</span>` : ''}
       ${/* THE DOOR TO THE LOOKS COLLECTION. v395 removed the hub's LOOKS card,
@@ -16722,6 +16724,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             with none (the yard prints 24, favourites 6, recents 8, and the looks
             pill beside this one prints N/M). Same .bh-pill as the looks count. */''}
       <span class="bh-pill ward-fits">${fitCount}/${MAX_FITS} fits</span>
+      </div>
     </div>` : tab === 'shop' ? gwartHeroHtml(rk) : `
     <div class="bh-hero mini">
       <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny, petMorph: chMorph, petWear: S.petWear })}</div>
@@ -16770,7 +16773,15 @@ async function renderCharacter(wrap, tab, opts = {}) {
      8: whatever hides something owns un-hiding it), and route() re-decides the
      gear on every navigation, so leaving the hub cannot strand it either. */
   const hubHeading = $('.hub-title', wrap);
-  if (hubHeading) hubHeading.hidden = tab === 'shop';
+  if (hubHeading) {
+    hubHeading.hidden = tab === 'shop';
+    hubHeading.classList.toggle('ward-identity', tab === 'wardrobe');
+    const level = $('.ward-lv', hubHeading);
+    if (level) {
+      level.hidden = tab !== 'wardrobe';
+      level.textContent = `Lv ${lvl.level}`;
+    }
+  }
   const floatingGear = $('#gearBtn');
   if (floatingGear) floatingGear.hidden = tab === 'shop';
   $('#gwGear', body)?.addEventListener('click', () => { location.hash = '#/settings'; });

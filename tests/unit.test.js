@@ -5346,9 +5346,9 @@ test('R23 F8: the fits cap is printed and the save chip stays, ghosted, with its
   assert.equal(bhFamilies(pair).size, 1, 'fixture must have two ids in one family');
   const counts = wardrobeLookCounts(new Set(pair.map(i => i.id)), { H: pair[0].id });
   assert.deepEqual(counts, { collected: 2, total: catalogue.length, alternatives: 1 });
-  const head = (n, lookCounts = counts) => new Function('lvl', 'coinBal', 'dustBal', 'ownedCount', 'boost', 'ICONS', 'sparkIco', 'lookCounts', 'esc', 'fitCount', 'MAX_FITS',
+  const head = (n, lookCounts = counts) => new Function('myTitle', 'todayEarnedTitle', 'lvl', 'coinBal', 'dustBal', 'ownedCount', 'boost', 'ICONS', 'sparkIco', 'lookCounts', 'esc', 'fitCount', 'MAX_FITS',
     'return `' + app.slice(h, hEnd) + '</div>`;')(
-    { level: 1, name: 'x' }, 0, 0, 0, 0, { coin: () => '', dust: () => '', bone: () => '', boltIco: () => '' }, () => '', lookCounts, String, n, MAX);
+    '', lvl => LEVEL_NAMES[Math.min(lvl.level, LEVEL_NAMES.length) - 1], { level: 1, name: 'x' }, 0, 0, 0, 0, { coin: () => '', dust: () => '', bone: () => '', boltIco: () => '' }, () => '', lookCounts, String, n, MAX);
   assert.match(head(5), /<span class="bh-pill ward-fits">5\/6 fits<\/span>/, 'the header does not print 5/6 fits');
   assert.match(head(6), /<span class="bh-pill ward-fits">6\/6 fits<\/span>/, 'the header does not print 6/6 fits');
   const expectLooks = (html, collected, alternatives) => assert.ok(

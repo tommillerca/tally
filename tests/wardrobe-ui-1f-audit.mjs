@@ -80,3 +80,33 @@ assert.equal(events.filter(e=>e[0]==='delete').length,0,'Delete must not mutate 
 await confirm.click();await confirm.click();
 assert.equal(events.filter(e=>e[0]==='delete').length,1,'confirmed deletion is locked against double clicks');
 console.log('PASS real fit bindings in DOM model: toggle state, equip, explicit rename, confirmed delete and duplicate-confirm lock. Browser UNPROVEN.');
+
+// Header grouping: execute the shipped template with real title lookup.
+const headerStart = app.indexOf('    <div class="ward-head">');
+const headerEnd = app.indexOf("` : tab === 'shop'", headerStart);
+const headerTemplate = app.slice(headerStart, headerEnd);
+const names = vm.runInNewContext(read('js/game.js').match(/export const LEVEL_NAMES = (\[[\s\S]*?\]);/)[1]);
+const titleLookup = app.slice(app.indexOf('function todayEarnedTitle('), app.indexOf('async function refreshLevelChip('));
+function header(myTitle, level) {
+  return vm.runInNewContext(titleLookup + '\n`' + headerTemplate + '`', {
+    LEVEL_NAMES:names, lvl:{level}, myTitle, esc:String, coinBal:1234, dustBal:567,
+    ownedCount:8, boost:2, lookCounts:{collected:9,total:100,alternatives:91},
+    fitCount:3, MAX_FITS:6, sparkIco:()=>'', ICONS:{coin:()=>'',dust:()=>'',bone:()=>'',boltIco:()=>''}
+  });
+}
+assert.match(header('',21), /class="ward-rank">Bone Grandmaster<\/span>/);
+assert.match(header('Title 101',21), /class="ward-rank">Title 101<\/span>/);
+assert.doesNotMatch(header('',21), /class="ward-lv"|Lv 21|Grandmaster 21/);
+assert.match(header('',21), /class="ward-wallet">[\s\S]*1,234[\s\S]*567[\s\S]*<\/div>/);
+assert.match(header('',21), /class="ward-collection">[\s\S]*8 found[\s\S]*x2[\s\S]*9\/100 collected looks[\s\S]*91 other looks to try[\s\S]*3\/6 fits/);
+assert.match(app, /class="hub-name">\$\{esc\(title\)\}<\/span><span class="ward-lv" hidden><\/span>/);
+const headingBlock = app.slice(app.indexOf("  const hubHeading = $('.hub-title', wrap);"), app.indexOf("  const floatingGear = $('#gearBtn');", app.indexOf("  const hubHeading = $('.hub-title', wrap);")));
+const chip = {}, heading = {classList:{toggle:(_,on)=>{heading.identity=on;}}};
+for (const tab of ['wardrobe','shop','crates','wardrobe']) {
+  vm.runInNewContext(headingBlock, {tab,lvl:{level:21},wrap:{},$:s=>s==='.hub-title'?heading:chip});
+  assert.equal(heading.hidden, tab==='shop');
+  assert.equal(heading.identity, tab==='wardrobe');
+  assert.equal(chip.hidden, tab!=='wardrobe');
+  assert.equal(chip.textContent, 'Lv 21');
+}
+console.log('PASS wardrobe header: separate earned title preserves digits, live wallet/collection values, one name-row level chip and tab restoration. Geometry UNPROVEN.');

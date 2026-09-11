@@ -12196,3 +12196,12 @@ button.t3-price::before {
 #wardFitList > .ward-fit-row > .fit-chip { min-width: 0; padding: 7px 8px; font-size: var(--fs-0); }
 #wardFitList .ward-fit-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #wardFitList > .ward-fit-row > [data-fit-del] { color: var(--danger); }
+
+/* Wardrobe 1F: name and one level chip, then earned title and live tallies. */
+.hub-title.ward-identity { display: flex; align-items: center; gap: 9px; }
+.hub-title.ward-identity > .hub-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hub-title.ward-identity > .ward-lv { flex: none; }
+.ward-head > .ward-rank { flex-basis: 100%; }
+.ward-head > .ward-wallet,
+.ward-head > .ward-collection { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; width: 100%; }
+.ward-head .bh-pill:first-of-type { margin-left: 0; }
