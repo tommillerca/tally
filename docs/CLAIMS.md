@@ -1,5 +1,47 @@
 # What each patch note claims, and what backs it
 
+## v568 (2026-09-11)
+
+Changelog item: Backpack keeps empty inventory visible, groups crates and battle items into cards, and shows each egg with its own progress.
+
+1. PROOF: backpack-ui-1g-audit.mjs | REACH: Rendered zero ingredients, per-record egg progress and inventory card coverage. Browser geometry and controls remain unproven; animated Laboratory host is absent from this checkout.
+
+## v567 (2026-09-11)
+
+Changelog item: Wardrobe has a compact fit toolbar with a saved-fit switcher and visible rename and delete actions.
+
+1. PROOF: wardrobe-ui-1f-audit.mjs | REACH: Compact toolbar rendering, saved-fit management and source locks. Browser geometry and hit targets are unproven. Identity regrouping is deferred to preserve the header geometry lock.
+
+## v566 (2026-09-10)
+
+Changelog item: Today has a tighter hero layout, separate name and title, and matching News and Quests rows.
+
+1. PROOF: today-ui-1e-audit.mjs | REACH: Today source geometry contract, title lookup, live identity refresh and disclosure styling. Browser geometry, safe areas and controls remain unproven.
+
+## v565 (2026-09-10)
+
+Changelog item: Readiness has clearer metric tiles with heart, pulse and moon icons, dated readings and activity artwork.
+
+1. PROOF: readiness-ui-1d-audit.mjs | REACH: Real scoring and rendered metric markup, stale dates and local icon treatment. Browser geometry, controls and sheet dismissal remain unproven.
+
+## v564 (2026-09-10)
+
+Changelog item: Crew has separate friend actions, a larger favourite star, and the Step Race above the standings.
+
+1. PROOF: crew-ui-1c-audit.mjs | REACH: Crew source layout, favourite state, existing action bindings and race/podium order. Browser geometry, ink, controls and all live states remain unproven.
+
+## v563 (2026-09-10)
+
+Changelog item: The Pit has clearer sections and opponent portraits, with ranks beside the fight details.
+
+1. PROOF: pit-ui-1b-audit.mjs | REACH: Live opponent outfit selection, special monster artwork, all opponent row bindings, supporting ranks and distinct Build. Scoped Pit presentation only. Browser portrait decoding, controls and fight geometry remain unproven.
+
+## v562 (2026-09-10)
+
+Changelog item: Fight controls have cleaner styling, the pet HUD uses your pet’s given name, and ITEMS has a simpler label.
+
+1. PROOF: fight-ui-1a-audit.mjs | REACH: Fight HUD nickname from the equipped instance, existing unnamed fallback, escaped label, simple ITEMS and live venue. Chrome-only CSS preserves geometry declarations. Browser figure coordinates and control hit tests remain unproven.
+
 ## v561 (2026-09-10)
 
 Changelog item: Wardrobe tiles no longer show Free or Free: no stats. Wearing, Paid and Bone Dust prices remain visible.

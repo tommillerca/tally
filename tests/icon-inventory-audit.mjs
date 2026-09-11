@@ -158,6 +158,7 @@ for (const m of appForIcons.matchAll(/(?:^\s{0,2}|ICONS\.)(\w+)\s*[:=]\s*\((?:(\
  *   brand  a fixed third-party or brand mark
  * ======================================================================== */
 const EMITTERS = {
+  'js/app.js:newsBannerHtml': ['scene', 'Today news disclosure with the approved inline pixel newspaper icon and live news content.'],
   /* ---- the icon system itself ---- */
   'js/icons-pix.js:pixCur':   ['icon', "THE PIXEL SOURCE. Tom's 48px art, served at 48/24/16 only; below 16 it returns null on purpose and the caller's vector renders."],
   'js/icons-pack.js:bhIcon':  ['icon', 'THE VECTOR SOURCE. Generated from assets/icons-proposal by gen_icons.mjs, so nothing hand-written survives in it.'],
@@ -184,9 +185,11 @@ const EMITTERS = {
   'js/app.js:proteinChart':       ['chart', 'the protein history.'],
   'js/app.js:metricSpark':        ['chart', 'the wellness sparkline.'],
   'js/app.js:metricDetailChart':  ['chart', 'the expanded wellness metric.'],
+  'js/app.js:activityRecoveryHtml': ['chart', 'real activity mix bars with existing walking/hiking and strength pixel artwork.'],
   'js/app.js:readinessHtml':      ['chart', 'the readiness dial.'],
   'js/app.js:calorieRingCard':    ['chart', 'the calorie ring, drawn on Today AND on Trends from this one function.'],
   /* ---- scene, stage and character art: sized by layout, not by an icon size ---- */
+  'js/app.js:pitOpponentPortrait': ['scene', 'Pit opponent portraits use live outfits and existing special-monster figure artwork, never a currency or Build icon.'],
   'js/app.js:avatarLayersHtml':     ['scene', 'the Bonehead figure: cosmetic layers stacked at stage size.'],
   'js/studio-screen.js:mountStudio': ['scene', 'the Studio preview. It emits one <img> whose src is an object URL for the 1080x1920 PNG the headless compositor in js/studio.js just produced, so the picture is the export itself at display size, not an icon and not a second rendering path. Nothing here calls pixCur or ICONS; a swap of the icon set has nothing to do in this file. The compositor that builds those pixels is proved separately in tests/studio-audit.mjs.'],
   'js/app.js:croppedPetImg':        ['scene', 'a pet sprite cropped to its own art box.'],
@@ -326,7 +329,6 @@ const SUBFLOOR = {
   'js/app.js:openStable|dust':            '13-14px dust chips in the stable.',
   'js/app.js:renderBoneyard|pit':         '15px in the map action bar. CANDIDATE for 16: one step away.',
   'js/app.js:renderPit|coin':             '12px in the Gauntlet reward lines.',
-  'js/app.js:renderPit|crate/golden':     '22px golden crate on the Gauntlet card, two pixels under the 24 floor. The strongest CANDIDATE on this list: 24 is one step up and the row is 22px of art already.',
   'js/app.js:openFight|coin':             '15px on the fight result. CANDIDATE for 16: one step away.',
 
   /* ---- v411, the batch that gave star / bone / paw / bolt / sparkle / the four

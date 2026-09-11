@@ -253,6 +253,12 @@ const coverageOnly = process.argv.includes('--coverage-only');
    the evidence in the failure line. */
 // Frozen loss-prevention work order, 2026-09-08: real UI and service controls, Node only.
 const PURE = [
+  'wardrobe-ui-1f-audit.mjs',
+  'today-ui-1e-audit.mjs',
+  'readiness-ui-1d-audit.mjs', // Frozen 1D: real scoring and metric markup, no browser claims.
+  'crew-ui-1c-audit.mjs',
+  'pit-ui-1b-audit.mjs', // Pit roster portrait bindings, node only.
+  'fight-ui-1a-audit.mjs', // Approved fight chrome and instance-name contract, node only.
   'device-report-audit.mjs', // Device observations: lookup, classifier, arithmetic and serialization.
   'r8-shop-css-audit.mjs', // Frozen R8 CSS source contracts and mutation controls; no rendered claims.
   'transmog-reach-audit.mjs', // R9: disabled second step, distinct free reasons, data counts, acquisition routes and retained appearances. No layout claim.
@@ -279,6 +285,7 @@ const PURE = [
   'render-sink-lint.mjs', 'lapse-witness-audit.mjs', 'spawn-claim-atomic-audit.mjs', 'wardrobe-family-audit.mjs', 'football-kit-audit.mjs', 'restore-latch-audit.mjs',
   'first-pet-audit.mjs', 'shop-economy-audit.mjs', 'recovery-status-audit.mjs', 'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs', 'take-and-pay-audit.mjs',
 ];
+PURE.push('backpack-ui-1g-audit.mjs'); // 1G rendered inventory and independent egg progress controls.
 PURE.push('c6-price-audit.mjs'); // One-off beta correction: real purchase, hatch, refund, retries, abort, merge and boot disclosure.
 PURE.push('pet-morph-animation-audit.mjs'); // 2026-09-08: selective layers, named fallback and neutral-rest width controls; no browser.
 PURE.push('pet-palette-audit.mjs'); // r56 B1: actual PNG pairs and shipped-art CONTROL; offline Python image reads.

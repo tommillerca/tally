@@ -10,7 +10,7 @@ import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
 import {
-  levelFor, totalXp, streakDateSet, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews, habitGrantCard,
+  LEVEL_NAMES, levelFor, totalXp, streakDateSet, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews, habitGrantCard,
   initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, retireGardenIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
   awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats, claimSpar, sparBoardState,
@@ -3900,11 +3900,18 @@ function fireDailyWheel() {
    OWN body (not just what runs synchronously in its render tick), so a
    closure defined in there reading xp counts as a second scan and that guard
    goes red (A1). Living out here, it is invisible to that walk. */
+// The rank table owns earned titles. levelFor's post-table suffix is a level,
+// already shown in Today's chip, not part of the earned title.
+function todayEarnedTitle(lvl) {
+  return LEVEL_NAMES[Math.min(lvl.level, LEVEL_NAMES.length) - 1];
+}
 async function refreshLevelChip() {
   const chip = $('#lvlChip'); if (!chip || !chip.isConnected) return;
   const lvl = levelFor(await totalXp());
-  const row = $('.hero-lvrow', chip);
-  if (row) row.innerHTML = `<span class="hero-lv">Lv ${lvl.level}</span><span class="hero-title">${esc(lvl.name)}</span>`;
+  const level = $('.hero-lvrow .hero-lv', chip);
+  if (level) level.textContent = `Lv ${lvl.level}`;
+  const title = $('.hero-title', chip);
+  if (title) title.textContent = todayEarnedTitle(lvl);
   const xprow = $('.hero-xprow', chip);
   if (xprow) xprow.innerHTML = `<span class="hero-xpn">${lvl.into.toLocaleString()}/${lvl.need.toLocaleString()}</span>`
     + Array.from({ length: XP_PIPS }, (_, i) => `<i${i < Math.ceil(lvl.pct / (100 / XP_PIPS)) ? ' class="on"' : ''}></i>`).join('');
@@ -4317,6 +4324,7 @@ function firstDiaryDate(createdAt, log) {
 }
 
 async function renderToday(el) {
+  const todayName = await social.displayName() || 'Your Bonehead';
   const entries = await entriesFor(S.date);
   const copySourceDate = addDays(S.date, -1);
   const yEntries = await entriesFor(copySourceDate);
@@ -4778,7 +4786,8 @@ async function renderToday(el) {
          Progress: at this size it was the third line of text on a poster. -->
     <div class="hero-meta">
       <button class="hero-level" id="lvlChip">
-        <span class="hero-lvrow"><span class="hero-lv">Lv ${lvl.level}</span><span class="hero-title">${esc(lvl.name)}</span></span>
+        <span class="hero-lvrow"><span class="hero-name">${esc(todayName)}</span><span class="hero-lv">Lv ${lvl.level}</span></span>
+        <span class="hero-title">${esc(todayEarnedTitle(lvl))}</span>
         <span class="hero-xprow">
           <span class="hero-xpn">${lvl.into.toLocaleString()}/${lvl.need.toLocaleString()}</span>
           ${Array.from({ length: XP_PIPS }, (_, i) => `<i${i < Math.ceil(lvl.pct / (100 / XP_PIPS)) ? ' class="on"' : ''}></i>`).join('')}
@@ -11922,7 +11931,11 @@ function readinessHtml(r) {
   const arrow = (v, goodLow) => v == null ? '' : (goodLow
     ? (v < 0 ? `<i class="up">${ICONS.down(10)}${Math.abs(Math.round(v))}</i>` : v > 0 ? `<i class="warn">${ICONS.up(10)}${Math.round(v)}</i>` : '')
     : (v > 0 ? `<i class="up">${ICONS.up(10)}${Math.round(v)}</i>` : v < 0 ? `<i class="warn">${ICONS.down(10)}${Math.abs(Math.round(v))}</i>` : ''));
-  const tile = (mk, lab, val, unit, tr) => `<button class="rd-tile${mk ? '' : ' static'}"${mk ? ` data-metric="${mk}"` : ''}><span class="rl">${lab}</span><span class="rv">${val}<small>${unit}</small></span>${tr}</button>`;
+  // Approved 1D icons, local to readiness presentation.
+  const heartIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path shape-rendering="crispEdges" fill="#ff8b81" d="M3 5h6v2h2v2h2V7h2V5h6v2h2v8h-2v2h-2v2h-2v2h-2v2H9v-2H7v-2H5v-2H3v-2H1V7h2z"/><path shape-rendering="crispEdges" fill="#ffd9bf" d="M4 8h4v2H6v3H4z"/></svg>`;
+  const pulseIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="#7cc4ff" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" d="M2 13h5l3-8 4 15 3-9 2 2h3"/></svg>`;
+  const moonIcon = '<img class="ico pix-cur" src="assets/icons-pix/moon.png" width="26" height="26" alt="">';
+  const tile = (mk, lab, val, unit, tr) => `<button class="rd-tile${mk ? '' : ' static'}"${mk ? ` data-metric="${mk}"` : ''}><span class="rd-icon">${mk === 'restingHr' ? heartIcon : pulseIcon}</span><span class="rl">${lab}</span><span class="rv">${val}<small>${unit}</small></span><span class="rd-delta">${tr}</span></button>`;
   const hm = h => `${Math.floor(h)}h${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
   // Sleep tile: when the watch gave us a score, that's the headline (Tom wanted
   // the sleep score shown) with hours beneath, and it's tappable for the stage
@@ -11931,17 +11944,17 @@ function readinessHtml(r) {
   // night, say which night instead of passing it off as last night's.
   const slStale = !!(r.slDate && r.slDate !== dateKey());
   const sleepTile = (r.slScore != null && !slStale)
-    ? `<button class="rd-tile" data-sleepdetail="1"><span class="rl">Sleep score</span><span class="rv">${r.slScore}</span>${r.slL != null ? `<i>${hm(r.slL)}</i>` : ''}</button>`
+    ? `<button class="rd-tile" data-sleepdetail="1"><span class="rd-icon">${moonIcon}</span><span class="rl">Sleep score</span><span class="rv">${r.slScore}</span><span class="rd-delta">${r.slL != null ? hm(r.slL) : ''}</span></button>`
     : r.slL != null
-      ? `<button class="rd-tile" data-sleepdetail="1"><span class="rl">Sleep${slStale ? ` · ${r.slDate.slice(5)}` : ''}</span><span class="rv">${hm(r.slL)}</span>${slStale ? '<i class="warn">not last night</i>' : ''}</button>`
-      : `<button class="rd-tile static"><span class="rl">Sleep</span><span class="rv">&mdash;</span></button>`;
+      ? `<button class="rd-tile" data-sleepdetail="1"><span class="rd-icon">${moonIcon}</span><span class="rl">Sleep</span><span class="rv">${hm(r.slL)}</span><span class="rd-delta">${slStale ? `${r.slDate.slice(5)} · not last night` : ''}</span></button>`
+      : `<button class="rd-tile static"><span class="rd-icon">${moonIcon}</span><span class="rl">Sleep</span><span class="rv">·</span><span class="rd-delta">No reading</span></button>`;
   /* Same rule as the sleep tile above: if the newest reading is not from today,
      say which day it is from instead of passing it off as current. An undated
      tile is how a broken heart read hides in plain sight. */
   const dayTag = d => (d && d !== dateKey()) ? ` · ${d.slice(5)}` : '';
   const tiles = [
-    r.rhrL != null ? tile('restingHr', `Resting HR${dayTag(r.rhrDate)}`, Math.round(r.rhrL), 'bpm', arrow(r.rhrL - r.rhrB, true)) : '',
-    r.hrvL != null ? tile('hrv', `HRV${dayTag(r.hrvDate)}`, Math.round(r.hrvL), 'ms', arrow(r.hrvL - r.hrvB, false)) : '',
+    r.rhrL != null ? tile('restingHr', 'Resting HR', Math.round(r.rhrL), 'bpm', arrow(r.rhrL - r.rhrB, true) + dayTag(r.rhrDate)) : '',
+    r.hrvL != null ? tile('hrv', 'HRV', Math.round(r.hrvL), 'ms', arrow(r.hrvL - r.hrvB, false) + dayTag(r.hrvDate)) : '',
     sleepTile,
   ].filter(Boolean).join('');
   return `<div class="card rd-card">
@@ -11988,7 +12001,7 @@ async function openSleepDetail() {
   const bar = staged
     ? `<div class="sleep-bar">${stages.filter(s => s.m > 0).map(s => `<i style="flex:${s.m};background:${s.col}"></i>`).join('')}</div>
        <div class="sleep-legend">${stages.filter(s => s.m > 0).map(s => `<div class="sl-row"><span class="sl-dot" style="background:${s.col}"></span><span class="sl-k">${s.k}</span><span class="sl-m">${hm(s.m)}</span><span class="sl-p">${Math.round(s.m / tot * 100)}%</span></div>`).join('')}</div>`
-    : `<p class="note" style="margin:10px 0 0">Stage breakdown (deep / REM / core) needs an Apple Watch worn to bed. ${r.sleepAuto ? 'Your watch logged the hours but not the stages last night.' : 'This night was logged by hand.'}</p>`;
+    : `<p class="note" style="margin:10px 0 0">Stage breakdown (deep / REM / core) needs an Apple Watch worn to bed. ${r.sleepAuto ? 'Your watch logged the hours but not the stages this night.' : 'This night was logged by hand.'}</p>`;
   const bandCol = sc >= 80 ? 'var(--accent)' : sc >= 60 ? '#5fe6d0' : 'var(--gold)';
   const when = r.date === dateKey() ? 'Last night' : `Night of ${r.date}`;
   const html = `<button class="sheet-close" style="position:absolute;top:12px;right:14px;z-index:2">Close</button>
@@ -12030,7 +12043,7 @@ function activityRecoveryHtml(days) {
     const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
     if (!rows.length) return '';
     const max = rows[0][1];
-    return `<div class="card"><div class="card-title">YOUR ACTIVITIES · LAST 8 WEEKS</div>${rows.map(([t, c]) => `<div class="mix-row"><span class="mix-lab">${WORKOUT_LABEL[t] || t}</span><div class="mix-bar"><i style="width:${Math.round(c / max * 100)}%"></i></div><span class="mix-n">${c}</span></div>`).join('')}<p class="note" style="margin-top:9px">Your real workout mix, straight from your watch. New activities show up here on their own.</p></div>`;
+    return `<div class="card rd-activities"><div class="card-title">YOUR ACTIVITIES · LAST 8 WEEKS</div>${rows.map(([t, c]) => `<div class="mix-row">${['walking', 'hiking', 'strength'].includes(t) ? `<img class="ico pix-cur rd-activity-icon" src="assets/icons-pix/${t === 'strength' ? 'dumbbell' : 'boot'}.png" width="32" height="32" alt="">` : ''}<span class="mix-lab">${WORKOUT_LABEL[t] || t}</span><div class="mix-bar"><i style="width:${Math.round(c / max * 100)}%"></i></div><span class="mix-n">${c}</span></div>`).join('')}<p class="note" style="margin-top:9px">Your real workout mix, straight from your watch. New activities show up here on their own.</p></div>`;
   })();
 
   // With heart data, lead with the futuristic readiness dashboard.
@@ -12574,7 +12587,7 @@ async function renderFriends(el) {
            four cards is faster than typing. -->
       <div class="cfan-search" id="cfanSearchRow" hidden>
         <input id="cfanSearch" type="search" inputmode="search" autocomplete="off"
-               placeholder="Search your Crew by name or nickname" aria-label="Search your Crew">
+               placeholder="Search your Crew" aria-label="Search your Crew">
         <button class="cfan-clear" id="cfanClear" hidden aria-label="Clear search">${ICONS.close ? ICONS.close(14) : '&times;'}</button>
         <!-- Tom, 2026-08-08: "the player could filter it themself once they get to
              the tab, not as a default open." So the deck still OPENS on the bias
@@ -12620,8 +12633,10 @@ async function renderFriends(el) {
       <div id="cheersList"></div>
     </div>
 
-    ${thanksBannerHtml()}
-    ${communityBannerHtml()}
+    <!-- THE WEEKLY RACE: the thing with a clock on it stays above the archive
+         half of the tab. -->
+    <details class="glutton-banner race-banner" id="raceCard" hidden></details>
+
     <button class="card lb-open" id="crewLeaderboard">
       <div class="card-title">LEADERBOARD</div>
       <!-- never greet the card with an empty box: it says something before the
@@ -12633,10 +12648,6 @@ async function renderFriends(el) {
       <span class="ul-chev">›</span>
     </button>
 
-    <!-- THE WEEKLY RACE: the thing with a clock on it stays above the archive
-         half of the tab. -->
-    <details class="glutton-banner race-banner" id="raceCard" hidden></details>
-
     <div class="card">
       <div class="card-title">ADD A FRIEND</div>
       <div id="friendsList"></div>
@@ -12646,19 +12657,11 @@ async function renderFriends(el) {
       </div>
     </div>
 
-    <div class="card" id="deliveriesCard" hidden>
-      <div class="card-title">DELIVERIES</div>
-      <p class="note" style="margin:0 0 10px">Miss the popup and the gift still lands here. Nothing to claim: it is already yours.</p>
-      <div id="deliveriesList"></div>
-    </div>
-
     <div class="card" id="newcomersCard" hidden>
       <div class="card-title">WORTH ADDING</div>
       <p class="note" style="margin:0 0 10px">Boneheadz who are actually playing and are not in your Crew yet.</p>
       <div id="newcomersList"></div>
     </div>
-
-    ${whatsNewCard}
 
     <div class="card">
       <div class="card-title">YOUR FRIEND CODE</div>
@@ -12668,7 +12671,17 @@ async function renderFriends(el) {
         <button class="btn small" id="crewShare">Share my code</button>
         <button class="btn small ghost" id="crewCopy">Copy</button>
       </div>
-    </div>`;
+    </div>
+
+    ${thanksBannerHtml()}
+    ${communityBannerHtml()}
+    <div class="card" id="deliveriesCard" hidden>
+      <div class="card-title">DELIVERIES</div>
+      <p class="note" style="margin:0 0 10px">Miss the popup and the gift still lands here. Nothing to claim: it is already yours.</p>
+      <div id="deliveriesList"></div>
+    </div>
+
+    ${whatsNewCard}`;
 
   /* ONE WATERMARK READ, SHARED BY BOTH INBOXES, and it has to be this way now
      that there are two of them. Each painter used to read the watermark and then
@@ -12979,18 +12992,15 @@ async function renderFriends(el) {
     const f = fanFriend(centerId);
     if (!box) return;
     if (!f) { box.hidden = true; return; }
-    const p = f.profile || {};
     const ol = onlineLabel(f.lastSeen);
-    const gearN = p.gearCount ?? (p.gear ? p.gear.length : 0);
+    // The payload since value is overwritten by repeated accept/add requests.
+    // It cannot establish friendship creation; keep only truthful recency.
     box.innerHTML = `
-      <button class="cfan-star${favs.has(f.playerId) ? ' on' : ''}" id="cfanStar" aria-label="Star this friend">${ICONS.star(!!favs.has(f.playerId))}</button>
-      <div class="cfan-sel-tx">
-        <button class="cfan-sel-nm" id="cfanView">${nameWithAlias(f)}${ol.text ? ` <em>${esc(ol.text)}</em>` : ''}</button>
-        <div class="cfan-chips">
-          <span class="cfan-chip lvl">LV ${p.level || 1}</span>
-          ${p.badges ? `<span class="cfan-chip">${p.badges} badges</span>` : ''}
-          ${gearN ? `<span class="cfan-chip">${gearN} gear</span>` : ''}
-          ${p.pet ? `<span class="cfan-chip pet">Pet LV ${p.pet.level || 1}</span>` : ''}
+      <div class="cfan-identity">
+        <button class="cfan-star${favs.has(f.playerId) ? ' on' : ''}" id="cfanStar" aria-label="Star this friend" aria-pressed="${favs.has(f.playerId)}">${ICONS.star(48)}</button>
+        <div class="cfan-sel-tx">
+          <button class="cfan-sel-nm" id="cfanView">${nameWithAlias(f)}</button>
+          ${ol.text ? `<small class="cfan-status">${esc(ol.text)}</small>` : ''}
         </div>
       </div>
       <div class="cfan-acts">
@@ -13002,7 +13012,7 @@ async function renderFriends(el) {
       await kvSet('crewFaves', [...favs]);
       toast(favs.has(f.playerId) ? `${f.alias || f.name} starred: sorted to the front of the fan.` : 'Unstarred.', 2400);
       const sb = $('#cfanStar', box);
-      if (sb) { sb.classList.toggle('on', favs.has(f.playerId)); sb.innerHTML = ICONS.star(!!favs.has(f.playerId)); }
+      if (sb) { sb.classList.toggle('on', favs.has(f.playerId)); sb.setAttribute('aria-pressed', String(favs.has(f.playerId))); }
       resortFan(); paintFaves(); applyFan();   // cards glide to their new seats
     });
     $('#cfanView', box).addEventListener('click', () => openFriendProfile(f, paint));
@@ -14591,7 +14601,7 @@ function newsBannerHtml(unseen, eq, dayClose) {
   if (!newest) return '';
   return `<details class="nb" id="newsBanner">
     <summary>
-      <span class="nb-ico">${pixCur('scroll', 16) || ICONS.quest(15)}</span>
+      <span class="nb-ico"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><g shape-rendering="crispEdges"><path fill="#736858" d="M3 4h17v15H3z"/><path fill="#f2e9d7" d="M4 3h15v16H4zM2 7h2v11H2zM4 19h15v2H4z"/><path fill="#a5e847" d="M6 5h11v3H6z"/><path fill="#343027" d="M6 10h5v5H6zM13 10h4v1h-4zM13 12h4v1h-4zM13 14h4v1h-4zM6 17h11v1H6z"/></g></svg></span>
       <span class="nb-t">News</span>
       ${unseen > 0 ? `<span class="nb-dot">${unseen}</span>` : ''}
       <span class="nb-sub">${unseen > 0 ? esc(newest.title) : 'Nothing new'}</span>
@@ -16421,7 +16431,7 @@ async function renderBonehead(el) {
   const title = (me && me.name)
     || (pick && buildDisplayName(pick.adj, pick.noun, pick.num))
     || 'Your Bonehead';
-  el.innerHTML = `<h1 class="page-h1 hub-title">${esc(title)}</h1><div id="chBody"></div>`;
+  el.innerHTML = `<h1 class="page-h1 hub-title"><span class="hub-name">${esc(title)}</span><span class="ward-lv" hidden></span></h1><div id="chBody"></div>`;
   await renderCharacter(el, tab);
 }
 
@@ -16692,10 +16702,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
   body.innerHTML = `
     ${tab === 'wardrobe' ? `
     <div class="ward-head">
-      <span class="ward-lv">Lv ${lvl.level}</span>
-      <span class="ward-rank">${esc(lvl.name)}</span>
+      <span class="ward-rank">${esc(myTitle || todayEarnedTitle(lvl))}</span>
+      <div class="ward-wallet">
       <span class="bh-pill">${ICONS.coin(16)} ${coinBal.toLocaleString()}</span>
       <span class="bh-pill ward-dust">${ICONS.dust(16)} ${dustBal.toLocaleString()}</span>
+      </div>
+      <div class="ward-collection">
       <span class="bh-pill">${ICONS.bone(14)} ${ownedCount} found</span>
       ${boost ? `<span class="bh-pill">${ICONS.boltIco(14)} x${boost}</span>` : ''}
       ${/* THE DOOR TO THE LOOKS COLLECTION. v395 removed the hub's LOOKS card,
@@ -16712,6 +16724,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             with none (the yard prints 24, favourites 6, recents 8, and the looks
             pill beside this one prints N/M). Same .bh-pill as the looks count. */''}
       <span class="bh-pill ward-fits">${fitCount}/${MAX_FITS} fits</span>
+      </div>
     </div>` : tab === 'shop' ? gwartHeroHtml(rk) : `
     <div class="bh-hero mini">
       <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny, petMorph: chMorph, petWear: S.petWear })}</div>
@@ -16726,7 +16739,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         </div>
       </div>
     </div>`}
-    <div class="ch-tabs" id="chTabs" role="tablist">
+    <div class="ch-tabs${tab === 'wardrobe' ? ' ward-navigation' : ''}" id="chTabs" role="tablist">
       ${/* role/aria-selected, matching the wn-tabs tablist above: with the solid
             accent fill gone the visual cues are a coral ring, a brighter label,
             a full-opacity icon and a sticker shadow, and none of those reach a
@@ -16760,7 +16773,15 @@ async function renderCharacter(wrap, tab, opts = {}) {
      8: whatever hides something owns un-hiding it), and route() re-decides the
      gear on every navigation, so leaving the hub cannot strand it either. */
   const hubHeading = $('.hub-title', wrap);
-  if (hubHeading) hubHeading.hidden = tab === 'shop';
+  if (hubHeading) {
+    hubHeading.hidden = tab === 'shop';
+    hubHeading.classList.toggle('ward-identity', tab === 'wardrobe');
+    const level = $('.ward-lv', hubHeading);
+    if (level) {
+      level.hidden = tab !== 'wardrobe';
+      level.textContent = `Lv ${lvl.level}`;
+    }
+  }
   const floatingGear = $('#gearBtn');
   if (floatingGear) floatingGear.hidden = tab === 'shop';
   $('#gwGear', body)?.addEventListener('click', () => { location.hash = '#/settings'; });
@@ -17119,57 +17140,34 @@ async function renderCharacter(wrap, tab, opts = {}) {
         ${fbBarHtml()}
       </div>`;
 
-    // SAVED FITS: a look you can put back on in one tap. Stats never move.
+    // The compact toolbar owns the expandable list. Everything stays in flow.
     const fitRail = `
-      <div class="fit-rail">
-        ${fitList.map((f, i) => {
-          // No art thumbnail: the source PNGs are full-body canvases with a lot of
-          // transparent padding, so at chip size they render as an empty square.
-          // A rarity pip off the fit's headline piece reads at any size.
-          const art = fitThumbArt(f);
-          const price = fitPrices[i];
-          return `<button class="fit-chip ${S.fitEdit === f.id ? 'editing' : ''}" data-fit="${f.id}" title="${esc(f.name)}">
-            <span class="fc-pip r-${art ? art.rarity : 'common'}"></span>
-            ${esc(f.name)}${price ? `<i class="fc-cost">${price} <span class="dust-ico">${ICONS.dust(11)}</span></i>` : ''}
-            ${S.fitEdit === f.id ? '<i class="fc-x" data-fit-del="' + f.id + '">' + ICONS.close(12) + '</i>' : ''}
-          </button>`;
-        }).join('')}
-        ${/* AT THE CAP THE CHIP STAYS, GHOSTED, AND A TAP EXPLAINS (QA round 23 F8).
-              It used to be removed outright, so "You can keep 6 fits. Bin one
-              first." (the handler below) was unreachable: captureFit can only
-              return `full` from a control that only rendered while not full.
-              aria-disabled, not disabled: a disabled button swallows the tap that
-              is supposed to toast the rule. "Replace which one" is design, not
-              built here. */''}
-        <button class="fit-chip add" data-fit-save="1"${fitList.length >= MAX_FITS ? ' aria-disabled="true"' : ''}>+ Save this fit</button>
-        ${/* THE STUDIO SITS IN THE ROW THAT ALREADY EXISTS. Tom, 2026-09-10: the
-              Wardrobe header is "a mess of misaligned buttons with different fonts
-              sizes placements etc obviously including your entry into the studio,
-              for now move the studio button somewhere". v551 hung it on its own
-              right-aligned line above this row as a bare underlined link, which is
-              one more alignment to get wrong. It is an action on your current look,
-              exactly like the two chips beside it, so it takes the same .fit-chip
-              and inherits their height, radius, font and spacing instead of
-              carrying its own. Camera icon is Tom's own 48px PixelLab art. */''}
+      <div class="fit-rail ward-toolbar">
+        <button class="fit-chip ward-fit-switcher" id="wardFitSwitcher" data-fit-switcher type="button" aria-expanded="${!!S.wardFitsOpen}" aria-controls="wardFitList"><span>Saved fits</span><small>${fitList.length}/${MAX_FITS} fits</small></button>
+        <button class="fit-chip add" data-fit-save="1"${fitList.length >= MAX_FITS ? ' aria-disabled="true"' : ''}>Save fit</button>
         <button class="fit-chip studio" id="wardrobeStudio" type="button">${pixCur('camera', 24) || ICONS.camera(18)}The Studio</button>
-        ${/* A player asked for one tap that clears the doll so a new outfit starts
-              from nothing, and Tom's call on 2026-08-22 is that it takes the
-              STATTED GEAR too. It UNEQUIPS and nothing else: every piece and every
-              roll stays owned and goes straight back on. See stripAll() in loot.js.
-              Only offered when there is something to take off, and the plan comes
-              from the same function that performs it so the two cannot drift. */''}
         ${stripPlan.slots.length || stripPlan.mogs.length
-          ? `<button class="fit-chip reset" data-fit-reset="1" title="Unequip everything, gear included. Nothing is lost: it all stays in your Backpack.">Take it all off</button>`
+          ? `<button class="fit-chip reset" data-fit-reset="1" title="Unequip everything, gear included. Nothing is lost: it all stays in your Backpack.">Take off</button>`
           : ''}
-      </div>
-      ${fitList.length ? `<details class="stable-help">
-        <summary>How fits work</summary>
-        <p class="note fit-note">Tap a fit to wear it. A fit brings its gear back to empty slots and never bumps gear you are already wearing. Long-press a fit to rename or bin it.</p>
-        ${/* v425: fits record gear now. An older fit has no gear map, so after
-            Take it all off it can only bring back part of the look; one quiet
-            line tells the player the re-save fixes it. No migration, no modal. */''}
-        ${fitList.some(f => !f.gear) ? `<p class="note fit-note">Fits saved a while ago remember only the look. Put one on, gear up, and save it again to keep the gear with it.</p>` : ''}
-      </details>` : ''}`;
+        <div class="ward-fit-list" id="wardFitList"${S.wardFitsOpen ? '' : ' hidden'}>
+          ${fitList.length ? fitList.map((f, i) => {
+            const art = fitThumbArt(f), price = fitPrices[i];
+            return `<div class="ward-fit-row">
+              <button class="fit-chip ${S.fitEdit === f.id ? 'editing' : ''}" data-fit="${f.id}" title="${esc(f.name)}" aria-label="Equip ${esc(f.name)}">
+                <span class="fc-pip r-${art ? art.rarity : 'common'}"></span>
+                <span class="ward-fit-name">${esc(f.name)}</span>${price ? `<i class="fc-cost">${price} <span class="dust-ico">${ICONS.dust(11)}</span></i>` : ''}
+              </button>
+              <button class="fit-chip" data-fit-rename="${f.id}" aria-label="Rename ${esc(f.name)}">Rename</button>
+              <button class="fit-chip" data-fit-del="${f.id}" aria-label="Delete ${esc(f.name)}">Delete</button>
+            </div>`;
+          }).join('') : '<p class="note">No saved fits yet. Save your current fit to find it here.</p>'}
+          ${fitList.length ? `<details class="stable-help">
+            <summary>How fits work</summary>
+            <p class="note fit-note">Tap a fit to wear it. A fit brings its gear back to empty slots and never bumps gear you are already wearing. Use Rename or Delete to manage it.</p>
+            ${fitList.some(f => !f.gear) ? `<p class="note fit-note">Fits saved a while ago remember only the look. Put one on, gear up, and save it again to keep the gear with it.</p>` : ''}
+          </details>` : ''}
+        </div>
+      </div>`;
 
     content.innerHTML = `
       ${fitRail}
@@ -17396,7 +17394,17 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; pieces marked with a bolt grant a talent. Rarer rolls hit harder. Melting a piece keeps its look forever.</p>' : ''}
       ${lockedCount ? `<p class="note" style="text-align:center;margin-top:10px">More ${slotMeta.label.toLowerCase()} pieces are out there. Keep hunting.</p>` : ''}`;
     $$('[data-look-source]', content).forEach(btn => btn.addEventListener('click', () => openCharacter(btn.dataset.lookSource)));
-    // --- saved fits: tap to wear, long-press for rename / bin ---
+    // --- saved fits: existing equip, rename and confirmed delete semantics ---
+    $('[data-fit-switcher]', content)?.addEventListener('click', e => {
+      S.wardFitsOpen = !S.wardFitsOpen;
+      e.currentTarget.setAttribute('aria-expanded', String(S.wardFitsOpen));
+      $('#wardFitList', content).hidden = !S.wardFitsOpen;
+    });
+    $$('[data-fit-rename]', content).forEach(button => button.addEventListener('click', () => {
+      S.fitEdit = button.dataset.fitRename;
+      const chip = $$('[data-fit]', content).find(c => c.dataset.fit === S.fitEdit);
+      chip?.click();
+    }));
     $$('[data-fit]', content).forEach(chip => {
       let held = false, t = null;
       const arm = () => { held = false; t = setTimeout(() => { held = true; S.fitEdit = S.fitEdit === chip.dataset.fit ? null : chip.dataset.fit; popSound(S.sounds); renderCharacter(wrap, 'wardrobe', { instant: true }); }, 520); };
@@ -18036,7 +18044,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
        progress bar with no explanation. Re-anchoring to now costs the player
        nothing they had and unsticks it. */
     await repairEggAnchors();
-    const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook, dust, pCounts, gearLoNow] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState(), boneDust(), petCounts(), gearLoadout()]);
+    const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook, dust, pCounts, gearLoNow, bpPotions] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState(), boneDust(), petCounts(), gearLoadout(), potionsInv()]);
     // an egg that is not moving because STEPS are not arriving says so instead of
     // showing a bar that never fills
     const eggStale = !!(await hkStaleInfo());
@@ -18052,27 +18060,22 @@ async function renderCharacter(wrap, tab, opts = {}) {
           <div class="loot-cards">${p.choices.map(id => GEAR_BY_ID[id] ? lootCardHtml(GEAR_BY_ID[id]) : '').join('')}</div>
           <button class="btn loot-keep" disabled>Tap a piece to preview</button>
         </div>`).join('')}` : ''}
-      ${/* Tier 3 (mockup t3-backpack.html): crates as crackable cells with a
-            quantity badge, the egg as a card with its own bar, consumables as
-            rows. Crates group BY TYPE now: eight identical rows each saying
-            "Golden Crate / Open" was a list to grind, not a stash to raid. */''}
-      <div class="t3-sect"><b>Crates · tap to crack</b><i></i>${crates.length ? `<span class="r chip" style="font-size:var(--fs-0)">${crates.length} to open</span>` : ''}</div>
-      ${crates.length ? `<div class="t3-cells">${(() => {
-        const byType = new Map();
-        for (const c of crates) { if (!byType.has(c.crate)) byType.set(c.crate, []); byType.get(c.crate).push(c); }
-        return [...byType.entries()].map(([kind, list]) => {
-          const def = CRATES[kind] || CRATES.daily;
-          return `<div class="t3-cell">
-            ${list.length > 1 ? `<span class="t3-qty">${list.length}</span>` : ''}
-            <span class="art">${crateIcon(kind, 56)}</span>
-            <b>${esc(def.label).toUpperCase()}</b>
-            <button class="btn" data-open="${list[0].id}">OPEN</button>
-            ${kind === 'daily' && list.length > 1 ? '<button class="btn ghost" data-open-all="daily">OPEN ALL</button>' : ''}
-          </div>`;
-        }).join('');
-      })()}</div>` : '<p class="note" style="text-align:center;padding:12px 0 16px">No unopened crates. Finish quests, close days on budget, and walk 10k steps to earn more.</p>'}
+      <div class="t3-sect"><b>Crates</b><i></i></div>
+      <div class="bp-grid">
       ${(() => {
-        /* CRATE ODDS, ALWAYS ON THIS SCREEN (playtest P2, 2026-08-30). Every
+        const kinds = [...new Set([...Object.keys(CRATES).filter(kind => kind !== 'egg'), ...crates.map(c => c.crate)])];
+        return kinds.map(kind => {
+          const list = crates.filter(c => c.crate === kind);
+          const def = CRATES[kind] || CRATES.daily;
+          return `<div class="bp-card">
+            <div class="bp-card-top"><span class="art">${crateIcon(kind, 56)}</span><span class="bp-qty">${list.length}</span></div>
+            <b>${esc(def.label).toUpperCase()}</b>
+            <p>${def.rolls} pull${def.rolls === 1 ? '' : 's'} · ${def.floor ? 'First cosmetic Rare or better' : 'Looks, supplies and coins'}</p>
+            <button class="btn" ${list.length ? `data-open="${list[0].id}"` : 'disabled'}>${list.length ? 'OPEN' : 'NONE TO OPEN'}</button>
+            <details class="bp-crate-details"><summary>Details &amp; odds</summary>
+            ${kind === 'daily' && list.length > 1 ? '<button class="btn ghost" data-open-all="daily">OPEN ALL</button>' : ''}
+      ${(() => {
+        /* CRATE ODDS, AVAILABLE IN EACH CRATE DETAIL (playtest P2, 2026-08-30). Every
            number below is COMPUTED at render time by crateOdds() in loot.js off
            the same RARITIES weights rollRarity spends, so a weight change ships
            its own disclosure and nothing here can drift. This is also the App
@@ -18092,7 +18095,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
         Any ordinary pull: ${line('daily')}. Rare or better: about 1 in ${crateOdds('daily').rareUpOneIn}.<br>
         Bone Crate: 3 pulls, and the first is always Rare or better: ${line('golden')}.</p>`;
       })()}
-      ${eggs.length ? `<div class="t3-sect"><b>Incubating</b><i></i></div>
+            </details>
+          </div>`;
+        }).join('');
+      })()}
+      <section class="bp-eggs"><div class="t3-sect"><b>Step Eggs</b><i></i><span>${eggs.length} owned</span></div>
+      ${eggs.length ? `
       ${eggs.map(e => {
         const p = eggProgress(e, lifeSteps);
         const pct = p.goal > 0 ? Math.min(100, Math.round(p.walked / p.goal * 100)) : 100;
@@ -18103,30 +18111,32 @@ async function renderCharacter(wrap, tab, opts = {}) {
           <span class="art${eTint ? ' tinted' : ''}"${eTint ? ` style="--shell:${eTint}"` : ''}>${crateIcon('egg', 48)}</span>
           <div class="tx">
             <b>${p.ready ? 'READY TO HATCH' : 'STEP EGG'}</b>
-            <div class="bar"><i style="width:${pct}%"></i></div>
-            <small>${eggStale ? 'Your steps are not reaching the app, so this is not moving. Tap the banner on Today to reconnect.' : `${p.walked.toLocaleString()} / ${p.goal.toLocaleString()} steps${p.ready ? ' · a pet is inside' : ` · ${(p.goal - p.walked).toLocaleString()} to go`}`}</small>
+            <div class="bar" role="progressbar" aria-label="Step Egg hatch progress" aria-valuemin="0" aria-valuemax="${p.goal}" aria-valuenow="${p.walked}"><i style="width:${pct}%"></i></div>
+            <small>${eggStale && !p.ready ? 'Your steps are not reaching the app, so this is not moving. Tap the banner on Today to reconnect.' : `${p.walked.toLocaleString()} / ${p.goal.toLocaleString()} steps${p.ready ? ' · a pet is inside' : ` · ${(p.goal - p.walked).toLocaleString()} to go`}`}</small>
           </div>
           ${p.ready ? `<button class="btn" style="width:auto;padding:9px 16px;font-size:var(--fs-body);box-shadow:var(--sh-sm)" data-hatch="${e.id}">HATCH</button>` : ''}
         </div>`;
-      }).join('')}` : ''}
-      <div class="t3-sect"><b>Consumables</b><i></i></div>
-      <div class="t3-row">
-        <span class="t3-med">${consumableIcon('xp2', 24)}</span>
-        <div class="t3-tx"><b>Battle Charm</b><small>${CONSUMABLES.xp2.desc}</small></div>
-        <span class="t3-lock">x${boosts}</span>
+      }).join('')}` : '<p class="note">0 owned. Collected eggs will appear here, each with its own progress.</p>'}
+      </section></div>
+      <div class="t3-sect"><b>Potions &amp; battle items</b><i></i></div>
+      <div class="bp-grid">
+      <div class="bp-card">
+        <div class="bp-card-top">${consumableIcon('xp2', 56)}<span class="bp-qty">${boosts}</span></div>
+        <b>Battle Charm</b><p>${CONSUMABLES.xp2.desc}</p>
         <!-- The state that makes the action illegal must also hide the button
              (rewarded-actions SOP rule 4): while a charm is running, USE becomes
              a disabled "ACTIVE" chip instead of a live control that refuses. -->
-        ${boosts ? (boost ? '<button class="btn ghost" id="useBoost" disabled>ACTIVE</button>' : '<button class="btn" id="useBoost">USE</button>') : ''}
+        ${boosts ? (boost ? '<button class="btn ghost" id="useBoost" disabled>ACTIVE</button>' : '<button class="btn" id="useBoost">USE</button>') : '<button class="btn" disabled>NONE OWNED</button>'}
       </div>
-      <div class="t3-row">
-        <span class="t3-med">${consumableIcon('vigor', 24)}</span>
-        <div class="t3-tx"><b>Vigor Draught</b><small>${CONSUMABLES.vigor.desc}</small></div>
-        <span class="t3-lock">x${vigors}</span>
-        ${vigors ? '<button class="btn" id="useVigor">USE</button>' : ''}
+      <div class="bp-card">
+        <div class="bp-card-top">${consumableIcon('vigor', 56)}<span class="bp-qty">${vigors}</span></div>
+        <b>Vigor Draught</b><p>${CONSUMABLES.vigor.desc}</p>
+        ${vigors ? '<button class="btn" id="useVigor">USE</button>' : '<button class="btn" disabled>NONE OWNED</button>'}
+      </div>
+      ${POTIONS.map(p => `<div class="bp-card"><div class="bp-card-top">${recipeIconHtml(p, 56)}<span class="bp-qty">${bpPotions[p.id] || 0}</span></div><b>${esc(p.name)}</b><p>${esc(p.desc)}</p><button class="btn ghost" id="bp-potion-${p.id}" data-bp-potion="${p.id}">VIEW IN KITCHEN</button></div>`).join('')}
       </div>
       ${boost ? `<p class="note" style="margin:6px 2px">${consumableIcon('xp2', 14)} Charm active: ${boost} Pit win${boost === 1 ? '' : 's'} left at +25% coins</p>` : ''}
-      <div class="t3-sect"><b>Kitchen · food &amp; buffs</b><i></i></div>
+      <div class="t3-sect"><b>Kitchen</b><i></i><button class="btn ghost small" id="bpKitchen">Cook ›</button></div>
       ${/* SAME EXPRESSION AS THE KITCHEN'S OWN "Active dishes" ROW (openKitchen,
            above): the hub was rendering the recipe's EMOJI in a .crate-ico slot,
            which app.css sets to font-size 24 -- so a 24px emoji sat where the
@@ -18135,9 +18145,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
            recipe id no longer resolves. */''}
       ${(foodActive || []).length ? (foodActive.map(b => `<div class="crate-row"><span class="crate-ico">${RECIPE_BY_ID[b.recipe] ? recipeIconHtml(RECIPE_BY_ID[b.recipe], 26) : (b.icon || '🍲')}</span><div style="flex:1"><b>${esc(b.name || 'Dish')} active</b><small>${b.kind === 'combat' ? `${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left` : `${Math.max(0, Math.ceil((b.untilMs - Date.now()) / 3600e3))}h left`}</small></div></div>`).join('')) : '<p class="note" style="margin:2px 2px 6px">No dish active. Cook one in the Kitchen for a Pit or coin buff.</p>'}
       ${(() => { const busy = cook.slots.filter(s => !s.empty); if (!busy.length) return ''; const rc = cook.readyCount, cc = busy.length - rc; const label = rc && cc ? `${rc} ready · ${cc} cooking` : rc ? `${rc} dish${rc === 1 ? '' : 'es'} ready!` : `${cc} cooking...`; return `<div class="crate-row"><span class="crate-ico">${rc ? '✅' : '🍳'}</span><div style="flex:1"><b>${label}</b><small>${busy.map(s => esc(s.recipe.name)).join(', ')}</small></div></div>`; })()}
-      ${(() => { const owned = INGREDIENT_IDS.filter(id => (ingInv[id] || 0) > 0); return owned.length ? `<div class="ingredient-grid" style="margin-top:6px">${owned.map(id => `<div class="ing-cell"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${ingInv[id]}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}</div>` : '<p class="note" style="margin:2px 2px">No ingredients yet. Collect them on the Boneyard map.</p>'; })()}
-      <button class="btn ghost small" id="bpKitchen" style="margin-top:8px">Open the Kitchen to cook</button>
-      <div class="t3-sect"><b>Salvage Bench · nothing wasted</b><i></i></div>
+      <div class="ingredient-grid" style="margin-top:6px">${INGREDIENT_IDS.map(id => `<div class="ing-cell"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${ingInv[id] || 0}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}</div>
+      <section class="bp-salvage"><div class="t3-sect"><b>Salvage Bench · nothing wasted</b><i></i></div>
       <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">${ICONS.dust(13)}</span> ${dust.toLocaleString()}</b></div>
       <p class="note">Every piece pays Bone Dust. Use dust for looks in the Dressing Room and the weekly Rack. Melting consumes the gear and its stats. Its look is yours forever.</p>
       ${/* THE BENCH STOPS PROMISING A LIST THAT IS NOT THERE. On a new account the
@@ -18212,7 +18221,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
                    : `<span class="melt-val on">+${gearDustValue(g)}</span>`}
           </label>`;
         }).join('') + `</details>`;
-      })()}`;
+      })()}</section>`;
     /* Scroll only when the USER opens the fold. The fold renders with `open`
        whenever spares exist, and a <details> born open fires 'toggle' on
        parse, so a toggle-driven scroll yanked every Backpack render (fresh
@@ -18375,6 +18384,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     /* The Backpack's own dust grid moved to the Shop screen in v410 and its
        handler has bound nothing since: no dust cell is rendered into this
        scope. It went with the shop it belonged to. */
+    $$('[data-bp-potion]', content).forEach(b => b.addEventListener('click', () => openKitchen()));
     $('#bpKitchen', content)?.addEventListener('click', () => openKitchen());
     $$('[data-buy]', content).forEach((b => {
       let t = null;
@@ -24670,7 +24680,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v561'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v568'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
@@ -25051,6 +25061,17 @@ function pitBeatKeys(xpRows) {
   return new Set(xpRows.filter(r => r.type === 'pitrung' || r.type === 'pitchamp').map(r => r.key));
 }
 
+// Pit-only framing. Headshots intentionally omit pets through the existing crop;
+// no pet instance, shiny or morph state is reconstructed from an outfit.
+function pitOpponentPortrait(cfg) {
+  const art = cfg.glutton ? gluttonStageHtml()
+    : cfg.mage ? '<img src="assets/bh/mage/mage-fight.png" alt="">'
+    : cfg.mimic ? mimicPlateHtml()
+    : cfg.wanderer ? `<img src="${WANDERER_ART}" alt="">`
+    : headshotHtml(cfg.foeOutfit || foeOutfitFor(cfg.name), 52);
+  return `<span class="pit-opponent-portrait" aria-hidden="true">${art}</span>`;
+}
+
 async function openPit() {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Pit</h2><button class="sheet-close">Done</button></div>
@@ -25104,9 +25125,9 @@ async function renderPit(wrap) {
   // a locked rung says WHY ("BEAT RUNG 1") instead of just "locked", and the
   // live fight is never hidden behind a summary you have to open.
   const sparringSect = `
-    <div class="t3-sect"><b>Sparring · no stakes</b><i></i><span class="r chip" style="font-size:var(--fs-0)">Always free</span></div>
+    <div class="t3-sect pit-sparring-heading"><b>Sparring · no stakes</b><i></i><span class="r chip" style="font-size:var(--fs-0)">Always free</span></div>
     ${[['easy', 'Loose Bones', 0.8], ['even', 'Your Shadow', 1.0], ['hard', 'Mean Mirror', 1.15]].map(([id, name, m]) => `
-      <div class="t3-row"><span class="t3-med">${ICONS.pit(24)}</span>
+      <div class="t3-row">${pitOpponentPortrait({ name })}
         <div class="t3-tx"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · ${sparBoard.line}</small></div>
         <button class="btn ghost" data-spar="${m}" data-name="${name}" aria-label="Fight ${esc(name)}">FIGHT</button>
       </div>`).join('')}`;
@@ -25116,8 +25137,8 @@ async function renderPit(wrap) {
       const done = beaten.has(`pitrung-${r.rung}`);
       const locked = r.rung > rungsBeaten + 1;
       return `<div class="t3-row${done ? ' done' : ''}">
-        <span class="t3-rung">${r.rung}</span>
-        <div class="t3-tx"><b>${r.name}</b><small>${Math.round(r.mult * 100)}% stats · ${done ? `rematch · ${ICONS.coin(12)}${r.repeatCoins}` : `first win ${ICONS.coin(12)}${r.coins} + ${r.xp}+10 XP`}</small></div>
+        ${pitOpponentPortrait({ name: r.name })}
+        <div class="t3-tx"><b>${r.name}</b><small>Rung ${r.rung} · ${Math.round(r.mult * 100)}% stats · ${done ? `rematch · ${ICONS.coin(12)}${r.repeatCoins}` : `first win ${ICONS.coin(12)}${r.coins} + ${r.xp}+10 XP`}</small></div>
         ${locked ? `<span class="t3-lock">BEAT RUNG ${rungsBeaten + 1}</span>` : `<button class="btn ${done ? 'ghost' : ''}" data-rung="${r.rung}" ${gate} aria-label="${done ? 'Rematch' : 'Fight'} ${esc(r.name)}, rung ${r.rung}">${done ? 'REMATCH' : 'FIGHT'}</button>`}
       </div>`;
     }).join('')}`;
@@ -25145,7 +25166,7 @@ async function renderPit(wrap) {
   const remoteSect = `
     <div class="t3-sect"><b>Remote den · one a day</b><i></i><span class="r chip" style="font-size:var(--fs-0)">No walking needed</span></div>
     <div class="t3-row${rDone ? ' done' : ''}">
-      <span class="t3-med">${badgePixHtml('badge-skull', 20)}</span>
+      ${pitOpponentPortrait({ name: rDen.boss, foeOutfit: themedLook(rDen.theme && rDen.theme.key, rDen.id), mage: !!(rDen.theme && rDen.theme.art === 'mage') })}
       <div class="t3-tx"><b>${esc(rDen.boss)}</b><small>${esc(rDen.name)} · ${rDone
         ? 'beaten · a new one is here tomorrow, free'
         /* denRewardLabel takes the REWARD, not the den: passing rDen read every
@@ -25157,12 +25178,12 @@ async function renderPit(wrap) {
   const champSect = `
     <div class="t3-sect"><b>After the ladder</b><i></i></div>
     <div class="t3-row${champBeaten ? ' done' : ''}">
-      <span class="t3-med">${crateIcon('golden', 22)}</span>
+      ${pitOpponentPortrait({ name: CHAMPION.name })}
       <div class="t3-tx"><b>${CHAMPION.name}</b><small>${champBeaten ? `rematch · ${ICONS.coin(12)}${CHAMPION.repeatCoins}` : 'Wields the Moonlit Skull · first win drops it + the Marrow King title'}</small></div>
       ${champOpen ? `<button class="btn ${champBeaten ? 'ghost' : ''}" id="champBtn" ${gate} aria-label="${champBeaten ? 'Rematch' : 'Fight'} ${esc(CHAMPION.name)}, the Champion">${champBeaten ? 'REMATCH' : 'FIGHT'}</button>` : `<span class="t3-lock">BEAT RUNG ${LADDER.length}</span>`}
     </div>`;
   const endlessSect = `
-    <div class="t3-sect"><b>Endless · The Gauntlet</b><i></i>${champBeaten ? `<span class="r chip" style="font-size:var(--fs-0)">${canNewRank ? `Rank ${fightRank}` : 'At the cap'}</span>` : ''}</div>
+    <div class="t3-sect pit-gauntlet-heading"><b>Endless · The Gauntlet</b><i></i>${champBeaten ? `<span class="r chip" style="font-size:var(--fs-0)">${canNewRank ? `Rank ${fightRank}` : 'At the cap'}</span>` : ''}</div>
     ${champBeaten ? `
     ${canNewRank
       ? `<p class="note" style="margin:2px 2px 8px">Foes scale as you climb ranks. World bosses raise the ceiling by 3 each. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'} of a possible ${ceiling}.</p>`
@@ -25174,8 +25195,8 @@ async function renderPit(wrap) {
           <p class="pg-foot">You can still rematch rank ${ceiling} below for coins while you look.</p>
         </div>`}
     <div class="t3-row${canNewRank ? '' : ' capped'}">
-      <span class="t3-rung">${fightRank}</span>
-      <div class="t3-tx"><b>${esc(fightFoe.name)}</b><small>${Math.round(fightFoe.mult * 100)}% stats · ${canNewRank ? `${fightFoe.xp} XP + ${ICONS.coin(12)}${fightFoe.coins}` : `<b>rematch only</b> · ${ICONS.coin(12)}${fightFoe.repeatCoins}, no new rank`}</small></div>
+      ${pitOpponentPortrait(endlessFightCfg(fightFoe))}
+      <div class="t3-tx"><b>${esc(fightFoe.name)}</b><small>Rank ${fightRank} · ${Math.round(fightFoe.mult * 100)}% stats · ${canNewRank ? `${fightFoe.xp} XP + ${ICONS.coin(12)}${fightFoe.coins}` : `<b>rematch only</b> · ${ICONS.coin(12)}${fightFoe.repeatCoins}, no new rank`}</small></div>
       <button class="btn${canNewRank ? '' : ' ghost'}" id="endlessBtn" ${gate}>${canNewRank ? 'FIGHT' : 'REMATCH'}</button>
     </div>`
     : `
@@ -25219,18 +25240,9 @@ async function renderPit(wrap) {
       <button class="btn" id="pitDefeatAck" style="width:100%">Back on your feet</button>
     </div>` : '';
 
-  // The mockup's hero sat on a raster capture of the arena. The app already
-  // draws that arena in CSS, live and lighter than shipping a screenshot as
-  // art, so the poster keeps the drawn scene and takes the mockup's typography.
+  // The approved Pit poster is a quiet surface with live rank and readiness.
   body.innerHTML = `
     <div class="t3-hero">
-      <div class="pit-hero-atmos">
-        <span class="pit-arch"></span>
-        <span class="pit-crowd"></span>
-        <span class="pit-torch l"></span><span class="pit-torch r"></span>
-        <span class="pit-banner l"></span><span class="pit-banner r"></span>
-        <span class="pit-fog"></span>
-      </div>
       <h2>MANY ENTER.<br>FEW LEAVE.</h2>
       <p>${champBeaten ? `THE GAUNTLET · RANK ${fightRank}` : `THE LADDER · RUNG ${Math.min(rungsBeaten + 1, LADDER.length)} OF ${LADDER.length}`}</p>
       <div class="stats">
@@ -25560,7 +25572,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const fast = !!navigator.webdriver;
   const beatMs = fast ? 60 : 700;
   const fxMs = fast ? 30 : 300;
+  const fightPetNicks = await petNicks();
   const petBody = fight.pAux;                              // your pet as a real body
+  const fightPetName = fightPetNicks[fighter.petMeta?.iid] || petBody?.name || 'Pet';
   const petArtId = fighter.petMeta ? fighter.petMeta.id : null;
   const petArtMorph = fighter.petMeta ? (fighter.petMeta.morph || 'base') : 'base';
   const venue = foeCfg.venue || PIT_VENUES[foeCfg.mode === 'champ' ? 'champ' : foeCfg.mode === 'rung' ? foeCfg.rung : 'spar'] || 'The Pit';
@@ -25637,7 +25651,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     || foeCfg.mode === 'mimic' || foeCfg.mode === 'wanderer';  // boss with week = walked-to den (map); boss without week = remote den (pit)
   const seamOwner = {};   // identity token: which fight installed the test seams
   const wrap = openSheet(`
-    <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
+    <div class="sheet-head fight-header"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
     <div class="sheet-body fight-body" id="fightBody"></div>`,
     { cls: 'full', onClose: async () => {
       stopGluttonFoeAnim();
@@ -25756,7 +25770,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           <div class="bar fhp"><i id="youHp" style="width:100%"></i></div>
           <div class="microbars"><div class="bar fwind"><i id="youWind" style="width:100%"></i></div><div class="bar fhype"><i id="youHype" style="width:0%"></i></div></div>
           <div class="fstate" id="youState" hidden></div>
-          ${petBody ? `<div class="hud-pet" id="hudPet"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini" style="--pool:${Math.min(100, Math.round(petBody.d.maxHp / Math.max(1, player.d.maxHp) * 100))}%"><i id="petHp" style="width:100%"></i></div></div>` : ''}
+          ${petBody ? `<div class="hud-pet" id="hudPet"><span class="petname">${esc(fightPetName)}</span><div class="bar fhp mini" style="--pool:${Math.min(100, Math.round(petBody.d.maxHp / Math.max(1, player.d.maxHp) * 100))}%"><i id="petHp" style="width:100%"></i></div></div>` : ''}
         </div>
         <div class="hud-side foe">
           <div class="fname">${esc(foe.name)} <span id="foeHpN">${Math.round(foe.hp)}/${foe.d.maxHp}</span></div>
@@ -26667,7 +26681,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const canDrink = fight.active === 'p' && fight.ap >= 1 && !fight.over;
     if (stocked.length) {
       if (!fight.itemsOpen) {
-        html += `<button class="fight-act items" id="itemsOpen" ${canDrink ? '' : 'disabled'} style="grid-column:1/-1"><b>ITEMS x${held}</b><small>${stocked.length} kind${stocked.length === 1 ? '' : 's'} brewed · 1 AP to drink</small></button>`;
+        html += `<button class="fight-act items" id="itemsOpen" ${canDrink ? '' : 'disabled'} style="grid-column:1/-1"><b>ITEMS</b></button>`;
       } else {
         /* Open: the potions AND the way back, AND NOTHING ELSE.
            The door halved the CLOSED tray and left the OPEN one exactly as it
@@ -26686,7 +26700,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
            still measures its height from the arena floor, the End Turn row and
            the HUD, so the boss art is untouched. That is the whole reason the
            door exists and it stays intact. */
-        html = `<button class="fight-act items back" id="itemsBack" style="grid-column:1/-1"><b>&lsaquo; BACK TO MOVES</b><small>${held} item${held === 1 ? '' : 's'}</small></button>`;
+        html = `<button class="fight-act items back" id="itemsBack" style="grid-column:1/-1"><b>&lsaquo; BACK TO MOVES</b><small>${held} item${held === 1 ? '' : 's'} · 1 AP to drink</small></button>`;
         for (const p of stocked) {
           html += `<button class="fight-act potion" data-potion="${p.id}" ${canDrink ? '' : 'disabled'}><b>${p.icon} ${esc(p.name)}</b><small>x${potionInv[p.id]} · ${esc(potionShort(p))}</small></button>`;
         }

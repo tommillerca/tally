@@ -85,7 +85,7 @@ function fits(fitList) {
     pixCur: () => '<img class="ico-pix" alt="">', ICONS: { camera: () => '<svg class="ico"></svg>' },
   });
 }
-const instruction = 'Tap a fit to wear it. A fit brings its gear back to empty slots and never bumps gear you are already wearing. Long-press a fit to rename or bin it.';
+const instruction = 'Tap a fit to wear it. A fit brings its gear back to empty slots and never bumps gear you are already wearing. Use Rename or Delete to manage it.';
 const warning = 'Fits saved a while ago remember only the look. Put one on, gear up, and save it again to keep the gear with it.';
 function help(html, expected) {
   const disclosures = [...html.matchAll(/<details\b([^>]*)>([\s\S]*?)<\/details>/g)];

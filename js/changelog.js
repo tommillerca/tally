@@ -10,6 +10,34 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 568, date: '2026-09-11', title: 'A clearer Backpack', items: [
+    'Backpack keeps empty inventory visible, groups crates and battle items into cards, and shows each egg with its own progress.',
+  ] },
+
+  { n: 567, date: '2026-09-11', title: 'Compact fit controls', items: [
+    'Wardrobe has a compact fit toolbar with a saved-fit switcher and visible rename and delete actions.',
+  ] },
+
+  { n: 566, date: '2026-09-10', title: 'A clearer Today', items: [
+    'Today has a tighter hero layout, separate name and title, and matching News and Quests rows.',
+  ] },
+
+  { n: 565, date: '2026-09-10', title: 'Clearer readiness', items: [
+    'Readiness has clearer metric tiles with heart, pulse and moon icons, dated readings and activity artwork.',
+  ] },
+
+  { n: 564, date: '2026-09-10', title: 'A clearer Crew', items: [
+    'Crew has separate friend actions, a larger favourite star, and the Step Race above the standings.',
+  ] },
+
+  { n: 563, date: '2026-09-10', title: 'Faces in the Pit', items: [
+    'The Pit has clearer sections and opponent portraits, with ranks beside the fight details.',
+  ] },
+
+  { n: 562, date: '2026-09-10', title: 'Cleaner fight controls', items: [
+    'Fight controls have cleaner styling, the pet HUD uses your pet’s given name, and ITEMS has a simpler label.',
+  ] },
+
   { n: 561, date: '2026-09-10', title: 'Quieter Wardrobe labels', items: [
     'Wardrobe tiles no longer show Free or Free: no stats. Wearing, Paid and Bone Dust prices remain visible.',
   ] },

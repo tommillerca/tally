@@ -110,14 +110,15 @@ for (const name of audits) {
 
 const refreshSource = between(app, '/* refreshLevelChip:', '/* set when a new service worker');
 const settleSource = between(app, '  async function settle() {', "    /* Spend the day's attempt");
-async function settleChip(winner, webdriver) {
+async function settleChip(winner, webdriver, source = refreshSource) {
   dbmod.useDbName(`r48-chip-${++seq}`);
   await game.award(`r48-before-${seq}`, 'test', 195, 'Before fight');
-  const row = { innerHTML: 'STALE' }, xp = { innerHTML: 'STALE' }, chip = { isConnected: true };
+  const levelText = { textContent: 'STALE' }, title = { textContent: 'STALE' }, name = { textContent: 'Real Player' };
+  const xp = { innerHTML: 'STALE' }, chip = { isConnected: true };
   const reads = [];
   const context = vm.createContext({ ...dbmod, ...loot, ...game, ...cooking, window: {}, navigator: { webdriver },
     document: { querySelectorAll: () => [] },
-    $: selector => selector === '#lvlChip' ? chip : selector === '.hero-lvrow' ? row : xp,
+    $: selector => ({ '#lvlChip': chip, '.hero-lvrow .hero-lv': levelText, '.hero-title': title, '.hero-name': name, '.hero-xprow': xp })[selector] || null,
     esc, XP_PIPS: Number(app.match(/const XP_PIPS = (\d+);/)[1]),
     totalXp: () => { const p = game.totalXp(); reads.push(p); return p; },
     settled: false, fight: { over: { winner } }, staked: false, foeCfg: { mode: 'spar' }, fightId: `r48-${seq}`,
@@ -125,23 +126,32 @@ async function settleChip(winner, webdriver) {
     FIGHT_ROW_LABEL: { spar: 'Pit win' }, S: { sounds: false },
     confettiRain() {}, levelSound() {}, queueCelebration() {}, evaluateBadges: async () => [],
   });
-  vm.runInContext(refreshSource, context);
+  vm.runInContext(source, context);
   const alias = typeof context.window.__refreshLevelChip;
   await vm.runInContext(settleSource + '\n}\nsettle();', context);
   await Promise.all(reads); await new Promise(resolve => setImmediate(resolve));
   const total = await game.totalXp(), level = game.levelFor(total);
-  return { row: row.innerHTML, xp: xp.innerHTML, total, level, alias, reads: reads.length };
+  return { levelText: levelText.textContent, title: title.textContent, name: name.textContent, xp: xp.innerHTML, total, level, alias, reads: reads.length };
 }
 for (const winner of ['p', 'f']) {
   await test(`CHIP webdriver=false ${winner === 'p' ? 'win' : 'loss'} refreshes production level and XP`, async () => {
     const r = await settleChip(winner, false);
     assert.ok(r.reads > 0, 'settlement never read XP');
     assert.equal(r.total, winner === 'p' ? 205 : 195, 'CONTROL real settlement award reaches ledger');
-    assert.match(r.row, new RegExp(`Lv ${r.level.level}<`));
+    assert.equal(r.levelText, `Lv ${r.level.level}`);
+    assert.equal(r.title, game.LEVEL_NAMES[Math.min(r.level.level, game.LEVEL_NAMES.length) - 1]);
+    assert.equal(r.name, 'Real Player');
     assert.ok(r.xp.includes(`${r.level.into.toLocaleString()}/${r.level.need.toLocaleString()}`), r.xp);
     assert.equal(r.alias, 'undefined', 'production leaks the webdriver alias');
   });
 }
+await test('CONTROL omitted level refresh leaves stale chip text', async () => {
+  const broken = refreshSource.replace('if (level) level.textContent = `Lv ${lvl.level}`;', '');
+  assert.notEqual(broken, refreshSource);
+  const r = await settleChip('p', false, broken);
+  assert.equal(r.levelText, 'STALE');
+  assert.notEqual(r.levelText, `Lv ${r.level.level}`);
+});
 await test('CONTROL webdriver=true retains the test alias', async () => {
   const r = await settleChip('p', true); assert.equal(r.alias, 'function'); assert.notEqual(r.xp, 'STALE');
 });

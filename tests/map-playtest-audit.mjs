@@ -205,7 +205,12 @@ await test('CONTROL remote den actual card, handler, payout and tomorrow', async
   await reset(); const day=dateKey(); let fight;
   const card=async()=>run(cut('  const rDen = remoteDen(date);', '\n  const remoteSect =') +
     cut('  const remoteSect =', '\n\n') + '\nreturn remoteSect;',
-    {...P,date:day,xpRows:await D.db.all('xp'),esc:String,badgePixHtml:()=>''});
+    {...P,date:day,xpRows:await D.db.all('xp'),esc:String,badgePixHtml:()=>'',
+      themedLook:()=>({}), pitOpponentPortrait:cfg=>{
+        assert.equal(cfg.name,P.remoteDen(day).boss);
+        assert.equal(cfg.mage,P.remoteDen(day).theme?.art === 'mage');
+        return ''; // Portrait pixels belong to the browser audit; this control grades availability and payout.
+      }});
   assert((await card()).includes('id="remoteDenBtn"'));
   const events={};
   await run(cut("  $('#remoteDenBtn', body)?.addEventListener", '\n  const start = (foeCfg)'), {
