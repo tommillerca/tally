@@ -53,17 +53,50 @@ const labels = [
   ['H10-3', {}, {}, 'Paid'],
 ];
 for (const [id,tm,gear,label] of labels) await check(`ZERO ${label}`, () => {
-  assert.match(tagFor(id,tm,gear), new RegExp(`>${label}<`));
+  const html = tagFor(id,tm,gear);
+  if (label === 'Free' || label === 'Free: no stats') assert.equal(html, '', 'free labels emit no element or spacing');
+  else assert.match(html, new RegExp(`>${label}<`));
 });
-await check('RESET and HIDE display their free reason without overlapping cost badges', () => {
+await check('RESET and HIDE retain actions without free labels or cost badges', () => {
   const tiles = block('        const lookTilesHtml =', '        /* ---------------------------------------------------------------- v2');
   const html=vm.runInNewContext(`${tiles}; lookTilesHtml([])`, {...L,
     cell:(value,inner)=>`<button data-look="${value}">${inner}</button>`,
     ownArt:{}, bhTrim:()=>'', bhAsset:()=>'', fbTintAttr:()=>'', esc:String,
     wornGear:null, tm:{}, slot:'H', ICONS:{hidden:()=>''}, bhFamilies:()=>new Map(),
   });
-  assert.match(html,/Reset · Free/); assert.match(html,/Hide · Free/);
+  assert.match(html,/>Reset</); assert.match(html,/>Hide</); assert.doesNotMatch(html, /Free/);
   assert(!html.includes('look-cost'), 'free actions use their existing caption, not a second overlapping badge');
+});
+await check('ITEM markup drops free badges and preserves state and dust badges', () => {
+  const tiles = block('        const lookTilesHtml =', '        /* ---------------------------------------------------------------- v2');
+  for (const [current, wornGear, price, expected] of [
+    ['', null, 0, ''], ['H10-3', null, 0, 'Wearing'], ['', {}, 0, 'Paid'], ['', {}, 12, '12dust'],
+  ]) {
+    const item = {id:'H10-3', name:'Hat', rarity:'common'};
+    const html = vm.runInNewContext(`${tiles}; lookTilesHtml([item])`, {...L, item,
+      cell:(value,inner)=>`<button data-look="${value}">${inner}</button>`,
+      ownArt:{}, bhTrim:()=>'', bhAsset:()=>'', fbTintAttr:()=>'', esc:String,
+      wornGear, tm:{H:current}, slot:'H', ICONS:{hidden:()=>''},
+      bhFamilies:items=>new Map([['hat',items]]), RAR_ORDER:['common'], sel:current, cur:current,
+      lookArt:()=>'<canvas></canvas>', rarityTagHtml:()=>'',
+      costTag:id=>tagFor(id,{H:current},wornGear,price),
+    });
+    assert.doesNotMatch(html, /Free/);
+    const inner = html.match(/<button data-look="H10-3">([\s\S]*?)<\/button>/)[1];
+    if (!expected) assert.equal(inner, '<canvas></canvas>', 'no badge, placeholder or whitespace remains');
+    else assert.match(inner, new RegExp(`>${expected}<`));
+  }
+});
+await check('REFRESH inserts Wearing after an absent badge and removes a newly free badge', () => {
+  const source = block("        const tag = $('.look-cost', c);", '\n      }\n      // Keep the disabled');
+  let markup = '';
+  const c = {dataset:{look:'H10-3'}, insertAdjacentHTML:(_where,html)=>{markup=html;}};
+  const tag = {set outerHTML(html) {markup=html;}};
+  for (const current of ['H10-3', '', 'H10-3']) {
+    vm.runInNewContext(source, {c, $:()=>markup ? tag : null, lookPriceMap:{'H10-3':0},
+      costTag:id=>tagFor(id,{H:current},null)});
+    assert.equal(markup, current ? '<span class="look-cost paid">Wearing</span>' : '');
+  }
 });
 await check('CONTROL priced tile retains dust amount and hide is free', () => {
   assert.match(tagFor('H10-3',{}, {},12), />12dust</);

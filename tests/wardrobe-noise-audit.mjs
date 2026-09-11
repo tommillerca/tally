@@ -38,7 +38,11 @@ function room() {
     assert.equal(where, 'beforeend'); assert.equal(html, ''); replace(value);
   } };
   const tiles = ['', 'other', '__hide__'].map(id => ({ dataset: { look: id },
-    classList: { toggle() {} }, addEventListener(type, fn) { this[type] = fn; } }));
+    classList: { toggle() {} }, addEventListener(type, fn) { this[type] = fn; },
+    insertAdjacentHTML(where, value) {
+      assert.equal(where, 'beforeend');
+      assert.match(value, /class="look-cost dust">6/);
+    } }));
   const ctx = vm.createContext({
     S: { mogv2: true, lookPreview: null }, GEAR_SLOTS: ['H'], slot: 'H', baseArtId: 'worn',
     tm: {}, dustBal: 20, look: { H: 'worn' }, lookPriceMap: { other: 6 }, slotArts: [],

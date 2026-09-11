@@ -10,6 +10,10 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 561, date: '2026-09-10', title: 'Quieter Wardrobe labels', items: [
+    'Wardrobe tiles no longer show Free or Free: no stats. Wearing, Paid and Bone Dust prices remain visible.',
+  ] },
+
   { n: 560, date: '2026-09-10', title: 'A device report for testing', items: [
     'Internal builds can copy device measurements from Settings, with keyboard and edge-swipe probes and clear labels for checks that still need a person.',
   ] },
