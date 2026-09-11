@@ -12095,7 +12095,7 @@ button.t3-price::before {
 
 /* Approved Crew 1C. IDs belong only to renderFriends, never the fight arena.
    Fan geometry, solid plates and bounded art mounting remain unchanged. */
-#cfanSel { display: block; padding: 12px 0; background: none; border: 0; box-shadow: none; }
+#cfanSel { display: block; margin-top: 4px; padding: 2px 0; background: none; border: 0; box-shadow: none; }
 #cfanSel .cfan-identity { display: flex; align-items: center; gap: 12px; }
 #cfanSel .cfan-star { width: 46px; height: 46px; place-content: center; border: 1px solid var(--line); box-shadow: none; }
 #cfanSel .cfan-star img { width: 48px; height: 48px; max-width: none; grid-area: 1 / 1; pointer-events: none; }
@@ -12103,7 +12103,7 @@ button.t3-price::before {
 #cfanSel .cfan-star.on { background: var(--surface-2); border-color: var(--gold); }
 #cfanSel .cfan-sel-nm { display: block; width: 100%; overflow-wrap: anywhere; }
 #cfanSel .cfan-status { display: block; margin-top: 4px; color: var(--text-3); font-size: var(--fs-0); }
-#cfanSel .cfan-acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 14px; }
+#cfanSel .cfan-acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 6px; }
 #cfanSel .cfan-acts .btn { min-height: 44px; font-size: var(--fs-4); }
 #cfanSel .cfan-acts .btn.gift { background: var(--gold); color: var(--ink); }
 #cfanSearchRow { flex-wrap: wrap; }
