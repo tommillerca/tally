@@ -15533,7 +15533,7 @@ async function renderSettings(el) {
   /* Copy, not just screenshot: a screenshot means somebody retypes these values to
      search for them. Clipboard can be refused, so the fallback is selecting the text
      rather than a toast claiming a copy that did not happen. */
-  $('#openDeviceReport')?.addEventListener('click', () => { if (!STORE_BUILD) openDeviceReport({ openSheet, diagnosticsLine, esc, toast }); });
+  $('#openDeviceReport')?.addEventListener('click', async () => { if (!STORE_BUILD) openDeviceReport({ openSheet, diagnosticsLine, esc, toast, apiConfig: await social.apiConfiguration(), resetApiBase: social.resetApiBase }); });
   $('#copyDiag')?.addEventListener('click', async () => {
     const txt = $('#diagLine')?.textContent || '';
     try { await navigator.clipboard.writeText(txt); toast('Diagnostics copied.', 1800); }
@@ -18323,7 +18323,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (r.ok) { popSound(S.sounds); toast('Battle Charm active: your next 5 Pit wins pay +25% coins'); }
       // refusing to stack is the point, so say why rather than failing silently
       else if (r.reason === 'active') toast(`A charm is already running: ${r.charges} Pit win${r.charges === 1 ? '' : 's'} left. Save this one.`, 3200);
-      renderCharacter(wrap, 'crates');
+      if (r.ok) renderCharacter(wrap, 'crates');
     });
     $('#useVigor', content)?.addEventListener('click', async () => {
       if (await consumeConsumable('vigor')) { const e = await addVigor(VIGOR_DRAUGHT_AMOUNT); popSound(S.sounds); toast(`Vigor Draught drunk: +${VIGOR_DRAUGHT_AMOUNT} Vigor. You have ${e.ready} Pit ${e.ready === 1 ? 'fight' : 'fights'} ready.`, 3000); }
@@ -24722,7 +24722,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v575'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v576'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
@@ -27067,10 +27067,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
            tests/reward-sop-audit.mjs. `tests/repeat-audit.mjs`, named here
            since v389, has never existed in this repo. */
         const already = !!(remote && remote.ok === true && remote.already === true);
-        const r = (refused || already) ? { ok: false, reason: already ? 'already' : remote.reason } : await claimSpire(foeCfg.spire);
+        const r = (refused || already) ? { ok: false, reason: already ? 'already' : remote.reason } : await claimSpire(foeCfg.spire).catch(() => ({ ok: false, reason: 'storage' }));
         if (pending) {
           coins = 0;
-          toast('Claim pending. Reconnect to confirm ownership. No tribute or Boon until confirmed.', 4600);
+          if (!r.ok && foeCfg.charge) await refundPitFight(foeCfg.charge);
+          toast(r.ok ? 'Claim pending. Reconnect to confirm ownership. No tribute or Boon until confirmed.' : 'Claim could not be saved locally. Fight charge returned. Reconnect to check ownership before trying again.', 4600);
           dispatchEvent(new CustomEvent('bh-spire-claimed'));
         } else if (already) {
           coins = 25;   // it is already yours: pocket change, no re-farm
@@ -27082,12 +27083,15 @@ async function openFight(pitWrap, fighter, foeCfg) {
         } else if (refused) {
           coins = 40;
           toast(`You already hold ${SPIRE_CAP} spires. Let one go dormant to take another.`, 4200);
-        } else if (r.ok) {
-          const owned = await social.fetchMySpires();
-          if (owned !== null) await syncSieges(owned);
+        } else if (r.ok || remote?.ok === true) {
+          // Server ownership is durable even if the local mirror refuses its cap.
+          // Pay the earned takeover now; the normal siege poll repairs the mirror.
+          if (!r.ok) toast('Tower claimed. Local ownership is waiting for sync.', 4000);
+          const owned = await social.fetchMySpires().catch(() => null);
+          if (owned !== null) await syncSieges(owned).catch(() => {});
           coins = 80;
           // the server owns the level; mirror what it just told us
-          if (remote && remote.ok && remote.level) await setSpireLevel(foeCfg.spire.id, remote.level);
+          if (remote && remote.ok && remote.level) await setSpireLevel(foeCfg.spire.id, remote.level).catch(() => {});
           const lvl = (remote && remote.level) || r.level || 1;
           extraCards.push({ iconHtml: `<img src="assets/brand/tomb.png" style="width:110px;height:110px;object-fit:contain">`,
             name: foeCfg.spire.name, rarity: 'epic', kind: lvl > 1 ? `DARK SPIRE · LV ${lvl}` : 'DARK SPIRE',

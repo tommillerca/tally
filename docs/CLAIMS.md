@@ -1,5 +1,11 @@
 # What each patch note claims, and what backs it
 
+## v576 (2026-09-11)
+
+Changelog item: Confirmed tower claims keep their reward when local sync fails. Device report shows test API overrides and can restore production.
+
+1. PROOF: v576-hunt-audit.mjs | REACH: Node execution of the production claim settlement branch and API reset functions, audit source anchors, changelog uniqueness, and charm handler rebuild counts. Red baseline and final results in docs/v576. Browser geometry, native taps, and live server recovery remain unverified.
+
 ## v575 (2026-09-11)
 
 Changelog item: Crew explains empty favourites and search selections and how to clear them.

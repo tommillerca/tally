@@ -50,6 +50,20 @@ export async function initFromQuery() {
   } catch { /* no location in tests */ }
 }
 
+// Device diagnostics expose deliberate test overrides without changing identity.
+export async function apiConfiguration() {
+  const base = await apiBase();
+  return { base, custom: base !== PROD_API };
+}
+export async function resetApiBase() {
+  const url = new URL(location.href);
+  url.searchParams.delete('api');
+  history.replaceState(history.state, '', url.href);
+  await kvSet('apiBase', null);
+  cachedApi = PROD_API;
+  return apiConfiguration();
+}
+
 /* ---------------- identity ---------------- */
 const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
 

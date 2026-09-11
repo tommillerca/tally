@@ -9,6 +9,9 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 576, date: '2026-09-11', title: 'Claim recovery and device API reset', items: [
+    'Confirmed tower claims keep their reward when local sync fails. Device report shows test API overrides and can restore production.',
+  ] },
   { n: 575, date: '2026-09-11', title: 'Crew empty selections explained', items: [
     'Crew explains empty favourites and search selections and how to clear them.',
   ] },
@@ -129,10 +132,6 @@ export const CHANGES = [
   ] },
 
   { n: 544, date: '2026-09-10', title: 'Held properly at last', items: [
-    'The off-hand brushes and spades are held properly now.',
-  ] },
-
-  { n: 544, date: '2026-09-09', title: 'Held properly at last', items: [
     'The off-hand brushes and spades are held properly now.',
   ] },
 

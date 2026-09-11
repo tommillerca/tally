@@ -1,0 +1,10 @@
+FAIL CONTROL server-confirmed claim retains full reward after local cap failure: Expected values to be strictly equal:
+FAIL API override resets persisted cache and query while preserving other parameters: resetApiBase is not defined
+FAIL coin audit follows Shop destination: The input did not match the regular expression /id: 'coinBtn'[^\n]+hubTab: 'shop'/. Input:
+FAIL character audit follows Backpack label: The input did not match the regular expression /id: 'charBtn'[^\n]+hubTab: 'crates'/. Input:
+FAIL retired drop audit uses current Shop control: The input was expected to not match the regular expression /id: 'dropToShop'/. Input:
+FAIL siege coverage is explicitly conditional: The input did not match the regular expression /conditional: '#activeSiegeBanner'/. Input:
+FAIL notch guard measures character instead of background: The input did not match the regular expression /#bhStage > \.hero-char/. Input:
+FAIL changelog versions unique with correct v544 date: Expected values to be strictly equal:
+FAIL refused charm costs zero full rebuilds; successful charm costs one: Expected values to be strictly equal:
+0/9 passed
