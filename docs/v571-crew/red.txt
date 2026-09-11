@@ -1,0 +1,199 @@
+FAIL fresh timestamps do not claim presence: Expected values to be strictly deep-equal:
++ actual - expected
+
+  {
+    fresh: true,
+    on: true,
++   text: 'Online now'
+-   text: ''
+  }
+
+FAIL CONTROL minute and hour comparison eligibility remains: Expected values to be strictly deep-equal:
++ actual - expected
+
+  {
+    fresh: true,
+    on: false,
++   text: 'Synced 6m ago'
+-   text: ''
+  }
+
+FAIL CONTROL day-old comparisons disabled without notices: Expected values to be strictly deep-equal:
++ actual - expected
+
+  {
+    fresh: false,
+    on: false,
++   text: 'Awaiting a recent sync'
+-   text: ''
+  }
+
+FAIL CONTROL missing, invalid and future clocks remain unknown: Expected values to be strictly deep-equal:
++ actual - expected
+
+  {
+    fresh: false,
+    on: false,
++   text: 'Sync time unavailable'
+-   text: ''
+  }
+
+FAIL no player presence claims or freshness wording in shipped social renderers: The input was expected to not match the regular expression /Online now|Synced|recent syncs|Sync time unavailable|Showing last shared snapshots|cfan-live|live-dot/. Input:
+
+'function crewCardHtml(f, since) {\n' +
+  '  const p = f.profile || {};\n' +
+  '  const ol = onlineLabel(f.lastSeen);\n' +
+  '  if (!ol.fresh) since = null;\n' +
+  "  /* THE STAGE SHIPS EMPTY. paintFan built every friend's full layered stack\n" +
+  '     through innerHTML, so a crew of 30 mounted 270 images and 428 MB before\n' +
+  '     anybody touched anything, and 120 friends reached 1537.5 MB. applyFan fills\n' +
+  '     the seven seated stages and clears the rest. */\n' +
+  '  return `<button class="cfan-card" data-fan="${esc(f.playerId)}">\n' +
+  '    <span class="cfan-hit"></span>\n' +
+  '    <div class="cfan-stage"></div>\n' +
+  '    ${ol.on ? \'<span class="cfan-live" title="Online now"></span>\' : \'\'}\n' +
+  '    <span class="cfan-fstar" hidden>${ICONS.star(15)}</span>\n' +
+  '    <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small><span class="cfan-title">${p.title ? esc(p.title) : p.level ? esc(p.levelName || \'Bonehead\') : \'New Bonehead\'}</span><span class="lv">LV ${p.level || 1}</span></small><small class="cfan-snapshot">${esc(ol.text)}</small>${since ? `<small class="cfan-since">${esc(since)}</small>` : \'\'}${\n' +
+  '      /* CREW-13: spires had zero surface anywhere on the Crew tab. Skipped\n' +
+  '         when `since` already said so (e.g. "Just took a spire") -- one card\n' +
+  '         does not need to say the same true thing twice. */\n' +
+  '      f.spires && !(since && /spire/i.test(since)) ? `<small class="cfan-spires">${badgePixHtml(\'tombstone\', 11)} Holds ${f.spires} spire${f.spires === 1 ? \'\' : \'s\'}</small>` : \'\'}</div>\n' +
+  '  </button>`;\n' +
+  '}\n' +
+  '\n' +
+  '/* THE SERVER BOUNDS EVERY BUCKET AND SAYS SO. GET /friends caps friends,\n' +
+  '   incoming and outgoing at 100 rows each and returns `truncated: { friends,\n' +
+  '   incoming, outgoing }`. That flag was added server-side on 2026-09-03 and\n' +
+  '   nothing read it; at 100+ friends the count stated a false number as fact.\n' +
+  '   A capped list reads `100+` (the bucket length, never a hardcoded cap) and\n' +
+  '   carries one line saying what is shown. */\n' +
+  "function crewCount(list, truncated) { return `${list.length}${truncated ? '+' : ''}`; }\n" +
+  'function crewTruncText(list, what) { return `Showing your ${list.length} most recent ${what}.`; }\n' +
+  '\n' +
+  '// Requests only: the Crew itself lives in the fan now. Incoming first (it has\n' +
+  '// the action on it), pending after.\n' +
+  'function requestRowsHtml(data) {\n' +
+  '  const { incoming, outgoing, truncated = {} } = data;\n' +
+  "  let h = '';\n" +
+  '  if (incoming.length) h += `<div class="fl-sect"><div class="fl-h">Wants to be friends · ${crewCount(incoming, truncated.incoming)}</div>${incoming.map(f => `\n' +
+  '    <div class="fl-row">\n' +
+  '      ${friendRowAvatar(f)}\n' +
+  '      <div class="fl-main"><b>${nameWithAlias(f)}</b><span>${f.profile ? \'Last shared Lv \' + f.profile.level : \'Profile not shared yet\'}</span></div>\n' +
+  '      <div class="fl-actions"><button class="btn small" data-accept="${esc(f.playerId)}">Accept</button><button class="btn small ghost" data-remove="${esc(f.playerId)}">Ignore</button></div>\n' +
+  '    </div>`).join(\'\')}${truncated.incoming ? `<p class="note">${crewTruncText(incoming, \'requests\')}</p>` : \'\'}</div>`;\n' +
+  '  if (outgoing.length) h += `<div class="fl-sect"><div class="fl-h">Pending · ${crewCount(outgoing, truncated.outgoing)}</div>${outgoing.map(f => `\n' +
+  '    <div class="fl-row">\n' +
+  '      ${friendRowAvatar(f)}\n' +
+  '      <div class="fl-main"><b>${nameWithAlias(f)}</b><span>Waiting for them to add you back</span></div>\n' +
+  '      <button class="btn small ghost" data-remove="${esc(f.playerId)}">Cancel</button>\n' +
+  '    </div>`).join(\'\')}${truncated.outgoing ? `<p class="note">${crewTruncText(outgoing, \'requests\')}</p>` : \'\'}</div>`;\n' +
+  '  return h;\n' +
+  '}\n' +
+  '\n' +
+  '// The Crew tab (full screen). Not online yet -> a Go Online prompt; online ->\n' +
+  '// your friend code up top (share + copy), an add-a-friend field, and your list.\n' +
+  'async function renderFriends(el) {\n' +
+  '  const apiConfigured = !!(await social.apiBase());\n' +
+  '  // __testMe / __testFriends: webdriver-gated fixture hooks (same pattern as\n' +
+  '  // __openFriendProfile). The fan needs real friends on the server, so the\n' +
+  '  // audits seed these instead of a live account.\n' +
+  '  const me = (apiConfigured ? await social.socialMe() : null)\n' +
+  '    || (navigator.webdriver && window.__testMe) || null;\n' +
+  "  const clUnseen = (await import('./changelog.js')).changelogUnseen(await kvGet('changelogSeen', 0));\n" +
+  '  const whatsNewCard = `\n' +
+  '    <button class="card crew-friends" id="crewWhatsNew" style="margin-bottom:12px">\n' +
+  '      <span>What\'s New${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : \'\'}</span>\n' +
+  '      <span class="crew-friends-r"><span style="color:var(--text-3);font-size:var(--fs-2)">See recent updates</span><span class="crew-chev">›</span></span>\n' +
+  '    </button>`;\n' +
+  '\n' +
+  '  if (!me) {\n' +
+  '    el.innerHTML = `\n' +
+  '      <h1 class="page-h1">The Crew</h1>\n' +
+  '      ${whatsNewCard}\n' +
+  '      <div class="card">\n' +
+  '        <p class="note" style="margin:0 0 12px">Go online to get your friend code and build your Crew. Your whole save backs up too, end-to-end <b>encrypted</b> so only your phone can read it.</p>\n' +
+  '        <button class="btn" id="crewGoOnline">Go Online</button>\n' +
+  '      </div>`;\n' +
+  "    $('#crewWhatsNew', el)?.addEventListener('click', openWhatsNew);\n" +
+  "    $('#crewGoOnline', el)?.addEventListener('click', async () => {\n" +
+  "      const btn = $('#crewGoOnline', el); btn.disabled = true; btn.textContent = 'Connecting...';\n" +
+  "      const r = await social.goOnline().catch(() => ({ ok: false, reason: 'network' }));\n" +
+  `      if (!r.ok) { btn.disabled = false; btn.textContent = 'Go Online'; toast(navigator.onLine === false ? "You're offline. Try again when you have signal." : 'Could not connect. Try again in a bit.'); return; }\n` +
+  "      trackEvent('go_online');\n" +
+  '      confettiRain(60); levelSound(S.sounds);\n' +
+  '      await social.syncProfile(await socialSnapshot(), APP_SOCIAL_V).catch(() => {});\n' +
+  '      await social.pushBackup(APP_SOCIAL_V).catch(() => {});\n' +
+  `      toast("You're online! Here's your friend code.", 3600);\n` +
+  '      toastNamePickRefusal(r.namePick);\n' +
+  '      renderFriends(el);\n' +
+  '      if (!(await social.socialMe())?.name) setTimeout(() => openNameBuilder(() => renderFriends(el)), 500);\n' +
+  '    });\n' +
+  '    return;\n' +
+  '  }\n' +
+  '\n' +
+  '  const dispName = me.name || me.handle;\n' +
+  '  el.innerHTML = `\n' +
+  '    <h1 class="page-h1">The Crew<span class="sub">You\'re <b>${esc(dispName)}</b> · <button class="link" id="crewEditName">${me.name ? \'change name\' : \'pick a name\'}</button></span></h1>\n' +
+  '\n' +
+  '    <!-- Tom, 2026-09-09: greet with the fan, then notifications. Gifts stay\n' +
+  '         immediately below the fan with their OPEN control and pending tab badge. -->\n' +
+  '    <div class="cfan-block">\n' +
+  '      <div class="cfan-head"><span>YOUR CREW<b id="cfanCount"></b></span><i></i><small>SWIPE OR TAP</small></div>\n' +
+  '      <div class="cfan-faves" id="cfanFaves" hidden></div>\n' +
+  '      <!-- Search sits ABOVE the deck and below the faves: it filters what the fan\n' +
+  '           shows, so it has to read as belonging to the fan rather than to the\n' +
+  '           leaderboard underneath. Hidden entirely for small crews, where scanning\n' +
+  '           four cards is faster than typing. -->\n' +
+  '      <div class="cfan-search" id="cfanSearchRow" hidden>\n' +
+  '        <input id="cfanSearch" type="search" inputmode="search" autocomplete="off"\n' +
+  '               placeholder="Search your Crew" aria-label="Search your Crew">\n' +
+  '        <button class="cfan-clear" id="cfanClear" hidden aria-label="Clear search">${ICONS.close ? ICONS.close(14) : \'&times;\'}</button>\n' +
+  '        <!-- Tom, 2026-08-08: "the player could filter it themself once they get to\n' +
+  '             the tab, not as a default open." So the deck still OPENS on the bias\n' +
+  '             sort (starred, then online, then everyone), and this is a control the\n' +
+  '             player reaches for. Off every time the tab opens: a filter that\n' +
+  "             remembers itself would eventually hide most of someone's crew with no\n" +
+  '             obvious reason why. -->\n' +
+  '        <button class="cfan-online" id="cfanOnline" aria-pressed="false"\n' +
+  '                aria-label="Show only friends online now"><i class="live-dot"></i>Online now</button>\n' +
+  '      </div>\n' +
+  '      <p class="cfan-nohit note" id="cfanNoHit" hidden></p>\n' +
+  '      <div class="cfan-wrap" id="cfanWrap" hidden><div class="cfan-deck" id="cfanDeck"></div></div>\n' +
+  '      <div class="cfan-pager" id="cfanPager" hidden>\n' +
+  '        <button class="cfan-arrow prev" id="cfanPrev" aria-label="Previous friend">${ICONS.chev(16)}</button>\n' +
+  '        <span class="cfan-dots" id="cfanDots"></span>\n' +
+  '        <button class="cfan-arrow" id="cfanNext" aria-label="Next friend">${ICONS.chev(16)}</button>\n' +
+  '      </div>\n' +
+  '      <div class="cfan-sel" id="cfanSel" hidden></div>\n' +
+  '      <p class="cfan-nohit note" id="cfanTrunc" hidden></p>\n' +
+  '      <p class="note" id="cfanSnapshot" hidden></p>\n' +
+  '      <div class="friends-empty" id="cfanEmpty" hidden>\n' +
+  '        <p class="fe-title">No Crew yet</p>\n' +
+  `        <p class="note">Send a friend your code, or type theirs in below. Once you've added each other their Bonehead joins your fan right here, and you can send gifts and cheers.</p>\n` +
+  '      </div>\n' +
+  '      <!-- "We could not ask" gets its OWN box, because it is not the same news as\n' +
+  '           "you have nobody" and must never borrow that copy. See listFriends. -->\n' +
+  '      <div class="friends-empty" id="cfanUnreached" hidden>\n' +
+  '        <p class="fe-title">Could not reach the Crew server</p>\n' +
+  '        <p class="note">Your Crew is safe: this phone just cannot get to it right now. Everything else in the app works offline. Tap to try again.</p>\n' +
+  '        <button class="btn ghost" id="cfanRetry">Try again</button>\n' +
+  '      </div>\n' +
+  '      <div id="cfanLoading" class="friends-loading">Loading your Crew...</div>\n' +
+  '    </div>\n' +
+  '\n' +
+  '    <div class="card gift-top-card" id="giftTopCard" hidden>\n' +
+  '      <div class="card-title">A GIFT IS WAITING</div>\n' +
+  '      <div id="giftTopList"></div>\n' +
+  '    </div>\n' +
+  '\n' +
+  '    <!-- Cheers follow the fan and pending gifts, before the standings. -->\n' +
+  '    <div class="card cheers-card" id="cheersCard" hidden>\n' +
+  '      <div class="card-title">CHEERS<span class="cheers-new" id="cheersNew" hidden></span></div>\n' +
+  '      <div id="cheersList"></div>\n' +
+  '    </div>\n' +
+  '\n' +
+  '    <!-- THE WEEKLY RACE: the thing with a clock on it stays above the archive\n' +
+  '         half of the tab. -->\n' +
+  '    <details class="glutton-banner race-b'... 70179 more characters
+
+CREW PRESENCE: 0 passed, 5 failed

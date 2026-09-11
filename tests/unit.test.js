@@ -8423,6 +8423,68 @@ test('PET STRESS: equipped legal level-16 profile and separate ordinary/extreme 
   assert.deepEqual(geared.f, naked.f, 'player armor never inflates the foe');
 });
 
+test('Crew empty state applies before enrichment and survives stale paints', async () => {
+  const { readFileSync } = await import('node:fs');
+  const vm = await import('node:vm');
+  const source = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  const start = source.indexOf('  let fanPaintRevision = 0;');
+  const end = source.indexOf('  const cfanCycle =', start);
+  assert.ok(start > 0 && end > start);
+  const nodes = new Map();
+  const node = id => {
+    if (!nodes.has(id)) nodes.set(id, {hidden: true, textContent: '', innerHTML: '',
+      dataset: {}, classList: {toggle() {}}, setAttribute() {}, addEventListener() {}, remove() {}});
+    return nodes.get(id);
+  };
+  const pending = [];
+  const context = vm.createContext({
+    el: {}, $: node, data: {friends: [{playerId: 'a'}, {playerId: 'b'}]},
+    favs: new Set(), fanOrder: [], fanQuery: '', fanFavouritesOnly: false,
+    snapshotNotice: () => '', crewCount: rows => rows.length, crewTruncText: () => '',
+    paintFaves() {}, applyFan() {}, fanFriend: id => ({playerId: id}),
+    crewCardHtml: f => `<card>${f.playerId}</card>`,
+    friendSinceYesterdayMap: () => new Promise(resolve => pending.push(resolve)),
+  });
+  vm.runInContext(`
+    const resortFan = () => { fanOrder = data.friends
+      .filter(f => !fanFavouritesOnly || favs.has(f.playerId))
+      .filter(f => !fanQuery || f.playerId.includes(fanQuery)).map(f => f.playerId); };
+    ${source.slice(start, end)}
+    globalThis.paintFan = paintFan;
+  `, context);
+  const oldPaint = context.paintFan();
+  assert.equal(pending.length, 1);
+  context.fanFavouritesOnly = true;
+  const emptyPaint = context.paintFan();
+  assert.equal(node('#cfanNoHit').hidden, false);
+  assert.match(node('#cfanNoHit').textContent, /No favourites/);
+  assert.equal(node('#cfanDeck').innerHTML, '');
+  assert.equal(pending.length, 1, 'empty selection needs no enrichment');
+  await emptyPaint;
+  pending.shift()({});
+  await oldPaint;
+  assert.equal(node('#cfanDeck').innerHTML, '', 'stale paint cannot refill empty deck');
+  assert.equal(node('#cfanNoHit').hidden, false);
+  context.fanFavouritesOnly = false;
+  context.fanQuery = 'missing';
+  await context.paintFan();
+  assert.match(node('#cfanNoHit').textContent, /matches "missing"/);
+  context.fanQuery = '';
+  const fullPaint = context.paintFan();
+  pending.shift()({});
+  await fullPaint;
+  assert.equal(node('#cfanNoHit').hidden, true);
+  assert.match(node('#cfanDeck').innerHTML, /<card>a<\/card>/);
+  context.data = {friends: []};
+  await context.paintFan();
+  assert.equal(node('#cfanEmpty').hidden, false);
+  assert.equal(node('#cfanNoHit').hidden, true);
+  context.data = {friends: [], reached: false};
+  await context.paintFan();
+  assert.equal(node('#cfanUnreached').hidden, false);
+  assert.equal(node('#cfanEmpty').hidden, true);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

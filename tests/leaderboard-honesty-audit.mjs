@@ -47,7 +47,7 @@ function harness(age, fleet = false) {
     crewCount: a => String(a.length), crewTruncText: () => '',
   });
   ctx.social.fetchStepRace = async () => ctx.raceFixture;
-  vm.runInContext(['onlineLabel', 'snapshotNotice', 'snapshotDetail', 'crewCardHtml', 'requestRowsHtml', 'openFriendProfile'].map(fn).join('\n') + '\n'
+  vm.runInContext(['leaderboardLastOnline', 'onlineLabel', 'snapshotNotice', 'snapshotDetail', 'crewCardHtml', 'requestRowsHtml', 'openFriendProfile'].map(fn).join('\n') + '\n'
     + ['paintFanSel', 'openLeaderboard', 'hydratePodium', 'raceFreshHtml', 'hydrateRace', 'hydrateNewcomers'].map(nested).join('\n'), ctx);
   vm.runInContext(fn('openFriendPaddock').replace("await import('./paddock.js')", 'paddock'), ctx);
   return { ctx, p, friend, nodes, node, sheet: () => sheet };
@@ -72,18 +72,11 @@ for (const [label, age, fleet] of scenarios) {
       const copy = text(html);
       assert.ok(copy.includes('Pal'), 'CONTROL player stays reachable');
       assert.doesNotMatch(copy, /last seen|\b\d+d ago|\byesterday\b/i);
-      if (age >= 6 * 60000) {
-        // Mixed boards include a fresh self row. Grade the stale friend's own
-        // rendered row so Online now cannot leak onto it or ban the fresh self.
-        const staleHtml = fleet ? html : surface === 'leaderboard'
-          ? html.match(/data-lbview="pal"[^]*?(?=<div class="lb-row|$)/)?.[0]
-          : surface === 'race' ? html.match(/<button[^>]*data-raceview="pal"[^]*?<\/button>/)?.[0] : html;
-        assert.ok(staleHtml, 'CONTROL stale player row exists');
-        assert.doesNotMatch(text(staleHtml), /\bonline\b/i);
-      }
-      if (!['podium', 'requests'].includes(surface)) assert.ok(copy.includes(expected), `expected "${expected}", got ${copy}`);
-      if (['profile', 'podium', 'requests', 'paddock'].includes(surface)) assert.match(copy, /last shared/i);
-      if (fleet && ['leaderboard', 'podium', 'race', 'fan selection'].includes(surface)) assert.match(copy, /No recent updates have reached this view/);
+      assert.doesNotMatch(copy, /Synced|recent sync|sync time|awaiting.*sync|Showing last shared snapshots|Online now/i);
+      if (surface === 'leaderboard') assert.match(copy, /Last online: 2026-/);
+      else assert.doesNotMatch(copy, /\bonline\b/i);
+      assert.doesNotMatch(html, /cfan-live|live-dot/);
+      if (['podium', 'requests'].includes(surface)) assert.match(copy, /last shared/i);
       if (surface === 'race') {
         assert.match(copy, /12,345/); // CONTROL saved count retained, never fabricated.
         if (age >= DAY) assert.doesNotMatch(copy, /\b2,345|minutes.*walking|You are.*behind/);
@@ -98,19 +91,20 @@ for (const [label, age, fleet] of scenarios) {
     });
   }
 }
-for (const [label, age] of scenarios) await check(`${label}: recent-sync filter`, () => {
+for (const [label, age] of scenarios) await check(`${label}: favourites filter`, () => {
   const h = harness(age);
   h.ctx.data.friends = [h.friend];
+  if (age < DAY) h.ctx.favs.add(h.friend.playerId);
   const start = app.indexOf("      noHit.textContent = !empty ? ''");
   const end = app.indexOf(";", start) + 1;
   assert.ok(start > 0 && end > start, 'CONTROL real empty-filter message exists');
-  vm.runInContext(`let fanOrder = [], centerId = null; const fanQuery = '', fanOnlineOnly = true;
+  vm.runInContext(`let fanOrder = [], centerId = null; const fanQuery = '', fanFavouritesOnly = true;
     const fanMatches = () => true, fanRank = () => 1;
     ${nested('resortFan')}; resortFan();
     const noHit = {}, empty = fanOrder.length === 0;
     ${app.slice(start, end)}; globalThis.filterResult = { count: fanOrder.length, copy: noHit.textContent };`, h.ctx);
   if (age < DAY) assert.equal(h.ctx.filterResult.count, 1, 'CONTROL fresh friend is selectable');
-  else { assert.equal(h.ctx.filterResult.count, 0); assert.equal(h.ctx.filterResult.copy, 'No friends online now in this selection. Tap Online now again to see everyone.'); }
+  else { assert.equal(h.ctx.filterResult.count, 0); assert.equal(h.ctx.filterResult.copy, 'No favourites in this selection. Tap Filter: favourites to see everyone.'); }
 });
 for (const [label, age, fleet] of scenarios) await check(`${label}: map race strip`, () => {
   const h = harness(age, fleet);
@@ -143,7 +137,7 @@ await check('CONTROL empty race and stale own row do not imply player inactivity
   assert.doesNotMatch(h.node('#raceCard').innerHTML, /class="track"/);
   h.ctx.raceFixture.players[0].seenAt = null;
   await vm.runInContext('hydrateRace()', h.ctx);
-  assert.match(text(h.node('#raceCard').innerHTML), /Sync time unavailable/);
+  assert.doesNotMatch(text(h.node('#raceCard').innerHTML), /sync|online/i);
   assert.doesNotMatch(text(h.node('#raceCard').innerHTML), /On this phone/);
 });
 await check('CONTROL timestamp boundaries and unavailable clocks', () => {
@@ -151,22 +145,22 @@ await check('CONTROL timestamp boundaries and unavailable clocks', () => {
   for (const value of [null, 0, -1, NaN, Infinity, now + 1, 'yesterday']) {
     ctx.stamp = value;
     const state = vm.runInContext('onlineLabel(stamp)', ctx);
-    assert.equal(state.on, false); assert.equal(state.text, 'Sync time unavailable');
+    assert.equal(state.on, false); assert.equal(state.text, '');
   }
   for (const [age, expected] of [[0, 'Online now'], [6 * 60000, 'Synced 6m ago'], [3600000, 'Synced 1h ago'], [DAY - 1, 'Synced 23h ago'], [DAY, 'Awaiting a recent sync']]) {
     ctx.stamp = now - age;
-    assert.equal(vm.runInContext('onlineLabel(stamp).text', ctx), expected);
+    assert.equal(vm.runInContext('onlineLabel(stamp).text', ctx), '');
   }
 });
 await check('CONTROL shared notice is bounded to available snapshots', () => {
   const { ctx } = harness(0);
   assert.equal(vm.runInContext('snapshotNotice([])', ctx), '');
-  assert.match(vm.runInContext('snapshotNotice([{lastSeen: null}])', ctx), /No recent updates/);
+  assert.equal(vm.runInContext('snapshotNotice([{lastSeen: null}])', ctx), '');
   assert.doesNotMatch(vm.runInContext('snapshotNotice([{lastSeen: Date.now()}, {lastSeen: 1}])', ctx), /No recent updates/);
 });
 await check('filter copy and stale fan notice are wired', () => {
-  assert.ok(app.includes('aria-label="Show only friends online now"'), 'recent-sync filter label');
-  assert.ok(app.includes('No friends online now in this selection. Tap Online now again to see everyone.'), 'honest empty filter');
+  assert.ok(app.includes('aria-label="Filter: show only favourite friends"'), 'favourites filter label');
+  assert.ok(app.includes('No favourites in this selection. Tap Filter: favourites to see everyone.'), 'honest empty filter');
   assert.ok(app.includes('snapshotNotice(data.friends)'), 'shared Crew notice');
   assert.ok(!app.includes('Their stats will show once they next open the app'), 'no promise that app open fixes stats');
 });
@@ -185,13 +179,13 @@ for (const staleAbove of [false, true]) await check(`mixed race: fresh lanes and
   assert.match(lanes[2][0], /race-pending-track/);
   assert.equal(Number(lanes[0][1]) > 0, !staleAbove);
   assert.match(html, /Last shared standings: You are <b>2th<\/b>/);
-  assert.match(html, /Showing last shared snapshots/);
-  assert.equal(/At last sync, you were/.test(html), !staleAbove, 'gap requires both own and adjacent row fresh');
+  assert.doesNotMatch(html, /Showing last shared snapshots/);
+  assert.equal(/At the recorded standings, you were/.test(html), !staleAbove, 'gap requires both own and adjacent row fresh');
   me.seenAt = now - DAY;
   await vm.runInContext('hydrateRace()', h.ctx);
   const staleOwn = h.node('#raceCard').innerHTML;
   assert.match(staleOwn, /Standings await recent updates/);
-  assert.doesNotMatch(staleOwn, /At last sync, you were/);
+  assert.doesNotMatch(staleOwn, /At the recorded standings, you were/);
 });
 console.log(`LEADERBOARD HONESTY: ${passed} passed, ${failed} failed`);
 process.exitCode = failed ? 1 : 0;

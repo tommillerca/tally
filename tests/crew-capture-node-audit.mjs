@@ -68,9 +68,10 @@ async function harness(scenario, webdriver = true) {
   const fetchBranch = app.match(/^  const fetchLb = async \(\) => [^]*?;$/m)?.[0];
   assert.ok(fetchBranch?.includes('window.__testLb'));
   vm.runInContext(`let data = { friends: [], incoming: [], outgoing: [] }, lbData = null;
-    let favs = new Set(), fanOrder = [], centerId = null, fanQuery = '', fanOnlineOnly = false;
+    let favs = new Set(), fanOrder = [], centerId = null, fanQuery = '', fanFavouritesOnly = false;
+    ${app.match(/^  let fanPaintRevision = 0;$/m)?.[0] || ''}
     const fanFriend = id => data.friends.find(f => f.playerId === id);
-    ${['onlineLabel', 'snapshotNotice', 'crewCardHtml', 'crewCount', 'crewTruncText', 'requestRowsHtml'].map(fn).join('\n')}
+    ${['leaderboardLastOnline', 'onlineLabel', 'snapshotNotice', 'crewCardHtml', 'crewCount', 'crewTruncText', 'requestRowsHtml'].map(fn).join('\n')}
     ${fetchBranch}
     ${['resortFan', 'paintFan', 'paint', 'openLeaderboard', 'raceFreshHtml', 'hydrateRace'].map(nested).join('\n')}
     globalThis.run = async () => { ${meBranch}
@@ -96,7 +97,7 @@ for (const scenario of ['degraded', 'fresh', 'one-stale', 'all-stale', 'unknown'
     assert.equal(h.fixture.data.friends[6].profile, null);
     assert.ok(!h.fixture.race.players.some(p => p.playerId === 'capture-6'), 'Never-synced friend is absent from the server race');
     assert.match(race, /Placeholder figure: outfit not shared/);
-    assert.match(race, /Progress comparison awaits recent syncs/);
+    assert.match(race, /Progress comparison unavailable/);
     const lanes = [...race.matchAll(/class="race-lane [^]*?<i style="width:([\d.]+)%"/g)];
     for (const [i, p] of h.fixture.race.players.entries()) {
       h.ctx.laneStamp = p.seenAt;

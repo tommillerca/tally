@@ -429,6 +429,8 @@ ok('HORIZONTAL a long drag travels FURTHER than a short one (a scroll, not a sna
    turning it off brings everyone back. The fixture alternates lastSeen, so half
    the crew is online and half is a day stale: a filter that did nothing would
    leave the count unchanged and fail here. */
+const favouriteIds = FRIENDS.slice(0, 2).map(f => f.playerId);
+await page.evaluate(async ids => { const db = await import('/js/db.js?cf=1'); await db.kvSet('crewFaves', ids); }, favouriteIds);
 await seedCrew(FRIENDS);
 const onBtnSel = '#cfanOnline';
 const fanState = () => page.evaluate(() => ({
@@ -438,42 +440,43 @@ const fanState = () => page.evaluate(() => ({
   cards: document.querySelectorAll('#cfanDeck .cfan-card').length,
   ids: [...document.querySelectorAll('#cfanDeck .cfan-card')].map(c => c.dataset.fan),
 }));
-const onlineIds = FRIENDS.filter(f => Date.now() - f.lastSeen < 6 * 60000).map(f => f.playerId);
+
 
 const fanBefore = await fanState();
-ok('ONLINE the filter control exists in the fan', fanBefore.exists);
-ok('ONLINE it is reachable (not hidden behind the small-crew search rule)', fanBefore.reachable);
-ok('ONLINE it is OFF when the tab opens (a filter must not be the default)',
+ok('FAVOURITES the filter control exists in the fan', fanBefore.exists);
+ok('FAVOURITES it is reachable (not hidden behind the small-crew search rule)', fanBefore.reachable);
+ok('FAVOURITES it is OFF when the tab opens (a filter must not be the default)',
   fanBefore.pressed === 'false', `pressed=${fanBefore.pressed}`);
-ok('ONLINE the unfiltered fan is not empty (an empty sample proves nothing)',
+ok('FAVOURITES the unfiltered fan is not empty (an empty sample proves nothing)',
   fanBefore.cards > 0, `${fanBefore.cards} cards`);
 
 await page.evaluate(sel => document.querySelector(sel)?.click(), onBtnSel);
 await sleep(1200);
 const fanOn = await fanState();
-ok('ONLINE operating it actually drops the offline friends',
+ok('FAVOURITES operating it actually drops friends outside favourites',
   fanOn.cards < fanBefore.cards && fanOn.cards > 0,
-  `${fanBefore.cards} -> ${fanOn.cards} (online fixtures: ${onlineIds.length})`);
-ok('ONLINE every card left on screen is genuinely online',
-  fanOn.ids.every(id => onlineIds.includes(id)), JSON.stringify(fanOn.ids));
+  `${fanBefore.cards} -> ${fanOn.cards} (online fixtures: ${favouriteIds.length})`);
+ok('FAVOURITES every card left on screen is favourited',
+  fanOn.ids.every(id => favouriteIds.includes(id)), JSON.stringify(fanOn.ids));
 
 await page.evaluate(sel => document.querySelector(sel)?.click(), onBtnSel);
 await sleep(1200);
 const fanOff = await fanState();
-ok('ONLINE turning it off brings the whole crew back',
+ok('FAVOURITES turning it off brings the whole crew back',
   fanOff.cards === fanBefore.cards, `${fanOff.cards} vs ${fanBefore.cards}`);
 
 /* Nobody online at all: the deck must SAY why it is empty rather than just going
    blank, which reads as the crew having vanished. */
-await seedCrew(FRIENDS.map(f => ({ ...f, lastSeen: Date.now() - 86400000 })));
+await page.evaluate(async () => { const db = await import('/js/db.js?cf=1'); await db.kvSet('crewFaves', []); });
+await seedCrew(FRIENDS);
 await page.evaluate(sel => document.querySelector(sel)?.click(), onBtnSel);
 await sleep(1200);
 const noneMsg = await page.evaluate(() => {
   const n = document.querySelector('#cfanNoHit');
   return n && !n.hidden ? n.textContent.trim() : '';
 });
-ok('ONLINE an empty result explains itself and says how to undo it',
-  /online right now/i.test(noneMsg) && /tap online/i.test(noneMsg), noneMsg || '(nothing shown)');
+ok('FAVOURITES an empty result explains itself and says how to undo it',
+  /No favourites/i.test(noneMsg) && /Tap Filter: favourites/i.test(noneMsg), noneMsg || '(nothing shown)');
 
 /* ------------------------------------------------- PLATE, and the pet ---------
    Tom, 2026-08-22: "the crew tab: some people's pets get cut off in the crew card

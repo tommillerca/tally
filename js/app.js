@@ -245,26 +245,21 @@ const LIMITS = {
   age: { min: MIN_AGE, max: 120 },
   heightCm: { min: 90, max: 250 },
 };
-// last_seen is a server contact timestamp. Contacts under six minutes read Online now.
-// Older contacts describe sync age, never absence. At a day, allow for delayed syncing.
-// Missing/future clocks are unknown.
+// Profile timestamps gate comparisons internally, never establish presence.
 function onlineLabel(lastSeen) {
   const age = Date.now() - lastSeen;
-  if (!Number.isFinite(lastSeen) || lastSeen <= 0 || age < 0) return { on: false, fresh: false, text: 'Sync time unavailable' };
-  if (age >= 86400000) return { on: false, fresh: false, text: 'Awaiting a recent sync' };
-  const mins = Math.floor(age / 60000);
-  if (mins < 6) return { on: true, fresh: true, text: 'Online now' };
-  return { on: false, fresh: true, text: mins < 60 ? `Synced ${mins}m ago` : `Synced ${Math.floor(mins / 60)}h ago` };
+  const valid = Number.isFinite(lastSeen) && lastSeen > 0 && age >= 0;
+  return { on: valid && age < 360000, fresh: valid && age < 86400000, text: '' };
 }
 function snapshotNotice(rows, key = 'lastSeen') {
-  if (!rows.length) return '';
-  // Lists can be capped. Describe this view, never claim a measured fleet outage.
-  return rows.some(p => onlineLabel(p[key]).fresh)
-    ? 'Showing last shared snapshots. Details may have changed.'
-    : 'Showing last shared snapshots. No recent updates have reached this view. Syncing may be delayed.';
+  return '';
 }
 function snapshotDetail(lastSeen) {
-  return `Last shared profile · ${onlineLabel(lastSeen).text}. Details may have changed.`;
+  return '';
+}
+function leaderboardLastOnline(lastSeen) {
+  if (!Number.isFinite(lastSeen) || lastSeen <= 0 || lastSeen > Date.now()) return '';
+  return `Last online: ${new Date(lastSeen).toISOString().replace('T', ' ').slice(0, 16)} UTC`;
 }
 
 const S = {
@@ -12492,9 +12487,9 @@ function crewCardHtml(f, since) {
   return `<button class="cfan-card" data-fan="${esc(f.playerId)}">
     <span class="cfan-hit"></span>
     <div class="cfan-stage"></div>
-    ${ol.on ? '<span class="cfan-live" title="Online now"></span>' : ''}
+
     <span class="cfan-fstar" hidden>${ICONS.star(15)}</span>
-    <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small><span class="cfan-title">${p.title ? esc(p.title) : p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}</span><span class="lv">LV ${p.level || 1}</span></small><small class="cfan-snapshot">${esc(ol.text)}</small>${since ? `<small class="cfan-since">${esc(since)}</small>` : ''}${
+    <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small><span class="cfan-title">${p.title ? esc(p.title) : p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}</span><span class="lv">LV ${p.level || 1}</span></small>${since ? `<small class="cfan-since">${esc(since)}</small>` : ''}${
       /* CREW-13: spires had zero surface anywhere on the Crew tab. Skipped
          when `since` already said so (e.g. "Just took a spire") -- one card
          does not need to say the same true thing twice. */
@@ -12596,7 +12591,7 @@ async function renderFriends(el) {
              remembers itself would eventually hide most of someone's crew with no
              obvious reason why. -->
         <button class="cfan-online" id="cfanOnline" aria-pressed="false"
-                aria-label="Show only friends online now"><i class="live-dot"></i>Online now</button>
+                aria-label="Filter: show only favourite friends">Filter: favourites</button>
       </div>
       <p class="cfan-nohit note" id="cfanNoHit" hidden></p>
       <div class="cfan-wrap" id="cfanWrap" hidden><div class="cfan-deck" id="cfanDeck"></div></div>
@@ -12895,7 +12890,7 @@ async function renderFriends(el) {
   let favs = new Set((await kvGet('crewFaves', [])) || []);
   let centerId = null;
   let fanOrder = [];   // playerIds: starred, then online, then the rest (stable)
-  let fanOnlineOnly = false;   // player-operated, never sticky (see the chip's comment)
+  let fanFavouritesOnly = false;   // player-operated, never sticky (see the chip's comment)
   let fanQuery = '';   // crew search box, matches name OR nickname
 
   const fanFriend = id => (data.friends || []).find(f => f.playerId === id);
@@ -12929,7 +12924,7 @@ async function renderFriends(el) {
     const q = fanQuery.trim();
     const pool = (data.friends || [])
       .filter(f => fanMatches(f, q))
-      .filter(f => !fanOnlineOnly || onlineLabel(f.lastSeen).on);
+      .filter(f => !fanFavouritesOnly || favs.has(f.playerId));
     fanOrder = pool.map(f => f.playerId).sort((a, b) => fanRank(a) - fanRank(b));
     if (!centerId || !fanOrder.includes(centerId)) centerId = fanOrder[0] || null;
   };
@@ -12997,10 +12992,10 @@ async function renderFriends(el) {
     // It cannot establish friendship creation; keep only truthful recency.
     box.innerHTML = `
       <div class="cfan-identity">
-        <button class="cfan-star${favs.has(f.playerId) ? ' on' : ''}" id="cfanStar" aria-label="Star this friend" aria-pressed="${favs.has(f.playerId)}">${ICONS.star(48)}</button>
+        <button class="cfan-star${favs.has(f.playerId) ? ' on' : ''}" id="cfanStar" aria-label="${favs.has(f.playerId) ? 'Remove favourite' : 'Favourite'} ${esc(f.alias || f.name)}" aria-pressed="${favs.has(f.playerId)}">${ICONS.star(48)}</button>
         <div class="cfan-sel-tx">
           <button class="cfan-sel-nm" id="cfanView">${nameWithAlias(f)}</button>
-          ${ol.text ? `<small class="cfan-status">${esc(ol.text)}</small>` : ''}
+          <small class="cfan-favourite-label">${favs.has(f.playerId) ? 'Favourite' : 'Tap the star to favourite'}</small>
         </div>
       </div>
       <div class="cfan-acts">
@@ -13013,7 +13008,8 @@ async function renderFriends(el) {
       toast(favs.has(f.playerId) ? `${f.alias || f.name} starred: sorted to the front of the fan.` : 'Unstarred.', 2400);
       const sb = $('#cfanStar', box);
       if (sb) { sb.classList.toggle('on', favs.has(f.playerId)); sb.setAttribute('aria-pressed', String(favs.has(f.playerId))); }
-      resortFan(); paintFaves(); applyFan();   // cards glide to their new seats
+      if (fanFavouritesOnly) await paintFan();
+      else { resortFan(); paintFaves(); applyFan(); }   // cards glide to their new seats
     });
     $('#cfanView', box).addEventListener('click', () => openFriendProfile(f, paint));
     $('#cfanCheer', box).addEventListener('click', () => openCheerSheet(f));
@@ -13042,7 +13038,9 @@ async function renderFriends(el) {
     row.hidden = false;
   };
 
+  let fanPaintRevision = 0;
   const paintFan = async () => {
+    const revision = ++fanPaintRevision;
     const wrap = $('#cfanWrap', el), pager = $('#cfanPager', el), deck = $('#cfanDeck', el);
     $('#cfanLoading', el)?.remove();
     /* THE FETCH FAILED IS NOT THE CREW IS EMPTY. `reached === false` only ever
@@ -13051,6 +13049,8 @@ async function renderFriends(el) {
        make-a-friend copy. The count reads a dash rather than 0 for the same
        reason: 0 is a claim about their crew, and we do not have one. */
     const unreached = data.reached === false;
+    const noHit = $('#cfanNoHit', el);
+    if (noHit) { noHit.hidden = true; noHit.textContent = ''; }
     const snapshot = $('#cfanSnapshot', el);
     if (snapshot) {
       snapshot.textContent = unreached ? '' : snapshotNotice(data.friends);
@@ -13119,34 +13119,29 @@ async function renderFriends(el) {
     }
     const onBtn = $('#cfanOnline', el);
     if (onBtn) {
-      onBtn.classList.toggle('on', fanOnlineOnly);
-      onBtn.setAttribute('aria-pressed', String(fanOnlineOnly));
+      onBtn.classList.toggle('on', fanFavouritesOnly);
+      onBtn.setAttribute('aria-pressed', String(fanFavouritesOnly));
     }
-    // The cards ship with EMPTY stages; applyFan (below) mounts the art for the
-    // seven seated ones and composes each stack as it lands.
-    const sinceMap = await friendSinceYesterdayMap(data.friends);
-    deck.innerHTML = fanOrder.map(id => crewCardHtml(fanFriend(id), sinceMap[id])).join('');
-
-    /* A search that matches nobody must SAY so. Hiding the deck and leaving the
-       space blank would read as the crew having vanished, which is the same
-       failure as an empty fan on a filter. */
-    const noHit = $('#cfanNoHit', el);
+    // Apply empty-state visibility before any asynchronous card enrichment.
     const empty = fanOrder.length === 0;
     if (noHit) {
       noHit.hidden = !empty;
-      /* An empty deck must say WHICH control emptied it, or it reads as the crew
-         having vanished. Filtering to online and finding nobody is the common
-         case (people are asleep), so that message also says how to undo it. */
+      // Explain the active filter and how to return to the full Crew.
       noHit.textContent = !empty ? ''
         : fanQuery.trim() ? `Nobody in your Crew matches "${fanQuery}".`
-        : fanOnlineOnly ? 'No friends online now in this selection. Tap Online now again to see everyone.'
+        : fanFavouritesOnly ? 'No favourites in this selection. Tap Filter: favourites to see everyone.'
         : 'Nobody in your Crew yet.';
     }
     wrap.hidden = empty;
     pager.hidden = empty || fanOrder.length < 2;
     $('#cfanSel', el).hidden = empty;
     paintFaves();
-    if (!empty) applyFan();
+    if (empty) { deck.innerHTML = ''; return; }
+    // Only the latest paint may mount cards after enrichment finishes.
+    const sinceMap = await friendSinceYesterdayMap(data.friends);
+    if (revision !== fanPaintRevision) return;
+    deck.innerHTML = fanOrder.map(id => crewCardHtml(fanFriend(id), sinceMap[id])).join('');
+    applyFan();
   };
 
   const cfanCycle = d => {
@@ -13166,7 +13161,7 @@ async function renderFriends(el) {
     searchT = setTimeout(() => { centerId = null; paintFan(); }, 140);
   });
   $('#cfanOnline', el)?.addEventListener('click', () => {
-    fanOnlineOnly = !fanOnlineOnly;
+    fanFavouritesOnly = !fanFavouritesOnly;
     centerId = null;          // the old centre may not survive the filter
     popSound(S.sounds);
     paintFan();
@@ -13388,7 +13383,7 @@ async function renderFriends(el) {
           : friendIds.has(p.playerId) ? `<span class="lb-tag crew">${ICONS.check(11)} Crew</span>`
           : outIds.has(p.playerId) ? '<span class="lb-tag sent">Sent</span>'
           : `<button class="btn small ${inIds.has(p.playerId) ? '' : 'ghost'}" data-lbadd="${esc(p.addToken)}">${inIds.has(p.playerId) ? 'Accept' : '+ Add'}</button>`;
-        const ol = onlineLabel(p.lastSeen);
+        const ol = { text: leaderboardLastOnline(p.lastSeen) };
         const rank = i + 1;
         /* Top three get a bigger numeral and bigger art. The numeral is always
            LARGER than the head it sits behind, and the head overlaps it, so the
@@ -13405,7 +13400,7 @@ async function renderFriends(el) {
         return `<div class="lb-row${top3} ${p.you ? 'me' : ''}" ${p.you ? '' : `data-lbview="${esc(p.playerId)}"`}>
           <span class="lb-num r${rank}">${rank}</span>
           <span class="lb-head" data-lbhead="${i}" style="width:52px;height:52px"></span>
-          <div class="lb-who"><b>${esc(p.name)}${medal}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${p.spires ? ` · <span class="lb-spires">${badgePixHtml('tombstone', 11)} ${p.spires} spire${p.spires === 1 ? '' : 's'}</span>` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${esc(ol.text)}</span>` : ''}</small></div>
+          <div class="lb-who"><b>${esc(p.name)}${medal}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${p.spires ? ` · <span class="lb-spires">${badgePixHtml('tombstone', 11)} ${p.spires} spire${p.spires === 1 ? '' : 's'}</span>` : ''}${ol.text ? ` · <span class="lb-seen">${esc(ol.text)}</span>` : ''}</small></div>
           ${btn}
         </div>`;
       }).join('')}`;
@@ -13501,7 +13496,7 @@ async function renderFriends(el) {
   // A race snapshot says what reached the server, not when somebody played.
   const raceFreshHtml = (p, local = false) => {
     if (local) return '<span class="race-fresh">On this phone</span>';
-    return `<span class="race-fresh">${esc(onlineLabel(p.seenAt).text)} · recorded steps</span>`;
+    return `<span class="race-fresh">Recorded steps</span>`;
   };
   const hydrateRace = async () => {
     if (!RACE_LIVE) return;
@@ -13638,10 +13633,10 @@ async function renderFriends(el) {
               <span class="rk" aria-label="Recorded rank ${p.rank}">${p.rank}</span>
               <div class="bd">
                 <div class="nm"><b>${esc(p.name)}</b>${raceFreshHtml(p, !(race.players || []).includes(p))}<span class="st">${p.steps.toLocaleString()}</span></div>
-                <div class="${laneFresh ? 'track' : 'race-pending-track'}" aria-label="${laneFresh ? `${p.steps.toLocaleString()} recorded steps` : 'Progress comparison unavailable until recent syncs'}"><i style="width:${pct}%"></i>
+                <div class="${laneFresh ? 'track' : 'race-pending-track'}" aria-label="${laneFresh ? `${p.steps.toLocaleString()} recorded steps` : 'Progress comparison unavailable'}"><i style="width:${pct}%"></i>
                   <span class="run" style="left:clamp(14px, ${pct}%, calc(100% - 14px))"${placeholder ? ' role="img" aria-label="Placeholder figure: outfit not shared"' : ''}>${avatarLayersHtml(fit, { noYard: true, skip: ['BG', 'C'], foreign: true })}</span>
                 </div>
-                ${!laneFresh ? '<span class="race-fresh">Progress comparison awaits recent syncs.</span>' : ''}
+                ${!laneFresh ? '<span class="race-fresh">Progress comparison unavailable.</span>' : ''}
               </div>
             </${tag}>`;
           }).join('')}
@@ -13655,7 +13650,7 @@ async function renderFriends(el) {
              anyone would act on. */ ''}
         ${firstRace
           ? `<div class="race-gap">Your first race${friendCount ? `. ${friendCount} friend${friendCount === 1 ? '' : 's'} ${friendCount === 1 ? 'is' : 'are'} in it` : ''}.</div>`
-          : gapFresh && behind ? `<div class="race-gap">At last sync, you were <b>${behind.toLocaleString()} steps</b> behind ${esc(aboveName || 'the racer above you')}${behind / 5500 * 60 <= 60 ? ` · about <b>${Math.max(1, Math.round(behind / 5500 * 60))} minutes</b> of walking` : ''}.</div>` : ''}
+          : gapFresh && behind ? `<div class="race-gap">At the recorded standings, you were <b>${behind.toLocaleString()} steps</b> behind ${esc(aboveName || 'the racer above you')}${behind / 5500 * 60 <= 60 ? ` · about <b>${Math.max(1, Math.round(behind / 5500 * 60))} minutes</b> of walking` : ''}.</div>` : ''}
         ${podium.length ? `<div class="race-purse">
           <span class="lab">When it settles, the top ${podium.length} take</span>
           <div class="rows">
@@ -13720,7 +13715,7 @@ async function renderFriends(el) {
     const rowHtml = p => `
       <div class="t3-row">
         ${lbAvatar(p, 'lb-av')}
-        <div class="t3-tx"><b>${esc(p.name)}</b><small>Last shared level ${p.level}${p.badges ? ` · ${p.badges} badges` : ''} · ${esc(onlineLabel(p.lastSeen).text)}</small></div>
+        <div class="t3-tx"><b>${esc(p.name)}</b><small>Last shared level ${p.level}${p.badges ? ` · ${p.badges} badges` : ''}</small></div>
         <button class="btn ghost" data-lbadd="${esc(p.addToken)}">+ ADD</button>
       </div>`;
     /* CREW-8, 2026-09-05: five rows of strangers cost 470px and were the single
@@ -24682,7 +24677,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v570'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v571'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

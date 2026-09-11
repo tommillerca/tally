@@ -1,3 +1,5 @@
+2026-09-11 decision reversal: Tom knowingly reversed the player freshness disclosure policy below because profile contacts cannot establish presence and the notices on people were unwanted. v571 chooses no presence dots or words. Only leaderboard Last online timestamps remain. Internal stale comparison safeguards and own-device Health, step troubleshooting and save failure copy remain. The following report records the historical decision.
+
 Advisory implementation report for independent review, 2026-09-09.
 
 The frozen plan SHA256 matched `65666361cd7527ce3ede172cf4ad95a4972284d6989188edf03004b6ef8c2a65`. All edits resolve inside this checkout. Starting HEAD: `5f880815f185d6557bd4ea6e0499e58f39d995c5`. The original `js/app.js` SHA256 was `eb8b5c9199224784016421c38e9f2f3ebb9f46d77056fb2bcae2efc7a4fc64e6`.
