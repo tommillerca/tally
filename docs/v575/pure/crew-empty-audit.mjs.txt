@@ -1,0 +1,10 @@
+PASS empty favourites explain undo
+PASS search explains undo
+PASS combined filters explain both controls
+PASS empty crew
+PASS CONTROL mounted-result refusal
+PASS cards mount while enrichment is pending
+PASS CONTROL full crew
+PASS CONTROL matching favourite
+PASS unreachable explains failure
+CREW EMPTY: 9 passed, 0 failed

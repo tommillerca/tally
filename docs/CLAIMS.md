@@ -1,5 +1,10 @@
 # What each patch note claims, and what backs it
 
+## v575 (2026-09-11)
+
+Changelog item: Crew explains empty favourites and search selections and how to clear them.
+
+1. PROOF: crew-empty-audit.mjs | REACH: Production resortFan and paintFan in a Node DOM model, empty favourites, search, combined filters, empty crew, unreachable server, suppressed card markup and pending enrichment. Original-source red control recorded in docs/v575/review.md. Browser geometry and taps remain unproven.
 ## v574 (2026-09-11)
 
 Changelog item: Today has calmer figures and a larger identity footer. The Pit combines fight readiness and build access, with a brighter poster and a larger daily Remote Den.

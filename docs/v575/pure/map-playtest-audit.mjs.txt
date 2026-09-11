@@ -1,0 +1,14 @@
+PASS M1 gear inventory abort retains earned choice: pending=1 after abort; retry delivers one gear
+PASS M1 appearance abort rolls back gear and choice together
+PASS CONTROL gear overlap, invalid choice and existing variant
+PASS M1 Keep handler recovers after rejected save
+PASS M2 mini crate abort is retryable: unspent after abort; retry=40 XP, one crate, 12 dust
+PASS M2 mini dust abort and concurrent retry
+PASS M3 interrupted ceiling backfill resumes missing weeks: two weeks restored once after retry
+PASS M3 legacy completion flag cannot hide missing ceiling markers
+PASS M4 roaming preview matches absence of gear choices
+PASS M4 mage location copy agrees with weekly movement
+PASS CONTROL den reach, cleared state and fight callback
+PASS CONTROL remote den actual card, handler, payout and tomorrow
+PASS CONTROL all five spawn types pay once on overlapping collects
+MAP PLAYTEST: 13 passed, 0 failed (Node only; no pixel claim)

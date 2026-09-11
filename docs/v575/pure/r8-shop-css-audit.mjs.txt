@@ -1,0 +1,8 @@
+PASS CONTROL affordable price defines filled gold with ink digits and violet dust
+PASS AFFORDABLE shared rack sizing cannot override price fill or digit ink
+PASS CANT hollow prices retain currency-colored digits
+PASS SHORT pet prices share the hollow .cant treatment
+PASS GHOST disabled treatment outranks the enabled two-class selector
+PASS CONTROL removing data-short styling is rejected
+PASS CONTROL removing disabled ghost styling is rejected
+R8 Shop CSS source: 7 passed, 0 failed. Render proof is separate.

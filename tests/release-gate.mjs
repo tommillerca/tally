@@ -400,6 +400,7 @@ PURE.push('collection-cell-audit.mjs'); // R6-C1/C5: shared cell identity, hosti
 PURE.push('r6-merge-audit.mjs'); // R6-E2: both offline buyers, import directions/modes, two wallet sizes, refund replay and encrypted 409 recovery; no sockets.
 PURE.push('r6-guards-audit.mjs'); // CONTROL: missing finding coverage and scroll fixture state cannot disappear.
 PURE.push('r6-app-audit.mjs'); // R6: rendered Breed consent, durable room counts, cell names, incubator availability and interrupted invitations; Node services/DOM doubles.
+PURE.push('crew-empty-audit.mjs'); // Mounted Crew empty-state and filter controls; Node DOM model.
 PURE.push('crew-presence-audit.mjs'); // Frozen Crew presence: six-minute boundary and unchanged stale/unknown clocks.
 PURE.push('crew-capture-node-audit.mjs'); // Fixture routing only; rendered Crew geometry belongs to BROWSER.
 PURE.push('pet-parity-guard.mjs'); // Every species reports an identical multiplier and tilt; red on the 1.00-1.36 spread.

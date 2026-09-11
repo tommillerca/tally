@@ -1,0 +1,19 @@
+PASS four named creatures use original static art
+SAFE SIZE square at 45 degrees: 649.1240251292506
+PASS CONTROL 12px disk dilation follows alpha, including concavity and holes
+ROTATION {"name":"The Wanderer","input":4129,"zero":1811,"worst":{"angle":71,"count":1781}}
+ROTATION {"name":"The Mimic","input":1024,"zero":3694,"worst":{"angle":0,"count":3694}}
+ROTATION {"name":"The Glutton","input":5448,"zero":2867,"worst":{"angle":0,"count":2867}}
+ROTATION {"name":"Gwart","input":9012,"zero":2153,"worst":{"angle":36,"count":2096}}
+ROTATION {"name":"Crew","input":27100,"zero":4661,"worst":{"angle":89,"count":4560}}
+ROTATION {"name":"gym","input":184,"zero":529,"worst":{"angle":25,"count":527}}
+ROTATION {"name":"feed","input":181,"zero":560,"worst":{"angle":62,"count":529}}
+ROTATION {"name":"home","input":182,"zero":580,"worst":{"angle":19,"count":543}}
+PASS every offered kind retains visible artwork and safe outlines through scale, mirror and twist
+EXPORT {"inkPercent":46.11172813924575,"largestComponentBoxPercent":76.30667219229176,"largest":{"count":441755,"x":65,"y":340,"width":822,"height":1120},"outside":0,"opaqueLetterContrast":12.637812847638706,"backingAgainstPlainPage":12.171577677581052,"decodedSha256":"c380cac6a42c99d68ebb4cf0536efe836471b768d3cd8f1f5c98b29d7357d7ac"}
+PASS decoded no-sticker export preserves geometry and backing with smooth sampling
+HANDLERS stored move, live pixels, pinch 400->600, twist 0->90, rebase, cancel, capture loss, bin, keyboard all exercised
+PASS production pointer and keyboard routes change stored transforms and decoded pixels before release
+PASS REACH the canvas leaves the scroll gesture alone unless a sticker is selected
+PASS REACH the tray handle is never underneath the tab bar
+7 passed, 0 failed. Interaction feel is unproven and operator-owned.

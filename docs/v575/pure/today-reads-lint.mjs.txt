@@ -1,0 +1,27 @@
+ok   SAMPLE renderToday and buildFighter both found and non-trivial  renderToday 689 lines @4322, buildFighter 63 lines @24540
+ok   SAMPLE the closure from renderToday walked a real call graph  50 functions, 6 reading sites, 45 listener/fallback strips
+ok   GATE reclaimOwnedPets still carries the once-guard its exemption pins (once per session (module flag), then a no-op)  /if \(_petsReclaimed\) return list;/
+ok   GATE petLevelBank still carries the once-guard its exemption pins (once per install (kv migration), then the cached bank)  /if \(bank && ver >= 2\) return bank;/
+ok   GATE petInstances still carries the once-guard its exemption pins (once per install (petInst migration), then the kv list)  /return \(await reclaimOwnedPets\(list\)\)\.filter\(selectablePetInstance\);\s*\}\s*const owned = await ownedCosmeticIds\(\);/
+ok   A1 the WHOLE Today draw (renderToday and everything it calls in the tick) scans log, xp, health and inv exactly once each  {"health":1,"inv":1,"log":1,"xp":1}  (VERBOSE=1 lists every reading site)
+ok   A1b renderToday itself scans log, xp, health, inv once each and nothing else  {"log":1,"xp":1,"inv":1,"health":1}
+ok   A2 buildFighter scans log, xp, health once each (the second xp scan is gone)  {"log":1,"xp":1,"health":1}
+ok   A3 renderToday hands buildFighter the rows it already holds
+ok   A4 buildFighter falls back to its own scans when not handed rows
+ok   A5 K = 2: the only log index reads on Today are today and yesterday (entriesFor)  K=2
+ok   A6 renderToday itself issues no db.byIndex outside entriesFor
+ok   A7 route() does not fire refreshCrateBadge on Today (renderToday sets the badge off the inv rows it holds)
+ok   A8 renderToday hands its inv, xp and health rows to unopenedCrates, ownedGearIds, routinesDone and hkStaleInfo
+ok   SAMPLE the seeded log holds 730 x 4 rows  count=2920
+ok   B1 db.byIndex performs no full-store scan and exactly one index read  full=0 index=1
+ok   B2 control: db.all is one full scan  full=1
+ok   B3 the index read returns exactly the rows the filtered full scan returns  4 rows
+info mem-idb, 2920 rows, median of 20: byIndex 2.66 ms, full scan + filter 3.14 ms
+ok   CONTROL runtime pet assembly is extracted from buildFighter
+ok   CONTROL cold pet assembly reads inventory and retains earned talents  {"inv":1}
+ok   C1 warm battle pet assembly scans no stores (tick 1)  {}
+ok   C2 warm battle pet remains identical to the migrated pet (tick 1)
+ok   C1 warm battle pet assembly scans no stores (tick 2)  {}
+ok   C2 warm battle pet remains identical to the migrated pet (tick 2)
+
+all green
