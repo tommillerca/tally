@@ -1,0 +1,9 @@
+PASS F1 after-claim: retry delivers the complete kit exactly once
+PASS F1 abort: retry delivers the complete kit exactly once
+PASS CONTROL concurrent first boots and later boot deliver only one kit
+PASS CONTROL legacy kit and existing coin receipt never pay again
+PASS CONTROL onboarding Meet, reroll, accept, back and skip handlers work
+PASS F2 onboarding explains the actual daily logging XP limit
+PASS CONTROL first-day kit opens, hatches and cooks with persisted deliveries
+PASS CONTROL onboarding saves the default plan and kit through production persistence
+firstrun: 8 passed, 0 failed

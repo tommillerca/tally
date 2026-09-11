@@ -1,0 +1,9 @@
+ok   SETUP six non-default slots hold a real item each, and a second hat exists to swap to  {"H":"H10-1","E":"E1","M":"M1","T":"T1","P":"P1","G":"G1"}
+ok   CONTROL six worn, nothing transmogged: counter 8, drip-6 earned  counter 8
+ok   AGREE (control) counter equals the resolved look  8 vs 8
+ok   SWAP a slot swapped to another look: still 8 (a swap changes the picture, not the count)  counter 8 with H -> H10-2
+ok   AGREE (swap) counter equals the resolved look  8 vs 8
+ok   HIDDEN three slots hidden in the Dressing Room: counter 5, drip-6 no longer earned  counter 5 (old path reads 8: it counted kv equipped, which transmog never touches)
+ok   AGREE (hidden) counter equals the resolved look  5 vs 5
+
+the Full drip badge counts what the player wears

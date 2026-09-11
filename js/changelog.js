@@ -9,6 +9,9 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 572, date: '2026-09-11', title: 'Quieter fit controls', items: [
+    'Wardrobe removes fit counts while keeping Save fit available with its six-fit limit.',
+  ] },
   { n: 571, date: '2026-09-11', title: 'Clearer Crew favourites', items: [
     'Crew labels the favourites filter and puts favourite guidance beside each selected friend. Player presence and sync notices are removed.',
   ] },

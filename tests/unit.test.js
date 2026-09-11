@@ -5308,7 +5308,7 @@ test('R40-31 a family tile\'s tier badge and border follow the item shown, not t
    dead code (captureFit can only return `full` from a control that only rendered
    while not full). Runs the REAL fitRail slice at 5 and 6 fits, the REAL
    ward-head at both counts, and pins that the string has more than one user. */
-test('R23 F8: the fits cap is printed and the save chip stays, ghosted, with its rule reachable', () => {
+test('R23 F8: fit counts are absent and the save chip stays, ghosted, with its cap rule reachable', () => {
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
   const MAX = 6;
   const a = app.indexOf('const fitRail = `');
@@ -5349,8 +5349,9 @@ test('R23 F8: the fits cap is printed and the save chip stays, ghosted, with its
   const head = (n, lookCounts = counts) => new Function('myTitle', 'todayEarnedTitle', 'lvl', 'coinBal', 'dustBal', 'ownedCount', 'boost', 'ICONS', 'sparkIco', 'lookCounts', 'esc', 'fitCount', 'MAX_FITS',
     'return `' + app.slice(h, hEnd) + '</div>`;')(
     '', lvl => LEVEL_NAMES[Math.min(lvl.level, LEVEL_NAMES.length) - 1], { level: 1, name: 'x' }, 0, 0, 0, 0, { coin: () => '', dust: () => '', bone: () => '', boltIco: () => '' }, () => '', lookCounts, String, n, MAX);
-  assert.match(head(5), /<span class="bh-pill ward-fits">5\/6 fits<\/span>/, 'the header does not print 5/6 fits');
-  assert.match(head(6), /<span class="bh-pill ward-fits">6\/6 fits<\/span>/, 'the header does not print 6/6 fits');
+  for (const html of [head(5), head(6), five, six]) {
+    assert.doesNotMatch(html, /\d+\/6 fits|ward-fits/, 'fit counts must stay removed');
+  }
   const expectLooks = (html, collected, alternatives) => assert.ok(
     html.includes(` ${collected}/${catalogue.length} collected looks &middot; ${alternatives} other looks to try</button>`),
     'the looks pill must print stored ids and alternatives, not family tiles');

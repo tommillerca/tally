@@ -16712,11 +16712,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             layout; it is a <button> with an accent edge so it reads as tappable
             rather than as one more read-only tally. */''}
       <button class="bh-pill ward-looks" data-tab="looks">${sparkIco(13)} ${lookCounts.collected}/${lookCounts.total} collected looks &middot; ${lookCounts.alternatives} other looks to try</button>
-      ${/* THE FITS CAP, STATED (QA round 23 F8). At 6 fits the save chip used to
-            vanish with no copy and no total, the only storage cap in the app
-            with none (the yard prints 24, favourites 6, recents 8, and the looks
-            pill beside this one prints N/M). Same .bh-pill as the looks count. */''}
-      <span class="bh-pill ward-fits">${fitCount}/${MAX_FITS} fits</span>
+
       </div>
     </div>` : tab === 'shop' ? gwartHeroHtml(rk) : `
     <div class="bh-hero mini">
@@ -17136,7 +17132,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     // The compact toolbar owns the expandable list. Everything stays in flow.
     const fitRail = `
       <div class="fit-rail ward-toolbar">
-        <button class="fit-chip ward-fit-switcher" id="wardFitSwitcher" data-fit-switcher type="button" aria-expanded="${!!S.wardFitsOpen}" aria-controls="wardFitList"><span>Saved fits</span><small>${fitList.length}/${MAX_FITS} fits</small></button>
+        <button class="fit-chip ward-fit-switcher" id="wardFitSwitcher" data-fit-switcher type="button" aria-expanded="${!!S.wardFitsOpen}" aria-controls="wardFitList"><span>Saved fits</span></button>
         <button class="fit-chip add" data-fit-save="1"${fitList.length >= MAX_FITS ? ' aria-disabled="true"' : ''}>Save fit</button>
         <button class="fit-chip studio" id="wardrobeStudio" type="button">${pixCur('camera', 24) || ICONS.camera(18)}The Studio</button>
         ${stripPlan.slots.length || stripPlan.mogs.length
@@ -24677,7 +24673,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v571'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v572'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

@@ -1,0 +1,20 @@
+PASS F01 stale merge retains marrow, Feast and spent buff charge
+PASS F02 deletion survives stale diary merge
+PASS F02 correction survives stale diary merge
+PASS F03 independent same-potion grants survive replay and spending
+PASS CONTROL replacement intentionally rolls back and distinct meals merge
+PASS F01 independent ingredient credits and debits join in both directions
+PASS F01 conflicting pantry branches refuse every store without losing either dish
+PASS F02 remote deletion propagates; concurrent edit/delete refuses atomically
+PASS F02 causal edits work with a backwards clock and survive a fresh restore
+PASS F02 all diary mutation primitives retain tombstones and edits
+PASS F03 duplicate grants are counted once across repeated bidirectional exchange
+PASS F03 overspent offline inventory refuses the entire import
+PASS CONTROL malformed history and ambiguous legacy resources refuse without mutation
+PASS CONTROL aborted multi-resource payout retains balances and histories
+PASS CONTROL partial replacement without kv retires obsolete diary history
+PASS CONTROL malformed diary put cannot become a clear operation
+PASS CONTROL failed import rolls back staged records and merged history
+PASS CONTROL legacy equal potion counts refuse instead of concealing missing grants
+PASS CONTROL import and queued potion earnings serialize under one transaction lock
+P1 MERGE: 19 passed, 0 failed
