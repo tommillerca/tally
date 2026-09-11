@@ -1,5 +1,11 @@
 # What each patch note claims, and what backs it
 
+## v571 (2026-09-11)
+
+Changelog item: Crew labels the favourites filter and puts favourite guidance beside each selected friend. Player presence and sync notices are removed.
+
+1. PROOF: crew-presence-audit.mjs, leaderboard-honesty-audit.mjs, crew-ui-1c-audit.mjs | REACH: Production rendering and timestamp guards, favourite control and filter source contracts. Browser geometry and taps unproven.
+
 ## v569 (2026-09-11)
 
 Changelog item: Backpack opens the Laboratory through an animated slime banner, and Wardrobe makes more room above your Bonehead.

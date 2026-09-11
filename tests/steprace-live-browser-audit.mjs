@@ -50,7 +50,7 @@ try {
       const expected = neutral ? 0 : fixture.race.players[i].steps / fixture.race.players[0].steps * row.track.clientWidth;
       assert.ok(Math.abs(row.fill.width - expected) < 0.6, `rank ${i + 1}: fill ${row.fill.width}px, data requires ${expected}px`);
       assert.ok(row.text.includes(fixture.race.players[i].steps.toLocaleString()), 'Recorded count retained');
-      if (neutral) assert.match(row.text, /Progress comparison awaits recent syncs/);
+      if (neutral) assert.match(row.text, /Progress comparison unavailable/);
     });
   };
   for (const scenario of ['degraded', 'fresh', 'one-stale', 'all-stale', 'unknown']) {

@@ -23,25 +23,32 @@ function check(label, run) {
   try { run(); passed++; console.log(`PASS ${label}`); }
   catch (e) { failed++; console.error(`FAIL ${label}: ${e.message}`); }
 }
-check('fresh state is Online now through the unchanged six-minute boundary', () => {
+check('fresh timestamps do not claim presence', () => {
   for (const age of [0, 60000, 359999])
-    assert.deepEqual(state(now - age), { on: true, fresh: true, text: 'Online now' });
+    assert.deepEqual(state(now - age), { on: true, fresh: true, text: '' });
 });
-check('CONTROL stale minute and hour states unchanged', () => {
+check('CONTROL minute and hour comparison eligibility remains', () => {
   for (const [age, text] of [[360000, 'Synced 6m ago'], [3599999, 'Synced 59m ago'], [3600000, 'Synced 1h ago'], [86399999, 'Synced 23h ago']])
-    assert.deepEqual(state(now - age), { on: false, fresh: true, text });
+    assert.deepEqual(state(now - age), { on: false, fresh: true, text: '' });
 });
-check('CONTROL day-old and older states retain delayed-sync notice without day counts', () => {
+check('CONTROL day-old comparisons disabled without notices', () => {
   for (const age of [86400000, 7 * 86400000]) {
-    assert.deepEqual(state(now - age), { on: false, fresh: false, text: 'Awaiting a recent sync' });
+    assert.deepEqual(state(now - age), { on: false, fresh: false, text: '' });
     ctx.stamp = now - age;
     assert.equal(vm.runInContext('snapshotNotice([{lastSeen: stamp}])', ctx),
-      'Showing last shared snapshots. No recent updates have reached this view. Syncing may be delayed.');
+      '');
   }
 });
 check('CONTROL missing, invalid and future clocks remain unknown', () => {
   for (const stamp of [undefined, null, 0, -1, NaN, Infinity, 'yesterday', now + 1, now + 86400000])
-    assert.deepEqual(state(stamp), { on: false, fresh: false, text: 'Sync time unavailable' });
+    assert.deepEqual(state(stamp), { on: false, fresh: false, text: '' });
+});
+check('no player presence claims or freshness wording in shipped social renderers', () => {
+  const crew = app.slice(app.indexOf('function crewCardHtml('), app.indexOf('function openFriendProfile('));
+  assert.doesNotMatch(crew, /Online now|Synced|recent syncs|Sync time unavailable|Showing last shared snapshots|cfan-live|live-dot/);
+  assert.match(crew, /Filter: favourites/);
+  assert.match(crew, /!fanFavouritesOnly \|\| favs.has\(f.playerId\)/);
+  assert.match(crew, /Tap the star to favourite/);
 });
 console.log(`CREW PRESENCE: ${passed} passed, ${failed} failed`);
 process.exitCode = failed ? 1 : 0;

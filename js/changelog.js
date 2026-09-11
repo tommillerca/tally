@@ -9,6 +9,9 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 571, date: '2026-09-11', title: 'Clearer Crew favourites', items: [
+    'Crew labels the favourites filter and puts favourite guidance beside each selected friend. Player presence and sync notices are removed.',
+  ] },
 
   { n: 570, date: '2026-09-11', title: 'Interrupted fights made right', items: ['Interrupted Pit fights return one fight credit without recording a loss. Today no longer shows the Laboratory row or kitchen disclaimer.'] },
   { n: 569, date: '2026-09-11', title: 'The Laboratory host', items: [
