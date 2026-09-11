@@ -24715,7 +24715,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v573'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v574'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
@@ -25200,7 +25200,7 @@ async function renderPit(wrap) {
   const rDone = xpRows.some(r => r.key === denKey(date, rDen));
   const remoteSect = `
     <div class="t3-sect"><b>Remote den · one a day</b><i></i><span class="r chip" style="font-size:var(--fs-0)">No walking needed</span></div>
-    <div class="t3-row${rDone ? ' done' : ''}">
+    <div class="t3-row pit-daily-den${rDone ? ' done' : ''}">
       ${pitOpponentPortrait({ name: rDen.boss, foeOutfit: themedLook(rDen.theme && rDen.theme.key, rDen.id), mage: !!(rDen.theme && rDen.theme.art === 'mage') })}
       <div class="t3-tx"><b>${esc(rDen.boss)}</b><small>${esc(rDen.name)} · ${rDone
         ? 'beaten · a new one is here tomorrow, free'
@@ -25300,10 +25300,10 @@ async function renderPit(wrap) {
         <div class="bar"><i style="width:${Math.min(100, Math.round(energy.ready / (energy.freeMax + 6) * 100))}%"></i></div>
         <small>${energy.free} free today + ${energy.vigor} Vigor${energy.refunded ? ` + ${energy.refunded} returned` : ''}${energy.dayGuard ? ' · ' + (DAY_GUARD_COPY[energy.dayGuard] || DAY_GUARD_COPY.other) /* QA round 26 O14: "refill at midnight" is false on a refused day */ : tapped ? ' · walk to earn Vigor · free fights refill at midnight' : ' · walk to earn more'}</small>
       </div>
+      <button class="t3-forage" id="buildBtn">${pixCur('build', 24) || ICONS.pit(20)}<b>Shape your build</b><small>stats &amp; talents ›</small>${unspent > 0 ? `<i class="hero-badge" style="position:static;display:inline-block;margin-left:4px">${unspent}</i>` : ''}</button>
     </div>
     ${kitchenLine}
     ${defeatSect}
-    <button class="t3-forage" id="buildBtn" style="margin:0 0 4px">${pixCur('build', 24) || ICONS.pit(20)}<b>Shape your build</b><small>stats &amp; talents ›</small>${unspent > 0 ? `<i class="hero-badge" style="position:static;display:inline-block;margin-left:4px">${unspent}</i>` : ''}</button>
     ${pitSections}`;
 
   // acknowledging the loss is the only way past it; the record dies here

@@ -1,0 +1,7 @@
+PASS CONTROL reservation spent one charge before recovery
+Recovery panel: INTERRUPTED FIGHT
+      Your session ended before the fight with Rattles finished. No loss was recorded. One fight credit was returned. Start a new fight when ready.
+        
+      Back on your feet
+PASS interrupted fight: real reservation, reload recovery, truthful panel, refund once, fight again
+PASS concurrent recovery, full Vigor, rollover, loss/forfeit controls, boot wiring and Today removals

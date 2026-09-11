@@ -1,5 +1,11 @@
 # What each patch note claims, and what backs it
 
+## v574 (2026-09-11)
+
+Changelog item: Today has calmer figures and a larger identity footer. The Pit combines fight readiness and build access, with a brighter poster and a larger daily Remote Den.
+
+1. PROOF: unit.test.js and the full PURE census, with direct process exit codes recorded in docs/v574. | REACH: Source and Node proofs only. Hero anchors and dimensions are unchanged; idle vertical amplitude is 0.001px. Live coordinates, gap, visual hierarchy and browser locks remain unproven. See docs/v574/REPORT.md for contrast, exact CSS, results and coordinate discrepancy.
+
 ## v571 (2026-09-11)
 
 Changelog item: Crew labels the favourites filter and puts favourite guidance beside each selected friend. Player presence and sync notices are removed.

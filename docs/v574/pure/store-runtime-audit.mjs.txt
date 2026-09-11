@@ -1,0 +1,17 @@
+PASS store producer without native/: exact bundle inventory and store flag
+PASS missing non-store manifest is loud; present manifest copies only for non-store
+PASS real web bundle producer completes in throwaway checkout
+PASS generated store config is local and bundled flag is true
+PASS bundle paths: 61 modules, 209 literal entry/CSS/import references, missing=[], root-absolute=[]
+PASS real service-worker condition skips capacitor and admits HTTPS control
+PASS CONTROL web Settings update row retains identical rendered bytes
+PASS store Settings names the update channel before the player taps
+PASS REACH Settings update button is bound to the audited handler
+PASS store refresh must explain App Store updates without web fetch/reload: calls=[], messages=["To update Boneheadz Gym, open the App Store and check for updates."]
+PASS store background update checks never fetch or show a web banner: calls=[]
+PASS CONTROL web stale banner observes the live version and binds its update button
+PASS CONTROL web banner click updates the waiting worker without a premature reload
+PASS CONTROL web refresh without a worker fetches and reloads
+PASS CONTROL offline web refresh retains its connection message without reloading
+LIMIT: literal path inventory and VM functions only; dynamic assets, WKWebView APIs and rendered controls require device proof.
+store runtime: 13/13 passed

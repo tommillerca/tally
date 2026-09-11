@@ -1,0 +1,18 @@
+ok    SETUP the scan found audit files  418 files
+ok    SETUP the matcher still finds literal expectation constants  128 constants; the first cut of this scan used a one-line regex and saw only 33 of them
+ok    RATCHET no NEW pinned expectation lacks dated provenance  60 known, 0 new
+ok    RATCHET the inventory has no stale entries (fixed one? delete its line)  inventory matches
+
+    oldest pinned expectations (68 cited, review when one blocks you):
+      2026-07-04  stat-source-audit.mjs:44  KEYS
+      2026-08-07  figure-audit.mjs:338  STACK_EXEMPT
+      2026-08-09  fight-layout-audit.mjs:539  SLACK_SIZES
+      2026-08-16  den-ceiling-audit.mjs:113  WEEKS
+      2026-08-17  fight-exit-audit.mjs:182  MAP_ROWS
+      2026-08-17  scout-audit.mjs:74  MAP_ROWS
+      2026-08-17  t1-audit.mjs:267  MAP_ROWS
+      2026-08-20  boneyard-audit.mjs:635  KIND_NAMES
+      2026-08-20  quest-pick-audit.mjs:25  FLAGS
+      2026-08-22  gwart-crate-audit.mjs:55  CRATE_LINES
+
+guard-provenance: clean

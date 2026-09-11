@@ -1,0 +1,7 @@
+
+ok    WEB-CONSISTENT  app.js=v574 sw.js=v574 version.json=v574
+ok    iOS-PROVENANCE  iOS 1.0: remote shell, no wrapped web version allowed, marker=null
+ok    ANDROID-MARKED  Android 1.0.9 has WRAPPED_WEB_BUILD=v413
+
+VERSION ALIGNMENT LINT: web builds aligned at v574, native provenance checked.
+

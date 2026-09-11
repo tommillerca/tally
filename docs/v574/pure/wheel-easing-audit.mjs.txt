@@ -1,0 +1,2 @@
+PASS CONTROL pre-fix cubic-bezier(.34,1.6,.64,1) is rejected
+PASS js/wheel.js: 2 easing curves, no control point above 1

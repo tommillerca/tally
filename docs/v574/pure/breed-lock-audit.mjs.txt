@@ -1,0 +1,13 @@
+PASS locked: 0 picks, 6,000 / 2,345 / 1 steps remaining and walking unlock condition
+PASS CONTROL READY: 0 picks, no lock message
+PASS locked: 1 picks, 6,000 / 2,345 / 1 steps remaining and walking unlock condition
+PASS CONTROL READY: 1 picks, no lock message
+PASS locked: 2 picks, 6,000 / 2,345 / 1 steps remaining and walking unlock condition
+PASS CONTROL READY: 2 picks, no lock message
+PASS CONTROL Stable: one collapsed explainer, labelled currency, retained doors before the album
+BREED LOCK + STABLE UI: 7 passed, 0 failed (Node only; browser and sockets unrun)
+PASS CONTROL Stable loss: named pet, permanent section, initial and switched focus, one next action
+PASS CONTROL Stable type: body controls and copy chips, display pet identity; three regressions rejected
+PASS CONTROL Stable order: all three doors precede the album; currency follows pet content; four regressions rejected
+PASS CONTROL Stable album: peeking edges, raised active card, swipe snap, axis lock, keys, dots and reduced motion; four regressions rejected
+STABLE REDESIGN: 4 guard groups passed, 0 failed (Node only; scroll height and pixels unmeasured)

@@ -1,0 +1,1 @@
+PASS readiness 1D: 72 / 96 / 47 / 49 / 72; calibration, null, tile anatomy, units/actions and stale dates. CONTROL missing-icon mutation rejected. Browser UNPROVEN.

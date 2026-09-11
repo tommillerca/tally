@@ -1,0 +1,8 @@
+PASS CONTROL C2 base: assets/bh/thumb/384/C/C2.png; 83x83 box; 1 image(s)
+PASS C6 base: assets/bh/thumb/192/C/C6.png; 58x58 box; 1 image(s)
+PASS C6 dressed: assets/bh/thumb/192/C/C6.png; 58x58 box; 2 image(s)
+PASS C6 shiny: assets/bh/thumb/192/C/shiny/C6.png; 58x58 box; 2 image(s)
+PASS C6 midnight: assets/bh/thumb/192/C/morph/C6__midnight.png; 58x58 box; 2 image(s)
+PASS C4 football: assets/bh/thumb/384/C/C4.png; 77x77 box; 2 image(s)
+PASS CX football: assets/bh/thumb/384/C/CX.png; 77x77 box; 2 image(s)
+7/7 Node rows passed. Browser paint unverified.

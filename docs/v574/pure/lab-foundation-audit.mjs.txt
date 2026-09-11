@@ -1,0 +1,30 @@
+PASS CONTROL BASE route: welcome
+PASS CONTROL BASE route: health milestone
+PASS CONTROL BASE route: level milestone
+PASS CONTROL BASE route: weekly dust
+PASS CONTROL BASE route: weekly dust recovery
+PASS CONTROL BASE route: quest
+PASS CONTROL BASE route: hunt/map spawn
+PASS CONTROL BASE route: POI roaming
+PASS CONTROL BASE route: POI remote
+PASS CONTROL BASE route: POI landmark
+PASS CONTROL BASE route: POI mini
+PASS CONTROL BASE route: map crate fallback
+PASS CONTROL BASE route: social 0
+PASS CONTROL BASE route: social 1
+PASS CONTROL BASE route: social 2
+PASS CONTROL BASE route: sealed social gift
+PASS CONTROL BASE route: legacy egg-crate conversion
+PASS CONTROL EGG row keeps metadata and never reads pet ownership or rolls
+PASS CONTROL GRID six colours, exact tables and 36 current cells survive restore
+PASS CONTROL ROSE art resolves all six approved masters
+PASS CONTROL LEGACY weighted helper can still select Rose
+PASS HATCH existing ember egg keeps its colour, shiny override unchanged
+PASS HATCH existing frost egg keeps its colour, shiny override unchanged
+PASS HATCH existing toxic egg keeps its colour, shiny override unchanged
+PASS HATCH existing rose egg keeps its colour, shiny override unchanged
+PASS HATCH existing midnight egg keeps its colour, shiny override unchanged
+PASS HATCH C6 still cannot be shiny
+PASS CONTROL DEFAULT direct and random pet grants remain Base
+PASS CONTROL LINT rejects old grant call, aliases and namespace access
+LAB FOUNDATION: 29 passed, 0 failed
