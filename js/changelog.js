@@ -10,6 +10,10 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 563, date: '2026-09-10', title: 'Faces in the Pit', items: [
+    'The Pit has clearer sections and opponent portraits, with ranks beside the fight details.',
+  ] },
+
   { n: 562, date: '2026-09-10', title: 'Cleaner fight controls', items: [
     'Fight controls have cleaner styling, the pet HUD uses your pet’s given name, and ITEMS has a simpler label.',
   ] },

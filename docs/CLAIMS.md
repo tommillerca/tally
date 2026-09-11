@@ -1,5 +1,11 @@
 # What each patch note claims, and what backs it
 
+## v563 (2026-09-10)
+
+Changelog item: The Pit has clearer sections and opponent portraits, with ranks beside the fight details.
+
+1. PROOF: pit-ui-1b-audit.mjs | REACH: Live opponent outfit selection, special monster artwork, all opponent row bindings, supporting ranks and distinct Build. Scoped Pit presentation only. Browser portrait decoding, controls and fight geometry remain unproven.
+
 ## v562 (2026-09-10)
 
 Changelog item: Fight controls have cleaner styling, the pet HUD uses your pet’s given name, and ITEMS has a simpler label.

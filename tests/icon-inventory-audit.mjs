@@ -187,6 +187,7 @@ const EMITTERS = {
   'js/app.js:readinessHtml':      ['chart', 'the readiness dial.'],
   'js/app.js:calorieRingCard':    ['chart', 'the calorie ring, drawn on Today AND on Trends from this one function.'],
   /* ---- scene, stage and character art: sized by layout, not by an icon size ---- */
+  'js/app.js:pitOpponentPortrait': ['scene', 'Pit opponent portraits use live outfits and existing special-monster figure artwork, never a currency or Build icon.'],
   'js/app.js:avatarLayersHtml':     ['scene', 'the Bonehead figure: cosmetic layers stacked at stage size.'],
   'js/studio-screen.js:mountStudio': ['scene', 'the Studio preview. It emits one <img> whose src is an object URL for the 1080x1920 PNG the headless compositor in js/studio.js just produced, so the picture is the export itself at display size, not an icon and not a second rendering path. Nothing here calls pixCur or ICONS; a swap of the icon set has nothing to do in this file. The compositor that builds those pixels is proved separately in tests/studio-audit.mjs.'],
   'js/app.js:croppedPetImg':        ['scene', 'a pet sprite cropped to its own art box.'],
@@ -326,7 +327,6 @@ const SUBFLOOR = {
   'js/app.js:openStable|dust':            '13-14px dust chips in the stable.',
   'js/app.js:renderBoneyard|pit':         '15px in the map action bar. CANDIDATE for 16: one step away.',
   'js/app.js:renderPit|coin':             '12px in the Gauntlet reward lines.',
-  'js/app.js:renderPit|crate/golden':     '22px golden crate on the Gauntlet card, two pixels under the 24 floor. The strongest CANDIDATE on this list: 24 is one step up and the row is 22px of art already.',
   'js/app.js:openFight|coin':             '15px on the fight result. CANDIDATE for 16: one step away.',
 
   /* ---- v411, the batch that gave star / bone / paw / bolt / sparkle / the four

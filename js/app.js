@@ -24670,7 +24670,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v562'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v563'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
@@ -25051,6 +25051,17 @@ function pitBeatKeys(xpRows) {
   return new Set(xpRows.filter(r => r.type === 'pitrung' || r.type === 'pitchamp').map(r => r.key));
 }
 
+// Pit-only framing. Headshots intentionally omit pets through the existing crop;
+// no pet instance, shiny or morph state is reconstructed from an outfit.
+function pitOpponentPortrait(cfg) {
+  const art = cfg.glutton ? gluttonStageHtml()
+    : cfg.mage ? '<img src="assets/bh/mage/mage-fight.png" alt="">'
+    : cfg.mimic ? mimicPlateHtml()
+    : cfg.wanderer ? `<img src="${WANDERER_ART}" alt="">`
+    : headshotHtml(cfg.foeOutfit || foeOutfitFor(cfg.name), 52);
+  return `<span class="pit-opponent-portrait" aria-hidden="true">${art}</span>`;
+}
+
 async function openPit() {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Pit</h2><button class="sheet-close">Done</button></div>
@@ -25104,9 +25115,9 @@ async function renderPit(wrap) {
   // a locked rung says WHY ("BEAT RUNG 1") instead of just "locked", and the
   // live fight is never hidden behind a summary you have to open.
   const sparringSect = `
-    <div class="t3-sect"><b>Sparring · no stakes</b><i></i><span class="r chip" style="font-size:var(--fs-0)">Always free</span></div>
+    <div class="t3-sect pit-sparring-heading"><b>Sparring · no stakes</b><i></i><span class="r chip" style="font-size:var(--fs-0)">Always free</span></div>
     ${[['easy', 'Loose Bones', 0.8], ['even', 'Your Shadow', 1.0], ['hard', 'Mean Mirror', 1.15]].map(([id, name, m]) => `
-      <div class="t3-row"><span class="t3-med">${ICONS.pit(24)}</span>
+      <div class="t3-row">${pitOpponentPortrait({ name })}
         <div class="t3-tx"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · ${sparBoard.line}</small></div>
         <button class="btn ghost" data-spar="${m}" data-name="${name}" aria-label="Fight ${esc(name)}">FIGHT</button>
       </div>`).join('')}`;
@@ -25116,8 +25127,8 @@ async function renderPit(wrap) {
       const done = beaten.has(`pitrung-${r.rung}`);
       const locked = r.rung > rungsBeaten + 1;
       return `<div class="t3-row${done ? ' done' : ''}">
-        <span class="t3-rung">${r.rung}</span>
-        <div class="t3-tx"><b>${r.name}</b><small>${Math.round(r.mult * 100)}% stats · ${done ? `rematch · ${ICONS.coin(12)}${r.repeatCoins}` : `first win ${ICONS.coin(12)}${r.coins} + ${r.xp}+10 XP`}</small></div>
+        ${pitOpponentPortrait({ name: r.name })}
+        <div class="t3-tx"><b>${r.name}</b><small>Rung ${r.rung} · ${Math.round(r.mult * 100)}% stats · ${done ? `rematch · ${ICONS.coin(12)}${r.repeatCoins}` : `first win ${ICONS.coin(12)}${r.coins} + ${r.xp}+10 XP`}</small></div>
         ${locked ? `<span class="t3-lock">BEAT RUNG ${rungsBeaten + 1}</span>` : `<button class="btn ${done ? 'ghost' : ''}" data-rung="${r.rung}" ${gate} aria-label="${done ? 'Rematch' : 'Fight'} ${esc(r.name)}, rung ${r.rung}">${done ? 'REMATCH' : 'FIGHT'}</button>`}
       </div>`;
     }).join('')}`;
@@ -25145,7 +25156,7 @@ async function renderPit(wrap) {
   const remoteSect = `
     <div class="t3-sect"><b>Remote den · one a day</b><i></i><span class="r chip" style="font-size:var(--fs-0)">No walking needed</span></div>
     <div class="t3-row${rDone ? ' done' : ''}">
-      <span class="t3-med">${badgePixHtml('badge-skull', 20)}</span>
+      ${pitOpponentPortrait({ name: rDen.boss, foeOutfit: themedLook(rDen.theme && rDen.theme.key, rDen.id), mage: !!(rDen.theme && rDen.theme.art === 'mage') })}
       <div class="t3-tx"><b>${esc(rDen.boss)}</b><small>${esc(rDen.name)} · ${rDone
         ? 'beaten · a new one is here tomorrow, free'
         /* denRewardLabel takes the REWARD, not the den: passing rDen read every
@@ -25157,12 +25168,12 @@ async function renderPit(wrap) {
   const champSect = `
     <div class="t3-sect"><b>After the ladder</b><i></i></div>
     <div class="t3-row${champBeaten ? ' done' : ''}">
-      <span class="t3-med">${crateIcon('golden', 22)}</span>
+      ${pitOpponentPortrait({ name: CHAMPION.name })}
       <div class="t3-tx"><b>${CHAMPION.name}</b><small>${champBeaten ? `rematch · ${ICONS.coin(12)}${CHAMPION.repeatCoins}` : 'Wields the Moonlit Skull · first win drops it + the Marrow King title'}</small></div>
       ${champOpen ? `<button class="btn ${champBeaten ? 'ghost' : ''}" id="champBtn" ${gate} aria-label="${champBeaten ? 'Rematch' : 'Fight'} ${esc(CHAMPION.name)}, the Champion">${champBeaten ? 'REMATCH' : 'FIGHT'}</button>` : `<span class="t3-lock">BEAT RUNG ${LADDER.length}</span>`}
     </div>`;
   const endlessSect = `
-    <div class="t3-sect"><b>Endless · The Gauntlet</b><i></i>${champBeaten ? `<span class="r chip" style="font-size:var(--fs-0)">${canNewRank ? `Rank ${fightRank}` : 'At the cap'}</span>` : ''}</div>
+    <div class="t3-sect pit-gauntlet-heading"><b>Endless · The Gauntlet</b><i></i>${champBeaten ? `<span class="r chip" style="font-size:var(--fs-0)">${canNewRank ? `Rank ${fightRank}` : 'At the cap'}</span>` : ''}</div>
     ${champBeaten ? `
     ${canNewRank
       ? `<p class="note" style="margin:2px 2px 8px">Foes scale as you climb ranks. World bosses raise the ceiling by 3 each. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'} of a possible ${ceiling}.</p>`
@@ -25174,8 +25185,8 @@ async function renderPit(wrap) {
           <p class="pg-foot">You can still rematch rank ${ceiling} below for coins while you look.</p>
         </div>`}
     <div class="t3-row${canNewRank ? '' : ' capped'}">
-      <span class="t3-rung">${fightRank}</span>
-      <div class="t3-tx"><b>${esc(fightFoe.name)}</b><small>${Math.round(fightFoe.mult * 100)}% stats · ${canNewRank ? `${fightFoe.xp} XP + ${ICONS.coin(12)}${fightFoe.coins}` : `<b>rematch only</b> · ${ICONS.coin(12)}${fightFoe.repeatCoins}, no new rank`}</small></div>
+      ${pitOpponentPortrait(endlessFightCfg(fightFoe))}
+      <div class="t3-tx"><b>${esc(fightFoe.name)}</b><small>Rank ${fightRank} · ${Math.round(fightFoe.mult * 100)}% stats · ${canNewRank ? `${fightFoe.xp} XP + ${ICONS.coin(12)}${fightFoe.coins}` : `<b>rematch only</b> · ${ICONS.coin(12)}${fightFoe.repeatCoins}, no new rank`}</small></div>
       <button class="btn${canNewRank ? '' : ' ghost'}" id="endlessBtn" ${gate}>${canNewRank ? 'FIGHT' : 'REMATCH'}</button>
     </div>`
     : `
@@ -25219,18 +25230,9 @@ async function renderPit(wrap) {
       <button class="btn" id="pitDefeatAck" style="width:100%">Back on your feet</button>
     </div>` : '';
 
-  // The mockup's hero sat on a raster capture of the arena. The app already
-  // draws that arena in CSS, live and lighter than shipping a screenshot as
-  // art, so the poster keeps the drawn scene and takes the mockup's typography.
+  // The approved Pit poster is a quiet surface with live rank and readiness.
   body.innerHTML = `
     <div class="t3-hero">
-      <div class="pit-hero-atmos">
-        <span class="pit-arch"></span>
-        <span class="pit-crowd"></span>
-        <span class="pit-torch l"></span><span class="pit-torch r"></span>
-        <span class="pit-banner l"></span><span class="pit-banner r"></span>
-        <span class="pit-fog"></span>
-      </div>
       <h2>MANY ENTER.<br>FEW LEAVE.</h2>
       <p>${champBeaten ? `THE GAUNTLET · RANK ${fightRank}` : `THE LADDER · RUNG ${Math.min(rungsBeaten + 1, LADDER.length)} OF ${LADDER.length}`}</p>
       <div class="stats">

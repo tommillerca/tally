@@ -12067,3 +12067,28 @@ button.t3-price::before {
 }
 #fightBody > .fight-endrow > .fight-act.endturn { border-color: var(--ink); }
 #fightBody .fight-hud .fname { box-shadow: none; border-color: var(--line); }
+
+/* Approved screen 1B. Every rule is rooted in the Pit body, never the arena. */
+#pitBody > .t3-hero { background: linear-gradient(180deg, #182013, #10140f); border: 1px solid #32362a; border-radius: 18px; box-shadow: none; padding: 22px 12px; }
+#pitBody > .t3-hero h2 { font-size: calc(var(--fs-body) * 2.1875); line-height: 1.02; text-shadow: none; }
+#pitBody > .t3-hero p { margin-top: 10px; font-size: calc(var(--fs-body) * .875); letter-spacing: .11em; }
+#pitBody > .t3-energy { border: 1px solid var(--line); border-radius: 15px; box-shadow: none; padding: 14px; }
+#pitBody > .t3-energy .ic { width: 28px; height: 28px; border: 0; border-radius: 0; background: transparent; }
+#pitBody > .t3-energy .bar { height: 6px; }
+#pitBody > #buildBtn { border: 1px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: none; padding: 10px 12px; gap: 10px; }
+#pitBody > #buildBtn b { min-width: 0; text-align: left; }
+#pitBody > .t3-sect { margin: 24px 0 10px; flex-wrap: wrap; }
+#pitBody > .t3-sect::before { content: ''; width: 4px; height: 15px; border-radius: 2px; background: var(--accent); }
+#pitBody > .t3-sect.pit-gauntlet-heading::before { background: var(--coral); }
+#pitBody > .t3-sect.pit-sparring-heading::before { background: var(--surface-3); }
+#pitBody > .t3-sect b { font-family: var(--display); font-size: calc(var(--fs-body) * 1.125); font-weight: 400; letter-spacing: .03em; color: var(--text); }
+#pitBody > .t3-sect i { height: 1px; }
+#pitBody > .t3-sect .r { background: transparent; border: 0; box-shadow: none; white-space: normal; }
+#pitBody > .t3-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; padding: 12px; margin-bottom: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+#pitBody > .t3-row > .t3-tx b { font-size: var(--fs-2); line-height: 1.3; overflow-wrap: anywhere; }
+#pitBody > .t3-row > .t3-tx small { display: block; margin-top: 4px; font-size: var(--fs-tiny); line-height: 1.4; }
+#pitBody > .t3-row > .btn { min-height: 40px; padding: 7px 12px; font-family: var(--display); font-size: var(--fs-body); border-radius: 10px; box-shadow: none; }
+#pitBody > .t3-row > .t3-lock { max-width: 92px; white-space: normal; text-align: center; }
+#pitBody > .t3-row > .pit-opponent-portrait { position: relative; display: block; width: 52px; height: 52px; overflow: hidden; border-radius: 12px; background: var(--surface-2); }
+#pitBody > .t3-row > .pit-opponent-portrait > .tz-head { border: 0; }
+#pitBody > .t3-row > .pit-opponent-portrait > img { display: block; width: 100%; height: 100%; object-fit: contain; }
