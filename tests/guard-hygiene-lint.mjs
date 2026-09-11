@@ -252,6 +252,17 @@ const SEAM_ONLY_KNOWN = [
      explaining what went wrong. */
   'pack-sink-audit.mjs',
   'render-sink-lint.mjs',
+  /* toast-today-audit drives window.__toast because Today has NO player control
+     that reliably produces a message. Probed 2026-09-11: all 14 controls the
+     screen renders were clicked in turn and not one toasted. The only message
+     Today fires on its own is the export nudge (js/app.js:3351), which needs
+     20+ log rows, a 14-day-old export and a 7-day-old nudge, and it writes
+     lastNudgeAt as it fires, so it is once-a-week and cannot be a fixture. The
+     seam is `(msg, ms) => toast(msg, ms)` onto the module-scoped queue, so the
+     audit still runs the shipped queue, the shipped unhide and the shipped
+     toastin, and what it grades is the GEOMETRY, which is the same wherever the
+     message came from. */
+  'toast-today-audit.mjs',
   'race-you.mjs',
   'speech-audit.mjs',
   'spire-phase3-audit.mjs',
