@@ -1,0 +1,16 @@
+PASS  HEALTHY  a correct store bundle passes  exit 0 (want 0)  submission preflight passed: marked store bundle, local config, no reachable beta strings
+PASS  MARKER   internal channel is refused even with a correct hash  exit 1 (want 1)  SUBMISSION PREFLIGHT FAILED: submission marker missing, wrong channel or does not match bundle bytes
+PASS  FLAG     a bundle built without STORE_BUILD=1 is refused  exit 1 (want 1)  SUBMISSION PREFLIGHT FAILED: /var/folders/k7/gh5s55k16q17nlm_hj_3g3bm0000gp/T/submission-preflight-6rGKjy/flag.js does not declare STORE_BUILD = true (the bundle was built without STORE_BUILD=1)
+PASS  SERVER   a synced config that still has a server URL is refused  exit 1 (want 1)  SUBMISSION PREFLIGHT FAILED: /var/folders/k7/gh5s55k16q17nlm_hj_3g3bm0000gp/T/submission-preflight-6rGKjy/server.json still has a server key, so the app would load the live site over the network instead of its own bundle
+PASS  STRING   a reachable TestFlight string is refused  exit 1 (want 1)  SUBMISSION PREFLIGHT FAILED: reachable "TestFlight" at /var/folders/k7/gh5s55k16q17nlm_hj_3g3bm0000gp/T/submission-preflight-6rGKjy/string.js:5
+PASS  SCANNER  single-url  exit 1 (want 1)  SUBMISSION PREFLIGHT FAILED: reachable "testflight.apple.com" at /var/folders/k7/gh5s55k16q17nlm_hj_3g3bm0000gp/T/submission-preflight-6rGKjy/single-url.js:5
+PASS  SCANNER  template-url  exit 1 (want 1)  SUBMISSION PREFLIGHT FAILED: reachable "testflight.apple.com" at /var/folders/k7/gh5s55k16q17nlm_hj_3g3bm0000gp/T/submission-preflight-6rGKjy/template-url.js:5
+PASS  SCANNER  double-url  exit 1 (want 1)  SUBMISSION PREFLIGHT FAILED: reachable "testflight.apple.com" at /var/folders/k7/gh5s55k16q17nlm_hj_3g3bm0000gp/T/submission-preflight-6rGKjy/double-url.js:5
+PASS  SCANNER  line-comment  exit 0 (want 0)  submission preflight passed: marked store bundle, local config, no reachable beta strings
+PASS  SCANNER  comment-in-string  exit 1 (want 1)  SUBMISSION PREFLIGHT FAILED: reachable "TestFlight" at /var/folders/k7/gh5s55k16q17nlm_hj_3g3bm0000gp/T/submission-preflight-6rGKjy/comment-in-string.js:5
+PASS  COVERAGE registered helper  exit 0 (want 0)  coverage: 435 audits on disk, 129 fast, 130 full, 176 skipped
+PASS  COVERAGE unregistered runnable refused  exit 1 (want 1)  FAIL  coverage: 1 declared audit file(s) belong to no running tier:
+        unregistered-store-fixture.mjs
+        Put each runnable file in exactly one of PURE, BROWSER, or DECLARED full.
+
+submission preflight: refuses marker, flag, server and copy defects; passes the control

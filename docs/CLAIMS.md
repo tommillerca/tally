@@ -5348,3 +5348,13 @@ selected-unit.txt and .exit, write-guard.red.txt and .exit, backfill.red.txt and
 device-loss.txt and .exit, sop-static.txt and .exit, and pure/results.json
 with per-file output and exit status. This report is advisory and is not
 independent review or release authorization.
+
+## v570 (interrupted Pit fights and Today removals)
+Changelog item: Interrupted Pit fights return one fight credit without recording a loss. Today no longer shows the Laboratory row or kitchen disclaimer.
+
+1. PROOF: interrupted-fight-audit.mjs, registered in PURE. docs/v570/red.txt records exit 1 on the original production forfeit panel; green.txt records the real reservation, atomic recovery, replay, concurrent recovery, capped Vigor, day rollover, retry and loss controls. | REACH: Boot changes an open fight to interrupted and returns one credit in the same transaction. Credits are spent before free fights or Vigor and survive resets. Legacy saves lack payment provenance, so compensation is a fight credit rather than a guessed free/Vigor refund. No combat state is resumed.
+Validation: node tests/unit.test.js and the full PURE census, including push/unshift additions, recorded under docs/v570. Advisory Node evidence only. No sockets, screenshots or browser geometry claims. The frozen Today gap and Wardrobe position require independent browser review.
+
+The deleted kitchen disclaimer was the only explicit production copy found stating that growing/cooking does not log eaten food. Its removal is intentional; diary and Kitchen functions remain. Laboratory routing and helper functions remain, but its Today insertion and Restore setting are removed. Crew and native/ASC-SUBMISSION.md are untouched.
+
+Limitation: existing open records do not identify a live owner tab. Boot recovery treats them as interrupted; simultaneous use of the same fight in multiple tabs is not distinguished from a terminated session. Recovery after a setup failure in the current session requires restarting, as stated in the unresolved copy.

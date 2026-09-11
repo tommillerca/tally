@@ -1,0 +1,52 @@
+PASS fresh: leaderboard
+PASS fresh: fan card
+PASS fresh: fan selection
+PASS fresh: requests
+PASS fresh: profile
+PASS fresh: podium
+PASS fresh: newcomers
+PASS fresh: race
+PASS fresh: paddock
+PASS day-old: leaderboard
+PASS day-old: fan card
+PASS day-old: fan selection
+PASS day-old: requests
+PASS day-old: profile
+PASS day-old: podium
+PASS day-old: newcomers
+PASS day-old: race
+PASS day-old: paddock
+PASS week-old: leaderboard
+PASS week-old: fan card
+PASS week-old: fan selection
+PASS week-old: requests
+PASS week-old: profile
+PASS week-old: podium
+PASS week-old: newcomers
+PASS week-old: race
+PASS week-old: paddock
+PASS fleet-stale: leaderboard
+PASS fleet-stale: fan card
+PASS fleet-stale: fan selection
+PASS fleet-stale: requests
+PASS fleet-stale: profile
+PASS fleet-stale: podium
+PASS fleet-stale: newcomers
+PASS fleet-stale: race
+PASS fleet-stale: paddock
+PASS fresh: recent-sync filter
+PASS day-old: recent-sync filter
+PASS week-old: recent-sync filter
+PASS fleet-stale: recent-sync filter
+PASS fresh: map race strip
+PASS day-old: map race strip
+PASS week-old: map race strip
+PASS fleet-stale: map race strip
+PASS CONTROL pending rows do not invent sync times
+PASS CONTROL empty race and stale own row do not imply player inactivity
+PASS CONTROL timestamp boundaries and unavailable clocks
+PASS CONTROL shared notice is bounded to available snapshots
+PASS filter copy and stale fan notice are wired
+PASS mixed race: fresh lanes and own standing (stale above=false)
+PASS mixed race: fresh lanes and own standing (stale above=true)
+LEADERBOARD HONESTY: 51 passed, 0 failed

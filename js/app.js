@@ -79,7 +79,7 @@ import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
 import { installPaddockSeam } from './paddock-cards.js';
 import { attachWalk } from './walk.js';
-import { refreshPitEnergy, spendPitFight, refundPitFight, addVigor, FREE_FIGHTS } from './energy.js';
+import { recoverInterruptedPitFight, refreshPitEnergy, spendPitFight, refundPitFight, addVigor, FREE_FIGHTS } from './energy.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
   spawnIngredient, SPAWN_FOOD, cookState, startCook, queueCook, advanceQueue, QUEUE_MAX, collectDish, cancelCook, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime, foodBuffLabel,
@@ -1687,6 +1687,7 @@ async function boot() {
   }
   if (await guardSaveBeforeInit()) return;
   await recoverLaboratoryAtBoot();
+  await recoverInterruptedPitFight();
   const interruptedFight = await kvGet('pitFight', null);
   const interruptedDraft = await kvGet('addDraft', null);
   const unfinished = interruptionCopy({ fight: interruptedFight, draft: interruptedDraft });
@@ -4273,7 +4274,7 @@ async function dayBudget() {
    a promise. It sits UNDER the day's totals because that is the moment the question
    gets asked, and it is permanent and unconditional: a trust line that only shows
    up sometimes is worse than none at all. */
-const LOG_ONLY_LINE = '<p class="log-only">Nothing you grow or cook in the Kitchen counts as food you ate. This diary only records what you log yourself.</p>';
+const LOG_ONLY_LINE = ''; // v570: requested disclaimer removed.
 
 /* ONE LINE PER DAY-GUARD RULE (js/db.js claimDay). Keyed by the reason claimDay
    itself returns, so a rule added there without copy here degrades to `other`
@@ -4655,7 +4656,7 @@ async function renderToday(el) {
   const tsec = (label, html) => (html ? `<section class="tsec"><div class="tsec-h">${label}</div>${html}</section>` : '');
 
   const labDiscovery = laboratoryEngine() ? await laboratoryEngine().snapshot({ inv, health: healthRows, log: allLog, xp: allXp, presentationOnly: true }).catch(() => null) : null;
-  const labToday = labDiscovery ? labTodayHtml(labDiscovery, { current: S.date === dateKey(), priorDay: labDiscovery.priorDay === true, hidden: labDiscovery.ui.todayHidden }) : '';
+  const labToday = ''; // Laboratory remains in the Backpack.
   const interruptedFightCard = await kvGet('pitFight', null);
   el.innerHTML = `
   ${/* THE PAGE BACKDROP, and it has to live INSIDE the scrolled content. The
@@ -5083,7 +5084,6 @@ async function renderToday(el) {
   S.ui = { ringPct: pct, eatenShown: tot.kcal, macroPcts };
 
   wireLabLinks(el);
-  $('[data-lab-hide]', el)?.addEventListener('click', async () => { try { await laboratoryEngine().setUi({ todayHidden: true }); refresh(); } catch { toast('Could not save that setting. Try again.'); } });
   $('[data-interrupted-pit]', el)?.addEventListener('click', () => openPit());
   $('#todaySettings', el)?.addEventListener('click', () => { location.hash = '#/settings'; });
   $('#prevDay').addEventListener('click', () => { if (S.date <= firstDate) return; S.date = addDays(S.date, -1); refresh(); });
@@ -15031,7 +15031,6 @@ async function renderSettings(el) {
     </div>`;
   el.innerHTML = `
   <h1 class="page-h1">Settings</h1>
-  <div class="settings-row"><div class="lab"><b>The Laboratory on Today</b><span>Show the row when a safe collection-building pair is available.</span></div><button class="btn ghost" id="labRestoreToday" ${laboratoryEngine() ? '' : 'disabled'}>Restore row</button></div>
 
   ${apiConfigured ? `
   <div class="card">
@@ -15202,7 +15201,6 @@ async function renderSettings(el) {
     Dialogue type: <a href="https://yukipixels.itch.io/boldpixels" target="_blank" rel="noopener">BoldPixels by YukiPixels</a>, used unmodified under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>
   </p>`;
 
-  $('#labRestoreToday', el)?.addEventListener('click', async () => { try { await laboratoryEngine().setUi({ todayHidden: false }); toast('The Laboratory row is restored when a safe pair is available.'); } catch { toast('Could not save that setting. Try again.'); } });
   $('#saveTargets').addEventListener('click', async () => {
     /* The target is the denominator of the calorie ring, the "left today"
        number and the over/under colour, so a nonsense target quietly recolours
@@ -21563,8 +21561,8 @@ function labQuoteSupported(q) {
   return q.branches?.length === q.distribution.length && q.distribution.every(d => q.branches.filter(b => b.morph === d.morph).length === 1);
 }
 function labInterruptedFightHtml(fight) {
-  if (fight?.phase !== 'open') return '';
-  return `<section class="lab-interruption"><b>Interrupted fight</b><p>Your last session ended with a fight against ${esc(fight.foe || 'The Pit')} still open. Open the Pit to review the result.</p><button class="btn ghost" data-interrupted-pit>Open the Pit</button></section>`;
+  if (!['open', 'interrupted'].includes(fight?.phase)) return '';
+  return `<section class="lab-interruption"><b>Interrupted fight</b><p>Your last session ended with a fight against ${esc(fight.foe || 'The Pit')} unfinished. No loss was recorded. ${fight.phase === 'interrupted' ? 'One fight credit was returned. Open the Pit to start again.' : 'Restart the app to recover your fight credit.'}</p><button class="btn ghost" data-interrupted-pit>Open the Pit</button></section>`;
 }
 function labNeedsTyped(q) { return q.inputs.some(labInvested) || q.branches.some(b => b.lost.length > 0); }
 function labConfirmationHtml(q) {
@@ -24684,7 +24682,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v569'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v570'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
@@ -25113,7 +25111,7 @@ async function renderPit(wrap) {
   const tapped = energy.ready <= 0;
   const gate = tapped ? 'disabled' : '';
   /* THE UNRESOLVED FIGHT, read from disk, not from render flow. Non-null means
-     a staked fight ended in a loss (or was abandoned, which is the same thing)
+     a staked fight has an unacknowledged outcome or interruption
      and the player has not acknowledged it yet: the panel below renders from
      this record wherever the player re-enters, and startPit refuses to spend
      until it is cleared. See the lifecycle comment above openFight. */
@@ -25216,8 +25214,8 @@ async function renderPit(wrap) {
 
   /* The DOWN, NOT OUT panel, derived from the persisted record so it survives
      an app kill, a re-open, and any number of re-renders. A record still in
-     phase 'open' can only mean the app died mid-fight, which is an abandon, so
-     it reads as a forfeit. Reuses the .pit-gate styling; no new CSS. */
+     phase 'open' is unresolved, never a forfeit. Boot atomically converts it
+     to 'interrupted' and returns one persistent fight credit. Reuses the .pit-gate styling; no new CSS. */
   /* R38-22: cooking is the strongest lever on fight win rate the game has
      (measured in the real fight engine, tests/fight-sim.mjs: +37.7pp Bone
      Broth, +50.3pp Hearty Hash, +59.9pp Necromancer's Feast) and this sheet
@@ -25236,11 +25234,13 @@ async function renderPit(wrap) {
       : '';
   const defeatSect = downed ? `
     <div class="pit-gate" id="pitDefeat">
-      <div class="pg-head"><span class="pg-ico">${badgePixHtml('tombstone', 22)}</span><b>DOWN, NOT OUT</b></div>
-      <p class="pg-why">${downed.phase === 'lost' && !downed.forfeit
+      <div class="pg-head"><span class="pg-ico">${badgePixHtml('tombstone', 22)}</span><b>${downed.phase === 'open' || downed.phase === 'interrupted' ? 'INTERRUPTED FIGHT' : 'DOWN, NOT OUT'}</b></div>
+      <p class="pg-why">${downed.phase === 'open' || downed.phase === 'interrupted'
+        ? `Your session ended before the fight with <b>${esc(downed.foe || 'The Pit')}</b> finished. No loss was recorded. ${downed.phase === 'interrupted' ? 'One fight credit was returned. Start a new fight when ready.' : 'Restart the app to recover your fight credit.'}`
+        : downed.phase === 'lost' && !downed.forfeit
         ? `<b>${esc(downed.foe || 'The Pit')}</b> put you down.`
         : `You left your fight with <b>${esc(downed.foe || 'The Pit')}</b> before it was decided, so it goes down as a loss.`}
-        ${DEFEAT_STATS_NOTE}</p>
+        ${downed.phase === 'lost' ? DEFEAT_STATS_NOTE : ''}</p>
       <button class="btn" id="pitDefeatAck" style="width:100%">Back on your feet</button>
     </div>` : '';
 
@@ -25265,7 +25265,7 @@ async function renderPit(wrap) {
       <div class="tx">
         <b>${energy.ready} fight${energy.ready === 1 ? '' : 's'} in the tank</b>
         <div class="bar"><i style="width:${Math.min(100, Math.round(energy.ready / (energy.freeMax + 6) * 100))}%"></i></div>
-        <small>${energy.free} free today + ${energy.vigor} Vigor${energy.dayGuard ? ' · ' + (DAY_GUARD_COPY[energy.dayGuard] || DAY_GUARD_COPY.other) /* QA round 26 O14: "refill at midnight" is false on a refused day */ : tapped ? ' · walk to earn Vigor · free fights refill at midnight' : ' · walk to earn more'}</small>
+        <small>${energy.free} free today + ${energy.vigor} Vigor${energy.refunded ? ` + ${energy.refunded} returned` : ''}${energy.dayGuard ? ' · ' + (DAY_GUARD_COPY[energy.dayGuard] || DAY_GUARD_COPY.other) /* QA round 26 O14: "refill at midnight" is false on a refused day */ : tapped ? ' · walk to earn Vigor · free fights refill at midnight' : ' · walk to earn more'}</small>
       </div>
     </div>
     ${kitchenLine}
@@ -25460,19 +25460,19 @@ function fighterStatuses(f) {
  *   { phase:'open', foe, mode, at }      written when the fight starts, the
  *                                        same moment the charge is genuinely
  *                                        spent. Found on re-entry it means the
- *                                        app died mid-fight: an abandon.
+ *                                        session ended mid-fight: interrupted.
  *   { phase:'lost', foe, mode, at,       written by settle() on any non-win,
  *     forfeit? }                         and by the sheet's onClose when the
  *                                        player flees a live staked fight
- *                                        (forfeit:true). An abandon IS a loss.
+ *                                        (forfeit:true). Only an explicit flee is a forfeit.
  *
- * A fight has exactly three exits, and each one resolves the key:
+ * A fight has four exits, and each one resolves the key:
  *   1. WIN            settle() clears it (a kill on the victory screen must
  *                     never read as a forfeit)
  *   2. DEFEAT SEEN    the defeat panel was on screen and the sheet closed
  *                     (the Done tap or any other close): onClose clears it
- *   3. ABANDON        flee or app-kill mid-fight: the key survives as an
- *                     unacknowledged loss
+ *   3. FORFEIT        explicit flee records a loss.
+ *   4. INTERRUPTED    boot refunds an open record once; no loss or resume
  *
  * While 'pitFight' is non-null, renderPit() derives a DOWN, NOT OUT panel from
  * it (#pitDefeat, persisted state, not render flow) and startPit() refuses to
@@ -25512,10 +25512,11 @@ async function reservePitFight(foeCfg) {
   return payAtomic({ snapshot: { keys: ['pitEnergy', 'pitFight'] },
     decide: ({ pitEnergy: energy = {}, pitFight }) => {
       if (pitFight) return { result: { ok: false } };
+      const refunded = energy.refunded > 0;
       const free = (energy.freeUsed || 0) < FREE_FIGHTS;
-      if (!free && !(energy.vigor > 0)) return { result: { ok: false } };
+      if (!refunded && !free && !(energy.vigor > 0)) return { result: { ok: false } };
       return { result: { ok: true }, kv: {
-        pitEnergy: () => free ? { ...energy, freeUsed: (energy.freeUsed || 0) + 1 }
+        pitEnergy: () => refunded ? { ...energy, refunded: energy.refunded - 1 } : free ? { ...energy, freeUsed: (energy.freeUsed || 0) + 1 }
           : { ...energy, vigor: Math.max(0, Math.min(VIGOR_CAP, energy.vigor - 1)) },
         pitFight: () => ({ phase: 'open', mode: foeCfg.mode, foe: foeCfg.name, at: Date.now() }),
       } };

@@ -1,0 +1,6 @@
+ok    SAMPLE the render layer was read and it contains interpolated markup  57 files, 53424 lines, 5041 interpolations
+ok    CONTROL the matcher flags both pre-fix raw sinks when it is shown them  c.stats, footerNote
+ok    CONTROL an escaped sink and an app-controlled raw value are NOT flagged  quiet on healthy markup
+ok    SINK no field that can carry another player's text is interpolated raw into markup  5041 interpolations scanned, none raw
+
+render-sink: clean

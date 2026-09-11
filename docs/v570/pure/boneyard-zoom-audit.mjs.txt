@@ -1,0 +1,4 @@
+PASS real routes, Boneyard camera boot, key taps, retry, exit/re-entry and late GPS teardown
+PASS CONTROL app-wide zoom rejected by the same guard
+PASS CONTROL zoom disabled everywhere rejected by the same guard
+DEVICE VERIFICATION OWED: physical pinch, scrolling and taps on iOS/Android were not tested

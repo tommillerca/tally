@@ -1,0 +1,14 @@
+ok    REACH: 200000/200000 rolls on a fully-owned pool came back dupes
+ok    PREMISE: a uniform pick would return legendary 9.6% of the time against a 3% drop weight (3.19x)
+ok    WEIGHT common: 0.522 against 0.520 expected (tolerance 0.01)
+ok    WEIGHT uncommon: 0.259 against 0.260 expected (tolerance 0.01)
+ok    WEIGHT rare: 0.129 against 0.130 expected (tolerance 0.01)
+ok    WEIGHT epic: 0.060 against 0.060 expected (tolerance 0.01)
+ok    WEIGHT legendary: 0.030 against 0.030 expected (tolerance 0.01)
+ok    FLOOR junk: 0 of 200000 Golden Crate dupes came back below the crate's rarity floor (common/uncommon)
+ok    FLOOR rare: 0.590 against 0.591 expected
+ok    FLOOR epic: 0.273 against 0.273 expected
+ok    FLOOR legendary: 0.136 against 0.136 expected
+ok    POOL pets: 0 pet-slot items were handed back as crate dupes
+
+PASS  loot-fallback-audit: 12/12 checks

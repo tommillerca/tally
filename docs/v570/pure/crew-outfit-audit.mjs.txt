@@ -1,0 +1,8 @@
+PASS CONTROL body football survives publish, sanitizer, friends, card and profile
+PASS pet garment equip publishes within the existing debounce
+PASS pet football team change publishes the new colourway
+PASS unequip publishes bare; refused garment schedules nothing
+PASS rapid garment changes coalesce and preserve snapshot shiny
+PASS unchanged and unavailable team choices do not publish
+PASS offline changes remain local without a transport attempt
+7/7 passed; 5 captured profile uploads; pixel review owed.

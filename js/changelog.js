@@ -10,6 +10,7 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 570, date: '2026-09-11', title: 'Interrupted fights made right', items: ['Interrupted Pit fights return one fight credit without recording a loss. Today no longer shows the Laboratory row or kitchen disclaimer.'] },
   { n: 569, date: '2026-09-11', title: 'The Laboratory host', items: [
     'Backpack opens the Laboratory through an animated slime banner, and Wardrobe makes more room above your Bonehead.',
   ] },

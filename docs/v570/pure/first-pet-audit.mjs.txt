@@ -1,0 +1,9 @@
+ok   SETUP the catalogue has at least two species to work with  7 species
+ok   HEAL one owned pet and nothing equipped: equippedPetIid equips her in BOTH records  petEquipped=pmtx9l2go-1-C6 C=C6
+ok   STUCK-SETUP petEquipped valid and the C slot empty, the state v482..v487 left players in
+ok   STUCK the shipped bug state (petEquipped valid, C slot empty) is repaired by the next equippedPetIid  C=C6
+ok   HATCH-SETUP the egg hatched one instance  ready=true instances=1
+ok   HATCH hatchEgg on a goal-0 egg leaves the hatched species in the C slot with petEquipped agreeing  hatched=C1 C=C1 petEquipped=pmtx9l2im-3-C1
+ok   CONTROL a chosen pet stays chosen: a second copy minted and a second egg hatched never re-point either record  after mint {"iid":"pmtx9l2jh-4-C6","C":"C6"}, after hatch {"iid":"pmtx9l2jh-4-C6","C":"C6"} (chosen pmtx9l2jh-4-C6/C6)
+
+first-pet: the first pet you hatch is out with you, in both records

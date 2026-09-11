@@ -1,0 +1,8 @@
+PASS 9-day history: deleting sole zero-calorie row changes display and paying streak together
+PASS 90-day history: deleting sole zero-calorie row changes display and paying streak together
+PASS zero-calorie quick add advances 13 to 14 and pays the same streak milestone once
+PASS deleting one of two zero-calorie rows keeps the day; deleting the last removes it
+PASS CONTROL no row is no logged day, including a walking-only day
+PASS legacy freeze protects the same streak in display and engine without inventing a logged day
+PASS zero-calorie log/delete hammer cannot bypass the existing shared daily XP cap
+7 passed, 0 failed

@@ -424,7 +424,7 @@ await check('Today row requires all gates, keeps hide, and never advertises mere
   rejectsMutation(recovery,'',h=>{assert.match(h,/data-lab-open/);assert.match(h,/status check/);assert.match(h,/data-lab-hide/);});
   assert.match(ui.labTodayHtml(state({status:'unknown',remaining:0}),{...ctx,priorDay:false}),/data-lab-open/);
   for(const change of [{current:false},{hidden:true}]) assert.equal(ui.labTodayHtml(state({status:'unknown',remaining:0}),{...ctx,...change}),'');
-  assert.match(source,/setUi\(\{ todayHidden: true \}\)/); assert.match(source,/setUi\(\{ todayHidden: false \}\)/);
+  assert.match(source,/const labToday = '';/); assert.doesNotMatch(source,/id="labRestoreToday"/);
 });
 await check('interrupted fight and unknown save copy name the action without inventing a result', () => {
   const html = ui.labInterruptedFightHtml({ phase:'open',foe:'<Slab>' });

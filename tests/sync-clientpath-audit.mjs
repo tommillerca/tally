@@ -23,7 +23,7 @@ function constant(name) {
   return m[0];
 }
 const bindings = {};
-const modules = ['db', 'game', 'loot', 'pets', 'pit', 'gear', 'nutrition', 'native', 'save-disclosure', 'poi'];
+const modules = ['db', 'game', 'loot', 'pets', 'pit', 'gear', 'nutrition', 'native', 'save-disclosure', 'poi', 'energy'];
 for (const match of app.matchAll(/import\s*\{([^}]+)\}\s*from\s*'([^']+)'/g)) {
   if (!modules.some(n => match[2] === `./${n}.js`)) continue;
   const mod = await import(new URL('../js/' + match[2], import.meta.url));

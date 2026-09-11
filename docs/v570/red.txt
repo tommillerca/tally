@@ -1,0 +1,34 @@
+Recovery panel: DOWN, NOT OUT
+      You left your fight with Rattles before it was decided, so it goes down as a loss.
+        stats
+      Back on your feet
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: The input was expected to not match the regular expression /You left|goes down as a loss/. Input:
+
+'\n' +
+  '    <div class="pit-gate" id="pitDefeat">\n' +
+  '      <div class="pg-head"><span class="pg-ico"></span><b>DOWN, NOT OUT</b></div>\n' +
+  '      <p class="pg-why">You left your fight with <b>Rattles</b> before it was decided, so it goes down as a loss.\n' +
+  '        stats</p>\n' +
+  '      <button class="btn" id="pitDefeatAck" style="width:100%">Back on your feet</button>\n' +
+  '    </div>'
+
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/v570-fight-today/tests/interrupted-fight-audit.mjs:19:8 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: '\n' +
+    '    <div class="pit-gate" id="pitDefeat">\n' +
+    '      <div class="pg-head"><span class="pg-ico"></span><b>DOWN, NOT OUT</b></div>\n' +
+    '      <p class="pg-why">You left your fight with <b>Rattles</b> before it was decided, so it goes down as a loss.\n' +
+    '        stats</p>\n' +
+    '      <button class="btn" id="pitDefeatAck" style="width:100%">Back on your feet</button>\n' +
+    '    </div>',
+  expected: /You left|goes down as a loss/,
+  operator: 'doesNotMatch',
+  diff: 'simple'
+}
+
+Node.js v22.22.2

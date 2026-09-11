@@ -1,0 +1,16 @@
+PASS CONTROL known cosmetic and gear retain Dressing Room tiles and controls
+PASS CONTROL absent equipment gives an explanatory panel without controls
+PASS RESTORE replace unknown truthy H keeps Dressing Room markup
+PASS RESTORE merge unknown truthy H keeps Dressing Room markup
+PASS BOUNDARY unknown artwork never reaches asset generation or Apply controls
+PASS ASSET undefined and null return a drawable placeholder; every catalogue asset is unchanged
+PASS ERRORS emporium observes clean, first-load and later errors
+PASS ERRORS hero-share observes clean, first-load and later errors
+PASS ERRORS shop-door observes clean, first-load and later errors
+PASS ERRORS purchase-write-failure observes clean, first-load and later errors
+PASS ERRORS tabbar-contrast observes clean, first-load and later errors
+PASS CHIP webdriver=false win refreshes production level and XP
+PASS CHIP webdriver=false loss refreshes production level and XP
+PASS CONTROL omitted level refresh leaves stale chip text
+PASS CONTROL webdriver=true retains the test alias
+r48-state: 15 passed, 0 failed

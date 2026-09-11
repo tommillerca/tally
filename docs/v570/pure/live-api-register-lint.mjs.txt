@@ -1,0 +1,7 @@
+PASS  15 register calls, 0 unflagged, 0 annotated, 14 labelled, 1 deliberately unlabelled
+AUDIT START live-api-register-lint.mjs: completion pending; planned rows undeclared
+PASS  WALL maskWebdriver refuses the production API host  https://bonez-api.boneheadz.workers.dev/register -> abort
+PASS  WALL CONTROL and lets a loopback request through  http://127.0.0.1:8765/index.html -> continue
+PASS  MASK no audit installs the webdriver mask by hand  455 test files scanned, all masks go through godmode
+PASS  MASK SAMPLE the helper is actually used by audits  11 caller(s): beta-thanks-audit.mjs, cloud-restore-silent-audit.mjs, community-audit.mjs, first-run-honesty-audit.mjs, first-session-audit.mjs, header-freshness-audit.mjs, honest-surfaces-audit.mjs, notif-audit.mjs, p1-r48-rest-audit.mjs, profile-units-audit.mjs, race-audit.mjs
+AUDIT END live-api-register-lint.mjs: PASSED; NORMAL EXIT (row coverage undeclared); rows=4/undeclared; failed=0; unproven=0; exit=0

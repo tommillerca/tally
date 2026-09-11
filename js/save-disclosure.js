@@ -86,7 +86,7 @@ export function interruptionCopy({ save, fight, draft, now = Date.now() }) {
   const lines = [];
   if (save === 'failed') lines.push('Your last session ended after a save failed. Open Settings and export a backup before trying again.');
   else if (save === 'pending') lines.push('Your last session ended before a save was confirmed. Check your saved progress before trying that action again.');
-  if (fight?.phase === 'open') lines.push(`Your last session ended with a fight against ${fight.foe || 'The Pit'} still open. Open the Pit to review the result.`);
+  if (['open', 'interrupted'].includes(fight?.phase)) lines.push(`Your last session ended with a fight against ${fight.foe || 'The Pit'} unfinished. No loss was recorded. ${fight.phase === 'interrupted' ? 'One fight credit was returned. Open the Pit to start again.' : 'Restart the app to recover your fight credit.'}`);
   if (draft && typeof draft.ts === 'number' && now >= draft.ts && now - draft.ts < 24 * 3600e3 && (draft.q || draft.foodId)) {
     lines.push('A food entry was open when your last session ended. Check Today before finishing the entry.');
   }
