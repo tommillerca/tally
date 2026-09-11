@@ -30,6 +30,7 @@ const resume = { pauses: 0, resumes: 0, last: null, subscription: 'not yet subsc
 let started = false;
 const watchers = new Set();
 export async function startDeviceSession() {
+  if (typeof window === 'undefined') { resume.subscription = 'no window'; return; }
   if (started) return;
   started = true;
   const app = window.Capacitor?.Plugins?.App;

@@ -5,6 +5,11 @@ import * as production from '../js/device-report.js';
 
 const manifest = JSON.parse(readFileSync(new URL('../native/capabilities.json', import.meta.url), 'utf8'));
 export const PURE = [
+  ['session without window', async m => {
+    assert.equal(typeof window, 'undefined', 'CONTROL: this guard requires Node without a DOM');
+    await m.startDeviceSession();
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }, "  if (typeof window === 'undefined') { resume.subscription = 'no window'; return; }\n", ''],
   ['CONTROL known-gap lookup', m => {
     assert.ok(manifest.plugins.length > 0, 'empty capability sample');
     assert.equal(m.knownGap(manifest, 'Haptics'), true);
@@ -47,20 +52,20 @@ export const PURE = [
 ];
 
 export async function runDeviceGuards(proveRed = false) {
-  assert.equal(PURE.length, 4);
+  assert.equal(PURE.length, 5);
   const source = readFileSync(new URL('../js/device-report.js', import.meta.url), 'utf8');
   for (const [name, guard, before, after] of PURE) {
     if (proveRed) {
       assert.ok(source.includes(before), `mutation target missing: ${name}`);
       const mutant = await import('data:text/javascript;base64,' + Buffer.from(source.replace(before, after)).toString('base64'));
       let failure;
-      try { guard(mutant); } catch (error) { failure = error; }
-      assert.ok(failure instanceof assert.AssertionError, `mutant survived: ${name}`);
+      try { await guard(mutant); } catch (error) { failure = error; }
+      assert.ok(failure instanceof assert.AssertionError || (name === 'session without window' && failure instanceof ReferenceError && /window is not defined/.test(failure.message)), `mutant survived: ${name}`);
       console.log(`RED ${name}: ${failure.message}`);
     }
-    guard(production);
+    await guard(production);
     console.log(`GREEN ${name}`);
   }
-  console.log('Device report: 4 passed, 0 failed');
+  console.log('Device report: 5 passed, 0 failed');
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) await runDeviceGuards(process.argv.includes('--prove-red'));
