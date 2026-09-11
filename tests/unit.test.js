@@ -5856,7 +5856,8 @@ test('R22-W13 the bar disarms on commit, every price tag carries the unit, a dol
   assert.equal((app.match(/\$\{lookTilesHtml\(arts\)\}/g) || []).length, 2, 'both look modes use the grouped renderer');
   // (c) slot taps arrive at the item chooser after rendering, with a saved return offset.
   const pd = app.slice(app.indexOf('const wirePd = b =>'), app.indexOf("$$('[data-pd]', content).forEach(wirePd)"));
-  assert.match(pd, /await renderCharacter\(wrap, 'wardrobe', \{ instant: true \}\);[\s\S]*\$\('\[data-slot-return\]', wrap\)\?\.scrollIntoView\(/, 'after a doll-slot tap the item chooser must scroll into view after render');
+  assert.match(pd, /await renderCharacter\(wrap, 'wardrobe', \{ instant: true \}\);[\s\S]*scrollWardrobeTo\([\s\S]*data-slot-heading/, 'after a doll-slot tap the section heading must scroll into view after render');
+  assert.match(pd, /S\.wardrobeReturnSlot === b\.dataset\.pd.*returnToDoll/, 'second tap returns to the paperdoll');
 });
 
 /* ---- QA round 22 W12: four tap targets under Apple's 44px floor ("Wear it"

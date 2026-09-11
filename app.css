@@ -12423,3 +12423,9 @@ body:has(.screen--today):not(:has(#sheets .sheet)) .toast { top: calc(var(--sat)
 .settings-data-action { flex-wrap: wrap; }
 .settings-data-action > .lab { flex: 1 1 10rem; min-width: 0; }
 .settings-data-action > .btn { flex: 0 0 7rem; width: 7rem; white-space: nowrap; }
+/* Wardrobe slot navigation: leave room for a heading and honour reduced motion. */
+[data-slot-heading], #chContent .paperdoll { scroll-margin-top: 12px; }
+.ward-other-slots section { margin-top: 24px; }
+@media (prefers-reduced-motion: reduce) {
+  #chBody *, #chBody *::before, #chBody *::after { animation: none !important; transition: none !important; }
+}
