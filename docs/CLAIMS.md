@@ -1,11 +1,24 @@
 # What each patch note claims, and what backs it
 
+## v579 (2026-09-11)
+
+Changelog item: Settings buttons no longer break a word in half, and the backup rows line up.
+1. PROOF: `node tests/settings-rows-audit.mjs` rows ROWS, COLUMN and CONTROL, at 375x812 and again at the largest text size. Proven red on the shipped rows in `docs/v579/guard-red.txt`, where IMPORT wraps to two lines reading IMP / ORT and the three YOUR DATA buttons carry three different widths. | REACH: the Settings YOUR DATA rows at 375x812 and at the largest text size. Other Settings sections and other viewports are unmeasured here.
+
+Changelog item: Tapping a slot on the paperdoll scrolls to that slot's items, and tapping it again brings you back.
+2. PROOF: `node tests/wardrobe-slot-scroll-audit.mjs` rows CONTROL, SCROLL, RETURN and REDUCED, driving a real slot tap and measuring the section heading's rect against the sticky header's rather than asserting a scrollTop. | REACH: the Wardrobe paperdoll and the item list below it. Behaviour under a mid-scroll re-render is unmeasured.
+
+Changelog item: Cosmetics that look the same stack into one tile with a count, in the Wardrobe and in transmog.
+3. PROOF: `node tests/wardrobe-stack-audit.mjs` rows CONTROL, STACK, REACHABLE and TRANSMOG, against a fixture of three items sharing one look plus two that do not, seeded through the app's own primitives. The audit equips the second variant and asserts it is the one worn, so nothing a player owns becomes unreachable. | REACH: the Wardrobe grid and the transmog tab. Stack naming at other sizes is unmeasured.
+
+Changelog item: A confirmed tower claim keeps its full reward even when the save fails afterwards.
+4. PROOF: `node tests/v576-hunt-audit.mjs` over the production claim settlement branch: a server-confirmed spire takeover followed by a local cap refusal paid 40 coins instead of the earned 80, and the fight charge is now returned when local persistence fails. | REACH: the claim settlement branch in Node. The full path on a phone with real network loss is unmeasured.
+
 ## v577 (2026-09-11)
 
 Changelog item: The Backpack shows its selected tab highlight, styled item explanations and a larger pet again.
 
 1. PROOF: backpack-ui-1g-audit.mjs | REACH: Backpack navigation, item cards and identity. Four CSS rules recovered after a chain-merge dropped them while their markup shipped. Browser render verified separately.
-
 ## v575 (2026-09-11)
 
 Changelog item: Crew explains empty favourites and search selections and how to clear them.

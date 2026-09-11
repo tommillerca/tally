@@ -1,0 +1,10 @@
+PASS CONTROL server-confirmed claim retains full reward after local cap failure
+PASS API override resets persisted cache and query while preserving other parameters
+PASS coin audit follows Shop destination
+PASS character audit follows Backpack label
+PASS retired drop audit uses current Shop control
+PASS siege coverage is explicitly conditional
+PASS notch guard measures character instead of background
+PASS changelog versions unique with correct v544 date
+PASS refused charm costs zero full rebuilds; successful charm costs one
+9/9 passed

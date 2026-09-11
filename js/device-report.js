@@ -50,8 +50,9 @@ let edgeResult = { name: 'Edge swipe', state: 'not yet observed', value: 'Tap Ar
 let edgeCleanup = null;
 const edgeWatchers = new Set();
 
-export function openDeviceReport({ openSheet, diagnosticsLine, esc, toast }) {
+export function openDeviceReport({ openSheet, diagnosticsLine, esc, toast, apiConfig = null, resetApiBase }) {
   const rows = [
+    ...(apiConfig ? [{ name: 'API base', state: apiConfig.custom ? 'override' : 'production default', value: apiConfig.base }] : []),
     { name: 'Safe area', state: 'measuring', value: '' },
     { name: 'Viewport model', state: 'measuring', value: '' },
     { name: 'Build agreement', state: 'measuring', value: '' },
@@ -65,7 +66,7 @@ export function openDeviceReport({ openSheet, diagnosticsLine, esc, toast }) {
     { name: 'Real purchase on Tom\'s own save', state: 'needs a person', value: 'Only Tom can judge whether the purchase felt right.' },
   ];
   let keyboardCleanup = () => {};
-  const wrap = openSheet(`<div class="sheet-head"><h2>Device report</h2><button class="btn small ghost sheet-close">Done</button></div><div class="sheet-body"><table style="width:100%;table-layout:fixed;overflow-wrap:anywhere"><thead><tr><th>Probe</th><th>State</th><th>Measured value</th></tr></thead><tbody id="deviceRows"></tbody></table><button class="btn" id="copyDeviceReport">Copy report</button><p><button class="btn small" id="deviceKeyboard">Measure keyboard</button></p><label>Keyboard probe<input id="deviceField" type="text" autocomplete="off" style="font-size:var(--fs-body);width:100%"></label><p><button class="btn small" id="deviceEdge">Arm edge swipe</button></p></div>`, { onClose: () => { watchers.delete(paintResume); edgeWatchers.delete(paint); keyboardCleanup(); } });
+  const wrap = openSheet(`<div class="sheet-head"><h2>Device report</h2><button class="btn small ghost sheet-close">Done</button></div><div class="sheet-body"><table style="width:100%;table-layout:fixed;overflow-wrap:anywhere"><thead><tr><th>Probe</th><th>State</th><th>Measured value</th></tr></thead><tbody id="deviceRows"></tbody></table>${apiConfig?.custom ? '<p><button class="btn small" id="resetDeviceApi">Use production API</button></p>' : ''}<button class="btn" id="copyDeviceReport">Copy report</button><p><button class="btn small" id="deviceKeyboard">Measure keyboard</button></p><label>Keyboard probe<input id="deviceField" type="text" autocomplete="off" style="font-size:var(--fs-body);width:100%"></label><p><button class="btn small" id="deviceEdge">Arm edge swipe</button></p></div>`, { onClose: () => { watchers.delete(paintResume); edgeWatchers.delete(paint); keyboardCleanup(); } });
   function paint() {
     wrap.querySelector('#deviceRows').innerHTML = rows.map(r => `<tr><th scope="row">${esc(r.name)}</th><td>${esc(r.state)}</td><td>${esc(r.value)}</td></tr>`).join('');
   }
@@ -97,6 +98,19 @@ export function openDeviceReport({ openSheet, diagnosticsLine, esc, toast }) {
       set('Build agreement', 'observed', line.split(' · App:')[0] + (manifest ? '' : ' · known-gap manifest unavailable'));
     } catch { set('Build agreement', 'no readback', 'diagnostics failed'); }
   })();
+  const resetApi = wrap.querySelector('#resetDeviceApi');
+  if (resetApi) resetApi.onclick = async () => {
+    resetApi.disabled = true;
+    try {
+      const config = await resetApiBase();
+      set('API base', 'production default', config.base);
+      resetApi.remove();
+      toast('Production API restored.');
+    } catch {
+      resetApi.disabled = false;
+      toast('Could not reset the API. Try again.');
+    }
+  };
   wrap.querySelector('#copyDeviceReport').onclick = async () => {
     try { await navigator.clipboard.writeText(reportText(rows)); toast('Device report copied.'); }
     catch { toast('Clipboard unavailable. Report was not copied.'); }
