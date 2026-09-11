@@ -11,3 +11,25 @@ ok    CONTROL Today drew its five door tiles  Trends 16,652.8 63.8x65.8 | Backpa
 FAIL  CLEAR a live toast covers none of the door tiles  toast 26.3,651.7 322.5x64.5 covers Trends, Backpack 2, Stable, Kitchen, The Pit !
 ok    SHADOW the contact shadow reads as contact, not a smudge  soles lum 60.2 with the shadow element hidden, 33.1 with it shown at 338,1078; the element contributes 45.0%
 FAILED  toast-today-audit
+
+
+ROOM HEADERS, 2026-09-11: BLOCKED, NOT A PROVEN RED
+Throwaway real-merge copy: /private/tmp/roomheaders-merge
+Removed both ${roomHeaderHtml('lab')} and ${roomHeaderHtml('kitchen')} call sites from its js/app.js. Kept helper, CSS and art.
+Command: node /private/tmp/roomheaders-merge/tests/room-headers-audit.mjs
+Exit: 97. Local server binding denied; HEADER and ART never ran. This is not evidence that either guard detects removal.
+AUDIT START room-headers-audit.mjs: completion pending; planned rows undeclared
+AUDIT PLAN room-headers-audit.mjs: 11 rows
+PASS NO-REVERT: recoverInterruptedPitFight
+PASS NO-REVERT: leaderboardLastOnline
+PASS NO-REVERT: fanPaintRevision
+UNPRV CONTROL kitchen  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV HEADER kitchen  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV ART kitchen  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV SCALE kitchen  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV CONTROL lab  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV HEADER lab  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV ART lab  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV SCALE lab  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+room headers: 0 failures
+AUDIT END room-headers-audit.mjs: UNPROVEN; COMPLETE; rows=11/11; failed=0; unproven=8; exit=97
