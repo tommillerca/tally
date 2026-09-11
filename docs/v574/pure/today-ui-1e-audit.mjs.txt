@@ -1,0 +1,2 @@
+PASS CONTROL omitted pet lift rejected; top -16 and bottom +16 preserve character height, pet bottom +16 preserves spacing.
+PASS Today title lookup, digit-bearing titles, live name/level/XP refresh, newspaper and scoped navigation/disclosure contracts. Browser UNPROVEN.

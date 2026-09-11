@@ -1,0 +1,9 @@
+PASS CONTROL external output is written and read back
+PASS CHECKOUT absolute, relative, traversal and URL destinations are refused
+PASS SYMLINK existing and nonexistent leaves cannot alias the checkout
+PASS DANGLING symlink fails closed
+PASS CONTROL sibling sharing checkout prefix remains outside
+PASS GRADED another served tree is also protected
+PASS CONTROL sink scan sees real writes, aliases and screenshot paths
+PASS SERVE identity uses memory and cannot create a proof file in the tree
+audit-output: 8 passed, 0 failed

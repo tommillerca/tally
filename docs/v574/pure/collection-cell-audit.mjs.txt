@@ -1,0 +1,124 @@
+PASS CONTROL hostile roster keeps seven cells on door, aria-label, heading and filled dots
+PASS hostile roster agrees with labCellKey, including duplicate iid
+PASS cell agreement C1/null/shiny=false
+PASS cell agreement C1/null/shiny=true
+PASS cell agreement C1/sparkle/shiny=false
+PASS cell agreement C1/sparkle/shiny=true
+PASS cell agreement C1/base/shiny=false
+PASS cell agreement C1/base/shiny=true
+PASS cell agreement C1/ember/shiny=false
+PASS cell agreement C1/ember/shiny=true
+PASS cell agreement C1/frost/shiny=false
+PASS cell agreement C1/frost/shiny=true
+PASS cell agreement C1/toxic/shiny=false
+PASS cell agreement C1/toxic/shiny=true
+PASS cell agreement C1/rose/shiny=false
+PASS cell agreement C1/rose/shiny=true
+PASS cell agreement C1/midnight/shiny=false
+PASS cell agreement C1/midnight/shiny=true
+PASS cell agreement C2/null/shiny=false
+PASS cell agreement C2/null/shiny=true
+PASS cell agreement C2/sparkle/shiny=false
+PASS cell agreement C2/sparkle/shiny=true
+PASS cell agreement C2/base/shiny=false
+PASS cell agreement C2/base/shiny=true
+PASS cell agreement C2/ember/shiny=false
+PASS cell agreement C2/ember/shiny=true
+PASS cell agreement C2/frost/shiny=false
+PASS cell agreement C2/frost/shiny=true
+PASS cell agreement C2/toxic/shiny=false
+PASS cell agreement C2/toxic/shiny=true
+PASS cell agreement C2/rose/shiny=false
+PASS cell agreement C2/rose/shiny=true
+PASS cell agreement C2/midnight/shiny=false
+PASS cell agreement C2/midnight/shiny=true
+PASS cell agreement C3/null/shiny=false
+PASS cell agreement C3/null/shiny=true
+PASS cell agreement C3/sparkle/shiny=false
+PASS cell agreement C3/sparkle/shiny=true
+PASS cell agreement C3/base/shiny=false
+PASS cell agreement C3/base/shiny=true
+PASS cell agreement C3/ember/shiny=false
+PASS cell agreement C3/ember/shiny=true
+PASS cell agreement C3/frost/shiny=false
+PASS cell agreement C3/frost/shiny=true
+PASS cell agreement C3/toxic/shiny=false
+PASS cell agreement C3/toxic/shiny=true
+PASS cell agreement C3/rose/shiny=false
+PASS cell agreement C3/rose/shiny=true
+PASS cell agreement C3/midnight/shiny=false
+PASS cell agreement C3/midnight/shiny=true
+PASS cell agreement C4/null/shiny=false
+PASS cell agreement C4/null/shiny=true
+PASS cell agreement C4/sparkle/shiny=false
+PASS cell agreement C4/sparkle/shiny=true
+PASS cell agreement C4/base/shiny=false
+PASS cell agreement C4/base/shiny=true
+PASS cell agreement C4/ember/shiny=false
+PASS cell agreement C4/ember/shiny=true
+PASS cell agreement C4/frost/shiny=false
+PASS cell agreement C4/frost/shiny=true
+PASS cell agreement C4/toxic/shiny=false
+PASS cell agreement C4/toxic/shiny=true
+PASS cell agreement C4/rose/shiny=false
+PASS cell agreement C4/rose/shiny=true
+PASS cell agreement C4/midnight/shiny=false
+PASS cell agreement C4/midnight/shiny=true
+PASS cell agreement C5/null/shiny=false
+PASS cell agreement C5/null/shiny=true
+PASS cell agreement C5/sparkle/shiny=false
+PASS cell agreement C5/sparkle/shiny=true
+PASS cell agreement C5/base/shiny=false
+PASS cell agreement C5/base/shiny=true
+PASS cell agreement C5/ember/shiny=false
+PASS cell agreement C5/ember/shiny=true
+PASS cell agreement C5/frost/shiny=false
+PASS cell agreement C5/frost/shiny=true
+PASS cell agreement C5/toxic/shiny=false
+PASS cell agreement C5/toxic/shiny=true
+PASS cell agreement C5/rose/shiny=false
+PASS cell agreement C5/rose/shiny=true
+PASS cell agreement C5/midnight/shiny=false
+PASS cell agreement C5/midnight/shiny=true
+PASS cell agreement C6/null/shiny=false
+PASS cell agreement C6/null/shiny=true
+PASS cell agreement C6/sparkle/shiny=false
+PASS cell agreement C6/sparkle/shiny=true
+PASS cell agreement C6/base/shiny=false
+PASS cell agreement C6/base/shiny=true
+PASS cell agreement C6/ember/shiny=false
+PASS cell agreement C6/ember/shiny=true
+PASS cell agreement C6/frost/shiny=false
+PASS cell agreement C6/frost/shiny=true
+PASS cell agreement C6/toxic/shiny=false
+PASS cell agreement C6/toxic/shiny=true
+PASS cell agreement C6/rose/shiny=false
+PASS cell agreement C6/rose/shiny=true
+PASS cell agreement C6/midnight/shiny=false
+PASS cell agreement C6/midnight/shiny=true
+PASS visible last-cell warning destroy/C2 shiny null
+PASS visible last-cell warning breed/C2 shiny null
+PASS visible last-cell warning destroy/C2 shiny sparkle
+PASS visible last-cell warning breed/C2 shiny sparkle
+PASS visible last-cell warning destroy/C2 shiny base
+PASS visible last-cell warning breed/C2 shiny base
+PASS visible last-cell warning destroy/C2 shiny ember
+PASS visible last-cell warning breed/C2 shiny ember
+PASS visible last-cell warning destroy/C2 shiny frost
+PASS visible last-cell warning breed/C2 shiny frost
+PASS visible last-cell warning destroy/C2 shiny toxic
+PASS visible last-cell warning breed/C2 shiny toxic
+PASS visible last-cell warning destroy/C2 shiny rose
+PASS visible last-cell warning breed/C2 shiny rose
+PASS visible last-cell warning destroy/C2 shiny midnight
+PASS visible last-cell warning breed/C2 shiny midnight
+PASS C5 safe Base backed by shiny null has no false last-colour warning
+PASS C5 safe Base backed by shiny sparkle has no false last-colour warning
+PASS C5 safe Base backed by shiny base has no false last-colour warning
+PASS C5 safe Base backed by shiny ember has no false last-colour warning
+PASS C5 safe Base backed by shiny frost has no false last-colour warning
+PASS C5 safe Base backed by shiny toxic has no false last-colour warning
+PASS C5 safe Base backed by shiny rose has no false last-colour warning
+PASS C5 safe Base backed by shiny midnight has no false last-colour warning
+PASS CONTROL appearance preservation is limited to collection pets and the last ordinary copy
+Collection cell audit: 123 passed, 0 failed

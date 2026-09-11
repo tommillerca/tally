@@ -1,0 +1,13 @@
+PASS PAID: real 50,000 purchase returns exactly 45,000 and preserves all progress
+PASS REPLAY: ten retries and a reopened database grant nothing
+PASS HATCH: a real free C6 hatch has no paid entitlement
+PASS NEW: real purchase charges 5,000 and receives no correction
+PASS RACE: three simultaneous corrections pay once
+PASS ABORT: failed credit burns no entitlement and can retry
+PASS MERGE: two offline copies settle the same refund without adding it twice
+PASS EVIDENCE: missing, unpriced and other-price receipts cannot authorize a refund
+PASS LEGACY: priced receipts predating currency history settle without changing the pet
+PASS RESTORE: a full rollback restores the old balance and cannot accumulate refunds
+PASS BOOT: shipped boot call pays and discloses the one-off correction
+
+C6 price audit: 11 passed, 0 failed

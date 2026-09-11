@@ -1,0 +1,13 @@
+PASS CONTROL normal session saves and returns with no error-shaped disclosure
+PASS ordinary claim refusals leave no failed-save journal or disclosure
+PASS generic write failure still speaks when telemetry throws
+PASS write failure is error-shaped, preempts routine traffic and survives 108 routine mutations
+PASS failed save remains disclosed on return even if later writes succeed
+PASS quiet bookkeeping failures do not announce or recurse
+PASS interrupted fight and food entry are disclosed from persisted evidence on any return route
+PASS stale drafts and settled fights are normal, not interrupted sessions
+PASS confirmed erase is error-shaped and consumed once
+PASS queued errors survive routine backlog pressure and normal exit animation callbacks
+PASS an interrupted in-flight write discloses uncertainty on return
+PASS refused journal storage does not prevent the live failure disclosure
+12 passed, 0 failed

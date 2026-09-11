@@ -1,0 +1,13 @@
+TRACE boot: GET /health -> autoSync -> buildSnapshot -> snapshot 10 -> PUT /profile -> GET /grants
+PASS CONTROL boot reaches lifecycle, online gate, real snapshot and signed profile request
+PASS HTTP 401 does not stamp success and an immediate retry reaches profile
+PASS HTTP 413 does not stamp success and an immediate retry reaches profile
+PASS HTTP 429 does not stamp success and an immediate retry reaches profile
+PASS HTTP 503 does not stamp success and an immediate retry reaches profile
+PASS CONTROL thrown snapshot/network failures leave throttle unchanged
+PASS null snapshot does not stamp success or block the next valid snapshot
+PASS CONTROL due backup HTTP 200 still reaches profile
+PASS CONTROL due backup HTTP 503 still reaches profile
+PASS CONTROL missing registration recovers before building and uploading a snapshot
+PASS CONTROL a player without an identity does not build or upload a snapshot
+SYNC CLIENT PATH: 0 failed

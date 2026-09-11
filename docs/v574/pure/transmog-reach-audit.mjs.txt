@@ -1,0 +1,20 @@
+PASS ARRIVAL disabled second step renders before a choice
+PASS CONTROL active selection enables commit; inactive panel stays absent
+PASS ZERO Free
+PASS ZERO Wearing
+PASS ZERO Free: no stats
+PASS ZERO Paid
+PASS RESET and HIDE retain actions without free labels or cost badges
+PASS ITEM markup drops free badges and preserves state and dust badges
+PASS REFRESH inserts Wearing after an absent badge and removes a newly free badge
+PASS CONTROL priced tile retains dust amount and hide is free
+PASS PRICE four free reasons and an unpaid gear look
+PASS COUNTS data counts individual looks; alternatives exclude baseline and empty slots
+PASS ROUTES picker explains and opens existing acquisition destinations
+PASS NEW PLAYER welcome crates supply a progression route without buying power
+EVIDENCE demo counts {"collected":14,"total":624,"alternatives":0}; coins=340 dust=0 gear=0 fits=0 crates=2
+PASS DEMO isolated seed has coins and unopened crates, no dust, gear or fits
+PASS COMMIT collected look debits dust once, preserves gear and appearance ownership
+PASS RETENTION melting keeps the earned appearance and pays dust
+PASS COPY melt disclosure is before the act and dust explanation is unconditional
+18 passed, 0 failed

@@ -1,0 +1,3 @@
+PASS CONTROL: stale review refuses, re-presents 1,100 steps, clears consent, then destroys exactly once
+PASS CONTROL: armed quick quote rejects a new nickname, preserves the pet, then requires fresh typed consent
+PASS CONTROL: 1,000 pending health steps belong to equipped b; unequipped a completes the quick path

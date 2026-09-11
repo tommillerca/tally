@@ -1,0 +1,4 @@
+GREEN CONTROL synthetic dense field (20 m spacing): N=100, median nearest non-far=4.95 m, reachable spawn sightings=722, score=7.220 spawns/fix against floor=1, fixes with reach=100/100, distinct reachable=41
+RED CONTROL synthetic sparse field (one fixed spawn): N=100, median nearest non-far=202.02 m, reachable spawn sightings=18, score=0.180 spawns/fix against floor=1, fixes with reach=18/100, distinct reachable=1
+PASS CONTROL empty field, outside-radius field and far-only field all grade RED
+GREEN reachable-density meter guard: dense and sparse controls distinguished; shipped reading is a MODEL.
