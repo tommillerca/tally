@@ -1376,7 +1376,6 @@ function bindAppLifecycle() {
      below: dateKey() flipped at 0 ms and the screen at up to 53 s. Re-aimed on
      every resume because a suspended WebView's pending timer is stale. */
   const midnight = armMidnightTimer(rollDayIfNeeded);
-  if (!STORE_BUILD) startDeviceSession();
   onAppResume(async () => {
     if (await guardSaveBeforeInit()) return;
     if (!NOSOCIAL) social.touchServerDay();
@@ -2594,6 +2593,8 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
    its copied app.js for an App Store archive, leaving web and internal native
    builds unchanged. Every distribution-only surface reads this flag. */
 const STORE_BUILD = false;
+// Observe pause/resume from startup, before Settings or either boot path opens.
+if (!STORE_BUILD) startDeviceSession();
 const TESTFLIGHT_URL = 'https://testflight.apple.com/join/rtZ6Uyxc';
 /* Inline for the same reason as DISCORD_MARK: sw.js precaches an explicit
    list, so an asset file would need an entry there and this needs none.

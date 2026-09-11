@@ -5,7 +5,7 @@ import * as production from '../js/device-report.js';
 
 const manifest = JSON.parse(readFileSync(new URL('../native/capabilities.json', import.meta.url), 'utf8'));
 export const PURE = [
-  ['known-gap lookup', m => {
+  ['CONTROL known-gap lookup', m => {
     assert.ok(manifest.plugins.length > 0, 'empty capability sample');
     assert.equal(m.knownGap(manifest, 'Haptics'), true);
     for (const id of ['App', 'Health', 'BhVault', 'LocalNotifications', 'Unknown']) assert.equal(m.knownGap(manifest, id), false);
