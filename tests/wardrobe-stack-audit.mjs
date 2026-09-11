@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
-import { boot, sleep, setWidth } from './godmode.js';
-const { browser, page } = await boot(undefined, { headless: 'shell' });
+import { boot, sleep, setWidth, serveTree } from './godmode.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+/* SERVE THIS TREE, NOT PRODUCTION. boot() with no base defaults to the live
+   site, so a lane's audit would have graded whatever is deployed and reported
+   green while proving nothing about the code under it. Caught 2026-09-11 by
+   submission-preflight-audit's COVERAGE row, not by reading the file. */
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const base = process.argv[2] || process.env.URL || null;
+const srv = base ? null : await serveTree(ROOT);
+const { browser, page } = await boot(base || srv.url, { headless: 'shell' });
 try {
   await setWidth(page, 390, 844);
   const fixture = await page.evaluate(async () => {
@@ -74,4 +83,4 @@ try {
   const worn = await page.evaluate(async () => (await (await import('./js/loot.js')).equipped()).H);
   assert.equal(worn, fixture.ids[1], 'TRANSMOG REACHABLE second variant worn');
   console.log('TRANSMOG REACHABLE second variant worn');
-} finally { await browser.close(); }
+} finally { await browser.close(); if (srv) srv.close(); }

@@ -14883,7 +14883,17 @@ async function openWhatsNew() {
 }
 
 async function profileSyncRowHtml() {
-  return `<div class="settings-row" id="profileSyncStatus"><div class="lab"><b>Profile sync</b><span>${esc(await social.socialMe() ? await social.syncHealthLine() : 'Offline.')}</span></div></div>`;
+  /* SIGNED OUT, THE ROW SAYS ONE PLAIN THING. Tom, 2026-09-10, ruling on the
+     same copy on the Crew screen: "remove the 'missing sync info' shit from
+     people just show online or not that's too much inside baseball to show
+     players." He then hit the identical line here on 2026-09-11. A player who
+     has never gone online is told "No profile server reply recorded yet. No
+     sync attempt recorded yet.", which narrates two mechanisms they have never
+     used. Signed IN, the full diagnostic stays: that is what
+     sync-observability-audit exists to protect and it is the line Tom
+     screenshots when a sync misbehaves. "Not connected" carries the phrase the
+     audit's offline-gate row keys on, so the row is still graded, not exempted. */
+  return `<div class="settings-row" id="profileSyncStatus"><div class="lab"><b>Profile sync</b><span>${await social.socialMe() ? esc(await social.syncHealthLine()) : 'Not connected. Go online above to back up your progress.'}</span></div></div>`;
 }
 
 /* ONE LINE TOM CAN SCREENSHOT, and it has to be honest about what it cannot know.

@@ -80,11 +80,23 @@ for (const path of ['autoSync', 'pushProfileSoon']) {
       'grants-throw': 'deliveries could not be checked', 'grants-body': 'deliveries could not be checked', success: 'Sync completed' };
     check(`${path} ${kind}: real Settings row reports outcome`, () => {
       assert.ok(row.includes('id="profileSyncStatus"'));
-      assert.ok(row.includes(phrases[kind]), row);
+      /* Case-insensitive: the phrases below are written lowercase because they
+         appear mid-sentence in every signed-in line, but the signed-out row
+         opens with its phrase ("Not connected."), and a sentence that starts
+         with a capital is not a defect. */
+      assert.ok(row.toLowerCase().includes(phrases[kind].toLowerCase()), row);
       if (kind === 'non-2xx') assert.ok(row.includes('HTTP 503'));
       if (kind === 'grants-failed') assert.ok(row.includes('HTTP 502'));
       if (kind === 'grants-throw') { assert.ok(row.includes('TypeError')); assert.ok(!row.includes('HTTP 200')); }
-      if (outcome.profileStatus) assert.ok(row.includes('Last server reply:'));
+      /* The signed-OUT row is deliberately exempt from the diagnostic detail.
+         Tom, 2026-09-11, on seeing "No profile server reply recorded yet. No
+         sync attempt recorded yet." in Settings having never gone online; the
+         same ruling he made for the Crew screen the day before. The row is
+         still graded: offline-gate must carry "not connected" above, so a row
+         that goes blank or lies still fails. Every SIGNED-IN failure mode keeps
+         the full detail, which is what this audit was written for. */
+      if (kind === 'offline-gate') assert.ok(!row.includes('recorded yet'), `signed-out row must not narrate sync plumbing: ${row}`);
+      else if (outcome.profileStatus) assert.ok(row.includes('Last server reply:'));
       else assert.ok(row.includes('No profile server reply recorded yet.'));
     });
   }
