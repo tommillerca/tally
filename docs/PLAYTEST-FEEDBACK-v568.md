@@ -41,6 +41,23 @@ Status key: OPEN, IN A LANE, DONE (live and verified).
 | D3 | Melt: multi-select is closest, move it into the Wardrobe, gear needs recognisable art, mass melt can exist alongside piece-by-piece |
 | D4 | Wardrobe tiles: drop `Free` and `Free: no stats`, keep `Wearing`. **DONE in v561, live** |
 
+## Round 2: his testing of v569, 2026-09-11
+
+| # | Area | What he said | Status |
+|---|---|---|---|
+| G1 | Laboratory | "Type animate to confirm not needed unless it's a shiny" | OPEN |
+| G2 | Laboratory | "Need a clear warning why a plain and toxic colour can't animate" | OPEN |
+| G3 | Backpack | "Backpack tab not using the new green highlight on the tab your in" | OPEN. 1E's selected-tile treatment was not carried to the Backpack tabs |
+| G4 | Backpack | lab banner: "it says recipes. Remove and just have the other two lines of text" | OPEN |
+| G5 | Backpack | "crates lose the text that is already explained in details and odds, same with other items, just give them a drop down explanation too, it's an elegant solution" | OPEN |
+| G6 | Wardrobe | "if I hit an item slot it should scroll me down below to see which items I have, not force me to go look below, and it should bring you back with an elegant scroll" | OPEN |
+| G7 | Wardrobe | "All cosmetics with the same look should stack together, be that stats or colour variations. Right now the wardrobe and transmog tab are messier and more confusing with every item we collect" | OPEN. Same root as F8 |
+| G8 | Pets | "Are we still having pets grow with breeding or something like that physically? My lvl 1 fish seems small but if that's intentional all good" | **QUESTION**, answer before building anything |
+| G9 | Pets | "I levelled up my pet, went to pick talents, I scroll down to red text saying DESTROY FOR 10 BONE DUST? That's a terrible greeting for a new player levelling their pet for the first time" | OPEN. Real first-run problem |
+
+G9 is the sharpest: a destructive action is the thing a player meets the first
+time they level a pet. It is not a styling issue, it is placement.
+
 ## Still owed to him, not from these screenshots
 
 - The 28 real browser-audit reds and their causes.
