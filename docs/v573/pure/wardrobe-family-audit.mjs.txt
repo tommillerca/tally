@@ -1,0 +1,16 @@
+ok    SETUP the catalogue loaded and holds the player slots: 550 items across 14 slots
+ok    PREMISE there are real multi-member families to grade: 65 families of 2+ (largest 32)
+ok    PARTITION every item lands in exactly one family: 550 placed / 550 distinct / 550 items, 239 families
+ok    SLOT no family spans two slots: 239 families, all single-slot
+ok    SOLO most families are still a single item, and each holds exactly its own: 174 of 239 families are one item (these render as the tile that already shipped)
+ok    SETUP every control pair still exists in the catalogue: 12 measured pairs
+ok    APART twelve pairs measured as DIFFERENT drawings are in different families: worst measured pair kept apart: IL11-1+IL7-1 at IoU 0.561
+ok    FILE items sharing one art file are one family, a different file is another: 3 tinted items -> 2 tiles holding [2, 1] (32 team helmets would be one tile of 32)
+ok    FILE every catalogue item carrying a file is a football item, and there are some: 192 items carry a file, 0 of them not football
+ok    OVERRIDE an explicit `family` beats the id stem: two ids with no shared stem -> 1 family
+ok    CEILING the worst slot fits inside ten rows of the grid: H: 185 items -> 40 tiles (10 rows, was 47)
+ok    CEILING the collapse does something on the slots that need it: H cut 145 tiles (78%)
+ok    ORDER families come back in catalogue order: 239 families, first-member indices ascending
+
+13 checks, 0 failed
+FAMILY RULE: ONE TILE PER DRAWING, NOTHING LOST, NOTHING WRONGLY MERGED

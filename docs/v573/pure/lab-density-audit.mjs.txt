@@ -1,0 +1,5 @@
+PASS CONTROL exhausted limit occurs once, beside disabled Review pair, across inventory states
+PASS CONTROL available reset and browse next action remain present
+PASS CONTROL browse explains the room once without consumption repetition or stock jargon
+PASS CONTROL confirmation retains destruction, investment, collection and typed consent disclosures
+4 passed, 0 failed

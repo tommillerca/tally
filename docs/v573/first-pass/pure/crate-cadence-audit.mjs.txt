@@ -1,0 +1,15 @@
+PASS CADENCE exact authored 300 + 20 + 380 = 700ms
+PASS ENTRY shipped page loads the audited JS and scoped browsing animation
+PASS CADENCE consecutive cards follow the single constant, including retuning to 175ms
+PASS STALL next cards arrive on schedule with never-resolving art and no frames
+PASS CONTROL art-dependent wait is rejected by the same runtime deadline guard
+PASS CONTROL old serial 330 + 40 + 420 = 790ms is rejected
+PASS OVERLAP both throw directions retain the old art through the full 340ms flight
+PASS LAST and REDUCED keep their existing 330ms dispatch and create no outgoing layer
+PASS LIFECYCLE stale entrances cannot restart the next deck or a closed reveal
+PASS FLIGHT pointerleave cannot settle a departing card back to centre
+PASS BROWSING clears delayed opening overrides only after the first card
+PASS TAIL opening still authors 100ms and retains the measured 60ms floor
+PASS GUARD is registered in PURE
+
+13/13 passed

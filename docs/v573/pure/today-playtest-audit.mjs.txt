@@ -1,0 +1,13 @@
+PASS CONTROL day close pays one crate and retries pay none
+PASS ROLLOVER failed settlement remains retryable in the same session
+PASS ROLLOVER failed meal-time settlement rearms Add and retry saves once today
+PASS CONTROL rollover retains deliberate past navigation and existing meal dates
+PASS STREAK Today honours earned freeze days in the hero copy
+PASS CONTROL food save failure keeps Add usable; XP failure keeps one committed meal
+PASS REWARD streak crate survives delivery failure and retry
+PASS REWARD every newly earned streak milestone delivers its crate
+PASS CONTROL overlapping milestone claims pay one crate; history initialization stays XP-only
+PASS CONTROL meal rows and calorie ring agree at fractional, empty and over-budget totals
+PASS CONTROL actual hero handlers open Backpack, Stable and Pit without button bubbling
+PASS CONTROL daily row handlers persist water, bed and sleep; repeat taps pay once
+TODAY PLAYTEST: 12 passed, 0 failed (Node only)

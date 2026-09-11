@@ -1,0 +1,14 @@
+OBSERVED concurrent sends: delivered=250, balance=250
+PASS C6 simultaneous confirmed chips cannot deliver more than the wallet
+PASS C1 every one of 101 pulled gifts remains openable after cursor advance
+PASS CONTROL concurrent ingest and open pay one receipt per gift
+PASS C2 aborted reward write leaves the OPEN control retryable
+PASS C3 transient server refusal never says a valid friend code does not exist
+PASS CONTROL missing, own and accepted friend codes keep distinct results
+PASS C4 failed remove explains retry in both profile and request list
+PASS C5 gift sheet tells the recipient to open their gift in Crew
+PASS CONTROL gift success spends once and confirmed refusal refunds
+PASS CONTROL free gift and already-sent response preserve wallet
+PASS CONTROL cheers retain phrase zero, sender and original send time
+PASS CONTROL friends and leaderboard separate empty, offline and clock refusal
+CREW PLAYTEST: 12 passed, 0 failed (Node only; no pixel claim)

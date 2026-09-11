@@ -1,0 +1,9 @@
+PASS PET instance salvage receipt survives repeated stale merges
+PASS PET species salvage receipt survives repeated stale merges
+PASS PET breeding retains earned lineage and never revives the fed copy
+PASS CONTROL duplicate-iid copies in one snapshot still reach the existing healer
+PASS BANK union and legacy merge retain per-instance steps and credit
+PASS POTION revisions preserve independent kinds, remote spend and rollback
+PASS POTION empty sip writes no revision and revision-only merge cannot poison balance
+PASS BUFF prune and fight spend preserve opaque rows and apply only understood effects
+8 passed, 0 failed

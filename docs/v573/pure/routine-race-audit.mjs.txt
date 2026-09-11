@@ -1,0 +1,7 @@
+ok   SETUP both seed routines paid ROUTINE_XP, leaving exactly one slot  A=5 B=5
+ok   RACE-TOTAL the two racing routines pay 5 XP between them, not 10  +5 XP paid, expected +5
+ok   RACE-CEILING total routine XP for the day never exceeds 15  15 XP total, expected 15
+ok   RACE-BOTH-DONE both racing routines are recorded as completed today, paid or not  done={rmtxdfkij0,rmtxdfkil1,rmtxdfkj52,rmtxdfkj73}
+ok   RACE-ONE-CAPPED exactly one of the two racing calls is capped  1 of 2 capped
+
+ROUTINE RACE VERIFIED

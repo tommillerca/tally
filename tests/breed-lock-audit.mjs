@@ -94,7 +94,7 @@ console.log('PASS CONTROL Stable: one collapsed explainer, labelled currency, re
 console.log('BREED LOCK + STABLE UI: 7 passed, 0 failed (Node only; browser and sockets unrun)');
 
 // Frozen redesign: execute the actual initial action template and focus repaint.
-// Healthy CONTROL covers equipped, inactive and breeding-pair presentations.
+// Healthy CONTROL covers equipped, inactive and breeding-pair presentations in the deliberate salvage view.
 const css = readFileSync(new URL('../app.css', import.meta.url), 'utf8');
 const slice = (from, to) => {
   const a = app.indexOf(from), b = app.indexOf(to, a + from.length);
@@ -105,7 +105,7 @@ const actions = slice('    const cfActs =', '\n    /* HER WARDROBE');
 const pet = { iid: 'frost', sp: 'C1', shiny: false, lineage: 0 };
 function renderActions(equipped, pair = false) {
   const scope = { focused: pet, BH_BY_ID: { C1: {} }, eqIid: equipped ? pet.iid : null,
-    sel: [], openIid: null, pair, nicks: {}, petDustValue: () => 60,
+    sel: [], openIid: null, meltMode: true, pair, nicks: {}, petDustValue: () => 60,
     petInstanceName: () => 'Frost Drizzle', esc: String };
   return new Function(...Object.keys(scope), actions + '\nreturn cfActs;')(...Object.values(scope));
 }

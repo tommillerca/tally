@@ -407,6 +407,7 @@ PURE.push('verify-tail-audit.mjs'); // Frozen tail: honest anchor comments and m
 PURE.push('cloud-optout-transport-audit.mjs'); // All-request counter and direct opt-out paths; browser autoSync conflict remains disclosed.
 PURE.push('r4-restore-audit.mjs'); // R4-7/R4-9: quota-bounded history, exact undo and isolated malformed entries. R4-10 separately remains blocked by the frozen app.js boundary.
 PURE.push('reachable-density-audit.mjs'); // R4-21: guards the shared reachability METER with dense/sparse controls; shipped spacing is a deferred MODEL finding.
+PURE.push('backpack-lab-polish-audit.mjs'); // v573: talents exclude salvage; deliberate melting keeps payout.
 PURE.push('interrupted-fight-audit.mjs');
 PURE.push('native-shell-comment-audit.mjs'); // R4-21: remote iOS shell cannot claim a wrapped web build; mutation controls.
 const BROWSER = [

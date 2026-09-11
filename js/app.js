@@ -16715,7 +16715,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
 
       </div>
     </div>` : tab === 'shop' ? gwartHeroHtml(rk) : `
-    <div class="bh-hero mini">
+    <div class="bh-hero mini${tab === 'crates' ? ' bp-identity' : ''}">
       <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny, petMorph: chMorph, petWear: S.petWear })}</div>
       <div class="bh-hero-meta">
         <b class="bh-title">Lv ${lvl.level} · ${esc(myTitle || lvl.name)}</b>
@@ -16728,7 +16728,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         </div>
       </div>
     </div>`}
-    <div class="ch-tabs${tab === 'wardrobe' ? ' ward-navigation' : ''}" id="chTabs" role="tablist">
+    <div class="ch-tabs${tab === 'wardrobe' ? ' ward-navigation' : tab === 'crates' ? ' bp-navigation' : ''}" id="chTabs" role="tablist">
       ${/* role/aria-selected, matching the wn-tabs tablist above: with the solid
             accent fill gone the visual cues are a coral ring, a brighter label,
             a full-opacity icon and a sticker shadow, and none of those reach a
@@ -18075,7 +18075,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     content.innerHTML = `
       <button class="lab-banner" type="button" data-lab-open>
         <span class="lab-slime" aria-hidden="true"></span>
-        <span class="lab-banner-copy"><b>THE LABORATORY</b><small>Spare pets become new colours.</small><span class="lab-banner-recipes">Recipes ›</span></span>
+        <span class="lab-banner-copy"><b>THE LABORATORY</b><small>Spare pets become new colours.</small></span>
       </button>
 
       ${(pendingLoot || []).length ? `<div class="t3-sect" style="margin-top:2px"><b>Boss loot · keep one per drop</b><i></i></div>
@@ -18095,9 +18095,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
           return `<div class="bp-card">
             <div class="bp-card-top"><span class="art">${crateIcon(kind, 56)}</span><span class="bp-qty">${list.length}</span></div>
             <b>${esc(def.label).toUpperCase()}</b>
-            <p>${def.rolls} pull${def.rolls === 1 ? '' : 's'} · ${def.floor ? 'First cosmetic Rare or better' : 'Looks, supplies and coins'}</p>
             <button class="btn" ${list.length ? `data-open="${list[0].id}"` : 'disabled'}>${list.length ? 'OPEN' : 'NONE TO OPEN'}</button>
             <details class="bp-crate-details"><summary>Details &amp; odds</summary>
+            <p>${def.rolls} pull${def.rolls === 1 ? '' : 's'} · ${def.floor ? 'First cosmetic Rare or better' : 'Looks, supplies and coins'}</p>
             ${kind === 'daily' && list.length > 1 ? '<button class="btn ghost" data-open-all="daily">OPEN ALL</button>' : ''}
       ${(() => {
         /* CRATE ODDS, AVAILABLE IN EACH CRATE DETAIL (playtest P2, 2026-08-30). Every
@@ -18147,7 +18147,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div class="bp-grid">
       <div class="bp-card">
         <div class="bp-card-top">${consumableIcon('xp2', 56)}<span class="bp-qty">${boosts}</span></div>
-        <b>Battle Charm</b><p>${CONSUMABLES.xp2.desc}</p>
+        <b>Battle Charm</b><details class="bp-item-details"><summary>Details</summary><p>${CONSUMABLES.xp2.desc}</p></details>
         <!-- The state that makes the action illegal must also hide the button
              (rewarded-actions SOP rule 4): while a charm is running, USE becomes
              a disabled "ACTIVE" chip instead of a live control that refuses. -->
@@ -18155,10 +18155,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
       </div>
       <div class="bp-card">
         <div class="bp-card-top">${consumableIcon('vigor', 56)}<span class="bp-qty">${vigors}</span></div>
-        <b>Vigor Draught</b><p>${CONSUMABLES.vigor.desc}</p>
+        <b>Vigor Draught</b><details class="bp-item-details"><summary>Details</summary><p>${CONSUMABLES.vigor.desc}</p></details>
         ${vigors ? '<button class="btn" id="useVigor">USE</button>' : '<button class="btn" disabled>NONE OWNED</button>'}
       </div>
-      ${POTIONS.map(p => `<div class="bp-card"><div class="bp-card-top">${recipeIconHtml(p, 56)}<span class="bp-qty">${bpPotions[p.id] || 0}</span></div><b>${esc(p.name)}</b><p>${esc(p.desc)}</p><button class="btn ghost" id="bp-potion-${p.id}" data-bp-potion="${p.id}">VIEW IN KITCHEN</button></div>`).join('')}
+      ${POTIONS.map(p => `<div class="bp-card"><div class="bp-card-top">${recipeIconHtml(p, 56)}<span class="bp-qty">${bpPotions[p.id] || 0}</span></div><b>${esc(p.name)}</b><details class="bp-item-details"><summary>Details</summary><p>${esc(p.desc)}</p></details><button class="btn ghost" id="bp-potion-${p.id}" data-bp-potion="${p.id}">VIEW IN KITCHEN</button></div>`).join('')}
       </div>
       ${boost ? `<p class="note" style="margin:6px 2px">${consumableIcon('xp2', 14)} Charm active: ${boost} Pit win${boost === 1 ? '' : 's'} left at +25% coins</p>` : ''}
       <div class="t3-sect"><b>Kitchen</b><i></i><button class="btn ghost small" id="bpKitchen">Cook ›</button></div>
@@ -20338,7 +20338,8 @@ async function openStable(opts = {}) {
   // undefined = never chosen (open the active pet's tree); null = deliberately
   // CLOSED. Both used to be null, so render() re-opened the active pet's tree
   // every time you closed it and the control looked broken.
-  let openIid = focusIid || undefined;   // which pet's talent tree is expanded inline
+  let meltMode = opts.labAction === 'melt';
+  let openIid = meltMode ? null : focusIid || undefined;   // which pet's talent tree is expanded inline
   // All three rooms have one door each at the top of the Stable body.
   const wrap = openSheet(`
     <div class="sheet-head stable-head"><h2>The Stable</h2><button class="sheet-close">Done</button></div>
@@ -20513,12 +20514,13 @@ async function openStable(opts = {}) {
           <button class="btn${isEq || pair ? ' ghost' : ' stable-primary'}" data-eq="${focused.iid}"${isEq ? ' disabled' : ''}>${isEq ? 'Out with you' : 'Bring along'}</button>
           <button class="btn${isEq && !pair ? ' stable-primary' : ' ghost'}" data-pettree="${focused.iid}">${isOpen ? 'Hide talents' : 'Talents'}</button>
           <button class="btn ghost stable-rename" data-petnick="${focused.iid}">${nicks[focused.iid] ? 'Rename' : 'Nickname'}</button>
-          <div class="stable-danger">
+          ${!openIid ? `<button class="btn ghost" data-pet-salvage>${meltMode ? 'Back to pet' : 'Melt a spare for Bone Dust'}</button>` : ''}
+          ${!openIid && meltMode ? `<div class="stable-danger">
             <p>Permanent changes</p>
             <button class="btn ghost${inSel ? ' on' : ''}" data-breedsel="${focused.iid}">${inSel ? 'Breeding' : 'Breed'}</button>
             <button class="btn ghost danger" data-destroy="${focused.iid}" data-dust="${dustVal}">Destroy ${esc(petInstanceName(focused))} for ${dustVal} Bone Dust</button>
             <small>Breeding destroys the spare. Destroy trades this pet for Bone Dust. That pet does not come back.</small>
-          </div>
+          </div>` : !openIid ? `<button class="btn ghost${inSel ? ' on' : ''}" data-breedsel="${focused.iid}">${inSel ? 'Breeding' : 'Breed'}</button>` : ''}
         </div>`;
     })();
 
@@ -21160,8 +21162,10 @@ async function openStable(opts = {}) {
     // the card is still tappable, but the mockup gives the talent tree its own
     // named control: "tap the card somewhere that isn't a button" is not an
     // affordance anyone finds
+    $('[data-pet-salvage]', body)?.addEventListener('click', () => { meltMode = !meltMode; render(); });
     $$('[data-pettree]', body).forEach(btn => btn.addEventListener('click', () => {
       const iid = btn.dataset.pettree;
+      meltMode = false;
       openIid = (openIid === iid) ? null : iid;
       render();
     }));
@@ -21616,11 +21620,17 @@ function labIncubatorHtml(s) {
   const addsUseToday = remainingAfter > s.remaining;
   return `<p>Incubator ${n}: ${price.toLocaleString()} coins. Adds one experiment each day. It supplies no pets and does not change the odds.</p><p>Capacity: ${s.capacity} to ${n}. Today's remaining uses: ${s.remaining} to ${remainingAfter}.</p>${addsUseToday ? '' : '<p>This incubator adds no uses today. Review it after the next experiment reset.</p>'}${afford ? '' : `<p>Incubator ${n} costs ${price.toLocaleString()} coins. You have ${s.coins.toLocaleString()}; ${(price - s.coins).toLocaleString()} more needed. Earn coins from your daily activities, or use the bench with your current capacity.</p>`}<p>${s.used === 0 ? 'Your free daily experiment is available.' : 'Your free daily experiment has been used. It returns at the next experiment reset.'}</p><button class="btn" data-lab-buy="${n}" ${afford && addsUseToday && s.status === 'ready' ? '' : 'disabled'}>Review incubator purchase</button>`;
 }
+function labPairReason(a, b) {
+  if (a.sp !== b.sp) return 'Both pets must be the same species.';
+  if ([a.morph, b.morph].includes('base')) return 'Base (plain) needs another Base pet of the same species. Base and Toxic cannot animate together; Toxic needs Rose.';
+  if ([a.morph, b.morph].includes('toxic')) return 'Toxic needs a Rose pet of the same species to make Midnight. Other colours do not match this recipe.';
+  return 'This colour pair has no recipe. Use two Base pets, Ember with Frost, or Toxic with Rose, all of the same species.';
+}
 function labPickerHtml(s, selected, slot, sp = '', colour = '') {
   const other = s.pets.find(p => p.iid === selected[1 - slot]);
   const rows = s.pets.filter(p => p.iid !== other?.iid && (!sp || p.sp === sp) && (!colour || p.morph === colour)).sort((a, b) => Number(!a.safeSurplus || labInvested(a)) - Number(!b.safeSurplus || labInvested(b)));
   return rows.length ? rows.map(p => {
-    const reason = p.reason || (p.morph === 'midnight' ? 'Midnight completes the recipe path. No recipe consumes it.' : '') || (other && !labPair(p, other) ? 'Does not match this same-species recipe.' : '');
+    const reason = p.reason || (p.morph === 'midnight' ? 'Midnight completes the recipe path. No recipe consumes it.' : '') || (other && !labPair(p, other) ? labPairReason(p, other) : '');
     const tags = [p.safeSurplus && !labInvested(p) ? 'Untrained spare' : '', p.lastCopy ? 'Last collection copy' : '', p.bankedSteps > 0 || p.level > 1 ? 'Trained' : '', p.nickname ? 'Named' : '', p.bond > 0 ? 'Bonded' : '', p.lineage > 0 ? `Lineage ${p.lineage}` : '', p.equipped ? 'Equipped' : '', p.neededFor ? `Needed as an ingredient for ${p.neededFor}` : ''].filter(Boolean);
     return `<section class="lab-pick-row"><button class="lab-pet" aria-describedby="lab-pick-info-${esc(p.iid)}" data-lab-pick="${esc(p.iid)}" ${p.eligible !== true || reason ? 'disabled' : ''}>${labPetDetails(p, true)}</button><div class="lab-pick-info" id="lab-pick-info-${esc(p.iid)}"><small>${esc(p.bankedSteps.toLocaleString())} banked training steps · Bond ${esc(p.bond)}/5${p.talents.length ? ` · ${esc(p.talents.join(', '))}` : ''}</small><small>${esc(tags.join(' · '))}</small>${reason ? `<small>${esc(reason)}</small>` : ''}</div></section>`;
   }).join('') : '<p>No pets match these filters. Try another species or colour, or hatch eggs.</p>';
@@ -21634,7 +21644,7 @@ function labBenchHtml(s, selected, sp, q = null, choosingSpecies = false) {
   const nextSlot = empty < 0 ? 0 : empty;
   const activeId = pair?.id || labRecipes.find(r => pets.some(p => p && r.inputs.includes(p.morph)))?.id || 'base-base';
   const active = labRecipes.find(r => r.id === activeId);
-  const prompt = s.status === 'ready' && s.remaining === 0 ? labDailyCopy(s) : !canWork ? labStateCopy(s, sp) : !sp ? 'Choose a species, then choose two pets.' : empty >= 0 ? `Choose ${empty === 0 ? 'first' : 'second'} pet to review a pair.` : !pair ? 'These pets do not match a recipe. Choose a different first or second pet.' : 'Review shows the exact collection colours lost and gained before you confirm.';
+  const prompt = s.status === 'ready' && s.remaining === 0 ? labDailyCopy(s) : !canWork ? labStateCopy(s, sp) : !sp ? 'Choose a species, then choose two pets.' : empty >= 0 ? `Choose ${empty === 0 ? 'first' : 'second'} pet to review a pair.` : !pair ? labPairReason(...pets) : 'Review shows the exact collection colours lost and gained before you confirm.';
   const working = `<section class="lab-working"><h3>${pets.some(Boolean) ? `${active.inputs.map(labColour).join(' + ')}: choose your pair` : 'Choose your pair'}</h3><div class="lab-slots" aria-label="Two pets to combine">${[0, 1].map(i => { const p = pets[i]; return `<section><button class="lab-pet${sp && canWork && !canReview && nextSlot === i ? ' lab-next' : ''}" data-lab-slot="${i}" ${canWork ? '' : 'disabled'}>${p ? labPetDetails(p, true) : `Choose ${i === 0 ? 'first' : 'second'} pet`}</button>${p ? `<button class="link" data-lab-clear="${i}">Clear ${i === 0 ? 'first' : 'second'} pet</button>` : ''}</section>`; }).join('<span class="lab-plus" aria-hidden="true">+</span>')}</div>${q ? labOutcomesHtml(q) : ''}${q ? labBranchesHtml(q) : ''}<p id="labPairHint"${canWork ? '' : ' role="status"'}>${esc(prompt)}</p><button class="btn ${canReview ? 'lab-next' : 'ghost'}" aria-describedby="labPairHint" data-lab-review ${canReview ? '' : 'disabled'}>Review pair</button></section>`;
   const status = labStateCopy(s, sp);
   const available = `${s.remaining} experiment${s.remaining === 1 ? '' : 's'} available today.`;
@@ -24705,7 +24715,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v572'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v573'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

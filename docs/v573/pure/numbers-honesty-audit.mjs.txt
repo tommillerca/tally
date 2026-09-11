@@ -1,0 +1,9 @@
+ok CONTROL ordinary quick add reaches the save boundary and exact toast: Added · 125 kcal · +10 XP
+ok R52-8 German output survives quick add without a 1000x loss: 1.234 -> 1234; Added · 1234 kcal · +10 XP
+ok CONTROL locale decimals, grouping, malformed input and numeric values: passed
+ok Recently scanned 12 of 148: 12 of 148 rows; 148 scanned; limit disclosed
+ok Search 25 of 52 announced and 40 of 52 visible: 25 of 52: 52 matches for L4meal. Showing first 25; refine your search to see the rest.; Foods: 40 of 52
+ok Weight chart 45 of 63 becomes 63 of 63: 63 of 63 circles in production SVG; 63 entries
+ok XP receipts 6 of 50: 6 of 50 XP receipts; full 500 XP total
+ok Progress month 30 of 90 days, Year includes all 90: Month 30 of 90; Year 90 of 90 (monthly averages); Week 7 of 90
+numbers-honesty: 8 passed, 0 failed

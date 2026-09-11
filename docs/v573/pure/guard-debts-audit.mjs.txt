@@ -1,0 +1,15 @@
+PASS  CONTROL lit Mimic trace grades pixels and reaches HANDOVER
+PASS  MIMIC zero frames: named failure, three UNPROVEN pixel rows, later HANDOVER runs
+PASS  MIMIC missing ground and undersampled trace cannot pass pixel rows
+PASS  MIMIC verdict preserves failure precedence and names UNPROVEN
+PASS  ARRIVAL-SLOW one-marker R45 sample is UNPROVEN, never PASS
+PASS  CONTROL ARRIVAL-SLOW ten visible markers pass; withheld marker and decoys fail
+PASS  LATENCY SwiftShader R45 260/362ms pass; 1200ms hold and missing visibility fail
+PASS  CONTROL both full-rate flicks pass independent cadence and burst rows
+PASS  FIRST FLICK stalls cannot hide behind the healthy second flick
+PASS  FLICK empty samples and an active burst fail
+PASS  CONTROL DPR default remains 2; ordinary explicit viewport settings still work
+PASS  DPR 3 reaches launch, legacy setViewport and setWidth; option overrides env
+PASS  DPR refuses a page that reports the wrong physical scale
+PASS  DPR invalid values fail before launching
+guard-debts: clean

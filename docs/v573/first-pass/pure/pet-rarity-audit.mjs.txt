@@ -1,0 +1,13 @@
+PASS CONTROL label and class detectors reject regressions
+PASS SHOP pet hero and accessories omit rarity in owned and locked states
+PASS PANEL every species retains stats, level and shiny without rarity
+PASS HATCH every species, duplicate and shiny reveal omits rarity
+PASS STABLE cards, initial caption and focus repaint retain family and shiny
+PASS PADDOCK models and all owned/locked tiles carry no rarity fields or glow
+PASS RECEIPTS pet result and delivery cards omit rarity; gear keeps every tier
+PASS PADDOCK field sprites have no species glow
+PASS SOURCE pet-only help, level-up, breeding and Kennel contain no tier labels
+PASS SOURCE pet stage classes and accessory wardrobe cannot emit rarity
+PASS CSS pet tier rules are gone and shared gear callers still own their rules
+PASS CONTROL actual gear, cosmetic, crate odds and weapon rack producers retain rarity
+12/12 pet rarity checks passed

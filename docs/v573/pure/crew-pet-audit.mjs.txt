@@ -1,0 +1,19 @@
+TRACE C6 DPR 2: assets/bh/thumb/192/C/C6.png (filesystem only; HTTP unproven)
+PASS C6 bare DPR 2
+PASS C6 accessories DPR 2
+PASS C4 tinted kit DPR 2
+PASS C4 shiny kit DPR 2
+PASS C6 morph accessories DPR 2
+TRACE C6 DPR 3: assets/bh/thumb/384/C/C6.png (filesystem only; HTTP unproven)
+PASS C6 bare DPR 3
+PASS C6 accessories DPR 3
+PASS C4 tinted kit DPR 3
+PASS C4 shiny kit DPR 3
+PASS C6 morph accessories DPR 3
+PASS legacy/malformed yard undefined
+PASS legacy/malformed yard null
+PASS legacy/malformed yard {}
+PASS legacy/malformed yard {"wear":{"CE":"CE1","CB":"CB1","CG":"CG1","CM":"CM1"}}
+PASS legacy/malformed yard {"pets":[],"wear":null}
+PASS CONTROL an absent pet produces no pet art
+CREW PET SNAPSHOT AND MARKUP VERIFIED

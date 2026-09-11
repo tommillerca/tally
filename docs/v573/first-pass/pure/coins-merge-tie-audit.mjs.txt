@@ -1,0 +1,23 @@
+ok   TIE  a coinsRev tie keeps the higher local balance, not whichever number the payload carried  | got 25, expected 25 (not the payload's 10)
+ok   AHEAD  control: a payload with a strictly higher coinsRev still wins  | got 100, expected 100
+ok   STALE  control: local strictly ahead of a stale payload still keeps its own balance  | got 60, expected 60
+ok   SUM-TIE SETUP  device B also reaches coinsRev 50, the same total as device A, by a different route  | A=50 B=50
+ok   SUM-TIE  an exact sum tie still keeps the higher balance (the merge-side fallback, not just the improbability)  | got 50, expected max(50,50)
+ok   COIN-DEBIT SETUP  spendCoins takes 90 of the real 100-coin balance  | coins=10
+ok   COIN-DEBIT  merging the pre-purchase blob cannot silently refund spent coins  | got 10, expected 10
+ok   DUST-DEBIT SETUP  spendDust takes 90 of the real 100-dust balance  | dust=10
+ok   DUST-DEBIT  merging the pre-purchase blob cannot silently refund spent Bone Dust  | got 10, expected 10
+ok   DUST-EARN SETUP  boneDustAdd credits 60  | dust=160
+ok   DUST-EARN  merging the pre-earn blob cannot erase Bone Dust just melted for  | got 160, expected 160
+ok   RACK-COIN SETUP  the aura sells for coins  | {"ok":true,"label":"Tidewater Aura","cost":2400,"currency":"coins","isAura":true,"coins":2600,"dust":0}
+ok   RACK-COIN  a coin rack purchase moves coinsRev by the price inside its claim  | coins 5000->2600, coinsRev 5000->7400
+ok   RACK-DUST SETUP  the aura sells for dust  | {"ok":true,"label":"Tidewater Aura","cost":220,"currency":"dust","isAura":true,"coins":0,"dust":280}
+ok   RACK-DUST  a dust rack purchase moves dustRev by the price inside its claim  | dust 500->280, dustRev 500->720
+ok   SPAWN SETUP  the coin spawn paid  | {"xp":6,"coins":12,"crate":null,"ing":{"id":"bog","n":0},"type":"coins","label":"Coin pile"}
+ok   SPAWN  collectSpawn's coin credit moves coinsRev by the same amount  | coins +12, coinsRev +12
+ok   REVIVE SETUP  the vigor draught is in inventory before the spend
+ok   REVIVE SETUP  consumeConsumable reports success
+ok   REVIVE SETUP  the draught is gone locally after the spend
+ok   REVIVE  a spent consumable does not come back through a merge of the pre-spend blob  | []
+
+all clean

@@ -1,0 +1,2 @@
+PASS CONTROL tap 1: armed, disclosure shown, roster 4, no breed credit
+PASS tap 2: roster 4 -> 3, keeper lineage 1, petBreedCredit written as 0, result opened

@@ -1,0 +1,22 @@
+PASS F04 Monday dailies leave weekly claims available Monday and Tuesday
+PASS F05 day three aborted payouts preserve the reward budget
+PASS F05 week three aborted payouts preserve the reward budget
+PASS F05 month three aborted payouts preserve the reward budget
+PASS F21 aborted 150-coin spin can retry and pays exactly once
+PASS CONTROL day concurrent distinct claims stop at the cap
+PASS CONTROL week concurrent distinct claims stop at the cap
+PASS CONTROL month concurrent distinct claims stop at the cap
+PASS CONTROL legacy paid claims count; orphan reservations do not
+PASS CONTROL concurrent duplicate quest spends one budget unit
+PASS CONTROL a capped quest is a refusal, not a save failure
+PASS CONTROL closed quest periods still refuse
+PASS CONTROL wheel c30 abort, reopen and concurrent retry pay once
+PASS CONTROL wheel c75 abort, reopen and concurrent retry pay once
+PASS CONTROL wheel c150 abort, reopen and concurrent retry pay once
+PASS CONTROL wheel daily abort, reopen and concurrent retry pay once
+PASS CONTROL wheel golden abort, reopen and concurrent retry pay once
+PASS CONTROL wheel charm abort, reopen and concurrent retry pay once
+PASS CONTROL wheel ingr abort, reopen and concurrent retry pay once
+PASS CONTROL wheel spent-date write failure rolls back the prize
+PASS CONTROL wheel save failure discloses retry without a win reveal
+21 passed, 0 failed

@@ -1,0 +1,10 @@
+PASS tracked native config selects the remote HTTPS shell
+PASS identity without social registration recovers before profile sync
+PASS CONTROL intact identity and registration produce a verifiable signed profile PUT
+PASS malformed stored signing key stops sync before transport and records the failure
+PASS rejected transport returns null without advancing sync stamp
+PASS native and visibility resume events share the 500ms deduplication window
+PASS ready cache serves social.js without module fetch
+PASS missing READY falls through to network for social.js
+PASS cross-origin API GET and PUT bypass the service worker
+9 diagnostic checks passed; device behavior remains unverified

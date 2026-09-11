@@ -1,0 +1,8 @@
+PASS CONTROL default boot call bytes match the frozen v512 trace
+PASS timezone and Intl locale reach Chrome before navigation, never launch options
+PASS phone orientation swaps CSS dimensions and preserves touch plus DPR override
+PASS SCROLL expected day stays local at UTC+14, UTC and DST boundaries
+PASS two-tap grades the exact browser-formatted price, with wrong-price controls
+PASS wallet grades the exact balance in both locales and rejects raw, wrong and empty samples
+PASS orientation grading rejects a missing landscape cover and a stuck portrait cover
+harness-environment: clean

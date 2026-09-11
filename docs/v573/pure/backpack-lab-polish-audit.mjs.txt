@@ -1,0 +1,4 @@
+PASS CONTROL nonempty production Stable template includes talents and salvage actions
+PASS 5/5: talents exclude destruction; deliberate salvage retains instance and payout
+PASS 10/10: pair warnings in both directions, valid recipes, preserved risk gates
+PASS 7/7: banner entry, closed card explanations and wired salvage entry

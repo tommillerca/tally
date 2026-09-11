@@ -1,0 +1,17 @@
+PASS CONTROL safety accepts local booted webdriver demo
+PASS CONTROL refuses real save despite existing demo DB
+PASS CONTROL refuses production demo
+PASS CONTROL refuses non-webdriver
+PASS CONTROL refuses missing demo DB
+PASS CONTROL refuses API override
+PASS CONTROL refuses unbooted demo
+PASS CONTROL degraded: installed hooks reach real paint, paintFan, openLeaderboard and hydrateRace
+PASS CONTROL fresh: installed hooks reach real paint, paintFan, openLeaderboard and hydrateRace
+PASS CONTROL one-stale: installed hooks reach real paint, paintFan, openLeaderboard and hydrateRace
+PASS CONTROL all-stale: installed hooks reach real paint, paintFan, openLeaderboard and hydrateRace
+PASS CONTROL unknown: installed hooks reach real paint, paintFan, openLeaderboard and hydrateRace
+PASS CONTROL missing __testFriends hits the real social fallback
+PASS CONTROL fresh partial outfits get drawable placeholder layers
+PASS CONTROL defensive zero and tiny counts never receive a minimum fill
+PASS CONTROL hooks cannot route without webdriver
+CREW CAPTURE NODE: 16 passed; browser geometry UNPROVEN
