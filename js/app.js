@@ -1,3 +1,4 @@
+import { classifyPlugin, knownGap, readback, startDeviceSession, openDeviceReport } from './device-report.js';
 import { mountStudio } from './studio-screen.js';
 import { STUDIO_DEFAULTS, studioCrewAppearance } from './studio.js';
 // Tally: app orchestrator. Screens, sheets, and flows.
@@ -2592,6 +2593,8 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
    its copied app.js for an App Store archive, leaving web and internal native
    builds unchanged. Every distribution-only surface reads this flag. */
 const STORE_BUILD = false;
+// Observe pause/resume from startup, before Settings or either boot path opens.
+if (!STORE_BUILD) startDeviceSession();
 const TESTFLIGHT_URL = 'https://testflight.apple.com/join/rtZ6Uyxc';
 /* Inline for the same reason as DISCORD_MARK: sw.js precaches an explicit
    list, so an asset file would need an entry there and this needs none.
@@ -14890,14 +14893,14 @@ async function profileSyncRowHtml() {
  *   no readback  haptics can be fired and never answers. Saying "ok" there would be
  *                a claim we cannot support, so it says what it is.
  */
-async function diagnosticsLine() {
+async function diagnosticsLine(reportRows = null, manifest = null) {
   const bits = [`build ${APP_BUILD}`];
   try { bits.push(`platform ${(window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform()) || 'web'}`); } catch { bits.push('platform web'); }
   /* the SERVED sw, fetched no-store, not the constant compiled into this bundle:
      the whole point is to catch the case where they differ */
   try {
-    const r = await fetch('./sw.js?diag=1', { cache: 'no-store' });
-    const m = /VERSION\s*=\s*'([^']+)'/.exec(await r.text());
+    const r = await readback(fetch('./sw.js?diag=1', { cache: 'no-store' }));
+    const m = /VERSION\s*=\s*'([^']+)'/.exec(await readback(r.text()));
     bits.push(`sw ${m ? m[1] : '?'}`);
   } catch { bits.push('sw unreachable'); }
   try { bits.push(navigator.serviceWorker && navigator.serviceWorker.controller ? 'sw controlling' : 'sw not controlling'); } catch { /* no sw api */ }
@@ -14911,10 +14914,16 @@ async function diagnosticsLine() {
   const P = (window.Capacitor && window.Capacitor.Plugins) || {};
   const seen = [];
   for (const id of ['App', 'Health', 'LocalNotifications', 'BhVault', 'Haptics']) {
-    if (!P[id]) { seen.push(`${id}:missing`); continue; }
+    if (!P[id]) {
+      const gap = knownGap(manifest, id);
+      seen.push(`${id}:${gap ? 'missing (declared known gap)' : 'missing'}`);
+      if (reportRows) Object.assign(reportRows.find(r => r.name === id), classifyPlugin(id, false, '', gap));
+      continue;
+    }
     let extra = '';
+    let reportExtra = null;
     try {
-      if (id === 'LocalNotifications' && P[id].checkPermissions) extra = ':' + ((await P[id].checkPermissions()).display || '?');
+      if (id === 'LocalNotifications' && P[id].checkPermissions) extra = ':' + ((await readback(P[id].checkPermissions())).display || '?');
       /* READ THE KEYS THE PLUGINS ACTUALLY RETURN. This asked for `readable` and
          `present`, and neither exists on either side: BhVault.status() resolves
          { available, e2e, hasIdentity, readError } on iOS
@@ -14929,13 +14938,15 @@ async function diagnosticsLine() {
          diagnostic that exists to catch that, and it would have said "empty"
          during the incident it was written for. */
       else if (id === 'BhVault' && P[id].status) {
-        const s = await P[id].status();
+        const s = await readback(P[id].status());
+        if (!s || (typeof s.hasIdentity !== 'boolean' && !s.readError && s.available !== false)) reportExtra = ':probe-failed';
         extra = ':' + (s && (s.readError || s.available === false) ? 'unreadable' : (s && s.hasIdentity ? 'has-key' : 'empty'));
       }
       else if (id === 'Haptics') extra = ':no-readback';
       else if (id === 'Health') extra = ':auth-not-probed';
     } catch { extra = ':probe-failed'; }
     seen.push(`${id}:ok${extra}`);
+    if (reportRows) Object.assign(reportRows.find(r => r.name === id), classifyPlugin(id, true, reportExtra ?? extra));
   }
   return bits.concat(seen).join(' · ');
 }
@@ -15171,6 +15182,7 @@ async function renderSettings(el) {
     <div class="settings-row"><div class="lab"><b>What's New</b><span>See what changed in recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</button></div>
     <div class="settings-row"><div class="lab"><b>App version</b><span id="buildLine">Build ${APP_BUILD}${shellV} · ${STORE_BUILD ? 'Updates are available through the App Store' : 'tap if the app looks out of date'}</span></div><button class="btn small ghost" id="updateBtn">${STORE_BUILD ? 'How to update' : 'Get latest'}</button></div>
     ${STORE_BUILD ? '' : `<div class="settings-row"><div class="lab"><b>Diagnostics</b><span id="diagLine">${esc(diag)}</span></div><button class="btn small ghost" id="copyDiag">Copy</button></div>`}
+    ${STORE_BUILD ? '' : `<div class="settings-row"><div class="lab"><b>Device report</b><span>Measurements and observations from this device</span></div><button class="btn small ghost" id="openDeviceReport">Open</button></div>`}
   </div>
 
   <p class="note" style="text-align:center;margin-top:18px">
@@ -15511,6 +15523,7 @@ async function renderSettings(el) {
   /* Copy, not just screenshot: a screenshot means somebody retypes these values to
      search for them. Clipboard can be refused, so the fallback is selecting the text
      rather than a toast claiming a copy that did not happen. */
+  $('#openDeviceReport')?.addEventListener('click', () => { if (!STORE_BUILD) openDeviceReport({ openSheet, diagnosticsLine, esc, toast }); });
   $('#copyDiag')?.addEventListener('click', async () => {
     const txt = $('#diagLine')?.textContent || '';
     try { await navigator.clipboard.writeText(txt); toast('Diagnostics copied.', 1800); }
@@ -24649,7 +24662,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v559'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v560'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

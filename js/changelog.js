@@ -10,6 +10,10 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 560, date: '2026-09-10', title: 'A device report for testing', items: [
+    'Internal builds can copy device measurements from Settings, with keyboard and edge-swipe probes and clear labels for checks that still need a person.',
+  ] },
+
   { n: 559, date: '2026-09-10', title: 'The Studio, softer and deeper', items: [
   'Studio artwork scales smoothly, keeping the soft edges of the original illustrations.',
   'All your Studio stickers share one tray. Tap the artwork to place it.',
