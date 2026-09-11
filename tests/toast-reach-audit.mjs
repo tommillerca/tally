@@ -32,7 +32,12 @@ try {
         window.__toast('Tip: back up your log (Settings, Export)', 1200);
         await new Promise(r => setTimeout(r, 500));
         const toast = document.querySelector('#toast'), b = toast.getBoundingClientRect(), ts = getComputedStyle(toast);
-        const controls = [...document.querySelectorAll('button, a[href], input, select, textarea, summary, [role="button"], [tabindex], .map-act')].flatMap(el => {
+        const selector = 'button, a[href], input, select, textarea, summary, [role="button"], [tabindex], .map-act';
+        // renderSettings receives #screen and writes el.innerHTML, just like
+        // the other routes. A positive global count alone could be shell nav
+        // on an empty route. Keep CONTROL until browser evidence identifies
+        // why route controls were rejected; expose ownership in failed rows.
+        const controls = [...document.querySelectorAll(selector)].flatMap(el => {
           if (toast.contains(el) || el.closest('[hidden], [inert]')) return [];
           const r = el.getBoundingClientRect(), s = getComputedStyle(el);
           if (!r.width || !r.height || s.visibility === 'hidden' || s.display === 'none' || +s.opacity === 0) return [];
@@ -48,10 +53,10 @@ try {
           const overlap = Math.max(0, Math.min(b.right, right) - Math.max(b.left, x)) * Math.max(0, Math.min(b.bottom, bottom) - Math.max(b.top, y));
           return [{ screen: !!el.closest('#screen'), name: el.id || el.textContent.trim().slice(0, 35) || el.tagName, y, height: r.height, collision: overlap > 0 && (r.height <= 160 || overlap / (r.width * r.height) >= .25) }];
         });
-        return { controls, toast: { y: b.y, height: b.height }, visible: !toast.hidden && ts.visibility !== 'hidden' && +ts.opacity > 0 && b.width > 100 && b.height > 20 && b.left >= 0 && b.top >= 0 && b.right <= innerWidth && b.bottom <= innerHeight, policy: ts.zIndex === '320' && ts.pointerEvents === 'none' };
+        return { controls, renderedScreenControls: document.querySelector('#screen')?.querySelectorAll(selector).length || 0, toast: { y: b.y, height: b.height }, visible: !toast.hidden && ts.visibility !== 'hidden' && +ts.opacity > 0 && b.width > 100 && b.height > 20 && b.left >= 0 && b.top >= 0 && b.right <= innerWidth && b.bottom <= innerHeight, policy: ts.zIndex === '320' && ts.pointerEvents === 'none' };
       });
       const label = `${route} ${w}x${h}`;
-      ok('CONTROL', m.controls.some(c => c.screen), `${label} count=${m.controls.length}`);
+      ok('CONTROL', m.controls.some(c => c.screen), `${label} count=${m.controls.length} screen=${m.controls.filter(c => c.screen).length} renderedScreen=${m.renderedScreenControls}${m.controls.some(c => c.screen) ? '' : ` reachable=${JSON.stringify(m.controls.map(c => c.name))}`}`);
       ok('VISIBLE', m.visible, `${label} ${JSON.stringify(m.toast)}`);
       const hits = m.controls.filter(c => c.collision);
       ok('CLEAR', !hits.length, `${label} ${JSON.stringify(hits)}`);
