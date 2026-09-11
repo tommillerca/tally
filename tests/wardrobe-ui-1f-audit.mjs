@@ -6,8 +6,9 @@ import vm from 'node:vm';
 const read = p => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const app = read('js/app.js'), css = read('app.css');
 const hash = s => createHash('sha256').update(s).digest('hex');
-const locks = {"dollMarkup": "057009290f8b25d441265756e5a1d23c83cfef1a279c9f183268a225ecda84b3", "lowerHandlers": "df7c3ad4f484a7087bf090de6237281e2db3e29200e7db5eaa1afdb2bd40988d", "cssPrefixLength": 812158, "cssPrefixHash": "31e2702ba835e59fbea471754b76ba4381f678564bd5f371ac83e2df1209bed8"};
+const locks = {"dollMarkup": "50d29535de11128bf518696e2a89f94c169bff60fe6f932760b23d4d56de90f3", "lowerHandlers": "9be74654fd35895beb325aa43b55b4a9b01b861e98991bf136f047763af0db2e", "cssPrefixLength": 812158, "cssPrefixHash": "31e2702ba835e59fbea471754b76ba4381f678564bd5f371ac83e2df1209bed8"};
 function grade(source) {
+  assert.equal(hash(source.slice(source.indexOf('    const pdSlot = code => {'), source.indexOf('    const statChip', source.indexOf('    const pdSlot = code => {')))), '7889f55f1ea010200eabeadf40cd189b69d32c156d4d58e010364ea53240c462', 'paperdoll slot definitions changed');
   assert.match(source, /data-fit-switcher/, 'compact saved-fit switcher missing');
   assert.match(source, /data-fit-rename/, 'explicit rename missing');
   const start = source.indexOf('      <div class="mog-dock">', source.indexOf('    const fitRail ='));
@@ -46,7 +47,7 @@ for (const n of [0,1,6]) {
 }
 assert.doesNotMatch(toolbar(0,true),/data-fit-reset/);
 
-console.log('PASS CONTROL switcher removal and locked doll mutation rejected; 0/1/6 fits, escaped names, prices, management, cap and strip visibility. Inherited CSS and lower handlers unchanged. Browser UNPROVEN.');
+console.log('PASS CONTROL switcher removal and locked doll mutation rejected; 0/1/6 fits, escaped names, prices, management, cap and strip visibility. Inherited CSS retained; authorized lower markup and handler hashes renewed. Browser UNPROVEN.');
 // Execute the actual fit event bindings with DOM doubles. No rendered-hit claim.
 function button(dataset={}) {
   return {dataset,attrs:{},handlers:{},disabled:false,

@@ -1,0 +1,33 @@
+PASS CONTROL green-first-run: exit 0, expected 0
+3/3 M5 guards passed
+PASS CONTROL green-lint: exit 0, expected 0
+lookup-guard: PASS
+PASS CONTROL red-old-disclosure: exit 1, expected 1
+FAIL M5 Gwart introduces himself and discloses the anonymous account verbatim: Expected values to be strictly equal:
+2/3 M5 guards passed
+PASS CONTROL red-first-run-suppressed: exit 1, expected 1
+FAIL M5 splash keeps first run and skips returning only: returning=false, forced=false
+2/3 M5 guards passed
+PASS CONTROL red-old-splash-gate: exit 1, expected 1
+FAIL M5 splash keeps first run and skips returning only: returning=false, forced=false
+2/3 M5 guards passed
+PASS CONTROL red-returning-splash: exit 1, expected 1
+FAIL M5 splash keeps first run and skips returning only: returning=true, forced=false
+2/3 M5 guards passed
+PASS CONTROL red-toast-cap-deleted: exit 1, expected 1
+FAIL M5 toast retains the four-job backlog cap and each retained job gets its dwell: Expected values to be strictly deep-equal:
+2/3 M5 guards passed
+PASS CONTROL red-pet-species: exit 1, expected 1
+SITE js/app.js:20354 filtered-id-boundary x.sp -> insts -> petPortraitHtml(x.sp [UNREVIEWED]
+FAIL NEW unresolved lookup guard: js/app.js:20354 x.sp
+lookup-guard: 1 FAILED
+PASS CONTROL red-equipped-art: exit 1, expected 1
+SITE js/app.js:17276 lookup-alias baseArtId -> BH_BY_ID[baseArtId] -> bhAsset(ownArt) [UNREVIEWED]
+FAIL NEW unresolved lookup guard: js/app.js:17276 baseArtId
+lookup-guard: 1 FAILED
+PASS CONTROL restored-first-run: exit 0, expected 0
+3/3 M5 guards passed
+PASS CONTROL restored-lint: exit 0, expected 0
+lookup-guard: PASS
+Evidence: /var/folders/k7/gh5s55k16q17nlm_hj_3g3bm0000gp/T/m5-red-lItteE
+m5-prove-red: PASS

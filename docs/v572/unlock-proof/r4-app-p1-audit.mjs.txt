@@ -1,0 +1,18 @@
+PASS R4-1 CONTROL all ten drop purchases retain coins-paid transmog credit
+helmet: 32 paid colourways
+jersey: 32 paid colourways
+cleats: 32 paid colourways
+PASS R4-1 football credits all 32 colourways, including helmet visors
+PASS R4-1 bundle credits every delivered garment
+PASS R4-1 unfunded purchase grants no credit or inventory
+PASS R4-2 CONTROL forage pays 45 and delivers one common ingredient
+PASS R4-2 aborted ingredient write preserves wallet and pantry
+PASS R4-2 retry succeeds after abort
+PASS R4-2 concurrent forage taps cannot spend one wallet twice
+PASS R4-19 CONTROL fresh driving speed blocks actions for full watch timeout
+PASS R4-19 stale speed and position clear at 20 seconds, at every gate
+PASS R4-19 first returning stationary GPS fix discards old smoothing history
+PASS R4-22 next control is disabled and handler refuses dates at or after today
+PASS R4-22 future logs and recovery grant zero XP, crates, level-ups or entitlement
+PASS R4-22 CONTROL today still earns XP
+R4 APP P1: 14 passed, 0 failed

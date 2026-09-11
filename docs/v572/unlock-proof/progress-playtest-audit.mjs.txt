@@ -1,0 +1,13 @@
+PASS CONTROL badge concurrent evaluation pays once and survives loss of qualifying log: one First bite announcement, 25 XP retained
+PASS CONTROL aborted badge write can retry without losing or doubling XP: abort 0 XP; retry 25 XP; repeat 0 new badges
+PASS CONTROL Progress receipts count all earned XP while disclosing the six-row preview: 90 XP total; six of nine receipts disclosed; all 29 badge tiles rendered
+PASS P1 cumulative history chart and summary share the completed-day average: steps 10,000; active energy 500; move minutes 60; steady insights
+PASS CONTROL range switches rewire actual chart click and no-data readouts: Day/Week/Month/Year clicks and empty history reached
+PASS P1 partial today cannot invent a declining activity insight: Holding steady across this window
+PASS CONTROL genuine changes, noncumulative readings and today-only samples remain visible: real decline 50%; heart average 70; today-only bar 100
+PASS P2 Year weight Latest is the latest weigh-in, not its monthly mean: monthly bar 80.0 kg; Latest 90.0 kg
+PASS R4-23 Year extremes use readings and disclose monthly-mean averages: steps 14,570; heart 48; HRV 80; weight 70-100 kg, both units; window and today-only controls
+PASS P3 short sleep does not present a null score as a number: 35 minutes retained; unavailable score explained
+PASS CONTROL full sleep still shows the computed score and secret badge taps stay masked: 95/100; secret masked before earning, description reachable after
+PASS P4 sleep chart with older readings keeps its exploration hint: 10-day-old sleep bar retains tap hint; 7-day average remains empty
+Progress playtest: 12 passed, 0 failed

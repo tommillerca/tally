@@ -1,0 +1,16 @@
+PASS F20 confirmed third-cauldron purchase abort: coins=3000, pots=2, coinsRev=7 on abort; retry delivers pot 3 once
+PASS F07 Serve Feast pantry abort: Feast remains in pot on abort; retry banks exactly one Feast
+PASS F09 Eat Feast buff abort: pantry=1, buffs=0 on abort; retry activates Feast for 4 fights
+PASS F10 overlapping Eat index zero: returns=marrow-stew,null, pantry=necro-feast, buffs=marrow-stew
+PASS F08 advance queue cooking abort: queue=1, originalPot=true, pantry=0 on abort; retry banks and starts successor
+PASS F08 advance queue pantry abort: queue=1, originalPot=true, pantry=0 on abort; retry banks and starts successor
+PASS F06 Cook job abort: marrow=2, salt=1 on abort; retry pays for exactly one job
+PASS F06 Line up job abort: marrow=2, salt=1 on abort; retry pays for exactly one job
+PASS CONTROL concurrent Serve and queue drain conserve both cooks
+PASS CONTROL potion Serve preserves inventory and revision on abort
+PASS CONTROL stale and overlapping purchase confirmations never change the price
+PASS CONTROL concurrent Cook and Line up spend only available ingredients
+PASS CONTROL separate module Eats target one dish and sequential Eats retain both buffs
+PASS F11 partial unsupported pantry entry is retained: pantry=1, buffs=0; unsupported UI disclosure remains out of scope
+PASS CONTROL missing ingredients and unknown recipes refuse without spending
+KITCHEN DELIVERY: 15 passed, 0 failed

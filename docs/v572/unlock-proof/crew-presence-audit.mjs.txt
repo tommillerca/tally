@@ -1,0 +1,6 @@
+PASS fresh timestamps do not claim presence
+PASS CONTROL minute and hour comparison eligibility remains
+PASS CONTROL day-old comparisons disabled without notices
+PASS CONTROL missing, invalid and future clocks remain unknown
+PASS no player presence claims or freshness wording in shipped social renderers
+CREW PRESENCE: 5 passed, 0 failed

@@ -1,0 +1,18 @@
+PASS MERGE false: 300 and 700 credits plus debits survive repeated exchange
+PASS MERGE true: 300 and 700 credits plus debits survive repeated exchange
+PASS CLAIM and TAKE: shared authority receipts deduplicate offline payout
+PASS ATOMIC payout records and import lock retain concurrent earnings
+PASS LEGACY export establishes a shared baseline before offline earning
+PASS HISTORY incompatible, malformed and partial snapshots refuse without mutation
+PASS WRITER claimAndPay: independent offline credits join the same history
+PASS WRITER payAtomic: independent offline credits join the same history
+PASS WRITER kvUpdate: independent offline credits join the same history
+PASS WRITER kvUpdateMulti: independent offline credits join the same history
+PASS IMPORT BOUNDARY: payout queued at the local read survives the write
+PASS OVERSPEND: incompatible offline debits refuse atomically
+PASS EXPORT: an untracked balance edit cannot publish mismatched history
+PASS push a-first: both offline sessions survive locally and in ciphertext
+PASS push b-first: both offline sessions survive locally and in ciphertext
+PASS hidden a-first: both offline sessions survive locally and in ciphertext
+PASS hidden b-first: both offline sessions survive locally and in ciphertext
+17 passed, 0 failed

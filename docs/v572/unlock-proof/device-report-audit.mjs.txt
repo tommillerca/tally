@@ -1,0 +1,6 @@
+GREEN session without window
+GREEN CONTROL known-gap lookup
+GREEN three-state classifier
+GREEN safe-area arithmetic
+GREEN plain-text serialization
+Device report: 5 passed, 0 failed
