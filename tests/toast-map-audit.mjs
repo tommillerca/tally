@@ -26,8 +26,8 @@
  *            CLEAR asserts a zero (no intersection), and the cheapest way to a
  *            fake zero is a toast flung off screen or collapsed to nothing.
  *   CLEAR    the settled toast rect does not intersect the visible card rect.
- *   SEAT     on Today, where no .map-act exists, the toast still sits at its
- *            shipped 96px seat. This is the regression the fix could most
+ *   SEAT     on Crew, where no .map-act and no screen override exist, the toast
+ *            still sits at its shipped 96px seat. This is the regression the fix could most
  *            easily cause: an override that leaks moves EVERY toast in the app.
  *
  * PROVEN RED, 2026-08-29, one mutation per throwaway cp -R copy:
@@ -116,8 +116,12 @@ if (mapUp) {
   unproven('CLEAR a live toast does not intersect the visible action card', 'the map never came up on this machine');
 }
 
-/* ---- SEAT: everywhere else the toast has not moved ---- */
-await page.evaluate(() => { location.hash = '#/today'; });
+/* ---- SEAT: everywhere else the toast has not moved ----
+   Crew, not Today. Today grew its OWN toast override in v578 (the pill was
+   landing on the five door tiles; see toast-today-audit), so a Today seat of
+   96px is no longer the shipped truth and this row would have graded the
+   wrong screen. Crew has neither override and is the plain case. */
+await page.evaluate(() => { location.hash = '#/friends'; });
 await sleep(2200);
 const home = await toastAndMeasure('Logged.');
 const seat = home.toast ? +(home.vh - home.toast.y - home.toast.h).toFixed(1) : null;
@@ -125,7 +129,7 @@ const seat = home.toast ? +(home.vh - home.toast.y - home.toast.h).toFixed(1) : 
    the offset reads back as the literal. 2px of tolerance for rounding. */
 ok('SEAT the toast keeps its shipped 96px seat when no card is visible',
   home.card === null && seat !== null && Math.abs(seat - 96) <= 2,
-  `seat ${seat}px from the viewport bottom, card ${home.card ? 'VISIBLE (should not exist here)' : 'absent'}`);
+  `seat ${seat}px from the viewport bottom on Crew, card ${home.card ? 'VISIBLE (should not exist here)' : 'absent'}`);
 
 await browser.close();
 if (srv) srv.close();
