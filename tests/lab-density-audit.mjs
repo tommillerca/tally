@@ -5,7 +5,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-const root = new URL(process.argv[2] ? `file://${process.argv[2]}/` : '../', import.meta.url);
+import { pathToFileURL } from 'node:url';
+const root = process.argv[2] ? pathToFileURL(process.argv[2] + '/') : new URL('../', import.meta.url);
 const { MORPHS, MORPH_LABEL } = await import(new URL('js/pets.js', root));
 
 const { BH_BY_ID } = await import(new URL('data/boneheadz.js', root));

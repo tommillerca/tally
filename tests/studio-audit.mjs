@@ -1,6 +1,8 @@
 // PURE: real PNG decode, Canvas rasterisation and encoding in Node. No browser,
 // server or screen. Native permission sheets and visual quality remain unproven.
 import assert from 'node:assert/strict';
+import './lib/studio-art-path-guard.mjs';
+import { studioArtPath } from './lib/studio-art-path.mjs';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -20,7 +22,7 @@ export async function checkStudio() {
   const { createCanvas, loadImage, GlobalFonts } = await importAuditPackage('@napi-rs/canvas');
   assert.ok(GlobalFonts.registerFromPath(root + 'assets/fonts/bangers.woff2', 'StudioBangers'), 'required font decodes');
   assert.ok(GlobalFonts.registerFromPath(root + 'assets/fonts/boldpixels.woff2', 'StudioDialogue'));
-  const runtime = { createCanvas, loadImage: src => loadImage(root + src), ready: async () => {},
+  const runtime = { createCanvas, loadImage: src => loadImage(studioArtPath(src, pathToFileURL(root))), ready: async () => {},
     encode: async c => new Blob([await c.encode('png')], { type: 'image/png' }) };
   const outfit = Object.fromEntries(BH_SLOTS.filter(s => !['BG', 'C'].includes(s.code))
     .map(s => [s.code, s.default || BH_ITEMS.find(i => i.slot === s.code)?.id]).filter(([, id]) => id));

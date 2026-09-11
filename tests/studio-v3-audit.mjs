@@ -1,6 +1,7 @@
 // PURE: production handlers and decoded raster output. No browser feel claim.
 // STUDIO_V3_BASELINE=1 runs the identical guard against the frozen input sources.
 import assert from 'node:assert/strict';
+import { studioArtPath } from './lib/studio-art-path.mjs';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { auditOutputPath } from './lib/audit-output.mjs';
@@ -29,9 +30,9 @@ const app_screen = baseline
 const studio = baseline ? frozen.module : await import('../js/studio.js');
 const { mountStudio } = baseline ? (await original('screen', { './studio.js': frozen.url })).module : await import('../js/studio-screen.js');
 const { createCanvas, loadImage, GlobalFonts } = await importAuditPackage('@napi-rs/canvas');
-GlobalFonts.registerFromPath(new URL('assets/fonts/bangers.woff2', root).pathname, 'StudioBangers');
-GlobalFonts.registerFromPath(new URL('assets/fonts/boldpixels.woff2', root).pathname, 'StudioDialogue');
-const runtime = { createCanvas, loadImage: src => loadImage(new URL(src, root).pathname), ready: async () => {},
+GlobalFonts.registerFromPath(studioArtPath('assets/fonts/bangers.woff2', root), 'StudioBangers');
+GlobalFonts.registerFromPath(studioArtPath('assets/fonts/boldpixels.woff2', root), 'StudioDialogue');
+const runtime = { createCanvas, loadImage: src => loadImage(studioArtPath(src, root)), ready: async () => {},
   encode: async c => new Blob([await c.encode('png')], { type: 'image/png' }) };
 const outfit = Object.fromEntries(BH_SLOTS.filter(s => !['BG', 'C'].includes(s.code)).map(s => [s.code, s.default || BH_ITEMS.find(i => i.slot === s.code)?.id]).filter(([, id]) => id));
 const look = { outfit, pet: { id: 'C1', shiny: true, morph: 'base', wear: null } };
