@@ -1,0 +1,80 @@
+ok   SETUP crate: the kill switch was armed by the take  armed=true killed=0
+ok   CRASH crate: the crate is gone AND the whole hand is on disk  crate gone=true, hand landed=true: results=cos,consumable,cos coins=15
+ok   REBOOT crate: a death before the take leaves the crate unopened and unpaid  threw=true crate present=true coins=0
+ok   REBOOT crate: the next open, with the process alive, pays in full  coins=22 results=3
+ok   REBOOT crate: two overlapping opens of one crate pay exactly once  wins=1 coins=19 (winner said 19)
+ok   SETUP egg: the kill switch was armed by the take  armed=true killed=1
+ok   CRASH egg: the egg is gone AND the pet is minted in the same transaction  egg gone=true, pet minted=true, instances=["C5"] cos row=true bank=true pets=true
+ok   RNG hatchEgg draws exactly 1 + hatchChance species + 1 random values, as before the reorder  draws=2 want 2 (H=0)
+ok   SETUP gear: the kill switch was armed by the take  armed=true killed=0
+ok   CRASH gear: the piece is gone AND the dust is paid with its revision  row gone=true, bonedust 20 (want 20), dustRev 20
+ok   SETUP salvageInstance: the kill switch was armed by the take  armed=true killed=0
+ok   CRASH salvageInstance: the copy is gone AND dust, ownership teardown and receipt are on disk  copy gone=true, bonedust 10 (want 10), cos row present=false, invTaken=true, pets has species=false
+ok   SETUP salvagePet: the kill switch was armed by the take  armed=true killed=0
+ok   CRASH salvagePet: the copy is gone AND dust, ownership teardown and receipt are on disk  copy gone=true, bonedust 10 (want 10), cos row present=false, invTaken=true, pets has species=false
+ok   SETUP legacy: the kill switch was armed by the take  armed=true killed=0
+ok   CRASH legacy: the egg-crate is gone AND the egg exists (count conserved)  legacy rows=0, eggs=1
+ok   SETUP shop: kill armed at 90-coin debit
+ok   CRASH shop: 90 coins buys one Draught even after death  coins=0, goods=1, cost=90 coins
+ok   CONTROL shop: two buyers can spend a 90-coin wallet only once
+ok   SETUP Pit stake: kill boundary reached  null
+ok   REBOOT Pit stake: staked win retains 60 coins and 75 XP  coins=60, XP=75; measured loss: charge, 60 coins and 75 XP
+ok   ONCE Pit stake: another open cannot pay again
+ok   SETUP Pit fight-xp: kill boundary reached  null
+ok   REBOOT Pit fight-xp: staked win retains 60 coins and 75 XP  coins=60, XP=75; measured loss: charge, 60 coins and 75 XP
+ok   ONCE Pit fight-xp: another open cannot pay again
+ok   SETUP Pit rung-xp: kill boundary reached  null
+ok   REBOOT Pit rung-xp: staked win retains 60 coins and 75 XP  coins=60, XP=75; measured loss: charge, 60 coins and 75 XP
+ok   ONCE Pit rung-xp: another open cannot pay again
+ok   SETUP Pit badge: kill boundary reached  takeAndPay aborted
+ok   REBOOT Pit badge: staked win retains 60 coins and 75 XP  coins=60, XP=75; measured loss: charge, 60 coins and 75 XP
+ok   ONCE Pit badge: another open cannot pay again
+ok   SETUP Pit modifiers: win intent boundary reached
+ok   REBOOT Pit modifiers: one charm and food charge buy the recorded 94 coins  coins=94, charm=4, food=2
+ok   CONTROL Pit rung: overlapping settlement pays one primary reward  coins=60, errors=
+ok   CONTROL Pit rung: a different repeat win pays 15 coins and only 10 fight XP
+ok   CONTROL Pit champ: overlapping settlement pays one primary reward  coins=60, errors=
+ok   CONTROL Pit champ: a different repeat win pays 15 coins and only 10 fight XP
+ok   CONTROL Pit champion: first clear pays one crate and the skull
+ok   CONTROL Pit endless: overlapping settlement pays one primary reward  coins=60, errors=
+ok   CONTROL Pit endless: a different repeat win pays 15 coins and only 10 fight XP
+ok   SETUP meal log: kill armed after committed totals
+ok   CONTROL meal: committed receipt failure returns zero XP
+ok   REBOOT meal: saved 642-kcal dinner recovers 25 XP  kcal=642, XP=25
+ok   REBOOT meal log: original scan context survives
+ok   ONCE meal log: overlapping and repeated opens pay exactly once
+ok   SETUP meal base: kill armed after committed totals
+ok   REBOOT meal base: saved dinner recovers 25 XP  kcal=642, XP=25
+ok   REBOOT meal base: original scan context survives
+ok   ONCE meal base: overlapping and repeated opens pay exactly once
+ok   SETUP meal firstlog: kill armed after committed totals
+ok   REBOOT meal firstlog: saved dinner recovers 25 XP  kcal=642, XP=25
+ok   REBOOT meal firstlog: original scan context survives
+ok   ONCE meal firstlog: overlapping and repeated opens pay exactly once
+ok   SETUP meal scan: kill armed after committed totals
+ok   REBOOT meal scan: saved dinner recovers 25 XP  kcal=642, XP=25
+ok   REBOOT meal scan: original scan context survives
+ok   ONCE meal scan: overlapping and repeated opens pay exactly once
+ok   SETUP meal label: kill armed after committed totals
+ok   REBOOT meal label: saved dinner recovers 25 XP  kcal=642, XP=25
+ok   REBOOT meal label: original label context survives
+ok   ONCE meal label: overlapping and repeated opens pay exactly once
+ok   SETUP meal done: kill armed after committed totals
+ok   REBOOT meal done: saved dinner recovers 25 XP  kcal=642, XP=25
+ok   REBOOT meal done: original scan context survives
+ok   ONCE meal done: overlapping and repeated opens pay exactly once
+ok   CONTROL meal: yesterday edit saves and returns zero XP
+ok   REBOOT meal midnight: original date and label entitlement recover once
+ok   CONTROL meal: backdated copies create no entitlement or XP
+ok   CONTROL meal: write failure keeps the entry available and reports failure
+ok   CONTROL meal: quota failure keeps the entry available and reports failure
+ok   CONTROL meal: both Add forms report saved calories and missing XP
+ok   REBOOT meal: recovery retains the 20-log daily ceiling  meals=21, XP=215
+ok   INIT meal: history backfill and recovery keep one receipt per entry  refs=a-legacy,b-pending
+ok   ONCE meal: restored history cannot acquire an extra slot on retry  XP=35
+ok   SETUP grant: kill armed at receipt
+ok   BASELINE grant: receipt and payout commit together, retry pays once
+ok   SETUP Spire: device mirror died after server ownership
+ok   BASELINE Spire: next ownership sync heals the missing tower once
+
+all clean

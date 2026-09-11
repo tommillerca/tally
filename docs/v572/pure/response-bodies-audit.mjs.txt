@@ -1,0 +1,59 @@
+PASS registerKey WRONG missing
+PASS registerKey WRONG typed
+PASS registerKey WRONG null
+PASS registerKey WRONG array
+PASS registerKey CONTROL
+PASS setName WRONG missing
+PASS setName WRONG typed
+PASS setName WRONG null
+PASS setName WRONG array
+PASS setName CONTROL
+PASS listFriends WRONG missing
+PASS listFriends WRONG typed
+PASS listFriends WRONG null
+PASS listFriends WRONG array
+PASS listFriends CONTROL
+PASS fetchSpires WRONG missing
+PASS fetchSpires WRONG typed
+PASS fetchSpires WRONG null
+PASS fetchSpires WRONG array
+PASS fetchSpires CONTROL
+PASS claimSpireRemote WRONG missing
+PASS claimSpireRemote WRONG typed
+PASS claimSpireRemote WRONG null
+PASS claimSpireRemote WRONG array
+PASS claimSpireRemote CONTROL
+PASS fetchStepRace WRONG missing
+PASS fetchStepRace WRONG typed
+PASS fetchStepRace WRONG null
+PASS fetchStepRace WRONG array
+PASS fetchStepRace CONTROL
+PASS fetchSettledRace WRONG missing
+PASS fetchSettledRace WRONG typed
+PASS fetchSettledRace WRONG null
+PASS fetchSettledRace WRONG array
+PASS fetchSettledRace CONTROL
+PASS defendSpireRemote WRONG missing
+PASS defendSpireRemote WRONG typed
+PASS defendSpireRemote WRONG null
+PASS defendSpireRemote WRONG array
+PASS defendSpireRemote CONTROL
+PASS leaderboard WRONG missing
+PASS leaderboard WRONG typed
+PASS leaderboard WRONG null
+PASS leaderboard WRONG array
+PASS leaderboard CONTROL
+PASS pullGrants WRONG missing
+PASS pullGrants WRONG typed
+PASS pullGrants WRONG null
+PASS pullGrants WRONG array
+PASS pullGrants CONTROL
+PASS claimSpireRemote already CONTROL
+PASS listFriends empty CONTROL
+PASS fetchSpires empty CONTROL
+PASS fetchStepRace empty CONTROL
+PASS fetchSettledRace empty CONTROL
+PASS leaderboard empty CONTROL
+PASS pullGrants empty CONTROL
+PASS pullGrants WRONG late payload refuses the entire batch
+58/58 passed; 0 failed

@@ -1,0 +1,10 @@
+ok   SETUP  client registered  | {"ok":true,"me":{"playerId":"backup-conflict-player","handle":"AUDIT BONES","friendCode":"AUD1","name":null}}
+ok   SETUP  initial push landed
+ok   SETUP  successful push stored the returned version  | local=1 server=1
+ok   RETRY  pushBackup reports success after one stale conflict  | true
+ok   RETRY  exactly one retry followed the conflict  | 2
+ok   MERGE  the retry blob contains both devices  | {"restored":{"restored":true,"counts":{"foods":0,"log":2,"weights":0,"skipped":[]},"updatedAt":3,"version":3},"ids":["from-a","from-b"]}
+ok   VERSION  the live pull stores the version it observed  | local=3 server=3
+ok   BOUND  a second 409 stops after one retry  | {"refused":false,"rejectedPuts":2}
+
+all green

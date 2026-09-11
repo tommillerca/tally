@@ -1,0 +1,2 @@
+PASS CONTROL removing family deduplication fails the tile count
+PASS 388 gear variants reachable with stats across 105 tiles; exclusive picker markup and reduced-motion return contract. Browser unproven.

@@ -1,0 +1,4 @@
+PASS CONTROL finding 1: removing the health audit or its PURE registration is rejected; lock-only coverage cannot substitute
+PASS CONTROL room 2: deleted findings 6 and 15 report 14/16, not 14/14
+PASS CONTROL scroll fixture: old child-dot selector picks 0; current button selector picks 2 in DOM model. Browser product assertion UNPROVEN
+PASS CONTROL evidence labels distinguish historical narrative from current capture; shipped and pending changelog items have PROOF rows; a missing row is rejected

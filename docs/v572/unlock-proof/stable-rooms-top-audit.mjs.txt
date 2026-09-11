@@ -1,0 +1,12 @@
+PASS CONTROL tile explicitly sets var(--text); all three tiles share uniform 18px corners
+PASS CONTROL populated ready: 5 pets / 1 today / 4 of 36; pixel and vector paths
+PASS CONTROL waiting wins over capacity: 5 pets / 2 waiting / 4 of 36; pixel and vector paths
+PASS CONTROL empty first visit: 0 pets / 3 today / 0 of 36; pixel and vector paths
+PASS CONTROL empty null engine: 0 pets / Unavailable / 0 of 36; pixel and vector paths
+PASS CONTROL populated null engine: 5 pets / Unavailable / 4 of 36; pixel and vector paths
+PASS CONTROL daily limit: 5 pets / 0 today / 4 of 36; pixel and vector paths
+PASS CONTROL unavailable snapshot: 0 pets / Check status / 0 of 36; pixel and vector paths
+PASS CONTROL recovering with results: 0 pets / 1 waiting / 0 of 36; pixel and vector paths
+PASS CONTROL single pet and lab entry hint: 1 pet / Unavailable / 1 of 36; pixel and vector paths
+PASS CONTROL original click handlers and three existing 48px assets
+STABLE ROOMS TOP: 18 rendered-template cases passed; visual result unverified, pixel review owed

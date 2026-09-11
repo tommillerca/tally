@@ -1,0 +1,10 @@
+PASS lost registration reply leaves a key but no social; resume repairs and signs as the same player
+PASS failed recovery and incomplete response stay retryable without replacing the key
+PASS new install and incomplete identity do not mint or register on resume
+PASS CONTROL existing account sync needs no registration
+PASS cloud-enabled boot already recovers missing social
+PASS cloud opt-out boot skips recovery but resume must recover public identity
+PASS replacement import preserves omitted identity and social; merge rejects incoming device overrides
+PASS replacement import honors explicit social null; surviving key recovers on resume
+PASS erase removes both records and resume cannot resurrect the erased account
+9 passed, 0 failed

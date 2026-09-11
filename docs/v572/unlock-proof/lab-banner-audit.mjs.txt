@@ -1,0 +1,2 @@
+PASS CONTROL mismatched PNG width and JSON rows are rejected.
+PASS slime PNG/JSON dimensions, all 240 authored frames and CSS clocks, reduced motion, fixed art box, Backpack entrance and existing Laboratory route. Browser geometry UNPROVEN.

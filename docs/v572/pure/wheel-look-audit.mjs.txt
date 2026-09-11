@@ -1,0 +1,7 @@
+PASS CONTROL the label grader rejects text riding a wheel
+PASS SAMPLE production draws all seven prizes and assets exist
+PASS LABELS all prize names stay outside the spinning wheel
+PASS RING all seven icon centres share one radius
+PASS PALETTE coins, crates and supplies each have a consistent spot colour
+PASS PRINT panel, rim and button use ink borders and hard shadows
+wheel-look: 6/6 passed

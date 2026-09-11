@@ -1,0 +1,2 @@
+PASS fight 1A: instance nickname, unnamed fallback, escaped HUD, simple ITEMS and live venue
+PASS CONTROL: species-keyed nickname lookup is rejected

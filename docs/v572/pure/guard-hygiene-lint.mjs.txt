@@ -1,0 +1,14 @@
+ok    SETUP the lint found test files to scan  455 files
+ok    RUNNER no case is registered after the runner has already drained  none
+ok    SETUP the audit scan is not vacuous  418 audits
+ok    CONTROL the number of audits with NO positive control does not rise above 49  49 of 418 carry no CONTROL/PREMISE/SETUP/REACH/SAMPLE row. ratchet holding
+ok    LITERAL-TRUE no audit asserts a constant success (including NO page errors)  0 offenders
+ok    LITERAL-TRUE the ten justified reports are excused exactly once  10 excused; 0 stale or duplicated
+ok    CONTROL literal-true catches a new offender even inside an excused file
+ok    PARSES every audit is something Node will actually execute  455 files parse
+ok    SEAM no NEW audit proves a feature only through a test hook  32 known seam-only, 0 new
+ok    SEAM the seam-only inventory has no stale entries (fixed one? delete its line)  inventory matches
+ok    OUTPUT all recognized audit writes validate destinations outside the graded checkout  234 guarded sinks
+ok    CONTROL the output sweep is nonempty and rejects an unguarded checkout screenshot  487 files scanned recursively
+
+guard-hygiene: clean

@@ -1,0 +1,25 @@
+PASS CONTROL minimal signed profile stores and advances last_seen
+MEASURE mature body: 4142 UTF-16 units, 4142 UTF-8 bytes
+PASS MATURE 64 talents, 100 gear ids, 200 pets accepted
+MEASURE catalogue body: 388 gear ids, 9632 UTF-16 units
+PASS GROWTH all catalogue gear survives at client cap
+PASS SHAPE clamps values without rejecting the signed request
+PASS BODY accepts exactly 24576 units, rejects 24577 before auth
+PASS CONTROL Unicode is signed as UTF-8 on both sides
+PASS AUTH CONTROL body tamper
+PASS AUTH CONTROL query tamper
+PASS AUTH CONTROL signature tamper
+PASS AUTH CONTROL unknown player
+PASS AUTH CONTROL stale timestamp
+PASS AUTH CONTROL nonfinite timestamp
+PASS AUTH CONTROL wrong local private key
+PASS REPLAY rejects captured signature, accepts newly signed retry
+PASS SHAPE CONTROL array and null snapshot rejected
+PASS RATE CONTROL accepts 120 fresh signatures, rejects request 121
+PASS AUTO real profile then signed grants completes and stamps sync
+MEASURE canonical mutation: child exit 1, MATURE rejected with 401 bad signature
+PASS RED CONTROL canonical mismatch makes this audit exit 1
+sync-authpath: 18 passed, 0 failed
+(node:5438) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+SECRETS MISSING: ADMIN_TOKEN, ADD_TOKEN_SECRET, RL_SECRET. ADD_TOKEN_SECRET unset = no leaderboard add tokens are minted (fail closed); RL_SECRET unset = rate-limit buckets are UNSALTED hashes (real limits, reversible labels); ADMIN_TOKEN unset = every admin route answers 401. Fix: npx wrangler secret put <NAME>

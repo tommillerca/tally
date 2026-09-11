@@ -1,0 +1,11 @@
+PASS ODDS CONTROL: all three recipes, exact weights and 60000 draws
+PASS ODDS CONTROL: flat 50/50 across collection, stock, species and trained inputs
+PASS ODDS CONTROL: reintroduced collection and ingredient filters fail the same guard
+PASS ATOMICITY CONTROL: successful Animate, interruption rollback and replay
+PASS DAILY CONTROL: second attempt, rollover, stale midnight, backwards and purchases
+PASS INVALID CONTROL: all 21 morph pairs and rejected inputs leave state intact
+PASS MIGRATION CONTROL: additive, idempotent and legacy coloured eggs preserved
+PASS LIVE CONTROL: investment, equipment, health, RNG and simultaneous submissions
+PASS RESTORE CONTROL: stale merge, replacement refusal, closure and currency receipts
+PASS FAULT CONTROL: split transactions lose inputs; atomic service rolls back every write boundary
+10/10 Laboratory guards passed

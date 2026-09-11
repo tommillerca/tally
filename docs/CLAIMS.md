@@ -5364,3 +5364,8 @@ Validation: node tests/unit.test.js and the full PURE census, including push/uns
 The deleted kitchen disclaimer was the only explicit production copy found stating that growing/cooking does not log eaten food. Its removal is intentional; diary and Kitchen functions remain. Laboratory routing and helper functions remain, but its Today insertion and Restore setting are removed. Crew and native/ASC-SUBMISSION.md are untouched.
 
 Limitation: existing open records do not identify a live owner tab. Boot recovery treats them as interrupted; simultaneous use of the same fight in multiple tabs is not distinguished from a terminated session. Recovery after a setup failure in the current session requires restarting, as stated in the unresolved copy.
+
+## v572
+
+Changelog item: Wardrobe removes fit counts while keeping Save fit available with its six-fit limit.
+1. PROOF: `node tests/unit.test.js` R23 F8 renders five and six saved fits, checks absent counts, cap ghosting and the explanatory tap handler. `node tests/wardrobe-ui-1f-audit.mjs` retains inherited CSS, paperdoll and lower-handler hashes. | REACH: Wardrobe header and saved-fit switcher only. Geometry and clipping unmeasured. Stacking and slot return navigation blocked by the frozen lower-region contract.

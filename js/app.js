@@ -16712,11 +16712,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             layout; it is a <button> with an accent edge so it reads as tappable
             rather than as one more read-only tally. */''}
       <button class="bh-pill ward-looks" data-tab="looks">${sparkIco(13)} ${lookCounts.collected}/${lookCounts.total} collected looks &middot; ${lookCounts.alternatives} other looks to try</button>
-      ${/* THE FITS CAP, STATED (QA round 23 F8). At 6 fits the save chip used to
-            vanish with no copy and no total, the only storage cap in the app
-            with none (the yard prints 24, favourites 6, recents 8, and the looks
-            pill beside this one prints N/M). Same .bh-pill as the looks count. */''}
-      <span class="bh-pill ward-fits">${fitCount}/${MAX_FITS} fits</span>
+
       </div>
     </div>` : tab === 'shop' ? gwartHeroHtml(rk) : `
     <div class="bh-hero mini">
@@ -16862,6 +16858,13 @@ async function renderCharacter(wrap, tab, opts = {}) {
        reading BH_ITEMS so an unreleased kit is not counted as "out there". */
     const items = BH_ITEMS_WITH_UNRELEASED.filter(i => i.slot === slot && owned.has(i.id));
     const gearItems = GEAR_ITEMS.filter(g => g.slot === slot && gOwnedSet.has(g.id));
+    const gearFamilyMap = bhFamilies(gearItems.map(g => BH_BY_ID[g.artId]));
+    for (let n = 0; n < gearItems.length; n++) {
+      const g = gearItems[n];
+      gearItems[n] = { ...g, lookFamily: bhFamilyKey(BH_BY_ID[g.artId]) };
+    }
+    const familyGear = key => gearItems.filter(g => g.lookFamily === key);
+
     const lockedCount = BH_ITEMS.filter(i => i.slot === slot).length - items.length;
     /* ONE TILE PER DRAWING, NOT PER ITEM (Tom, 2026-09-04: "those that have
        collected like 1000 head slots over the years will have a messy af
@@ -16872,7 +16875,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
        catalogue 185 -> 40 rather than 185. A family of ONE is untouched below:
        same classes, same one tap, no rail, because the fix for a big collection
        must cost a small one nothing. */
-    const fams = [...bhFamilies(items).values()];
+    const fams = [...bhFamilies(items).values()].filter(fam => !gearFamilyMap.has(bhFamilyKey(fam[0])));
     /* A FAMILY TILE ANSWERS TWO QUESTIONS AND THEY HAVE DIFFERENT ANSWERS.
        The ART is the variant you are WEARING, because the tile is the only thing
        on this screen that can say which one is on, and a family tile drawing a
@@ -17136,7 +17139,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     // The compact toolbar owns the expandable list. Everything stays in flow.
     const fitRail = `
       <div class="fit-rail ward-toolbar">
-        <button class="fit-chip ward-fit-switcher" id="wardFitSwitcher" data-fit-switcher type="button" aria-expanded="${!!S.wardFitsOpen}" aria-controls="wardFitList"><span>Saved fits</span><small>${fitList.length}/${MAX_FITS} fits</small></button>
+        <button class="fit-chip ward-fit-switcher" id="wardFitSwitcher" data-fit-switcher type="button" aria-expanded="${!!S.wardFitsOpen}" aria-controls="wardFitList"><span>Saved fits</span></button>
         <button class="fit-chip add" data-fit-save="1"${fitList.length >= MAX_FITS ? ' aria-disabled="true"' : ''}>Save fit</button>
         <button class="fit-chip studio" id="wardrobeStudio" type="button">${pixCur('camera', 24) || ICONS.camera(18)}The Studio</button>
         ${stripPlan.slots.length || stripPlan.mogs.length
@@ -17174,6 +17177,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
       </div>
       <div class="pd-bottom">${BOTTOM.map(pdSlot).join('')}</div>
       <div class="pd-stats">${STAT_META.map(statChip).join('')}</div>
+      <button class="btn ghost" data-slot-return>Back to slots</button>
+      <button class="btn ghost" data-ward-mode>${S.wardrobeLookMode ? 'Choose pieces' : 'Dressing Room'}</button>
+      <div data-ward-pieces${S.wardrobeLookMode ? ' hidden' : ''}>
       <div class="sect-h" style="margin-top:10px">${esc(GEAR_SLOTS.includes(slot) ? GEAR_SLOT_LABELS[slot] : slotMeta.label)} · pick your piece</div>
       <div class="ward-grid" data-wslot="${slot}">
         ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">${eq[slot] ? 'Take off' : 'None'}</button>`}
@@ -17202,17 +17208,29 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </button>`;
         }).join('')}
         ${gearItems.map(g => {
+          // Same-art fallback also supports callers rendering plain gear records.
+          const key = g.lookFamily || g.artId;
+          if (gearItems.find(x => (x.lookFamily || x.artId) === key) !== g) return '';
+          const variants = gearItems.filter(x => (x.lookFamily || x.artId) === key);
+          const selected = variants.find(x => x.id === S.wardrobePreview) || variants.find(x => x.id === gearLo[slot]);
+          if (selected) g = selected;
           const art = BH_BY_ID[g.artId];
           const locked = wLevel < g.minLevel;
           return `
-          <button class="ward-cell gear r-${g.rarity} ${slimedSet.has(g.id) ? 'slimed' : ''} ${gearLo[slot] === g.id ? 'equipped' : ''} ${S.wardrobePreview === g.id ? 'selected' : ''} ${locked ? 'locked' : ''}" data-equipgear="${g.id}" title="${esc(g.name)} · ${esc(g.rarity)}${slimedSet.has(g.id) ? ' (SLIMED)' : ''}">
+          <button class="ward-cell gear r-${g.rarity} ${slimedSet.has(g.id) ? 'slimed' : ''} ${gearLo[slot] === g.id ? 'equipped' : ''} ${S.wardrobePreview === g.id ? 'selected' : ''} ${locked ? 'locked' : ''}" data-gear-family="${esc(key)}" aria-expanded="${S.wardrobeGearFamily === key}" title="${esc(g.name)} · ${esc(g.rarity)}${slimedSet.has(g.id) ? ' (SLIMED)' : ''}">
             <canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}" data-pad="0.14" role="img" aria-label="${esc(g.name)}, ${esc(g.rarity)}"></canvas>
             ${rarityTagHtml(g.rarity)}
-            <span class="gear-stat">${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>
+            <span class="gear-stat">${variants.length} variants · ${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>
             ${locked ? `<span class="gear-lock">Lv ${g.minLevel}</span>` : ''}
             ${newIds.has(g.id) ? NEW_DOT : ''}
           </button>`;
         }).join('')}
+      </div>
+      <div class="ward-variants">
+        ${[...gearFamilyMap.keys()].filter(key => key === S.wardrobeGearFamily).map(key => `<div class="fam-rail pw-row" role="group" aria-label="Piece variants">
+          ${familyGear(key).map(g => `<button class="pw-item famr r-${g.rarity}" data-equipgear="${g.id}"><b>${esc(g.name)}</b><span>${gearLabel(g)}</span><small>${esc(g.talentName || 'No special ability')} · Lv ${g.minLevel}${slimedSet.has(g.id) ? ' · SLIMED' : ''}</small></button>`).join('')}
+          ${items.filter(i => bhFamilyKey(i) === key).map(i => `<button class="pw-item famr" data-equip="${i.id}">${famArtHtml(i)}<b>${esc(i.name)}</b><small>Cosmetic · replaces gear stats</small></button>`).join('')}
+        </div>`).join('')}
       </div>
       ${fbRailHtml()}
       ${(() => {
@@ -17240,6 +17258,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </div>
         </div>`;
       })()}
+      </div>
+      <div data-ward-looks${S.wardrobeLookMode ? '' : ' hidden'}>
       ${(() => {
         /* TRANSMOG. Offered on EVERY gear slot that holds something. It used to
            require a statted piece, on the reasoning that a plain cosmetic already
@@ -17362,11 +17382,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         return `
         <div class="sect-h" style="margin-top:14px">${esc(GEAR_SLOT_LABELS[slot])} · pick your look</div>
         <div class="ward-grid look-grid">
-          ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">Reset</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
-          ${cell(TRANSMOG_HIDE, `<span class="look-hide">🚫</span><span class="look-tag">Hide</span>`, 'Show nothing in this slot')}
-          ${/* costTag, not a bare number: the price carries the dust unit the same
-                way as the v2 panel's tiles (QA round 22 W13b) */''}
-          ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${costTag(i.id)}`, i.name)).join('')}
+          ${lookTilesHtml(arts)}
         </div>
         ${changed ? `
         <div class="look-bar${changed ? ' armed' : ''}">
@@ -17382,6 +17398,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
           : `Nothing with stats in this ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} slot, so a look here is only a look: <b>switching is free</b>.`}${arts.length ? '' : ' No other looks collected for this slot yet. Open earned crates in the Backpack, or collect cosmetic pieces from the Shop.'}</p>`;
       })()}
       ${GEAR_SLOTS.includes(slot) ? `<p class="note">More looks: <button class="link" data-look-source="crates">Open Backpack</button> · <button class="link" data-look-source="shop">Cosmetic Shop</button></p>` : ''}
+      </div>
       ${mogBarHtml()}
       </div>
       ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; pieces marked with a bolt grant a talent. Rarer rolls hit harder. Melting a piece keeps its look forever.</p>' : ''}
@@ -17496,17 +17513,28 @@ async function renderCharacter(wrap, tab, opts = {}) {
        writes nothing. Awaited so a reload straight after cannot race it. */
     if (newSlots.has(slot)) await clearNewInSlot(slot);
     const wirePd = b => b.addEventListener('click', async () => {
+      S.wardrobeReturnTop ??= scroller.scrollTop;
+      S.wardrobeLookMode = false; S.wardrobeGearFamily = null;
       S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null;
       await renderCharacter(wrap, 'wardrobe', { instant: true });
-      /* ARRIVE AT THE DRESSING ROOM (QA round 22 W13c). Measured on arrival at
-         375x667: scrollTop 0, .mog-panel top at 1147px, 0.000 of it visible, and
-         the only scrollIntoView on this screen went to the GEAR card. The F3 dock
-         keeps the bar reachable; this is about the panel the tap just opened.
-         'nearest' scrolls nothing when it is already in frame. Empty slot: no
-         panel, nothing moves. */
-      $('.mog-panel', wrap)?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'nearest' });
+      requestAnimationFrame(() => $('[data-slot-return]', wrap)?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' }));
     });
     $$('[data-pd]', content).forEach(wirePd);
+    $('[data-slot-return]', content)?.addEventListener('click', () => {
+      const top = S.wardrobeReturnTop;
+      S.wardrobeReturnTop = null;
+      if (top != null) scroller.scrollTo({ top, behavior: reducedMotion ? 'auto' : 'smooth' });
+      else $('.paperdoll', content)?.scrollIntoView({ block: 'start', behavior: reducedMotion ? 'auto' : 'smooth' });
+    });
+    $('[data-ward-mode]', content)?.addEventListener('click', () => {
+      S.wardrobeLookMode = !S.wardrobeLookMode;
+      renderCharacter(wrap, 'wardrobe', { instant: true });
+    });
+    $$('[data-gear-family]', content).forEach(b => b.addEventListener('click', () => {
+      S.wardrobeGearFamily = S.wardrobeGearFamily === b.dataset.gearFamily ? null : b.dataset.gearFamily;
+      renderCharacter(wrap, 'wardrobe', { instant: true });
+    }));
+
     /* NAMED, because the colourway rail's tiles are created after this runs and
        must be wired by the SAME function. A second copy of the equip path for
        the rail is how the two drift, and one of them is the one that spends. */
@@ -17609,7 +17637,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (open) { open.remove(); $$('.ward-cell.fam', grid).forEach(t => t.setAttribute('aria-expanded', 'false')); }
       if (wasMine) return;                       // second tap on the same tile closes it
       const ids = new Set(tile.dataset.famIds.split(' '));
-      const fam = BH_ITEMS.filter(i => ids.has(i.id));
+      const fam = BH_ITEMS_WITH_UNRELEASED.filter(i => ids.has(i.id));
       const rail = document.createElement('div');
       rail.innerHTML = famRailHtml(fam, attr, tag);
       const node = rail.firstElementChild;
@@ -17620,7 +17648,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       tile.setAttribute('aria-expanded', 'true');
       $$(`[data-${attr}]`, node).forEach(b => { ring(b); wire(b); });
       hydratePackArt(node, '.ward-art[data-art]');
-      node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      node.scrollIntoView({ block: 'nearest', behavior: reducedMotion ? 'auto' : 'smooth' });
       /* THE ONE YOU ARE WEARING OPENS UNDER YOUR THUMB. The rail snaps to
          centre, so without this a family whose worn colourway is 20th opens on
          the first tile and the player has to hunt for the ring they came to
@@ -17881,7 +17909,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       S.wardrobePreview = g.id;
       popSound(S.sounds);
       renderCharacter(wrap, 'wardrobe', { instant: true });
-      requestAnimationFrame(() => $('.gear-inspect', content)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+      requestAnimationFrame(() => $('.gear-inspect', content)?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'nearest' }));
     }));
     $$('[data-equipgear-commit]', content).forEach(btn => btn.addEventListener('click', async () => {
       const g = GEAR_BY_ID[btn.dataset.equipgearCommit];
@@ -24677,7 +24705,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v571'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v572'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

@@ -1,0 +1,8 @@
+PASS CONTROL the three graded files are really the ones this audit thinks paddock 13412B, app 1790192B, css 820476B
+PASS R44-12 packing 17/200 placed; 0 overlaps across 175440 conservative pair-samples (Node model only)
+PASS R44-20 selected instances are placed all 3 selected instances placed for all 4 motion classes; daily rotation holds
+PASS R44-20 actual sprite markup saved iid -> roster -> both visible text labels; same-species neighbour stays unmarked
+PASS R44-25 breeding persistence and cancel pick survives reopen; Cancel survives reopen
+PASS R44-25 copy rail restores 2160px 2160px restored after replacement; per-species state; production rebuild and repaint hooks present (no DOM proof)
+PASS R44-17 scoreboard units copies, species (CX included), collected colours (ordinary species only) named separately
+6/6 R1 Node guards pass. Real-render proofs were not run.

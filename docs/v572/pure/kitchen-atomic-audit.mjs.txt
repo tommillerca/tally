@@ -1,0 +1,22 @@
+ok   CONTROL a ready, funded transmute pays  {"ok":true,"yields":"ectoplasm"}
+ok   CONTROL one transmute: six commons out, one Ectoplasm in  {"marrow":6,"ectoplasm":1}
+ok   SEQUENTIAL the second transmute on the same day is refused  {"ok":false,"reason":"cooldown","msLeft":72000000}
+ok   CONCURRENT two overlapping transmutes: exactly one wins  [{"ok":true,"yields":"ectoplasm"},{"ok":false,"reason":"cooldown","msLeft":72000000}]
+ok   CONCURRENT two overlapping transmutes: ONE Ectoplasm minted, SIX commons spent  inv={"marrow":6,"ectoplasm":1} (12 commons in; on main both taps pay: ectoplasm 2, commons 0)
+ok   CONCURRENT the stamp was written once, to now
+ok   BACKWARD a stamp 365 days in the future leaves at most one cooldown, not 8780h  msLeft=20.0h against cooldown 20h
+ok   BACKWARD the clamp does not free the transmute early (msLeft > 0, ready false)
+ok   FORWARD a jump past the witness ceiling is refused  {"ok":false,"reason":"day"}
+ok   FORWARD a refused jump spends nothing and mints nothing  {"marrow":12}
+ok   FORWARD a refused jump leaves the stamp untouched
+ok   CONTROL a 21h-old stamp on a witnessed day still pays  {"ok":true,"yields":"ectoplasm"}
+ok   SHAPE the cooldown is still 20h
+ok   CONCURRENT two overlapping grantPotion(id) land two potions  count=2 (main: 1, one Serve lost)
+ok   CONCURRENT two different potions granted at once both land  {"vital-tonic":3,"fury-flask":1}
+ok   CONTROL a funded bone-broth cook starts  {"ok":true,"slot":0}
+ok   MID-CANCEL a throw between the two halves rejects the call  TypeError: Cannot convert undefined or null to object
+ok   MID-CANCEL the pot is untouched, not silently emptied  before=[{"recipeId":"bone-broth","startedAt":1789156327924,"readyAt":1789157227924}] after=[{"recipeId":"bone-broth","startedAt":1789156327924,"readyAt":1789157227924}]
+ok   MID-CANCEL the ingredients are untouched, not refunded without the pot  before={"marrow":0,"salt":0} after={"marrow":0,"salt":0}
+ok   CONTROL a normal cancel returns the recipe and refunds in full  {"clean":{"id":"bone-broth","iconId":"dish-broth","name":"Bone Broth","icon":"🍲","needs":{"marrow":2,"salt":1},"cookMin":15,"buff":{"kind":"combat","regenPct":0.06,"fights":2},"desc":"Heals 6% HP each turn, next 2 fights"},"cooking":[null],"inv":{"marrow":2,"salt":1}}
+
+all green, 20 checks

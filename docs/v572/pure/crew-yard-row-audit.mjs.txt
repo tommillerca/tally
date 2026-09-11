@@ -1,0 +1,9 @@
+PASS sampled total
+PASS empty sample with pets owned
+PASS singular total
+PASS empty paddock
+PASS zero total with stale sample
+PASS legacy profile
+PASS malformed yard
+PASS deleted selectors have no CSS rules
+CREW YARD ROW: 8 passed, 0 failed

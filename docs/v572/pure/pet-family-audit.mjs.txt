@@ -1,0 +1,16 @@
+PASS FAMILY-ACTIONS refuses a registered row without actions
+PASS FAMILY-ABILITY refuses a registered row with actions but no dispatch
+PASS FAMILY-BUILD refuses an incomplete family before a real fight
+PASS FAMILY-MISSING an existing dispatch cannot hide missing actions
+PASS KNOWN accepts renderable combat species and rejects unknown/prototype ids
+PASS PICKS-TREE drops an out-of-family pick
+PASS PICKS-LEVEL drops an above-level pick
+PASS PICKS-TIER drops the second pick in a tier
+PASS PICKS-SUBSET accepts every legal combination, preserves order, never throws on invalid data
+PASS TIERS derives new unlocks from the applicable family tree
+PASS COOLDOWN family metadata agrees with the effective special action
+PASS COOLDOWN-ENGINE specials reopen after the full family recovery
+PASS FAMILY-IDENTITY assignments, roles, passives, talent IDs/unlocks and Signature identities never drift
+  13552 builds and 54208 effects byte-identical
+PASS NO-DRIFT parity builds and unchanged WAVE effects match frozen expectations
+pet-family-audit: 14 passed, 0 failed

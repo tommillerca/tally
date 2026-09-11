@@ -1,0 +1,12 @@
+PASS source-derived contract is fresh, including INSERT, UPDATE and UPSERT columns
+PASS future-column and unsupported-SQL controls
+CONTROL RED drift: missing players.last_week_key, players.last_week_steps
+CONTROL RED /health: 503 missing column: last_week_key
+CONTROL RED /health/deep: 503 missing column: last_week_key
+GREEN drift: Schema OK: 12 tables, 114 write columns
+GREEN /health and /health/deep: 200, six calls, zero rows changed
+PASS deploy CONTROL: failed preflight prevents deployment; green preflight permits the stub
+PASS migration guard (SQLite proof; local D1 is a separate required proof)
+SECRETS MISSING: ADMIN_TOKEN, ADD_TOKEN_SECRET, RL_SECRET. ADD_TOKEN_SECRET unset = no leaderboard add tokens are minted (fail closed); RL_SECRET unset = rate-limit buckets are UNSALTED hashes (real limits, reversible labels); ADMIN_TOKEN unset = every admin route answers 401. Fix: npx wrangler secret put <NAME>
+(node:52647) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)

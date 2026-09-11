@@ -1,0 +1,8 @@
+PASS F12 seventh pending den reward: pending=7, earned-0=true
+PASS F13 den crate abort and retry: landmark=1 crate, remote=1 crate, roaming=1 crate, duplicates=0; gear-choice abort rolls back; concurrent claim=1
+PASS F14 Battle Charm buffs abort: abort retains item; retry=5 charges; active/concurrent stacking refused
+PASS F17 Wanderer egg abort and replay: abort unclaimed; replay=150 XP, 200 coins, 1 egg; duplicate=0; coin abort rolls back; concurrent boosted payout=375
+PASS F15 Pit setup record abort: abort=3 charges, no record; retry=2 charges, open record; next spend blocked
+PASS F16 capped non-staked XP: displayXP=0, actualXP=0; uncapped control=10 (game.js board copy remains outside lane)
+PASS F18 empty Pit guidance: toast="Rest up! Take a walk to earn Vigor. Free fights refill tomorrow."; meal=0, 2500 steps=1 charge
+P1 DENS: 7 passed, 0 failed
