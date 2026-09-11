@@ -1,0 +1,248 @@
+PASS CONTROL mismatched PNG width and JSON rows are rejected.
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: The input did not match the regular expression /Recipes ›/. Input:
+
+"  if (tab === 'crates') {\n" +
+  '    await migrateLegacyEggs();\n' +
+  '    /* Repair before reading. An egg whose anchor sits above the current lifetime\n' +
+  '       can never progress (a restore or a wiped container leaves fewer health rows\n' +
+  '       than the device had when the egg was granted), and it presents as a dead\n' +
+  '       progress bar with no explanation. Re-anchoring to now costs the player\n' +
+  '       nothing they had and unsticks it. */\n' +
+  '    await repairEggAnchors();\n' +
+  "    const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook, dust, pCounts, gearLoNow, bpPotions] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState(), boneDust(), petCounts(), gearLoadout(), potionsInv()]);\n" +
+  '    // an egg that is not moving because STEPS are not arriving says so instead of\n' +
+  '    // showing a bar that never fills\n' +
+  '    const eggStale = !!(await hkStaleInfo());\n' +
+  "    const eggs = invAll.filter(r => r.kind === 'egg').sort((a, b) => a.ts - b.ts);\n" +
+  "    const ownedPets = invAll.filter(r => r.kind === 'cos' && BH_BY_ID[r.itemId] && BH_BY_ID[r.itemId].slot === 'C').map(r => BH_BY_ID[r.itemId]);\n" +
+  '    const pCountTotal = Object.values(pCounts).reduce((a, n) => a + n, 0);\n' +
+  '    content.innerHTML = `\n' +
+  '      <button class="lab-banner" type="button" data-lab-open>\n' +
+  '        <span class="lab-slime" aria-hidden="true"></span>\n' +
+  '        <span class="lab-banner-copy"><b>THE LABORATORY</b><small>Spare pets become new colours.</small></span>\n' +
+  '      </button>\n' +
+  '\n' +
+  '      ${(pendingLoot || []).length ? `<div class="t3-sect" style="margin-top:2px"><b>Boss loot · keep one per drop</b><i></i></div>\n' +
+  '      ${pendingLoot.map((p, i) => `\n' +
+  '        <div class="loot-pending" data-lootkey="${esc(p.key)}">\n' +
+  '          <small>${esc(p.den)} dropped:</small>\n' +
+  '          <div class="loot-cards">${p.choices.map(id => GEAR_BY_ID[id] ? lootCardHtml(GEAR_BY_ID[id]) : \'\').join(\'\')}</div>\n' +
+  '          <button class="btn loot-keep" disabled>Tap a piece to preview</button>\n' +
+  "        </div>`).join('')}` : ''}\n" +
+  '      <div class="t3-sect"><b>Crates</b><i></i></div>\n' +
+  '      <div class="bp-grid">\n' +
+  '      ${(() => {\n' +
+  "        const kinds = [...new Set([...Object.keys(CRATES).filter(kind => kind !== 'egg'), ...crates.map(c => c.crate)])];\n" +
+  '        return kinds.map(kind => {\n' +
+  '          const list = crates.filter(c => c.crate === kind);\n' +
+  '          const def = CRATES[kind] || CRATES.daily;\n' +
+  '          return `<div class="bp-card">\n' +
+  '            <div class="bp-card-top"><span class="art">${crateIcon(kind, 56)}</span><span class="bp-qty">${list.length}</span></div>\n' +
+  '            <b>${esc(def.label).toUpperCase()}</b>\n' +
+  '            <button class="btn" ${list.length ? `data-open="${list[0].id}"` : \'disabled\'}>${list.length ? \'OPEN\' : \'NONE TO OPEN\'}</button>\n' +
+  '            <details class="bp-crate-details"><summary>Details &amp; odds</summary>\n' +
+  "            <p>${def.rolls} pull${def.rolls === 1 ? '' : 's'} · ${def.floor ? 'First cosmetic Rare or better' : 'Looks, supplies and coins'}</p>\n" +
+  '            ${kind === \'daily\' && list.length > 1 ? \'<button class="btn ghost" data-open-all="daily">OPEN ALL</button>\' : \'\'}\n' +
+  '      ${(() => {\n' +
+  '        /* CRATE ODDS, AVAILABLE IN EACH CRATE DETAIL (playtest P2, 2026-08-30). Every\n' +
+  '           number below is COMPUTED at render time by crateOdds() in loot.js off\n' +
+  '           the same RARITIES weights rollRarity spends, so a weight change ships\n' +
+  '           its own disclosure and nothing here can drift. This is also the App\n' +
+  '           Store loot-box odds disclosure (Review Guideline 3.1.1), which is why\n' +
+  '           the block renders whether or not a crate is currently held: the odds\n' +
+  '           must be readable BEFORE you earn one, not only while holding one.\n' +
+  '           Two lines on purpose, coarse and honest, rather than a per-crate\n' +
+  '           table per pull: openCrate applies the floor to the FIRST pull only,\n' +
+  "           so the Bone Crate's later pulls use the ordinary table, and printing\n" +
+  '           one blended table per crate would be a lie in both directions. A pull\n' +
+  '           can also pay a consumable or an ingredient instead of a cosmetic, so\n' +
+  '           the copy scopes the table to "when a cosmetic drops" instead of\n' +
+  '           pretending every pull is one. */\n' +
+  "        const line = kind => crateOdds(kind).rows.map(o => `${RARITIES[o.rarity].label} ${o.pct}%`).join(' · ');\n" +
+  '        return `<div class="t3-sect"><b>Crate odds</b><i></i></div>\n' +
+  '        <p class="note" style="margin:2px 2px 10px">A pull can pay a cosmetic, a consumable or an ingredient. When a cosmetic drops:<br>\n' +
+  "        Any ordinary pull: ${line('daily')}. Rare or better: about 1 in ${crateOdds('daily').rareUpOneIn}.<br>\n" +
+  "        Bone Crate: 3 pulls, and the first is always Rare or better: ${line('golden')}.</p>`;\n" +
+  '      })()}\n' +
+  '            </details>\n' +
+  '          </div>`;\n' +
+  "        }).join('');\n" +
+  '      })()}\n' +
+  '      <section class="bp-eggs"><div class="t3-sect"><b>Step Eggs</b><i></i><span>${eggs.length} owned</span></div>\n' +
+  '      ${eggs.length ? `\n' +
+  '      ${eggs.map(e => {\n' +
+  '        const p = eggProgress(e, lifeSteps);\n' +
+  '        const pct = p.goal > 0 ? Math.min(100, Math.round(p.walked / p.goal * 100)) : 100;\n' +
+  "        // Kennel Phase A, section 2.5: the shell carries a tint of what's inside\n" +
+  '        // (no colour name in the copy below -- the tint is the whole tease).\n' +
+  '        const eTint = eggTint(e.morph);\n' +
+  '        return `<div class="t3-egg" style="margin-bottom:9px">\n' +
+  '          <span class="art${eTint ? \' tinted\' : \'\'}"${eTint ? ` style="--shell:${eTint}"` : \'\'}>${crateIcon(\'egg\', 48)}</span>\n' +
+  '          <div class="tx">\n' +
+  "            <b>${p.ready ? 'READY TO HATCH' : 'STEP EGG'}</b>\n" +
+  '            <div class="bar" role="progressbar" aria-label="Step Egg hatch progress" aria-valuemin="0" aria-valuemax="${p.goal}" aria-valuenow="${p.walked}"><i style="width:${pct}%"></i></div>\n' +
+  "            <small>${eggStale && !p.ready ? 'Your steps are not reaching the app, so this is not moving. Tap the banner on Today to reconnect.' : `${p.walked.toLocaleString()} / ${p.goal.toLocaleString()} steps${p.ready ? ' · a pet is inside' : ` · ${(p.goal - p.walked).toLocaleString()} to go`}`}</small>\n" +
+  '          </div>\n' +
+  '          ${p.ready ? `<button class="btn" style="width:auto;padding:9px 16px;font-size:var(--fs-body);box-shadow:var(--sh-sm)" data-hatch="${e.id}">HATCH</button>` : \'\'}\n' +
+  '        </div>`;\n' +
+  '      }).join(\'\')}` : \'<p class="note">0 owned. Collected eggs will appear here, each with its own progress.</p>\'}\n' +
+  '      </section></div>\n' +
+  '      <div class="t3-sect"><b>Potions &amp; battle items</b><i></i></div>\n' +
+  '      <div class="bp-grid">\n' +
+  '      <div class="bp-card">\n' +
+  '        <div class="bp-card-top">${consumableIcon(\'xp2\', 56)}<span class="bp-qty">${boosts}</span></div>\n' +
+  '        <b>Battle Charm</b><details class="bp-item-details"><summary>Details</summary><p>${CONSUMABLES.xp2.desc}</p></details>\n' +
+  '        <!-- The state that makes the action illegal must also hide the button\n' +
+  '             (rewarded-actions SOP rule 4): while a charm is running, USE becomes\n' +
+  '             a disabled "ACTIVE" chip instead of a live control that refuses. -->\n' +
+  '        ${boosts ? (boost ? \'<button class="btn ghost" id="useBoost" disabled>ACTIVE</button>\' : \'<button class="btn" id="useBoost">USE</button>\') : \'<button class="btn" disabled>NONE OWNED</button>\'}\n' +
+  '      </div>\n' +
+  '      <div class="bp-card">\n' +
+  '        <div class="bp-card-top">${consumableIcon(\'vigor\', 56)}<span class="bp-qty">${vigors}</span></div>\n' +
+  '        <b>Vigor Draught</b><details class="bp-item-details"><summary>Details</summary><p>${CONSUMABLES.vigor.desc}</p></details>\n' +
+  '        ${vigors ? \'<button class="btn" id="useVigor">USE</button>\' : \'<button class="btn" disabled>NONE OWNED</button>\'}\n' +
+  '      </div>\n' +
+  '      ${POTIONS.map(p => `<div class="bp-card"><div class="bp-card-top">${recipeIconHtml(p, 56)}<span class="bp-qty">${bpPotions[p.id] || 0}</span></div><b>${esc(p.name)}</b><details class="bp-item-details"><summary>Details</summary><p>${esc(p.desc)}</p></details><button class="btn ghost" id="bp-potion-${p.id}" data-bp-potion="${p.id}">VIEW IN KITCHEN</button></div>`).join(\'\')}\n' +
+  '      </div>\n' +
+  '      ${boost ? `<p class="note" style="margin:6px 2px">${consumableIcon(\'xp2\', 14)} Charm active: ${boost} Pit win${boost === 1 ? \'\' : \'s\'} left at +25% coins</p>` : \'\'}\n' +
+  '      <div class="t3-sect"><b>Kitchen</b><i></i><button class="btn ghost small" id="bpKitchen">Cook ›</button></div>\n' +
+  '      ${/* SAME EXPRESSION AS THE KITCHEN\'S OWN "Active dishes" ROW (openKitchen,\n' +
+  "           above): the hub was rendering the recipe's EMOJI in a .crate-ico slot,\n" +
+  '           which app.css sets to font-size 24 -- so a 24px emoji sat where the\n' +
+  '           Kitchen, on the same buff objects, draws the 24px pixel dish. All seven\n' +
+  '           dishes have art. The emoji stays as the last resort for a buff whose\n' +
+  "           recipe id no longer resolves. */''}\n" +
+  '      ${(foodActive || []).length ? (foodActive.map(b => `<div class="crate-row"><span class="crate-ico">${RECIPE_BY_ID[b.recipe] ? recipeIconHtml(RECIPE_BY_ID[b.recipe], 26) : (b.icon || \'🍲\')}</span><div style="flex:1"><b>${esc(b.name || \'Dish\')} active</b><small>${b.kind === \'combat\' ? `${b.fightsLeft} fight${b.fightsLeft === 1 ? \'\' : \'s\'} left` : `${Math.max(0, Math.ceil((b.untilMs - Date.now()) / 3600e3))}h left`}</small></div></div>`).join(\'\')) : \'<p class="note" style="margin:2px 2px 6px">No dish active. Cook one in the Kitchen for a Pit or coin buff.</p>\'}\n' +
+  '      ${(() => { const busy = cook.slots.filter(s => !s.empty); if (!busy.length) return \'\'; const rc = cook.readyCount, cc = busy.length - rc; const label = rc && cc ? `${rc} ready · ${cc} cooking` : rc ? `${rc} dish${rc === 1 ? \'\' : \'es\'} ready!` : `${cc} cooking...`; return `<div class="crate-row"><span class="crate-ico">${rc ? \'✅\' : \'🍳\'}</span><div style="flex:1"><b>${label}</b><small>${busy.map(s => esc(s.recipe.name)).join(\', \')}</small></div></div>`; })()}\n' +
+  '      <div class="ingredient-grid" style="margin-top:6px">${INGREDIENT_IDS.map(id => `<div class="ing-cell"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${ingI'... 636423 more characters
+
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/v573-backpack-lab/tests/lab-banner-audit.mjs:48:8
+    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: "  if (tab === 'crates') {\n" +
+    '    await migrateLegacyEggs();\n' +
+    '    /* Repair before reading. An egg whose anchor sits above the current lifetime\n' +
+    '       can never progress (a restore or a wiped container leaves fewer health rows\n' +
+    '       than the device had when the egg was granted), and it presents as a dead\n' +
+    '       progress bar with no explanation. Re-anchoring to now costs the player\n' +
+    '       nothing they had and unsticks it. */\n' +
+    '    await repairEggAnchors();\n' +
+    "    const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook, dust, pCounts, gearLoNow, bpPotions] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState(), boneDust(), petCounts(), gearLoadout(), potionsInv()]);\n" +
+    '    // an egg that is not moving because STEPS are not arriving says so instead of\n' +
+    '    // showing a bar that never fills\n' +
+    '    const eggStale = !!(await hkStaleInfo());\n' +
+    "    const eggs = invAll.filter(r => r.kind === 'egg').sort((a, b) => a.ts - b.ts);\n" +
+    "    const ownedPets = invAll.filter(r => r.kind === 'cos' && BH_BY_ID[r.itemId] && BH_BY_ID[r.itemId].slot === 'C').map(r => BH_BY_ID[r.itemId]);\n" +
+    '    const pCountTotal = Object.values(pCounts).reduce((a, n) => a + n, 0);\n' +
+    '    content.innerHTML = `\n' +
+    '      <button class="lab-banner" type="button" data-lab-open>\n' +
+    '        <span class="lab-slime" aria-hidden="true"></span>\n' +
+    '        <span class="lab-banner-copy"><b>THE LABORATORY</b><small>Spare pets become new colours.</small></span>\n' +
+    '      </button>\n' +
+    '\n' +
+    '      ${(pendingLoot || []).length ? `<div class="t3-sect" style="margin-top:2px"><b>Boss loot · keep one per drop</b><i></i></div>\n' +
+    '      ${pendingLoot.map((p, i) => `\n' +
+    '        <div class="loot-pending" data-lootkey="${esc(p.key)}">\n' +
+    '          <small>${esc(p.den)} dropped:</small>\n' +
+    '          <div class="loot-cards">${p.choices.map(id => GEAR_BY_ID[id] ? lootCardHtml(GEAR_BY_ID[id]) : \'\').join(\'\')}</div>\n' +
+    '          <button class="btn loot-keep" disabled>Tap a piece to preview</button>\n' +
+    "        </div>`).join('')}` : ''}\n" +
+    '      <div class="t3-sect"><b>Crates</b><i></i></div>\n' +
+    '      <div class="bp-grid">\n' +
+    '      ${(() => {\n' +
+    "        const kinds = [...new Set([...Object.keys(CRATES).filter(kind => kind !== 'egg'), ...crates.map(c => c.crate)])];\n" +
+    '        return kinds.map(kind => {\n' +
+    '          const list = crates.filter(c => c.crate === kind);\n' +
+    '          const def = CRATES[kind] || CRATES.daily;\n' +
+    '          return `<div class="bp-card">\n' +
+    '            <div class="bp-card-top"><span class="art">${crateIcon(kind, 56)}</span><span class="bp-qty">${list.length}</span></div>\n' +
+    '            <b>${esc(def.label).toUpperCase()}</b>\n' +
+    '            <button class="btn" ${list.length ? `data-open="${list[0].id}"` : \'disabled\'}>${list.length ? \'OPEN\' : \'NONE TO OPEN\'}</button>\n' +
+    '            <details class="bp-crate-details"><summary>Details &amp; odds</summary>\n' +
+    "            <p>${def.rolls} pull${def.rolls === 1 ? '' : 's'} · ${def.floor ? 'First cosmetic Rare or better' : 'Looks, supplies and coins'}</p>\n" +
+    '            ${kind === \'daily\' && list.length > 1 ? \'<button class="btn ghost" data-open-all="daily">OPEN ALL</button>\' : \'\'}\n' +
+    '      ${(() => {\n' +
+    '        /* CRATE ODDS, AVAILABLE IN EACH CRATE DETAIL (playtest P2, 2026-08-30). Every\n' +
+    '           number below is COMPUTED at render time by crateOdds() in loot.js off\n' +
+    '           the same RARITIES weights rollRarity spends, so a weight change ships\n' +
+    '           its own disclosure and nothing here can drift. This is also the App\n' +
+    '           Store loot-box odds disclosure (Review Guideline 3.1.1), which is why\n' +
+    '           the block renders whether or not a crate is currently held: the odds\n' +
+    '           must be readable BEFORE you earn one, not only while holding one.\n' +
+    '           Two lines on purpose, coarse and honest, rather than a per-crate\n' +
+    '           table per pull: openCrate applies the floor to the FIRST pull only,\n' +
+    "           so the Bone Crate's later pulls use the ordinary table, and printing\n" +
+    '           one blended table per crate would be a lie in both directions. A pull\n' +
+    '           can also pay a consumable or an ingredient instead of a cosmetic, so\n' +
+    '           the copy scopes the table to "when a cosmetic drops" instead of\n' +
+    '           pretending every pull is one. */\n' +
+    "        const line = kind => crateOdds(kind).rows.map(o => `${RARITIES[o.rarity].label} ${o.pct}%`).join(' · ');\n" +
+    '        return `<div class="t3-sect"><b>Crate odds</b><i></i></div>\n' +
+    '        <p class="note" style="margin:2px 2px 10px">A pull can pay a cosmetic, a consumable or an ingredient. When a cosmetic drops:<br>\n' +
+    "        Any ordinary pull: ${line('daily')}. Rare or better: about 1 in ${crateOdds('daily').rareUpOneIn}.<br>\n" +
+    "        Bone Crate: 3 pulls, and the first is always Rare or better: ${line('golden')}.</p>`;\n" +
+    '      })()}\n' +
+    '            </details>\n' +
+    '          </div>`;\n' +
+    "        }).join('');\n" +
+    '      })()}\n' +
+    '      <section class="bp-eggs"><div class="t3-sect"><b>Step Eggs</b><i></i><span>${eggs.length} owned</span></div>\n' +
+    '      ${eggs.length ? `\n' +
+    '      ${eggs.map(e => {\n' +
+    '        const p = eggProgress(e, lifeSteps);\n' +
+    '        const pct = p.goal > 0 ? Math.min(100, Math.round(p.walked / p.goal * 100)) : 100;\n' +
+    "        // Kennel Phase A, section 2.5: the shell carries a tint of what's inside\n" +
+    '        // (no colour name in the copy below -- the tint is the whole tease).\n' +
+    '        const eTint = eggTint(e.morph);\n' +
+    '        return `<div class="t3-egg" style="margin-bottom:9px">\n' +
+    '          <span class="art${eTint ? \' tinted\' : \'\'}"${eTint ? ` style="--shell:${eTint}"` : \'\'}>${crateIcon(\'egg\', 48)}</span>\n' +
+    '          <div class="tx">\n' +
+    "            <b>${p.ready ? 'READY TO HATCH' : 'STEP EGG'}</b>\n" +
+    '            <div class="bar" role="progressbar" aria-label="Step Egg hatch progress" aria-valuemin="0" aria-valuemax="${p.goal}" aria-valuenow="${p.walked}"><i style="width:${pct}%"></i></div>\n' +
+    "            <small>${eggStale && !p.ready ? 'Your steps are not reaching the app, so this is not moving. Tap the banner on Today to reconnect.' : `${p.walked.toLocaleString()} / ${p.goal.toLocaleString()} steps${p.ready ? ' · a pet is inside' : ` · ${(p.goal - p.walked).toLocaleString()} to go`}`}</small>\n" +
+    '          </div>\n' +
+    '          ${p.ready ? `<button class="btn" style="width:auto;padding:9px 16px;font-size:var(--fs-body);box-shadow:var(--sh-sm)" data-hatch="${e.id}">HATCH</button>` : \'\'}\n' +
+    '        </div>`;\n' +
+    '      }).join(\'\')}` : \'<p class="note">0 owned. Collected eggs will appear here, each with its own progress.</p>\'}\n' +
+    '      </section></div>\n' +
+    '      <div class="t3-sect"><b>Potions &amp; battle items</b><i></i></div>\n' +
+    '      <div class="bp-grid">\n' +
+    '      <div class="bp-card">\n' +
+    '        <div class="bp-card-top">${consumableIcon(\'xp2\', 56)}<span class="bp-qty">${boosts}</span></div>\n' +
+    '        <b>Battle Charm</b><details class="bp-item-details"><summary>Details</summary><p>${CONSUMABLES.xp2.desc}</p></details>\n' +
+    '        <!-- The state that makes the action illegal must also hide the button\n' +
+    '             (rewarded-actions SOP rule 4): while a charm is running, USE becomes\n' +
+    '             a disabled "ACTIVE" chip instead of a live control that refuses. -->\n' +
+    '        ${boosts ? (boost ? \'<button class="btn ghost" id="useBoost" disabled>ACTIVE</button>\' : \'<button class="btn" id="useBoost">USE</button>\') : \'<button class="btn" disabled>NONE OWNED</button>\'}\n' +
+    '      </div>\n' +
+    '      <div class="bp-card">\n' +
+    '        <div class="bp-card-top">${consumableIcon(\'vigor\', 56)}<span class="bp-qty">${vigors}</span></div>\n' +
+    '        <b>Vigor Draught</b><details class="bp-item-details"><summary>Details</summary><p>${CONSUMABLES.vigor.desc}</p></details>\n' +
+    '        ${vigors ? \'<button class="btn" id="useVigor">USE</button>\' : \'<button class="btn" disabled>NONE OWNED</button>\'}\n' +
+    '      </div>\n' +
+    '      ${POTIONS.map(p => `<div class="bp-card"><div class="bp-card-top">${recipeIconHtml(p, 56)}<span class="bp-qty">${bpPotions[p.id] || 0}</span></div><b>${esc(p.name)}</b><details class="bp-item-details"><summary>Details</summary><p>${esc(p.desc)}</p></details><button class="btn ghost" id="bp-potion-${p.id}" data-bp-potion="${p.id}">VIEW IN KITCHEN</button></div>`).join(\'\')}\n' +
+    '      </div>\n' +
+    '      ${boost ? `<p class="note" style="margin:6px 2px">${consumableIcon(\'xp2\', 14)} Charm active: ${boost} Pit win${boost === 1 ? \'\' : \'s\'} left at +25% coins</p>` : \'\'}\n' +
+    '      <div class="t3-sect"><b>Kitchen</b><i></i><button class="btn ghost small" id="bpKitchen">Cook ›</button></div>\n' +
+    '      ${/* SAME EXPRESSION AS THE KITCHEN\'S OWN "Active dishes" ROW (openKitchen,\n' +
+    "           above): the hub was rendering the recipe's EMOJI in a .crate-ico slot,\n" +
+    '           which app.css sets to font-size 24 -- so a 24px emoji sat where the\n' +
+    '           Kitchen, on the same buff objects, draws the 24px pixel dish. All seven\n' +
+    '           dishes have art. The emoji stays as the last resort for a buff whose\n' +
+    "           recipe id no longer resolves. */''}\n" +
+    '      ${(foodActive || []).length ? (foodActive.map(b => `<div class="crate-row"><span class="crate-ico">${RECIPE_BY_ID[b.recipe] ? recipeIconHtml(RECIPE_BY_ID[b.recipe], 26) : (b.icon || \'🍲\')}</span><div style="flex:1"><b>${esc(b.name || \'Dish\')} active</b><small>${b.kind === \'combat\' ? `${b.fightsLeft} fight${b.fightsLeft === 1 ? \'\' : \'s\'} left` : `${Math.max(0, Math.ceil((b.untilMs - Date.now()) / 3600e3))}h left`}</small></div></div>`).join(\'\')) : \'<p class="note" style="margin:2px 2px 6px">No dish active. Cook one in the Kitchen for a Pit or coin buff.</p>\'}\n' +
+    '      ${(() => { const busy = cook.slots.filter(s => !s.empty); if (!busy.length) return \'\'; const rc = cook.readyCount, cc = busy.length - rc; const label = rc && cc ? `${rc} ready · ${cc} cooking` : rc ? `${rc} dish${rc === 1 ? \'\' : \'es\'} ready!` : `${cc} cooking...`; return `<div class="crate-row"><span class="crate-ico">${rc ? \'✅\' : \'🍳\'}</span><div style="flex:1"><b>${label}</b><small>${busy.map(s => esc(s.recipe.name)).join(\', \')}</small></div></div>`; })()}\n' +
+    '      <div class="ingredient-grid" style="margin-top:6px">${INGREDIENT_IDS.map(id => `<div class="ing-cell"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${ingI'... 636423 more characters,
+  expected: /Recipes ›/,
+  operator: 'match',
+  diff: 'simple'
+}
+
+Node.js v22.22.2

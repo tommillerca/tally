@@ -1,0 +1,23 @@
+ok   SETUP the look under test has a real non-zero price and is collected  transmogCost(H10-2) = 12
+ok   CONTROL with statted gear in the slot the look costs its full price  price 12
+ok   CONTROL (free rule unchanged, Tom 2026-08-11) with no gear in the slot the look is free  price 0
+ok   CONTROL the free apply went through at 0  {"ok":true,"cost":0,"already":false}
+ok   W1 the free wear left no receipt  paidlooks []
+ok   W1 after re-equipping the gear the look costs full price again  price 12, want 12
+ok   W1 the receipt is still absent after the re-equip (the seed did not bank it either)  paidlooks []
+ok   W1 the unpaid override did not survive stats entering the slot  transmog {}
+ok   W1 with gear back on, applying the look is a real purchase again (refused: no dust)  {"ok":false,"reason":"dust","need":12,"have":0}
+ok   CONTROL a paid apply charges the full price  {"ok":true,"cost":12,"already":false}, dust 88
+ok   CONTROL the paid apply banked the receipt  paidlooks ["H:H10-2"]
+ok   CONTROL a bought look is free to re-apply  price 0
+ok   CONTROL re-applying a bought look costs 0  {"ok":true,"cost":0,"already":false}
+ok   CONTROL a PAID look survives re-gearing (rule 3: the look sticks as the gear changes)  transmog {"H":"H10-2"}
+ok   CONTROL the stripped player prices the unpaid fit at 0 before its gear is back (the wrong loadout)  fitPrice 0
+ok   W11 a fit holding an unpaid look on a slot its gear pass fills is refused for dust  applyFit -> {"ok":false,"reason":"dust","need":6,"have":0}
+ok   W11 the refusal left the player re-geared and the unpaid look off  loadout.S g-S1-1-gravewarden, transmog {"H":"H10-2"}
+ok   W11 (the reachable badge) with gear in the slot the fit now prices above 0  fitPrice 6
+ok   W11 a fit of paid looks prices 0 and goes on  {"ok":true,"cost":0,"name":"Paid"}
+ok   REACH the fit chip renders .fc-cost when fitPrice is above 0  fc-cost markup keyed on price
+ok   REACH the applyFit handler toasts "That fit needs N dust" on reason dust  toast keyed on reason dust
+
+a free wear is a wear, not a purchase

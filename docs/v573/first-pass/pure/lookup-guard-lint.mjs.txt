@@ -1,0 +1,21 @@
+PASS CONTROL early return: expected 1, found 1
+PASS CONTROL positive lookup: expected 1, found 1
+PASS CONTROL renamed art alias before guard: expected 1, found 1
+PASS CONTROL truth-only filter: expected 1, found 1
+PASS CONTROL resolved filter: expected 0, found 0
+PASS CONTROL lookup truth test: expected 0, found 0
+PASS CONTROL result guard: expected 0, found 0
+PASS CONTROL fallback: expected 0, found 0
+PASS CONTROL optional access: expected 0, found 0
+PASS CONTROL separate functions: expected 0, found 0
+PASS CONTROL comments and strings: expected 0, found 0
+PASS CONTROL regex: expected 0, found 0
+PASS CONTROL template expression: expected 1, found 1
+PASS SAMPLE source modules and known candidate sites were examined: 61 files, 4 candidates
+SITE js/app.js:12433 id-boundary p.pet.id -> catalogueviahelper -> petPortraitHtml(p.pet.id, [boundary-debt]
+SITE js/app.js:13865 id-boundary p.pet.id -> catalogueviahelper -> petSpriteHtml(p.pet.id, [boundary-debt]
+SITE js/app.js:20101 record-boundary lurkSp -> BH_BY_ID[lurkSp] -> bhAsset [false-positive]
+SITE js/app.js:25819 id-boundary petArtId -> catalogueviahelper -> petSpriteHtml(petArtId, [false-positive]
+PASS REVIEW no stale suppressions: all reviewed sites still present
+PRECISION 2 true positives (boundary debts, not proven crashes), 2 false positives, 0 unreviewed. Incomplete class coverage; no crash-prevention claim.
+lookup-guard: PASS

@@ -1,0 +1,13 @@
+PASS SOURCE today: border band 0px; dock top padding 21px; modeled FAB ring clearance 1.425px
+PASS SOURCE boneyard: border band 0px; dock top padding 21px; modeled FAB ring clearance 1.425px
+PASS SOURCE friends: border band 0px; dock top padding 21px; modeled FAB ring clearance 1.425px
+PASS SOURCE bonehead: border band 0px; dock top padding 21px; modeled FAB ring clearance 1.425px
+PASS CONTROL rejected Boneyard clipping
+PASS CONTROL rejected Boneyard nested clip
+PASS CONTROL rejected real opaque-band regression
+PASS CONTROL rejected original hero sliver
+PASS CONTROL rejected lost exclusion
+PASS CONTROL rejected larger FAB overhang
+PASS CONTROL rejected map-only border
+PASS SOURCE geometry preserves the content clip and FAB position at heights 667/852 and bottom insets 0/34
+NOT RUN: rendered all-tab colours, row hit-testing and native bounce; pixel review is owed

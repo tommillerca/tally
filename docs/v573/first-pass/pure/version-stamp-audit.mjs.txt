@@ -1,0 +1,6 @@
+ok   FOUND all four version stamps are where this test looks for them  sw.js yes, APP_BUILD yes, changelog yes, version.json yes
+ok   REACH the changelog stamp read is the newest entry in the file, not just the first written  read n: 573, newest of 333 entries is 573
+ok   AGREE sw.js VERSION, APP_BUILD and the newest changelog entry are the same build  sw.js tally-v573, APP_BUILD v573, changelog n: 573
+ok   AGREE version.json, the service worker killswitch, names the same build as sw.js VERSION  sw.js tally-v573, version.json tally-v573
+
+all green, 4 checks

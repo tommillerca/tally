@@ -5365,6 +5365,12 @@ The deleted kitchen disclaimer was the only explicit production copy found stati
 
 Limitation: existing open records do not identify a live owner tab. Boot recovery treats them as interrupted; simultaneous use of the same fight in multiple tabs is not distinguished from a terminated session. Recovery after a setup failure in the current session requires restarting, as stated in the unresolved copy.
 
+## v573
+
+Changelog item: Backpack gives pets more room, highlights the selected tab and tucks item explanations into details. Pet melting has a deliberate entry outside talents, and Laboratory pair warnings explain the required colours.
+1. PROOF: `node tests/backpack-lab-polish-audit.mjs` covers the talents exclusion and deliberate salvage action, with the original placement failing in `docs/v573/guard-red.txt`. `node tests/unit.test.js` and the complete enumerated PURE tier are recorded in `docs/v573/`. | REACH: Backpack identity, selected tab and card details; Stable > Melt a spare for Bone Dust; Backpack > Laboratory > recipe path and How the recipes work. Browser geometry remains unproven here.
+
+Deviations: The existing typed gate protects trained, named, bonded, lineage, equipped and talent-bearing pets and collection losses, so it remains intact under item 6's exception. Shiny inputs are already ineligible in the engine. Base and Toxic are valid ingredients but not a valid pair; warnings explain Base + Base and Toxic + Rose. Existing destructive mechanics permanently consume pets and investment, conflicting with the no-permanent-loss lock. These mechanics and confirmations remain unchanged; a recovery redesign requires a separate work order.
 ## v572
 
 Changelog item: Wardrobe removes fit counts while keeping Save fit available with its six-fit limit.

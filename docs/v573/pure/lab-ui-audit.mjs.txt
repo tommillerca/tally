@@ -1,0 +1,31 @@
+PASS CONTROL bench has all three paths, empty slots, progress and every sink
+PASS CONTROL chooser has six 96px portraits before selection; selected bench leads the path
+PASS CONTROL path ownership has positive markers, honest accessible names and no wall of absence
+PASS CONTROL radio circles are visually hidden while native focus and selected text survive
+PASS CONTROL species tile spacing contracts with the approved 96px portraits and readable text
+PASS CONTROL path art stays in normal flow and phone species choices keep two columns
+PASS CONTROL reveal settles in 240ms at full opacity without rarity effects
+PASS CONTROL DEMO occupies shell and wrapping sheet headers only in demo mode
+PASS CONTROL Bangers heading retains the ink overhang padding, which requires pixel review
+PASS CONTROL exactly one lime next action follows selection, with no automatic pet choice
+PASS CONTROL recipe progression uses engine distributions and preserves certain Midnight
+PASS CONTROL the two repeated sentences occur once in their applicable context
+PASS CONTROL species change expands native choices and clears the exact pets and quote on selection
+PASS CONTROL compact supporting disclosures preserve help, recovery and the full bench quote
+PASS CONTROL bench help discloses repeated coin flips without collection or stock promises
+PASS CONTROL all 36 preview files use the shipped morph resolver and suppress shiny and wear
+PASS CONTROL empty and no-pair states are neutral and still explain eggs
+PASS CONTROL cap, invested-only, species-complete and cannot-afford states offer next actions
+PASS CONTROL picker never selects a pet and trained ordinary partners stay selectable
+PASS CONTROL picker excludes the other slot by instance, retains identical partners and handles empty filters
+PASS CONTROL pet-choice buttons use display type with compact identities and accessible investment details
+PASS CONTROL quote art separates two inputs from one possible output, including guaranteed Midnight
+PASS CONTROL confirmation names every investment and exact pair-wide cell loss
+PASS CONTROL every certain reveal is direct and only two-way outcomes get surprise
+PASS CONTROL Today row requires all gates, keeps hide, and never advertises mere eligibility
+PASS CONTROL interrupted fight and unknown save copy name the action without inventing a result
+PASS CONTROL six-column surfaces and Rose tint have production controls
+PASS CONTROL all navigation controls reach the named existing actions
+PASS CONTROL absent engine overview reads actual egg progress and cannot select or spend
+PASS CONTROL shared destructive review requires exact text and suppresses repeat dispatch
+30 passed, 0 failed. Browser, pixels, engine transactions and IndexedDB durability unrun by this UI guard.

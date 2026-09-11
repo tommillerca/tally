@@ -1,0 +1,9 @@
+AUDIT START n3-deadpaths-audit.mjs: completion pending; planned rows undeclared
+PASS CONTROL checkout artifacts are refused
+PASS ARTIFACT today-container-audit.mjs defaults outside checkout
+PASS ARTIFACT today-d2-shots.mjs defaults outside checkout
+PASS ARTIFACT levelpaid-trace.mjs defaults outside checkout
+PASS ARTIFACT figure-audit.mjs defaults outside checkout
+PASS RACE News delivers the equipped outfit to the poster renderer
+6/6 passed (Node paths and renderer input only)
+AUDIT END n3-deadpaths-audit.mjs: PASSED; NORMAL EXIT (row coverage undeclared); rows=6/undeclared; failed=0; unproven=0; exit=0

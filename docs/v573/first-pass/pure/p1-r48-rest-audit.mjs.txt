@@ -1,0 +1,13 @@
+PASS ART all six populated surfaces pass
+PASS ART refuses empty crew
+PASS ART refuses empty crew,build
+PASS ART refuses empty wardrobe,backpack,shop,build,today,crew
+PASS ART every individual surface is mandatory
+PASS ART missing route and undersampled sweep cannot certify art
+PASS ART Crew fixture contains a renderable friend outfit
+PASS ART Crew samples its fan, not unrelated images elsewhere on the page
+PASS DISCLOSURE hollow-beds-audit.mjs prints zero player coverage before boot
+PASS DISCLOSURE hollow-backdrop-audit.mjs prints zero player coverage before boot
+PASS REWARD landed rows disclose unreachable Hollow and deleted GROW door
+PASS RACE landed ANNOUNCE row uses masked reload and real News controls
+p1-r48-rest: 12/12 passed (Node audit semantics only)

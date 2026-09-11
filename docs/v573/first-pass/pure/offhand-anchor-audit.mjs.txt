@@ -1,0 +1,16 @@
+hand [459.317,263.832], 10 pinned held items, tolerance 4px
+
+PASS  IL7-1 grip gap 17.7,-6.3
+PASS  IL7-2 grip gap 17.7,-6.8
+PASS  IL7-3 grip gap 18.2,-6.8
+PASS  IL16-1 grip gap 16.2,-7.8
+PASS  IL16-2 grip gap 16.2,-7.8
+PASS  IL16-3 grip gap 16.7,-8.3
+PASS  IL17-1 grip gap 17.7,-7.3
+PASS  IL17-2 grip gap 17.7,-7.3
+PASS  IL10-1 grip gap 16.2,-6.3
+PASS  IL10-2 grip gap 18.2,-8.3
+
+PASS  CONTROL the v544 drift (+24,+32 on spades, +22,+86 on brushes) exceeds the 4px tolerance
+
+offhand-anchor clean

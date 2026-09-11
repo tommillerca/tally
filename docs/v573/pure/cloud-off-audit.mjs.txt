@@ -1,0 +1,10 @@
+PASS CONTROL healthy enabled garment tap uploads its persisted outfit
+OFF transport: []
+PASS OFF garment tap emits ZERO network requests
+PASS OFF direct and shared profile calls emit zero requests
+PASS OFF skips the snapshot builder itself
+PASS opting out during snapshot preparation stops the shared upload
+PASS Settings disclosure names stopped profile sync and stale Crew entries
+PASS OFF diagnostic outcomes describe zero attempted profile requests
+PASS CONTROL re-enable reaches server and reports its rejection
+Cloud off audit: 8 passed, 0 failed

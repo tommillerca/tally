@@ -1,0 +1,32 @@
+{
+  "originalGuard": {
+    "command": "node tests/backpack-lab-polish-audit.mjs",
+    "exit": 1
+  },
+  "initialUnit": {
+    "command": "node tests/unit.test.js",
+    "exit": 1,
+    "passed": 390,
+    "failed": 1
+  },
+  "finalUnit": {
+    "command": "node tests/unit.test.js",
+    "exit": 0,
+    "passed": 391,
+    "failed": 0
+  },
+  "initialPure": {
+    "command": "node docs/v573/run-pure.mjs",
+    "exit": 1,
+    "passed": 174,
+    "total": 178
+  },
+  "finalPure": {
+    "command": "node docs/v573/run-pure.mjs",
+    "exit": 0,
+    "literalCount": 81,
+    "additionSites": 97,
+    "passed": 178,
+    "total": 178
+  }
+}

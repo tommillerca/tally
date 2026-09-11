@@ -1,0 +1,17 @@
+PASS QUIET
+PASS SEEN
+PASS NEW
+PASS BUSY
+PASS CALM
+PASS SETTINGS
+PASS CLAIM
+PASS ONLY
+8 passed, 0 failed
+RED CONTROL QUIET: boot schedules What's New exactly once
+RED CONTROL SEEN: opening marks latest seen
+RED CONTROL NEW: new player never gets the backlog
+RED CONTROL BUSY: never open over an existing sheet
+RED CONTROL CALM: calm/webdriver boot suppresses patch notes
+RED CONTROL SETTINGS: no settings means no popup
+RED CONTROL CLAIM: existing boot claim suppresses patch notes
+RED CONTROL ONLY: only patch notes are restored; existing wheel, rename and recovery toast stay

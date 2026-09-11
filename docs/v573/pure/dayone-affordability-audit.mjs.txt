@@ -1,0 +1,5 @@
+MEASURE day-one wallet=340; cheapest rack piece=300; affordable themed pieces=1/8
+PASS REAL GRANT: first boot can afford at least one rack piece
+PASS CONTROL: 40 coins refuse the anchor; its exact price buys it
+PASS CONTROL: a completed legacy welcome kit receives no new grant
+3 passed, 0 failed

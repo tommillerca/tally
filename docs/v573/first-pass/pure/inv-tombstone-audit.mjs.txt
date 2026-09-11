@@ -1,0 +1,14 @@
+ok   CONTROL SETUP  the draught is in inventory
+ok   CONTROL  a consume removes the row and leaves its receipt  receipts=1
+ok   RING SETUP  501 draughts granted and in the pre-consumption blob
+ok   RING SETUP  all 501 consumed locally
+ok   RING  501 consumed draughts stay consumed through a merge of the pre-consumption blob  0 revived (the oldest: no)
+ok   RING-CRATE SETUP  501 crates granted and in the pre-open blob
+ok   RING-CRATE SETUP  all 501 opened locally
+ok   RING-CRATE  501 opened crates stay opened through a merge of the pre-open blob  0 revived (the oldest: no)
+ok   ATOMIC SETUP  the killed consume reached the database at all  neither the row nor a receipt moved
+ok   ATOMIC  a consumable's delete and its receipt land together or not at all  row gone: true, receipt: true
+ok   ATOMIC-CRATE SETUP  the killed open reached the database at all  neither the row nor a receipt moved
+ok   ATOMIC-CRATE  a crate's take and its receipt land together or not at all  row gone: true, receipt: true
+
+all clean

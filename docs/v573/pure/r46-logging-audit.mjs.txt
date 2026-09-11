@@ -1,0 +1,14 @@
+PASS R46-4 two diary snapshots searchable with saved nutrition
+PASS R46-3 accents folded on both sides without changing display names
+PASS R46-2 both limits expose true totals and truncation
+PASS R46-5 midnight retains both sheets and 505 input, advances date, repaints after close
+PASS R46-8 Add budget uses the sum of displayed diary rows
+PASS R46-6 online results bind each local food exactly once
+PASS R46-6 slow recents cannot replace a newer apple search with Banana
+PASS R46-4 selecting history commits a new 505 kcal snapshot without saving a fake food
+PASS R46-4 a history portion draft resolves its original log after reload
+PASS R46-5 real midnight commit retains sheets and writes a fresh row to today
+PASS R46-6 CONTROL exposed recent really logs Banana 105 and traverses Back
+PASS R46-6 bulk close cannot expose Banana or traverse back to about:blank
+PASS R46-6 repeated bulk close consumes each owned history entry once
+13/13 guards passed

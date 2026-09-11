@@ -9,6 +9,8 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 573, date: '2026-09-11', title: 'Backpack and Laboratory polish', items: [
+    'Backpack gives pets more room, highlights the selected tab and tucks item explanations into details. Pet melting has a deliberate entry outside talents, and Laboratory pair warnings explain the required colours.',
   { n: 572, date: '2026-09-11', title: 'Quieter fit controls', items: [
     'Wardrobe removes fit counts while keeping Save fit available with its six-fit limit.',
   ] },

@@ -1,0 +1,19 @@
+PASS CONTROL zero: 36 real buttons
+PASS NAMES zero: 36 distinct species/colourway labels
+PASS CLICKS zero: every selection retains identity and toggles back
+PASS SWATCHES zero: six labelled colours before ownership
+PASS CONTROL partial: 36 real buttons
+PASS NAMES partial: 36 distinct species/colourway labels
+PASS CLICKS partial: every selection retains identity and toggles back
+PASS SWATCHES partial: six labelled colours before ownership
+PASS DOTS partial: colourway identity reaches each indicator
+PASS CONTROL full: 36 real buttons
+PASS NAMES full: 36 distinct species/colourway labels
+PASS CLICKS full: every selection retains identity and toggles back
+PASS SWATCHES full: six labelled colours before ownership
+PASS DOTS full: colourway identity reaches each indicator
+PASS INTENT roster retains highest-tier portraits
+PASS DOT EDGE missing slots have a colour ring and visible neutral outline
+PASS SHAPE Ember has a square cue distinct from round Toxic
+PASS TEXT all three pet sheets opt into relative type
+PET A11Y NODE: all passed (no pixel claim)

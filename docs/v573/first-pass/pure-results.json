@@ -1,0 +1,1070 @@
+[
+  {
+    "file": "version-align-lint.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "no-debug-markers-lint.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "store-copy-lint.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "wardrobe-ui-1f-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "today-ui-1e-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "readiness-ui-1d-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "crew-ui-1c-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "pit-ui-1b-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "fight-ui-1a-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "device-report-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "r8-shop-css-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "transmog-reach-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "migration-guard-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "sync-observability-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "sync-identity-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "sync-native-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "lab-density-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "crew-outfit-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "dock-line-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "whatsnew-boot-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "wardrobe-noise-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "sync-clientpath-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "sync-authpath-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "sync-path-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "wardrobe-playtest-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "lab-room2-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "stable-stale-disclosure-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "breed-last-colour-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "stable-loss-disclosure-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "lab-health-recovery-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "lab-integration-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "lab-ui-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "laboratory-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "lab-foundation-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "pet-stress-guard.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "crew-pet-node-guard.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "transmog-receipt-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "today-reads-lint.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "kitchen-atomic-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "backup-encoder-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "backup-key-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "backup-version-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "backup-conflict-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "unit.test.js",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "log-xp-farm-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "drip-badge-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "xp-key-provenance-lint.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "facegate-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "garden-appetite-guard.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "pit.test.js",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "quest-daymore-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "quest-pick-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "first-fight-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "stat-source-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "bastions-rep-sim.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "analytics-tag-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "icon-inventory-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "version-stamp-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "boneyard-supply-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "loot-fallback-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "guard-hygiene-lint.mjs",
+    "exit": 1,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "guard-provenance-lint.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "feedback-status-lint.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "rack-theme-lint.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "rack-rotate-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "pet-accessory-lint.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "pet-pool-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "manifest-exports-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "xp-curve-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "live-api-register-lint.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "claim-evidence-lint.mjs",
+    "exit": 1,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "thumb-freshness-lint.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "render-sink-lint.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "lapse-witness-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "spawn-claim-atomic-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "wardrobe-family-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "football-kit-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "restore-latch-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "first-pet-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "shop-economy-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "recovery-status-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "currency-revision-lint.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "inv-tombstone-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "take-and-pay-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "lab-banner-audit.mjs",
+    "exit": 1,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "backpack-ui-1g-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "c6-price-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "pet-morph-animation-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "pet-palette-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "fontscale-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "wheel-look-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "wheel-easing-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "storage-boot-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "crate-cadence-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "r4-app-p1-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "water-retry-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "cloud-off-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "r4-silence-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "silence-disclosure-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "health-disclosure-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "paddock-pack-audit.mjs",
+    "exit": 1,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "numbers-honesty-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "locale-numbers-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "audit-output-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "branch-graveyard-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "store-runtime-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "r47-rest-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "r47-economy-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "submission-build-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "harness-environment-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "guard-debts-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "submission-preflight-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "pet-state-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "pet-family-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "crew-pet-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "coins-merge-tie-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "routine-race-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "dayone-topup-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "dish-worth-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "pet-C-node-guard.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "r48-state-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "r46-logging-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "r46-diary-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "zero-calorie-seam-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "audit-completion-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "machine-character-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "n3-deadpaths-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "m5-prove-red.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "lookup-guard-lint.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "restore-state-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "restore-debt-edges-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "restore-debt-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "p1-r48-rest-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "pet-a11y-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "kennel-copy-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "breed-lock-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "device-loss-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "multidevice-earnings-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "response-bodies-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "p1-merge-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "quest-wheel-budget-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "kitchen-delivery-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "map-playtest-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "p1-dens-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "crew-yard-row-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "pet-rarity-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "stable-rooms-top-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "today-playtest-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "crew-playtest-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "firstrun-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "dayone-affordability-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "settings-safety-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "progress-playtest-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "leaderboard-honesty-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "breed-two-tap-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "after-await-event-lint.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "offhand-anchor-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "boneyard-zoom-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "lab-conflict-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "lab-lock-recovery-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "r3-rest-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "studio-v4-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "studio-v3-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "studio-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "collection-cell-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "r6-merge-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "r6-guards-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "r6-app-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "crew-presence-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "crew-capture-node-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "pet-parity-guard.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "verify-tail-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "cloud-optout-transport-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "r4-restore-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "reachable-density-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "backpack-lab-polish-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "interrupted-fight-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "file": "native-shell-comment-audit.mjs",
+    "exit": 0,
+    "signal": null,
+    "error": null
+  }
+]

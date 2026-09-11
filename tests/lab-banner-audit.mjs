@@ -45,6 +45,15 @@ assert.match(help, /New eggs hatch Base pets, with the existing rare shiny chanc
 assert.match(help, /Your pets and the colours already stored in your eggs stay yours/);
 assert.match(bp,/<button class="lab-banner" type="button" data-lab-open>/);
 assert.match(bp,/Spare pets become new colours\./);
-assert.match(bp,/Recipes ›/);
+const banner = bp.slice(bp.indexOf('<button class="lab-banner"'), bp.indexOf('</button>', bp.indexOf('<button class="lab-banner"')));
+const gradeBanner = html => {
+  assert.match(html, /THE LABORATORY/);
+  assert.match(html, /Spare pets become new colours\./);
+  assert.doesNotMatch(html, /Recipes ›|lab-banner-recipes/);
+};
+gradeBanner(banner);
+assert.throws(() => gradeBanner(banner + '<span class="lab-banner-recipes">Recipes ›</span>'), assert.AssertionError);
+assert.match(app, /\$\{labRecipesHtml\(s, sp\)\}/);
+assert.match(help, /How the recipes work/);
 assert.match(app,/\$\$\('\[data-lab-open\]', root\)\.forEach\(b => b.addEventListener\('click', \(\) => openLaboratory\(\)\)\)/);
 console.log('PASS slime PNG/JSON dimensions, all 240 authored frames and CSS clocks, reduced motion, fixed art box, Backpack entrance and existing Laboratory route. Browser geometry UNPROVEN.');

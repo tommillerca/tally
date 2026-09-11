@@ -1,0 +1,6 @@
+PASS CONTROL known pet restore reaches real level reader and export
+PASS DEBT stale petInst merge must retain earned duplicate without reviving salvaged copies
+PASS DEBT stale per-instance level bank must not erase earned steps
+PASS DEBT stale potion balance must not refund a consumed potion
+PASS DEBT older cooking reader must preserve opaque future earned buff
+5 passed, 0 failed (unresolved restore debt)

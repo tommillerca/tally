@@ -12308,3 +12308,9 @@ button.t3-price::before {
   font-size: var(--fs-tiny); font-weight: 400; line-height: 1.2;
   color: var(--accent-ink);
 }
+
+/* v573: Backpack-only selected tile and larger identity figure container. */
+#chTabs.bp-navigation .ch-tab.on { background: #1e1c26; box-shadow: inset 0 -3px 0 var(--accent); color: var(--accent); border: none; }
+#chTabs.bp-navigation .ch-tab.on span { color: var(--accent); }
+.bh-hero.mini.bp-identity .bh-stage.lg { width: 120px; height: 120px; }
+#chContent .bp-item-details summary { min-height: 44px; padding: 12px 0; font-size: var(--fs-1); cursor: pointer; }

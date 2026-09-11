@@ -1,0 +1,15 @@
+ok   EXPORTS the fix's two entry points exist  js/db.js dayIsUnwitnessed: yes, js/social.js settleServerDay: yes
+ok   SEED a 14-day gap holds logged rows and is refused as `unwitnessed`  2 rows on 2026-08-21, claimDay(2026-09-04) -> unwitnessed
+ok   NO-PAY a stale ceiling pays nothing and mints no ledger row  closed {"dayGuard":"unwitnessed"}, ledger 0 -> 0
+ok   VOICE dayIsUnwitnessed(today) is true, and Today renders DAY_GUARD_COPY.unwitnessed off it  predicate true, template wired true
+ok   OFFLINE no network: settleServerDay gives up fast, resolves false, nothing pays  settled false in 3ms, paid {"dayGuard":"unwitnessed"}
+ok   BOUND a 2.5s server does not hold the boot: settled inside the 1.5s bound, having waited  settled false in 1504ms (want 1000..2200), paid {"dayGuard":"unwitnessed"}
+ok   PAYS the witness inside the bound pays the owed close  settled true, closed {"date":"2026-08-21","closed":true,"gap":true}, ledger yes
+ok   ORDER both js/app.js day-close call sites settle first  2 call sites, boot true, resume true
+ok   SAMPLE the restore payload carries kv rows at all  3 kv rows
+ok   CLOUD merge restore with a 30-day-older ceiling leaves both marks alone  witness 20670 -> 20700 (want 20700), highWater 2026-08-05 -> 2026-09-04 (want 2026-09-04)
+ok   FILE file restore with a 30-day-older ceiling leaves both marks alone  witness 20670 -> 20700 (want 20700), highWater 2026-08-05 -> 2026-09-04 (want 2026-09-04)
+ok   HIGHER a payload carrying a NEWER ceiling still wins  highWater 2026-09-04 -> 2026-09-07 (want 2026-09-07), witness 20700 -> 20703
+ok   ESCAPE no request left the process  3 fetches, 0 blocked
+
+a returning player's owed day close pays, says why when it cannot, and a restore cannot lower the ceiling

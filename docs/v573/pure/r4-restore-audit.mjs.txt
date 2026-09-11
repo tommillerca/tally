@@ -1,0 +1,11 @@
+WITNESS imports=9, points=2, quota=5242880, used=1179672
+WITNESS undo: 0 of 35,491 synthetic fixture fields missing or changed, both retained points
+PASS R4-7 ninth year-sized import succeeds with exactly two newest points
+PASS R4-9 truncated entry is reported while good restore points still list
+PASS CONTROL legacy quota-full history prunes only this database
+PASS CONTROL quota refusal preserves the last recoverable point and live earnings
+PASS CONTROL two-slot rotation fits without a third snapshot and a failed write keeps both
+PASS CONTROL malformed metadata and containers cannot break sorting or hide good data
+PASS CONTROL verification failure restores the overwritten older slot
+PASS CONTROL rapid writes and a reversed clock retain the last two saves
+r4-restore: 8 passed, 0 failed

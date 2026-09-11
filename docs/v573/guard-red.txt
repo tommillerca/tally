@@ -1,0 +1,28 @@
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: talents must not offer destruction or its entry control
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/v573-backpack-lab/tests/backpack-lab-polish-audit.mjs:12:8
+    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: '<div class="cf-acts">\n' +
+    '          <button class="btn ghost" data-eq="pet1" disabled>Out with you</button>\n' +
+    '          <button class="btn stable-primary" data-pettree="pet1">Hide talents</button>\n' +
+    '          <button class="btn ghost stable-rename" data-petnick="pet1">Nickname</button>\n' +
+    '          <div class="stable-danger">\n' +
+    '            <p>Permanent changes</p>\n' +
+    '            <button class="btn ghost" data-breedsel="pet1">Breed</button>\n' +
+    '            <button class="btn ghost danger" data-destroy="pet1" data-dust="10">Destroy Pet for 10 Bone Dust</button>\n' +
+    '            <small>Breeding destroys the spare. Destroy trades this pet for Bone Dust. That pet does not come back.</small>\n' +
+    '          </div>\n' +
+    '        </div>',
+  expected: /data-destroy|data-pet-salvage/,
+  operator: 'doesNotMatch',
+  diff: 'simple'
+}
+
+Node.js v22.22.2

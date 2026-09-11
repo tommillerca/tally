@@ -1,0 +1,9 @@
+ok   SHAPE XP_DAILY_CAP.log exists and is below the hammer count  cap=20, hammer=60
+ok   CONTROL the first log of a day pays 10 XP  10 XP after one log
+ok   FARM 60 logs on one date pay the daily ceiling and stop  60 logs minted 200 XP of type log, ceiling is 20 x 10 = 200
+ok   DELETE deleting the day and logging again mints nothing new  200 -> 200 XP after deleting all rows and logging 5 more
+ok   ROLLOVER a different date pays again  210 XP
+ok   REPEAT the same entry through onFoodLogged twice pays its log XP once  210 -> 220 XP after two calls for one entry (one slot is 10)
+ok   CONCURRENT two overlapping onFoodLogged calls for one entry pay its log XP once  220 -> 230 XP after two simultaneous calls for one entry
+
+all green, 7 checks

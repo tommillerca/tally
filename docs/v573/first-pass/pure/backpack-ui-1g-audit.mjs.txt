@@ -1,0 +1,2 @@
+PASS Backpack: seven rendered ingredients, independent egg records, ready hatch routing, empty/card coverage. CONTROL zero filtering and cloned progress rejected. Browser UNPROVEN.
+PASS complete Backpack template: 10 inventory cards; empty and mixed counts; odds/bulk confined to details; 6 potion controls invoke the real Kitchen destination binding.

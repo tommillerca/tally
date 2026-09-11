@@ -1,0 +1,13 @@
+ok   SETUP  DB_VERSION read from js/db.js  | 3
+ok   VERSION-DERIVED  exportAll stamps DB_VERSION, not a literal  | exportAll still stamps "DB_VERSION"
+ok   VERSION-DERIVED  the exported file carries that number
+ok   V1-SKIPPED  a v1 file still imports (older is allowed, it is what every existing player holds)
+ok   V1-SKIPPED  importAll reports the two stores the file did not carry  | ["health","inv"]
+ok   V1-SKIPPED  the skipped store was left alone, not cleared
+ok   V1-SKIPPED  summary names the missing stores  | "Restored 5 of 7 stores. Health and inventory were not in this backup."
+ok   SAME-CLEAN  a current-version file with all seven stores skips nothing  | []
+ok   SAME-CLEAN  summary says nothing about missing stores  | "Restored 1 log entry"
+ok   NEWER-REFUSED  importAll refuses a file from a newer app  | that backup was made by a newer version of the app (v4; this app reads v3). Update the app, then import it again. Your old data is unchanged.
+ok   NEWER-REFUSED  nothing was written  | 1 log rows
+
+all green

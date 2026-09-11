@@ -1,0 +1,7 @@
+ok    RAW  no raw kvSet/kvUpdate/kvBump/db.put of a literal 'coins' or 'bonedust' row  reads only (kvGet)
+ok    MAP  every coins/bonedust pay-map fn has its revision fn in the same object literal  14 pay-map entries
+ok    ASSIGN  every `.kv.coins =` / `.kv.bonedust =` has its revision assigned within 6 lines  1 assignments
+ok    PRIM  coinsAdd, boneDustAdd and spendBalance route through kvBumpRevisioned  all three
+ok    SAMPLE  the scan saw the sites it was written against (an empty scan is a failure)  14 pay-map entries, 1 assignments
+
+currency-revision: clean

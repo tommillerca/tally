@@ -1,0 +1,13 @@
+PASS CONTROL smooth resampling preserves edge softness
+PASS one flat sticker list without group headings
+PASS depth steps include figure and pet; decoded overlays remain on top
+EDGES {"id":"The Wanderer","size":180,"source":14103,"decoded":1914,"sourceBoundary":7899,"decodedBoundary":1348}
+EDGES {"id":"The Wanderer","size":650,"source":14103,"decoded":24782,"sourceBoundary":7899,"decodedBoundary":8496}
+EDGES {"id":"The Mimic","size":180,"source":12624,"decoded":1351,"sourceBoundary":7767,"decodedBoundary":1090}
+EDGES {"id":"The Mimic","size":650,"source":12624,"decoded":16839,"sourceBoundary":7767,"decodedBoundary":6940}
+EDGES {"id":"The Glutton","size":180,"source":4547,"decoded":1179,"sourceBoundary":2039,"decodedBoundary":840}
+EDGES {"id":"The Glutton","size":650,"source":4547,"decoded":15221,"sourceBoundary":2039,"decodedBoundary":3337}
+EDGES {"id":"Gwart","size":180,"source":12745,"decoded":790,"sourceBoundary":7485,"decodedBoundary":679}
+EDGES {"id":"Gwart","size":650,"source":12745,"decoded":10757,"sourceBoundary":7485,"decodedBoundary":4831}
+PASS decoded creature edge measurements at both offered endpoints
+4 passed, 0 failed. Browser appearance and gesture feel UNPROVEN.

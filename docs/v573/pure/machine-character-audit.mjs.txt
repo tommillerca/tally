@@ -1,0 +1,7 @@
+PASS CONTROL every result row carries measured machine character and cleans up its probe
+PASS TRACE stopped Puppeteer and CDP traces retain attached history and overhead warning
+PASS EMPTY and refused probes disclose unavailable cadence, never invent a healthy baseline
+PASS PAGES isolated contexts and closed pages retain distinct measurement provenance
+PASS FLICK baseline brackets the actual diagnostic path before opening the crate; bounds unchanged
+PASS REGISTER the disclosure guard executes in exactly one gate tier
+machine-character: 6/6 passed, 0 FAILED
