@@ -12226,3 +12226,14 @@ button.t3-price::before {
 #chContent .bp-eggs .t3-egg .tx { flex-basis: 150px; }
 #chContent .bp-salvage { margin-top: 20px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
 #chContent .bp-salvage > .t3-sect { margin-top: 0; }
+
+/* Selected Laboratory/Kitchen headers. Art does not intercept room controls. */
+.bh-room-header { position: relative; isolation: isolate; flex: none; min-height: 144px; padding-top: 12px; margin-bottom: 12px; overflow: hidden; border-radius: 16px; background: linear-gradient(180deg, #202715, #0d0c12); --header-accent: #a5e847; --fs-room-title: 2.25rem; }
+.bh-room-header.bh-room-kitchen { background: linear-gradient(180deg, #302319, #0d0c12); --header-accent: #ffc961; }
+.bh-room-header .bh-room-title { position: relative; z-index: 2; margin: 0; padding: 0 8px; font: 400 var(--fs-room-title)/1 var(--display); letter-spacing: .015em; color: #f2e9d7; text-align: center; overflow-wrap: anywhere; }
+.bh-room-cast { position: relative; height: 96px; max-width: 375px; margin: auto; transform: scale(.875); transform-origin: center bottom; pointer-events: none; }
+.bh-room-art { position: absolute; display: block; width: var(--art-size); height: var(--art-size); object-fit: contain; image-rendering: pixelated; pointer-events: none; z-index: 1; }
+.bh-room-inward { transform: scaleX(-1); }
+.bh-room-stage { position: absolute; left: 18px; right: 18px; bottom: 15px; height: 1px; background: color-mix(in srgb, var(--header-accent) 22%, transparent); pointer-events: none; }
+.lab-sheet .bh-room-header { margin-bottom: 0; }
+.lab-sheet #labBody { padding-bottom: 0; }
