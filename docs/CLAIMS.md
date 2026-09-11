@@ -1,5 +1,11 @@
 # What each patch note claims, and what backs it
 
+## v577 (2026-09-11)
+
+Changelog item: The Backpack shows its selected tab highlight, styled item explanations and a larger pet again.
+
+1. PROOF: backpack-ui-1g-audit.mjs | REACH: Backpack navigation, item cards and identity. Four CSS rules recovered after a chain-merge dropped them while their markup shipped. Browser render verified separately.
+
 ## v575 (2026-09-11)
 
 Changelog item: Crew explains empty favourites and search selections and how to clear them.

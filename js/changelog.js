@@ -9,6 +9,9 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 577, date: '2026-09-11', title: 'Backpack styling restored', items: [
+    'The Backpack shows its selected tab highlight, styled item explanations and a larger pet again.',
+  ] },
   { n: 575, date: '2026-09-11', title: 'Crew empty selections explained', items: [
     'Crew explains empty favourites and search selections and how to clear them.',
   ] },
