@@ -16979,7 +16979,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
             <span class="mog-arrow" aria-hidden="true">${ICONS.chev(18)}</span>
             <figure class="${changed ? 'after' : 'same'}"><span class="mog-cap">${changed ? 'After' : 'Pick one below'}</span>${figure(previewEq())}</figure>`;
     };
-    const costTag = id => lookPriceMap[id] ? `<span class="look-cost dust">${lookPriceMap[id]}${dustIco}</span>` : `<span class="look-cost paid">${transmogZeroLabel(id, tm[slot], !!wornGear)}</span>`;
+    const costTag = id => {
+      if (lookPriceMap[id]) return `<span class="look-cost dust">${lookPriceMap[id]}${dustIco}</span>`;
+      const label = transmogZeroLabel(id, tm[slot], !!wornGear);
+      return label === 'Free' || label === 'Free: no stats' ? '' : `<span class="look-cost paid">${label}</span>`;
+    };
     /* THE BAR IS A CHILD OF .mog-dock, NOT OF .mog-panel (QA round 23 F3). It is
        `position: sticky; bottom: 0`, and sticky is clamped by its containing
        block: inside the panel it could only float while the panel was on screen,
@@ -17286,8 +17290,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
            the tile paints the colourway it stands for. bhFamilies keeps first-
            member order, so grouping the rarity-sorted list keeps the sort. */
         const lookArt = i => `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14"${fbTintAttr(i)} role="img" aria-label="${esc(i.name)}, ${esc(i.rarity)}"></canvas>`;
-        const lookTilesHtml = arts => `${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"${fbTintAttr(ownArt)}></canvas><span class="look-tag">Reset · Free</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
-            ${cell(TRANSMOG_HIDE, `<span class="look-hide">${ICONS.hidden(22)}</span><span class="look-tag">Hide · Free</span>`, 'Show nothing in this slot')}
+        const lookTilesHtml = arts => `${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"${fbTintAttr(ownArt)}></canvas><span class="look-tag">Reset</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
+            ${cell(TRANSMOG_HIDE, `<span class="look-hide">${ICONS.hidden(22)}</span><span class="look-tag">Hide</span>`, 'Show nothing in this slot')}
             ${[...bhFamilies([...arts].sort((a, b) => RAR_ORDER.indexOf(b.rarity) - RAR_ORDER.indexOf(a.rarity))).values()]
               .map(fam => {
                 /* the tile shows the colourway being tried, else the one worn, else the family's best (first after the sort) */
@@ -17367,8 +17371,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
         return `
         <div class="sect-h" style="margin-top:14px">${esc(GEAR_SLOT_LABELS[slot])} · pick your look</div>
         <div class="ward-grid look-grid">
-          ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">Reset · Free</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
-          ${cell(TRANSMOG_HIDE, `<span class="look-hide">🚫</span><span class="look-tag">Hide · Free</span>`, 'Show nothing in this slot')}
+          ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">Reset</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
+          ${cell(TRANSMOG_HIDE, `<span class="look-hide">🚫</span><span class="look-tag">Hide</span>`, 'Show nothing in this slot')}
           ${/* costTag, not a bare number: the price carries the dust unit the same
                 way as the v2 panel's tiles (QA round 22 W13b) */''}
           ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${costTag(i.id)}`, i.name)).join('')}
@@ -17793,7 +17797,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
         c.classList.toggle('selected', ids.includes(sel));
         if (c.dataset.famIds && ids.includes(sel) && c.dataset.look !== sel) await famTileShow(c, BH_BY_ID[sel], 'look');
         const tag = $('.look-cost', c);
-        if (tag && lookPriceMap[c.dataset.look] !== undefined) tag.outerHTML = costTag(c.dataset.look);
+        if (lookPriceMap[c.dataset.look] !== undefined) {
+          const html = costTag(c.dataset.look);
+          if (tag) tag.outerHTML = html;
+          else if (html) c.insertAdjacentHTML('beforeend', html);
+        }
       }
       // Keep the disabled second step on arrival and after reverting/committing.
       // Replace it in the same dock, preserving the sticky travel and the doll.
@@ -24662,7 +24670,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v560'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v561'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

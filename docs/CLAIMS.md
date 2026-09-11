@@ -1,5 +1,11 @@
 # What each patch note claims, and what backs it
 
+## v561 (2026-09-10)
+
+Changelog item: Wardrobe tiles no longer show Free or Free: no stats. Wearing, Paid and Bone Dust prices remain visible.
+
+1. PROOF: transmog-reach-audit.mjs | REACH: Wardrobe, Dressing Room look tiles and colourway choices. Production markup suppresses free badges entirely and retains Wearing, Paid and dust prices. Reset and Hide retain action captions without Free. Badge refresh supports adding a previously absent state label. No pricing or loot service changes. Browser geometry remains unproven.
+
 ## v560 (2026-09-10)
 
 Changelog item: Internal builds can copy device measurements from Settings, with keyboard and edge-swipe probes and clear labels for checks that still need a person.
