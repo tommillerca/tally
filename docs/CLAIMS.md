@@ -1,5 +1,11 @@
 # What each patch note claims, and what backs it
 
+## v566 (2026-09-10)
+
+Changelog item: Today has a tighter hero layout, separate name and title, and matching News and Quests rows.
+
+1. PROOF: today-ui-1e-audit.mjs | REACH: Today source geometry contract, title lookup, live identity refresh and disclosure styling. Browser geometry, safe areas and controls remain unproven.
+
 ## v565 (2026-09-10)
 
 Changelog item: Readiness has clearer metric tiles with heart, pulse and moon icons, dated readings and activity artwork.

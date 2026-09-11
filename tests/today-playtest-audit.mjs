@@ -110,7 +110,7 @@ try {
     await db.put('xp', { key: 'freeze', type: 'freeze', date: nutrition.addDays(today, -2), xp: 0 });
     const prefix = cut('async function renderToday(el) {', '  const inv = await db.all(\'inv\');');
     const streak = await run(prefix + '\nreturn streak; } return renderToday({});', {
-      S: { date: today, settings: {} }, entriesFor,
+      S: { date: today, settings: {} }, entriesFor, social: { displayName: async () => null },
       firstDiaryDate: () => nutrition.addDays(today, -4),
     });
     assert.equal(streak, 5, `Today says ${streak}; protected streak is 5`);

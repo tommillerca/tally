@@ -10,7 +10,7 @@ import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
 import {
-  levelFor, totalXp, streakDateSet, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews, habitGrantCard,
+  LEVEL_NAMES, levelFor, totalXp, streakDateSet, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews, habitGrantCard,
   initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, retireGardenIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
   awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats, claimSpar, sparBoardState,
@@ -3900,11 +3900,18 @@ function fireDailyWheel() {
    OWN body (not just what runs synchronously in its render tick), so a
    closure defined in there reading xp counts as a second scan and that guard
    goes red (A1). Living out here, it is invisible to that walk. */
+// The rank table owns earned titles. levelFor's post-table suffix is a level,
+// already shown in Today's chip, not part of the earned title.
+function todayEarnedTitle(lvl) {
+  return LEVEL_NAMES[Math.min(lvl.level, LEVEL_NAMES.length) - 1];
+}
 async function refreshLevelChip() {
   const chip = $('#lvlChip'); if (!chip || !chip.isConnected) return;
   const lvl = levelFor(await totalXp());
-  const row = $('.hero-lvrow', chip);
-  if (row) row.innerHTML = `<span class="hero-lv">Lv ${lvl.level}</span><span class="hero-title">${esc(lvl.name)}</span>`;
+  const level = $('.hero-lvrow .hero-lv', chip);
+  if (level) level.textContent = `Lv ${lvl.level}`;
+  const title = $('.hero-title', chip);
+  if (title) title.textContent = todayEarnedTitle(lvl);
   const xprow = $('.hero-xprow', chip);
   if (xprow) xprow.innerHTML = `<span class="hero-xpn">${lvl.into.toLocaleString()}/${lvl.need.toLocaleString()}</span>`
     + Array.from({ length: XP_PIPS }, (_, i) => `<i${i < Math.ceil(lvl.pct / (100 / XP_PIPS)) ? ' class="on"' : ''}></i>`).join('');
@@ -4317,6 +4324,7 @@ function firstDiaryDate(createdAt, log) {
 }
 
 async function renderToday(el) {
+  const todayName = await social.displayName() || 'Your Bonehead';
   const entries = await entriesFor(S.date);
   const copySourceDate = addDays(S.date, -1);
   const yEntries = await entriesFor(copySourceDate);
@@ -4778,7 +4786,8 @@ async function renderToday(el) {
          Progress: at this size it was the third line of text on a poster. -->
     <div class="hero-meta">
       <button class="hero-level" id="lvlChip">
-        <span class="hero-lvrow"><span class="hero-lv">Lv ${lvl.level}</span><span class="hero-title">${esc(lvl.name)}</span></span>
+        <span class="hero-lvrow"><span class="hero-name">${esc(todayName)}</span><span class="hero-lv">Lv ${lvl.level}</span></span>
+        <span class="hero-title">${esc(todayEarnedTitle(lvl))}</span>
         <span class="hero-xprow">
           <span class="hero-xpn">${lvl.into.toLocaleString()}/${lvl.need.toLocaleString()}</span>
           ${Array.from({ length: XP_PIPS }, (_, i) => `<i${i < Math.ceil(lvl.pct / (100 / XP_PIPS)) ? ' class="on"' : ''}></i>`).join('')}
@@ -14592,7 +14601,7 @@ function newsBannerHtml(unseen, eq, dayClose) {
   if (!newest) return '';
   return `<details class="nb" id="newsBanner">
     <summary>
-      <span class="nb-ico">${pixCur('scroll', 16) || ICONS.quest(15)}</span>
+      <span class="nb-ico"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><g shape-rendering="crispEdges"><path fill="#736858" d="M3 4h17v15H3z"/><path fill="#f2e9d7" d="M4 3h15v16H4zM2 7h2v11H2zM4 19h15v2H4z"/><path fill="#a5e847" d="M6 5h11v3H6z"/><path fill="#343027" d="M6 10h5v5H6zM13 10h4v1h-4zM13 12h4v1h-4zM13 14h4v1h-4zM6 17h11v1H6z"/></g></svg></span>
       <span class="nb-t">News</span>
       ${unseen > 0 ? `<span class="nb-dot">${unseen}</span>` : ''}
       <span class="nb-sub">${unseen > 0 ? esc(newest.title) : 'Nothing new'}</span>
@@ -24671,7 +24680,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v565'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v566'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

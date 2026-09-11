@@ -10,6 +10,10 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 566, date: '2026-09-10', title: 'A clearer Today', items: [
+    'Today has a tighter hero layout, separate name and title, and matching News and Quests rows.',
+  ] },
+
   { n: 565, date: '2026-09-10', title: 'Clearer readiness', items: [
     'Readiness has clearer metric tiles with heart, pulse and moon icons, dated readings and activity artwork.',
   ] },

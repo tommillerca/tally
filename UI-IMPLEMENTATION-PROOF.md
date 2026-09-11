@@ -292,3 +292,76 @@ A later PURE entry, studio-v4-audit.mjs, rejected the two pixelated declarations
 - Deviations: no functional or visual redesign. Use the reference's actual PNG moon; preserve existing live sleep-score behavior and unsupported-icon activity labels. Reuse existing pixel-image styling and named scalable type tokens to satisfy repository contracts. Four interrupted PURE passes are retained as partial logs under /tmp/ui-1d-pure-interrupted* and are excluded from the final count. The known six static figure findings remain, with unchanged contents.
 
 This is advisory evidence for independent review, not browser approval or publish authorization.
+
+# Screen 1E Today, frozen lane, v566 (2026-09-10)
+
+Work order SHA256 verified: 9e34d91323d4cce378efc92a479b5f623ab9d115a7927c4c0b7e0876ac5b317d. IMPLEMENTATION.md read in full, plus reference/layout.css and layout.js. The relative implementation kit is absent, so the named external kit was read only. MOCK.html was not read. All edits are in this checkout.
+
+## Files and implementation boundary
+
+- js/app.js: import the existing LEVEL_NAMES table, add Today-only todayEarnedTitle, read the existing social display name (truthful Your Bonehead fallback when absent), render name and one level chip on the same row, render the earned title separately, and refresh level/title/XP from real totalXp. No arbitrary digit stripping or shared levelFor change. News uses the exact reference newsIcon paths inline. Existing handlers, unread counts, claim counts and disclosure destinations remain. APP_BUILD v565 to v566.
+- app.css: append only the scoped selectors listed below. All inherited CSS remains byte-identical, including screens 1A to 1D. No art, figure renderer, animation, scene height, --fig sizing, pet instance, fight or readiness changes.
+- sw.js, version.json, js/changelog.js: remaining three version stamps advance 565 to 566; player-facing changelog added. No cache machinery changes.
+- docs/CLAIMS.md: matching Changelog item and numbered PROOF/REACH row.
+- tests/today-ui-1e-audit.mjs: new PURE source contract, title lookup and refresh assertions; omitted-pet-lift negative control. This is not browser proof.
+- tests/release-gate.mjs: register one new PURE entry. Inherited 172 entries remain; final census is 173.
+- UI-IMPLEMENTATION-PROOF.md: append this evidence.
+
+## Every touched selector and exact geometry
+
+All rules are appended, scoped to .screen--today:
+
+1. #bhStage > .hero-char: original top calc(--gw-top + --gw-h + --bleed) becomes the same expression minus 16px. Bottom 79px to 95px. If height = sceneHeight - top - bottom, new height = sceneHeight - (top - 16) - (bottom + 16) = original height. Left/right, --fig and animation transforms are untouched.
+2. #bhStage > .hero-companion: bottom 92px to 108px. Auto width/height, --pet-rel, big-pet sizing and horizontal anchors unchanged.
+3. #bhStage > .gw-row: original top calc(--gw-top + --bleed) minus 16px. The row contains only Gwart and his associated speech. Wallet, metadata, scene and unrelated content do not move.
+4. #bhStage > .hero-fade: replace the old fixed-colour fade with the existing --bg and --app-backdrop, fixed attachment matching .today-plate, feathered by standard and WebKit mask-image from transparent at 70% to opaque at 100%. No equipped backdrop is hardcoded.
+5. #bhStage > .hero-meta: remove the separate dark gradient. Existing 96px height and padding remain.
+6. .hero-meta .hero-name: display font at --fs-5, min-width 0, single-row ellipsis for long names.
+7. .hero-meta .hero-lv: flex none and --fs-body instead of --fs-5. Existing padding, border and gold state remain.
+8. .hero-meta .hero-title: --fs-tiny instead of --fs-body.
+9. .hero-actions #pitBtn and .hero-actions .hero-act:active: dark --surface-2, transparent border and inset 0 -3px lime underline. Pit remains visibly emphasized as approved; existing attention badge remains state-driven. No rarity or destructive controls matched.
+10. #newsBanner and .q-collapse: common 1px --line border, 12px radius and 10px bottom margin. News border was 2px; Quests radius was 16px and bottom margin 12px. Existing News shadow and meaningful Quests claim shadow remain.
+11. #newsBanner > summary and .q-collapse > summary: common 48px minimum height, 9px 13px padding, 10px gap, inherited font family, --fs-1, weight 800 and .06em tracking. Previously News used 10px 12px padding/8px gap and Quests 14px 16px/8px. Both retain real content and can grow with accessibility text sizing.
+12. #newsBanner .nb-ico and .q-collapse .q-sum-ico: common 24px square, flex none, centered alignment. News icon was 16px, now the reference 24px newspaper; Quests keeps its 24px icon box.
+13. .q-collapse.has-claim: retain a conspicuous accent border after the common row border rule.
+
+375px arithmetic against Tom's supplied real baseline: heroChar y 178.3 - 16 = 162.3; heroCompanion y 439.6 - 16 = 423.6. Relative top separation remains 439.6 - 178.3 = 423.6 - 162.3 = 261.3px. Expected heights remain 380.7px and 106.5px. These are derived expectations, not fresh browser measurements. Safe-area --bleed stays in both top formulas. Actual safe-area and large-gear clearance are unproven.
+
+## Proof and limitations
+
+The new guard was run before production changes and exited 1 on the missing character lift. After implementation it exits 0; removing just the pet lift is rejected. The title guard checks level 8, level 21 and a title containing digits, preserving real title-table content. A test regex initially matched xprow when intending row; corrected the word boundary. Guard hygiene initially mistook a source boundary containing a webdriver hook name for hook-only proof; the test now bounds the real function by its closing brace, without referencing the hook or adding exemptions.
+
+Initial agreed node tests/unit.test.js: exit 1, 389 passed, 1 failed. R41-16 requires a hero-lvrow selector in the refresh function. Scoped the live level lookup to .hero-lvrow .hero-lv, preserving that contract without changing tests. Full final PURE and unit results follow below.
+
+Static figure prefix evaluated separately for HEAD and final app source: six passing rows, one failing coverage row in both. Full unclaimed call-site CONTENT compared equal, exactly six sites, no seventh. Baseline lines 20429, 21466, 21502, 21505, 21506, 21531; final lines 20438, 21475, 21511, 21514, 21515, 21540. Logs: /tmp/ui-1e-figure-baseline.log, /tmp/ui-1e-figure-final.log and /tmp/ui-1e-figure-comparison.log. Temporary runner /tmp/ui-1e-static.cjs. Its first comparison hit a cross-VM array-prototype mismatch; converting to local arrays corrected the runner. The actual site strings were unchanged. This is only the static prefix, not a full figure-audit pass.
+
+No browser audits, sockets or screenshots attempted, as required. Full figure audit, Pit 25/25, readiness browser 7/7, controls, hit tests, decoded ink, backdrop feather, equal rendered row dimensions, safe-area and large-gear checks remain UNPROVEN for independent review. Pit and readiness code and audits are unchanged; inherited PURE guards will still run.
+
+No denied permission actions. No commit, push, merge, publish, external-checkout edit, native/ASC-SUBMISSION.md edit, art modification or production data mutation attempted. No functional redesign. Adapting the reference to real data uses the existing title table and a truthful unnamed-player fallback. The browser proof required by the general kit cannot be completed under the frozen lane's explicit prohibition; proposed disposition is independent browser review, not a substitute visual claim.
+
+## First complete PURE pass and fixture corrections
+
+First complete pass: 170 green, 3 red, 0 unproven; overall exit 1. The 173 entries were enumerated as 80 literal plus 93 push/unshift additions. The agreed unit command in that pass exited 0 with 390 passed, 0 failed.
+
+Three additional test files changed to support the approved markup, without exemptions or weakened production checks:
+
+- tests/icon-inventory-audit.mjs: classify newsBannerHtml as the existing Today news scene, now emitting an inline newspaper SVG. Its discovery census had correctly failed on the new emitter.
+- tests/r48-state-audit.mjs: replace the obsolete single innerHTML row stub with exact level/title/name/XP selectors. Actual win/loss settlement still runs with webdriver false, reads the real ledger and checks the paid totals and XP. It now asserts the separate real title and unchanged player name. A mutation deleting the level update must leave STALE text, which is explicitly rejected as a current level.
+- tests/today-playtest-audit.mjs: provide the newly used social.displayName dependency in the existing isolated renderToday-prefix fixture. Existing five-day protected-streak assertion is unchanged.
+
+All three targeted commands now exit 0. Full corrected PURE starts again from the beginning. Initial logs and results are retained under /tmp/ui-1e-pure-first and /tmp/ui-1e-pure-first.log. No browser checks are included in either PURE count.
+
+Additional boundary proof: inherited app.css prefix, readiness renderer/scoring region and openFight function compare byte-for-byte equal to HEAD. The figure content comparison remains unchanged after the fixture-only fixes.
+
+## Final corrected-tree results
+
+- Full PURE: 173 green, 0 red, 0 unproven. Runner exit 0. Enumeration exactly follows tests/r6-guards-audit.mjs: const PURE literal plus every PURE.push/unshift site, evaluated in VM. Census: 80 literal entries + 93 additions = 173. No inherited entry removed. Every child exit read directly from spawnSync.status, without a pipe; exit 97 would be UNPROVEN. No null exits or signals in this run.
+- Agreed command node tests/unit.test.js: exit 0, final output 390 passed, 0 failed. Executed as a full PURE entry on the corrected tree.
+- Complete unit output: /tmp/ui-1e-pure/unit.test.js.log. Every command and exit: /tmp/ui-1e-pure/results.json. Exact literal, push/unshift expressions and final inventory: /tmp/ui-1e-pure/inventory.json. Runner: /tmp/ui-1e-pure.cjs. Complete runner output: /tmp/ui-1e-pure.log.
+- New Today guard, its omitted-pet-lift control, corrected settlement guard and omitted-level-refresh control, icon census, Today read/playtest guards, inherited 1A to 1D guards and guard hygiene are all green in the complete final pass.
+- No production or test source changed during the final pass. Only this evidence section was appended afterward. git diff --check passes.
+- Final changed files: app.css; js/app.js; sw.js; version.json; js/changelog.js; docs/CLAIMS.md; tests/today-ui-1e-audit.mjs; tests/release-gate.mjs; tests/icon-inventory-audit.mjs; tests/r48-state-audit.mjs; tests/today-playtest-audit.mjs; UI-IMPLEMENTATION-PROOF.md.
+- Denied actions: none. Browser proof remains blocked by the frozen work order, with no sockets, screenshots or browser audits attempted. No commit, push, merge or publish.
+- Deviations: no functional or visual redesign. Browser geometry and controls require independent review. Existing title-table lookup is retained for the earned title, and absent social names use Your Bonehead. The new PURE guard increases the inherited 172-entry census to 173. All failures and fixture corrections are recorded above.
+
+Advisory evidence only. This does not claim browser approval or authorize publishing.

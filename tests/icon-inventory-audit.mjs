@@ -158,6 +158,7 @@ for (const m of appForIcons.matchAll(/(?:^\s{0,2}|ICONS\.)(\w+)\s*[:=]\s*\((?:(\
  *   brand  a fixed third-party or brand mark
  * ======================================================================== */
 const EMITTERS = {
+  'js/app.js:newsBannerHtml': ['scene', 'Today news disclosure with the approved inline pixel newspaper icon and live news content.'],
   /* ---- the icon system itself ---- */
   'js/icons-pix.js:pixCur':   ['icon', "THE PIXEL SOURCE. Tom's 48px art, served at 48/24/16 only; below 16 it returns null on purpose and the caller's vector renders."],
   'js/icons-pack.js:bhIcon':  ['icon', 'THE VECTOR SOURCE. Generated from assets/icons-proposal by gen_icons.mjs, so nothing hand-written survives in it.'],

@@ -12127,3 +12127,43 @@ button.t3-price::before {
 .rd-card .rd-delta { font-size: var(--fs-tiny); margin-top: 7px; color: var(--text-2); line-height: 1.4; overflow-wrap: anywhere; }
 .rd-card .rd-delta i { font-size: inherit; }
 .rd-activities .rd-activity-icon { object-fit: contain; flex: none; }
+
+/* Screen 1E: move only Today's three figures. Paired top/bottom changes keep
+   the character box and --fig unchanged, including the large-pet composition. */
+.screen--today #bhStage > .hero-char {
+  top: calc(var(--gw-top, 50px) + var(--gw-h, 90px) + var(--bleed, 0px) - 16px);
+  bottom: 95px;
+}
+.screen--today #bhStage > .hero-companion { bottom: 108px; }
+.screen--today #bhStage > .gw-row { top: calc(var(--gw-top) + var(--bleed, 0px) - 16px); }
+/* Paint the existing page backdrop through a feather, over any equipped hero.
+   Fixed attachment matches .today-plate without choosing a cosmetic colour. */
+.screen--today #bhStage > .hero-fade {
+  background-color: var(--bg);
+  background-image: var(--app-backdrop);
+  background-attachment: fixed;
+  -webkit-mask-image: linear-gradient(180deg, transparent 70%, #000 100%);
+  mask-image: linear-gradient(180deg, transparent 70%, #000 100%);
+}
+.screen--today #bhStage > .hero-meta { background: none; }
+.screen--today .hero-meta .hero-name {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--display); font-size: var(--fs-5); color: var(--text);
+}
+.screen--today .hero-meta .hero-lv { flex: none; font-size: var(--fs-body); }
+.screen--today .hero-meta .hero-title { font-size: var(--fs-tiny); }
+.screen--today .hero-actions #pitBtn,
+.screen--today .hero-actions .hero-act:active {
+  background: var(--surface-2); border-color: transparent;
+  box-shadow: inset 0 -3px 0 var(--accent); color: var(--accent);
+}
+.screen--today #newsBanner,
+.screen--today .q-collapse { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; }
+.screen--today #newsBanner > summary,
+.screen--today .q-collapse > summary {
+  min-height: 48px; padding: 9px 13px; gap: 10px;
+  font-family: inherit; font-size: var(--fs-1); font-weight: 800; letter-spacing: .06em;
+}
+.screen--today #newsBanner .nb-ico,
+.screen--today .q-collapse .q-sum-ico { width: 24px; height: 24px; flex: none; align-items: center; justify-content: center; }
+.screen--today .q-collapse.has-claim { border-color: var(--accent); }
