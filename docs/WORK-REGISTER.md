@@ -4,7 +4,7 @@ Live status of everything Tom has asked for that is not yet live and verified.
 I own this file. It is updated when work is ASKED, DELEGATED, DIES, or LANDS.
 A dead or parked lane still counts as outstanding.
 
-Last updated: 2026-09-10 (v559 live)
+Last updated: 2026-09-11 (v560 live)
 
 ## In flight
 
@@ -13,7 +13,7 @@ Last updated: 2026-09-10 (v559 live)
 | 1 | **Playtest slate, runs 10-14** | mostly ME (see note) | **STARTED at 12-A** | Census of all 122 browser audits running now |
 | 2 | **Wardrobe header rejig** — four misaligned single-item lines, four chip treatments | Codex, building | **PAUSED at Tom's request** | Park the tree, do not review until Tom lifts it |
 | 3 | ~~Step race: no progress bars~~ | me | **LANDED v558**, live | Closed. Bars 0/11 to 7/11 on the real board |
-| 12 | **Device report** — move the machine-answerable half of the phone hour off Tom and into a self-report screen | **Codex, running** | **DELEGATED 2026-09-10** | Lane `device-report`, spec in scratchpad. I verify on the simulator; Codex cannot bind sockets |
+| 12 | ~~Device report~~ | Codex, 3 rounds | **LANDED v560**, live and byte-verified | Closed. Tom's phone pass is now ~15 min, 10 of it VoiceOver |
 | 13 | **The 28 real browser-audit reds** — causes for each | me | **OPEN**, run 12-A's deliverable | 121 graded: GREEN 76, RED 40, UNPROVEN 5. `gate-audit` defect already named |
 
 ## Approved and not started
@@ -34,6 +34,7 @@ Last updated: 2026-09-10 (v559 live)
 | 10 | Studio wordmark contrast | CLOSED by v554: 1.02:1 -> 12.40:1, measured on the export |
 | 11 | Studio: bubble/mark placement on other outfits | The occupancy search resolved both onto clean ground for ONE render. Untested across outfits and backdrops |
 | 9 | Wardrobe header | Still a mess. Item 2 is the fix, paused |
+| 15 | Onboarding restore-button trap | On a FRESH save the primary green button is "Restore an account or backup file" and "I am new" is the grey secondary. This is the run-9 finding that burned 14 taps; re-observed live on v560, 2026-09-11. Not fixed |
 
 ## Shipped and byte-verified live
 
@@ -46,6 +47,7 @@ Last updated: 2026-09-10 (v559 live)
 | v550 | Dressing Room second step visible; zero-price labels; look counts; acquisition links | live |
 | v551 | The Studio behind a quiet Wardrobe link. SILENT | live |
 | v552 | Confirm bar static at rest / sticky when armed; Studio chip in the fit rail; camera + fusion-chamber icons. SILENT | live |
+| v560 | Device report in Settings behind the STORE_BUILD gate. PURE 75/75; probes verified against known-wrong values; live end-to-end | live, byte-verified |
 | v553 | Studio v2: stickers, speech bubble, monsters, Crew, tray, screenshot mode. SILENT | live, export measured |
 | v554 | BONEHEADZ wordmark legible, 12.40:1; placement searches for clear ground. SILENT | live, export measured |
 
