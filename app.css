@@ -12376,3 +12376,45 @@ button.t3-price::before {
 #chTabs.bp-navigation .ch-tab.on span { color: var(--accent); }
 #chContent .bp-item-details summary { min-height: 44px; padding: 12px 0; font-size: var(--fs-1); cursor: pointer; }
 .bh-hero.mini.bp-identity .bh-stage.lg { width: 120px; height: 120px; }
+
+/* v578: the contact shadow reads, instead of washing out. Tom, 2026-09-11:
+   "he is still clearly not down on the ground with his own shadow."
+   .hero-cast.c-bh's GEOMETRY is the measured 2026-08 sole line and is untouched
+   here; its .55 alpha was measured against the ground as it stood then, and
+   .hero-fade and the scene vignette have darkened that plate since, so the same
+   alpha now lands as a smudge. Measured 2026-09-11 at 375x812, the element's own
+   contribution at the sole line (the same frame with it hidden, then shown):
+     .55 (shipped)   29.0%   <- what Tom was looking at
+     .78             45.0%
+   The first cut of this fix also raised the element above .hero-fade on the
+   theory that the fade was erasing it. Measured, that is FALSE and it is the
+   wrong direction: at z-index 5 the same alpha reads WEAKER (.55 -> 24.5%,
+   .78 -> 41.6%), because the fade's warm wash over the shadow is part of what
+   separates it from the plate. Stacking is left exactly as it shipped.
+   Guard: tests/toast-today-audit.mjs, row SHADOW. */
+#bhStage > .hero-cast.c-bh {
+  background: radial-gradient(ellipse at 50% 50%, rgba(24, 27, 20, .78) 0%, rgba(24, 27, 20, 0) 70%); }
+
+/* AND IT MUST NOT LAND ON TODAY'S DOOR ROW. Same class of collision as the map
+   card and the sheet tray above, found the same way: measured 2026-09-11 at
+   375x812 on live v575, toast 672.0->716.3 sitting on the Trends / Backpack /
+   Stable / Kitchen / The Pit tiles at 653.0->719.0, so a message covered the
+   five doors that are the whole point of the screen. Tom saw it in his own
+   screenshot.
+   Anchored to the TOP here rather than nudged up, because nudging only moves
+   the collision: below the art every band on Today is a control (name+level
+   557->627, doors 653->719, nav 738->804) and the widest is 24px, which a 44px
+   pill cannot sit in. The art band 165->425 is the only clear full-width run on
+   the screen. 175px clears the Gwart card's measured bottom (163.0) by 12px and
+   a two-line pill still ends at ~245, well above the pet at 426.
+   Keyed with :has() on the body, like the map-card rule above, because the
+   toast is a SIBLING of #app while screen--today is stamped on #screen inside
+   it, so a plain descendant selector never matches. No hidden state to test
+   for: the doors are always present on Today.
+   AND IT YIELDS TO THE SHEET RULE. This rule is appended below
+   `body:has(#sheets .sheet)` and both are one :has() on body, so without the
+   :not() it wins on order and re-seats the toast at 175 while a fight sheet is
+   open over Today, covering Flee. Caught by toast-sheet-audit rows CLEAR and
+   SEAT, not by reading the file.
+   Guard: tests/toast-today-audit.mjs. */
+body:has(.screen--today):not(:has(#sheets .sheet)) .toast { top: calc(var(--sat) + 175px); bottom: auto; }

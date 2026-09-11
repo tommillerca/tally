@@ -9,6 +9,10 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 578, date: '2026-09-11', title: 'Your Bonehead stands on the ground', items: [
+    'Your Bonehead has a proper shadow at his feet again instead of floating.',
+    'Messages on Today no longer sit on top of the five room doors.',
+  ] },
   { n: 577, date: '2026-09-11', title: 'Backpack styling restored', items: [
     'The Backpack shows its selected tab highlight, styled item explanations and a larger pet again.',
   ] },
