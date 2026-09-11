@@ -17187,7 +17187,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <button class="btn ghost" data-slot-return>Back to slots</button>
       <button class="btn ghost" data-ward-mode>${S.wardrobeLookMode ? 'Choose pieces' : 'Dressing Room'}</button>
       <div data-ward-pieces${S.wardrobeLookMode ? ' hidden' : ''}>
-      <div class="sect-h" style="margin-top:10px">${esc(GEAR_SLOTS.includes(slot) ? GEAR_SLOT_LABELS[slot] : slotMeta.label)} · pick your piece</div>
+      <div class="sect-h" data-slot-heading="${slot}" style="margin-top:10px">${esc(GEAR_SLOTS.includes(slot) ? GEAR_SLOT_LABELS[slot] : slotMeta.label)} · pick your piece</div>
       <div class="ward-grid" data-wslot="${slot}">
         ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">${eq[slot] ? 'Take off' : 'None'}</button>`}
         ${fams.map(fam => {
@@ -17227,7 +17227,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
           <button class="ward-cell gear r-${g.rarity} ${slimedSet.has(g.id) ? 'slimed' : ''} ${gearLo[slot] === g.id ? 'equipped' : ''} ${S.wardrobePreview === g.id ? 'selected' : ''} ${locked ? 'locked' : ''}" data-gear-family="${esc(key)}" aria-expanded="${S.wardrobeGearFamily === key}" title="${esc(g.name)} · ${esc(g.rarity)}${slimedSet.has(g.id) ? ' (SLIMED)' : ''}">
             <canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}" data-pad="0.14" role="img" aria-label="${esc(g.name)}, ${esc(g.rarity)}"></canvas>
             ${rarityTagHtml(g.rarity)}
-            <span class="gear-stat">${variants.length} variants · ${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>
+            <span class="gear-stat">${variants.length + items.filter(i => bhFamilyKey(i) === key).length} variants · ${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>
             ${locked ? `<span class="gear-lock">Lv ${g.minLevel}</span>` : ''}
             ${newIds.has(g.id) ? NEW_DOT : ''}
           </button>`;
@@ -17265,6 +17265,22 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </div>
         </div>`;
       })()}
+      </div>
+      <div class="ward-other-slots"${S.wardrobeLookMode ? ' hidden' : ''}>
+      ${BH_SLOTS.filter(meta => meta.code !== slot && meta.code !== 'C').map(meta => {
+        const cosmetics = BH_ITEMS_WITH_UNRELEASED.filter(i => i.slot === meta.code && owned.has(i.id));
+        const pieces = GEAR_ITEMS.filter(g => g.slot === meta.code && gOwnedSet.has(g.id));
+        const families = bhFamilies([...cosmetics, ...pieces.map(g => BH_BY_ID[g.artId])]);
+        if (!families.size) return '';
+        return `<section><h3 class="sect-h" data-slot-heading="${meta.code}">${esc(meta.label)}</h3>
+          <div class="ward-grid">${[...families].map(([key, arts]) => {
+            const variants = pieces.filter(g => bhFamilyKey(BH_BY_ID[g.artId]) === key);
+            const looks = cosmetics.filter(i => bhFamilyKey(i) === key);
+            const count = variants.length + looks.length;
+            const art = arts.find(i => i.id === look[meta.code]) || arts[0];
+            return `<button class="ward-cell" data-slot-stack="${meta.code}" data-stack-family="${esc(key)}" data-stack-art="${esc(art.id)}" aria-label="${esc(art.name)}, ${count} variants">${famArtHtml(art)}${count > 1 ? `<span class="ward-fam-n">${count}</span>` : ''}</button>`;
+          }).join('')}</div></section>`;
+      }).join('')}
       </div>
       <div data-ward-looks${S.wardrobeLookMode ? '' : ' hidden'}>
       ${(() => {
@@ -17519,20 +17535,43 @@ async function renderCharacter(wrap, tab, opts = {}) {
        put per still-flagged row in THIS slot only, so a slot with nothing new
        writes nothing. Awaited so a reload straight after cannot race it. */
     if (newSlots.has(slot)) await clearNewInSlot(slot);
+    const scrollWardrobeTo = target => {
+      if (!target) return;
+      const bounds = scroller.getBoundingClientRect();
+      const headerBottom = [...document.querySelectorAll('header, .ch-tabs')].reduce((bottom, node) => {
+        const style = getComputedStyle(node), rect = node.getBoundingClientRect();
+        return ['sticky', 'fixed'].includes(style.position) && rect.top <= bounds.top + 1
+          ? Math.max(bottom, rect.bottom) : bottom;
+      }, bounds.top);
+      scroller.scrollTo({ top: scroller.scrollTop + target.getBoundingClientRect().top - headerBottom - 12,
+        behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+    };
+    const returnToDoll = () => {
+      S.wardrobeReturnSlot = null;
+      S.wardrobeReturnTop = null;
+      scrollWardrobeTo($('.paperdoll', content));
+    };
     const wirePd = b => b.addEventListener('click', async () => {
+      if (S.wardrobeReturnSlot === b.dataset.pd) { returnToDoll(); return; }
       S.wardrobeReturnTop ??= scroller.scrollTop;
+      S.wardrobeReturnSlot = b.dataset.pd;
       S.wardrobeLookMode = false; S.wardrobeGearFamily = null;
       S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null;
       await renderCharacter(wrap, 'wardrobe', { instant: true });
-      requestAnimationFrame(() => $('[data-slot-return]', wrap)?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' }));
+      requestAnimationFrame(() => scrollWardrobeTo($(`[data-slot-heading="${b.dataset.pd}"]`, wrap)));
     });
     $$('[data-pd]', content).forEach(wirePd);
-    $('[data-slot-return]', content)?.addEventListener('click', () => {
-      const top = S.wardrobeReturnTop;
-      S.wardrobeReturnTop = null;
-      if (top != null) scroller.scrollTo({ top, behavior: reducedMotion ? 'auto' : 'smooth' });
-      else $('.paperdoll', content)?.scrollIntoView({ block: 'start', behavior: reducedMotion ? 'auto' : 'smooth' });
-    });
+    $('[data-slot-return]', content)?.addEventListener('click', returnToDoll);
+    $$('[data-slot-stack]', content).forEach(b => b.addEventListener('click', async () => {
+      S.wardrobeSlot = b.dataset.slotStack;
+      S.wardrobeReturnSlot = b.dataset.slotStack;
+      S.wardrobeGearFamily = b.dataset.stackFamily;
+      S.wardrobePreview = null; S.lookPreview = null;
+      await renderCharacter(wrap, 'wardrobe', { instant: true });
+      const family = [...$$('[data-family]', wrap)].find(n => n.dataset.family === b.dataset.stackFamily);
+      if (family) family.click();
+      requestAnimationFrame(() => scrollWardrobeTo($(`[data-slot-heading="${b.dataset.slotStack}"]`, wrap)));
+    }));
     $('[data-ward-mode]', content)?.addEventListener('click', () => {
       S.wardrobeLookMode = !S.wardrobeLookMode;
       renderCharacter(wrap, 'wardrobe', { instant: true });

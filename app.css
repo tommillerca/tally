@@ -12376,3 +12376,10 @@ button.t3-price::before {
 #chTabs.bp-navigation .ch-tab.on span { color: var(--accent); }
 #chContent .bp-item-details summary { min-height: 44px; padding: 12px 0; font-size: var(--fs-1); cursor: pointer; }
 .bh-hero.mini.bp-identity .bh-stage.lg { width: 120px; height: 120px; }
+
+/* Wardrobe slot navigation: leave room for a heading and honour reduced motion. */
+[data-slot-heading], #chContent .paperdoll { scroll-margin-top: 12px; }
+.ward-other-slots section { margin-top: 24px; }
+@media (prefers-reduced-motion: reduce) {
+  #chBody *, #chBody *::before, #chBody *::after { animation: none !important; transition: none !important; }
+}

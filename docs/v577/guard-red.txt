@@ -1,0 +1,31 @@
+Wardrobe frozen work order, 2026-09-11
+Plan SHA256: 83536b07aad8e75707bab67462f9f40e327e690ead02e3800fc521b97415b522
+
+STATUS: NOT PROVEN RED. This is a blocker record, not mutation evidence.
+
+Both browser audits were invoked in the current checkout:
+  node tests/wardrobe-slot-scroll-audit.mjs
+  node tests/wardrobe-stack-audit.mjs
+Both exited 1 before browser startup:
+  Error: listen EPERM: operation not permitted 127.0.0.1
+  code: EPERM; errno: -1; syscall: listen; address: 127.0.0.1
+
+The environment forbids the audit harness's loopback listener. Approval policy
+is never. No escalation was requested, and no alternative checkout was edited.
+No throwaway mutation runs were performed: the baseline cannot reach a row.
+An infrastructure failure is not evidence that a guard detects a regression.
+
+Rows still requiring a green baseline and individual throwaway-copy red runs:
+  slot CONTROL: fewer than four slots or fewer than two item sections
+  slot SCROLL: disable section navigation or obscure the heading
+  slot RETURN: remove second-tap return
+  slot REDUCED: force smooth scrolling / retain running animations
+  stack CONTROL: refuse one fixture grant or remove its independent looks
+  stack STACK: remove family grouping, restoring five fixture tiles
+  stack REACHABLE: remove a rail variant or refuse the second variant equip
+  stack TRANSMOG STACK: remove look-grid grouping
+  stack TRANSMOG REACHABLE: remove a look variant or refuse its commit
+
+Required follow-up: run both unchanged audits in a browser-capable checkout,
+then perform each mutation in a disposable copy and append actual row failures
+and process exit codes. Do not substitute this record for the requested proof.
