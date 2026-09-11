@@ -12418,3 +12418,8 @@ button.t3-price::before {
    SEAT, not by reading the file.
    Guard: tests/toast-today-audit.mjs. */
 body:has(.screen--today):not(:has(#sheets .sheet)) .toast { top: calc(var(--sat) + 175px); bottom: auto; }
+
+/* Settings backup actions share one column; enlarged text wraps the row. */
+.settings-data-action { flex-wrap: wrap; }
+.settings-data-action > .lab { flex: 1 1 10rem; min-width: 0; }
+.settings-data-action > .btn { flex: 0 0 7rem; width: 7rem; white-space: nowrap; }
