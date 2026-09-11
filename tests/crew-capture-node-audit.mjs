@@ -69,6 +69,7 @@ async function harness(scenario, webdriver = true) {
   assert.ok(fetchBranch?.includes('window.__testLb'));
   vm.runInContext(`let data = { friends: [], incoming: [], outgoing: [] }, lbData = null;
     let favs = new Set(), fanOrder = [], centerId = null, fanQuery = '', fanFavouritesOnly = false;
+    ${app.match(/^  let fanPaintRevision = 0;$/m)?.[0] || ''}
     const fanFriend = id => data.friends.find(f => f.playerId === id);
     ${['leaderboardLastOnline', 'onlineLabel', 'snapshotNotice', 'crewCardHtml', 'crewCount', 'crewTruncText', 'requestRowsHtml'].map(fn).join('\n')}
     ${fetchBranch}

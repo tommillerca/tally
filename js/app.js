@@ -13038,7 +13038,9 @@ async function renderFriends(el) {
     row.hidden = false;
   };
 
+  let fanPaintRevision = 0;
   const paintFan = async () => {
+    const revision = ++fanPaintRevision;
     const wrap = $('#cfanWrap', el), pager = $('#cfanPager', el), deck = $('#cfanDeck', el);
     $('#cfanLoading', el)?.remove();
     /* THE FETCH FAILED IS NOT THE CREW IS EMPTY. `reached === false` only ever
@@ -13047,6 +13049,8 @@ async function renderFriends(el) {
        make-a-friend copy. The count reads a dash rather than 0 for the same
        reason: 0 is a claim about their crew, and we do not have one. */
     const unreached = data.reached === false;
+    const noHit = $('#cfanNoHit', el);
+    if (noHit) { noHit.hidden = true; noHit.textContent = ''; }
     const snapshot = $('#cfanSnapshot', el);
     if (snapshot) {
       snapshot.textContent = unreached ? '' : snapshotNotice(data.friends);
@@ -13118,21 +13122,11 @@ async function renderFriends(el) {
       onBtn.classList.toggle('on', fanFavouritesOnly);
       onBtn.setAttribute('aria-pressed', String(fanFavouritesOnly));
     }
-    // The cards ship with EMPTY stages; applyFan (below) mounts the art for the
-    // seven seated ones and composes each stack as it lands.
-    const sinceMap = await friendSinceYesterdayMap(data.friends);
-    deck.innerHTML = fanOrder.map(id => crewCardHtml(fanFriend(id), sinceMap[id])).join('');
-
-    /* A search that matches nobody must SAY so. Hiding the deck and leaving the
-       space blank would read as the crew having vanished, which is the same
-       failure as an empty fan on a filter. */
-    const noHit = $('#cfanNoHit', el);
+    // Apply empty-state visibility before any asynchronous card enrichment.
     const empty = fanOrder.length === 0;
     if (noHit) {
       noHit.hidden = !empty;
-      /* An empty deck must say WHICH control emptied it, or it reads as the crew
-         having vanished. Filtering to online and finding nobody is the common
-         case (people are asleep), so that message also says how to undo it. */
+      // Explain the active filter and how to return to the full Crew.
       noHit.textContent = !empty ? ''
         : fanQuery.trim() ? `Nobody in your Crew matches "${fanQuery}".`
         : fanFavouritesOnly ? 'No favourites in this selection. Tap Filter: favourites to see everyone.'
@@ -13142,7 +13136,12 @@ async function renderFriends(el) {
     pager.hidden = empty || fanOrder.length < 2;
     $('#cfanSel', el).hidden = empty;
     paintFaves();
-    if (!empty) applyFan();
+    if (empty) { deck.innerHTML = ''; return; }
+    // Only the latest paint may mount cards after enrichment finishes.
+    const sinceMap = await friendSinceYesterdayMap(data.friends);
+    if (revision !== fanPaintRevision) return;
+    deck.innerHTML = fanOrder.map(id => crewCardHtml(fanFriend(id), sinceMap[id])).join('');
+    applyFan();
   };
 
   const cfanCycle = d => {
