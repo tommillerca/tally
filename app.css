@@ -12376,3 +12376,8 @@ button.t3-price::before {
 #chTabs.bp-navigation .ch-tab.on span { color: var(--accent); }
 #chContent .bp-item-details summary { min-height: 44px; padding: 12px 0; font-size: var(--fs-1); cursor: pointer; }
 .bh-hero.mini.bp-identity .bh-stage.lg { width: 120px; height: 120px; }
+
+/* Settings backup actions share one column; enlarged text wraps the row. */
+.settings-data-action { flex-wrap: wrap; }
+.settings-data-action > .lab { flex: 1 1 10rem; min-width: 0; }
+.settings-data-action > .btn { flex: 0 0 7rem; width: 7rem; white-space: nowrap; }

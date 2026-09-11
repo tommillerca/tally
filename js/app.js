@@ -14883,7 +14883,7 @@ async function openWhatsNew() {
 }
 
 async function profileSyncRowHtml() {
-  return `<div class="settings-row" id="profileSyncStatus"><div class="lab"><b>Profile sync</b><span>${esc(await social.syncHealthLine())}</span></div></div>`;
+  return `<div class="settings-row" id="profileSyncStatus"><div class="lab"><b>Profile sync</b><span>${esc(await social.socialMe() ? await social.syncHealthLine() : 'Offline.')}</span></div></div>`;
 }
 
 /* ONE LINE TOM CAN SCREENSHOT, and it has to be honest about what it cannot know.
@@ -15071,9 +15071,9 @@ async function renderSettings(el) {
 
   <div class="card">
     <div class="card-title">YOUR DATA</div>
-    <div class="settings-row"><div class="lab"><b>Export backup</b><span>${exportAgo == null ? 'Never backed up yet' : exportAgo === 0 ? 'Last backup: today' : `Last backup: ${exportAgo} day${exportAgo === 1 ? '' : 's'} ago`}</span></div><button class="btn small ghost" id="exportBtn">Export</button></div>
-    <div class="settings-row"><div class="lab"><b>Import backup</b><span>Review what will be replaced. A restore point is required before importing.</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
-    <div class="settings-row"><div class="lab"><b>Restore points</b><span>Return to a save kept before a file import, on this device. Erase all data also removes these.</span></div><button class="btn small ghost" id="filePointsBtn">Review</button></div>
+    <div class="settings-row settings-data-action"><div class="lab"><b>Export backup</b><span>${exportAgo == null ? 'Never backed up yet' : exportAgo === 0 ? 'Last backup: today' : `Last backup: ${exportAgo} day${exportAgo === 1 ? '' : 's'} ago`}</span></div><button class="btn small ghost" id="exportBtn">Export</button></div>
+    <div class="settings-row settings-data-action"><div class="lab"><b>Import backup</b><span>Review what will be replaced. A restore point is required before importing.</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
+    <div class="settings-row settings-data-action"><div class="lab"><b>Restore points</b><span>Return to a save kept before a file import, on this device. Erase all data also removes these.</span></div><button class="btn small ghost" id="filePointsBtn">Restore</button></div>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
     <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights, gear</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
     ${me ? `<div class="settings-row"><div class="lab"><b>Delete account &amp; cloud data</b><span>Removes your cloud account, friends + backup</span></div><button class="btn small danger" id="delAcctBtn">Delete</button></div>` : ''}
