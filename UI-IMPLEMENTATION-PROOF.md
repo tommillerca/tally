@@ -1,484 +1,156 @@
-# Fight 1A implementation evidence
-
-Frozen plan SHA256 verified: b9bf665208260b0aee6c306786b955c39b0baf4b287955a97b812aa868154f22.
-
-Scope: openFight in this checkout only. The full implementation brief, local CLAUDE.md and reference layout sources were read. MOCK.html was not opened, as the lane specifically prohibits it.
-
-## Changed files and selectors
-
-- js/app.js: adds fight-header to the existing fight header, reads petNicks keyed by fighter.petMeta.iid, and displays the escaped nickname with the existing petBody.name fallback. No combat object is renamed. ITEMS retains its stock/availability conditions and handler; counts and the 1 AP drinking explanation remain in the existing inventory tray. APP_BUILD becomes v562.
-- app.css: only the selectors listed below are added. Existing arena, stage, pet, monster, media-query and shared layout declarations remain byte-for-byte intact.
-- sw.js and version.json: version stamps become tally-v562; no geometry.
-- js/changelog.js and docs/CLAIMS.md: one matching player-facing note and numbered proof row; no geometry.
-- tests/fight-ui-1a-audit.mjs: node guard for instance-specific nicknames, fallback, escaped HUD binding, simple ITEMS, availability binding and live venue. No production geometry.
-- tests/release-gate.mjs: registers that guard in PURE. The original 168 suites remain, making 169 with the new guard.
-- UI-IMPLEMENTATION-PROOF.md: this advisory evidence record.
-
-Exact new CSS selectors:
-
-1. .sheet-head.fight-header > .fight-title: flex: 1 distributes horizontal spare space inside the existing header. Existing min-width: 0, title ellipsis, font sizes, line heights, vertical padding and venue line are retained.
-2. .sheet-head.fight-header > .sheet-close: flex-shrink: 0 protects Flee's existing width. No vertical dimensions change.
-3. #fightBody > .fight-actions > .fight-act
-4. #fightBody > .fight-endrow > .fight-act
-   Selectors 3 and 4 change radius and shadow only, with no box dimensions or flow changes.
-5. #fightBody > .fight-actions > .fight-act:not(.glow):not(.sig):not(.petmove):not(.potion): changes background and border colour only. Existing special-action colours and availability opacity remain.
-6. #fightBody > .fight-endrow > .fight-act.endturn: border colour only.
-7. #fightBody .fight-hud .fname: shadow and border colour only, within the absolutely positioned HUD. No figure or HUD box dimensions change.
-
-The nickname is inside the existing single-line, clipped HUD label. It cannot resize the arena or the independently positioned figures. Removing the ITEMS detail line changes that button's content height inside the existing scrolling action tray. The arena has its existing non-flexing viewport-derived height. No arena sizing calculations, figure anchors, transforms, layers or art are changed. These are source-level reasons, not measured browser proof.
-
-## Deviations and unproven checks
-
-The existing title and venue already occupy separate lines. Their typography and vertical metrics are retained rather than copying the mock's header padding/font sizes, which could violate the hard lock. The mock's 64px move tiles and 1px borders are not copied; existing responsive row metrics and 2px borders remain, with approved colour/radius/shadow treatment. Existing live inventory uses a tray inside the fight, not a separate sheet; that interaction remains intact.
-
-Browser audits, screenshots, safe-area simulation and control hit tests were not run because the frozen order identifies socket binding as blocked (listen EPERM). No local server was started. The operator must verify the locked coordinates at 393x852 and 320x568, including Wanderer, Live Wire, Bumbleseal, Glutton and large gear, and operate Flee, moves, ITEMS and End turn. No rendered-coordinate equality is claimed.
-
-The supplied pre-existing figure-audit failure for the unregistered kinChips petPortraitHtml site remains out of scope. No figure call site was added or changed. Its new line number may shift with preceding edits.
-
-No commit, push, publication, deployment, original-checkout write, native/ASC-SUBMISSION.md edit or art edit was attempted. No approval denial occurred. A read-only process-list diagnostic (ps) was denied with "operation not permitted"; it was not needed to collect child exit codes. Browser verification is the known blocked action.
-
-## Proof results
-
-The new guard was run before implementation: exit 1, "Fight HUD must resolve the equipped instance nickname". After implementation: exit 0, "PASS fight 1A: instance nickname, unnamed fallback, escaped HUD, simple ITEMS and live venue".
-
-Release coverage command: node tests/release-gate.mjs --coverage-only, exit 0. Reports 428 audits on disk. This is registration coverage, not execution proof.
-
-Final execution results are recorded below after completion.
-
-Agreed proof: node tests/unit.test.js, exit 0, final output: 390 passed, 0 failed. Full output: /tmp/ui-1a-unit.log. The same command also passed inside the PURE run.
-
-The initial PURE run caught guard-hygiene-lint.mjs rejecting the new guard for missing a positive-control row. The guard now mutates the production nickname expression from instance key to species key and asserts that the nickname check fails. Both the guard and the hygiene lint reran with exit 0. No lint threshold was weakened.
-
-node --check js/app.js and git diff --check: exit 0.
-
-PURE enumeration used the exact r6-guards-audit extraction: the const PURE literal plus all /^PURE\.(?:push|unshift)/ additions, evaluated with node:vm. The initial inventory was 75 literal entries plus 93 additions, total 168. Each suite ran via spawnSync with its status read directly, no exit-code pipeline. Exit 97 was classified as unproven. Every child completed without a timeout or signal.
-
-Initial run: 167 green, 1 red, 0 unproven. The sole red was the new guard's missing positive control, described above. After its successful targeted rerun, final original-tier status: **168 green, 0 red, 0 unproven**. The newly registered fight-ui-1a-audit.mjs also passed: **169 green, 0 red, 0 unproven including the added guard**. Final registration is 76 literal entries plus 93 additions.
-
-Per-suite initial exit codes and logs: /tmp/ui-1a-pure/results.json and /tmp/ui-1a-pure/*.log. Run summary: /tmp/ui-1a-pure.log. Corrected hygiene output: /tmp/ui-1a-hygiene-final.log. r6-guards-audit passed both independently and in the completed PURE run. Browser audits are not included in these node-only pass counts.
-
-
-# Pit 1B implementation evidence
-
-Frozen plan SHA256 verified: 896b4064a861c9860fcae593743e515380c04b75b775e373de9c22ddfb9218de.
-
-Scope: this checkout only. The full IMPLEMENTATION.md, figure contract and reference layout sources were read. The kit was read at its supplied authority path because it is not present under this checkout. No original-checkout source was edited. MOCK.html was not read or opened.
-
-## Files and boundaries
-
-- js/app.js: adds pitOpponentPortrait and replaces icons/rank tiles in the remote den, ladder, champion, Gauntlet and sparring rows with live opponent artwork. Ordinary faces use the unchanged headshotHtml renderer. Named and sparring opponents use foeOutfitFor, remote dens use the same themedLook and mage flag as their handler, and Gauntlet rows use endlessFightCfg. Rank/rung remains supporting text. The Pit hero loses its decorative arena-like backdrop in favor of the reviewed gradient. Build stays distinct. APP_BUILD becomes v563.
-- app.css: adds only the selectors inventoried below. They all require #pitBody and direct Pit children. #fightBody and #arena cannot match them. The existing arena CSS, shared figure CSS and screen 1A additions are unchanged.
-- sw.js, version.json: build stamps become tally-v563. No geometry or game code.
-- js/changelog.js: new n: 563 note. docs/CLAIMS.md: matching exact changelog line and numbered proof row. Neither affects geometry.
-- tests/pit-ui-1b-audit.mjs: new PURE guard for opponent identity, special figure choice, row bindings, supporting rank and distinct Build, with a mutation control. Test data stays in the audit only.
-- tests/release-gate.mjs: registers that guard in PURE. No existing registration removed.
-- UI-IMPLEMENTATION-PROOF.md: appends this advisory record without changing screen 1A evidence.
-
-The existing head crop intentionally skips C, so these are opponent faces without pets. No pet instance, shiny or morph data is invented, replaced or dropped from an existing pet renderer. No new pet call site is introduced. Glutton and Mimic use their unchanged figure markup; Live Wire and Wanderer use the same authored plates as the fight. Mimic's existing renderer installs its existing stylesheet, exactly as it already does in fights. No shared renderer, art file, fight rule, reward or eligibility code is changed.
-
-Source equality checks against HEAD confirmed that the entire Pit event-handler block and the entire openFight function through the end of app.js are unchanged. All pre-champion, champion, cleared, cap/rematch, depleted-energy, free sparring, remote-den and persisted defeat/recovery conditions remain in place. This is source evidence, not operated-control or pixel proof.
-
-## Exact CSS selector inventory
-
-Every selector below is rooted in #pitBody. Hero, energy, Build, headings and row text/actions change only Pit presentation. The last three selectors frame Pit portraits, remove the existing headshot border to avoid a double frame, and contain the two single-image monster plates. They do affect these new Pit portraits as intended; they cannot affect a fight or any existing figure surface. Head crop transforms, figure layers and pet helpers are unchanged.
-
-1. `#pitBody > .t3-hero`
-2. `#pitBody > .t3-hero h2`
-3. `#pitBody > .t3-hero p`
-4. `#pitBody > .t3-energy`
-5. `#pitBody > .t3-energy .ic`
-6. `#pitBody > .t3-energy .bar`
-7. `#pitBody > #buildBtn`
-8. `#pitBody > #buildBtn b`
-9. `#pitBody > .t3-sect`
-10. `#pitBody > .t3-sect::before`
-11. `#pitBody > .t3-sect.pit-gauntlet-heading::before`
-12. `#pitBody > .t3-sect.pit-sparring-heading::before`
-13. `#pitBody > .t3-sect b`
-14. `#pitBody > .t3-sect i`
-15. `#pitBody > .t3-sect .r`
-16. `#pitBody > .t3-row`
-17. `#pitBody > .t3-row > .t3-tx b`
-18. `#pitBody > .t3-row > .t3-tx small`
-19. `#pitBody > .t3-row > .btn`
-20. `#pitBody > .t3-row > .t3-lock`
-21. `#pitBody > .t3-row > .pit-opponent-portrait`
-22. `#pitBody > .t3-row > .pit-opponent-portrait > .tz-head`
-23. `#pitBody > .t3-row > .pit-opponent-portrait > img`
-
-## Deviations and baseline discrepancies
-
-- The special monsters do not have the skeleton's head-crop geometry. As reported during implementation, they use their existing full figure artwork inside the same 52px portrait frame rather than an invented skull crop. Ordinary opponents use the existing headshot renderer. Review of special-monster visible ink remains owed.
-- The reviewed pixel font sizes are expressed through scalable type tokens, preserving their default sizes and the app's Dynamic Type contract. Live extra states, support copy and hero readiness chips remain even though the mock omits them.
-- The supplied PURE census says 75 literal entries plus additions equals 169. This checkout actually began with 76 literal entries and 93 added entries, totaling 169. Adding this guard gives 77 literal entries plus 93 additions, totaling 170. No suite was dropped to match the prose count.
-- The figure audit's static prefix has one red coverage row, but that row lists SIX existing call sites, not only kinChips: js/app.js:20428, :21465, :21501, :21504, :21505 and :21530. The other five are Laboratory sites. Running the exact static prefix with HEAD's app.js and with the changed app.js produced identical output. Result: 6 green static rows, 1 red, zero additional findings. These sites are all before the Pit edits and retain their line numbers. They were not fixed.
-
-## Blocked and unproven actions
-
-Browser audits, screenshots, decoded portrait checks, safe-area/width review, actual control operation and hit tests were not run. The order states that socket binding fails with listen EPERM; no server or browser audit was attempted. Full figure-audit and pit-figures-audit remain unproven. The operator's supplied fight measurements are a baseline only, not a newly measured result. Verify 375px, 390px and wider phones, large text, all opponent types and states, and the locked fight arena before acceptance.
-
-No commit, push, merge, publish, deploy, original-checkout write, native/ASC-SUBMISSION.md edit or art edit was attempted. No permission denial occurred during implementation.
-
-## Proof
-
-New guard before implementation: node tests/pit-ui-1b-audit.mjs, exit 1, "SETUP Pit rows need the live opponent portrait renderer". After implementation: exit 0, "PASS Pit 1B: live outfits, all special figures, five row bindings, supporting ranks and distinct Build" and "PASS CONTROL: lost opponent outfit rejected". The control removes explicit outfit precedence and asserts that the identity check rejects it.
-
-Initial agreed proof: node tests/unit.test.js, exit 1, 389 passed, 1 failed. The failure was fontscale-audit rejecting six newly added fixed-pixel font sizes. Those declarations now use scalable tokens. Targeted fontscale-audit rerun: exit 0, SOURCE CENSUS 988/988 (100.00%). No test threshold changed.
-
-Guard hygiene: exit 0, clean. Release registration coverage: exit 0, 429 audits on disk. Impeccable detector: exit 2 with 54 existing warnings; none in the added UI lines. Its output is /tmp/ui-1b-design-detect.json. Detector output is not visual proof.
-
-The static-only figure run copied the unchanged audit prefix into a temporary file beside the original, stopping before its setup/browser gate. The temporary file was removed. This was NOT a full figure-audit run. Baseline and final logs: /tmp/ui-1b-figure-baseline.log and /tmp/ui-1b-figure-static.log.
-
-Final PURE execution and corrected agreed-proof results follow below.
-
-
-The PURE run also caught the icon inventory correctly rejecting the new unregistered portrait emitter and the stale golden-crate fallback entry removed from the champion row. tests/icon-inventory-audit.mjs now registers pitOpponentPortrait as scene artwork and removes only that obsolete renderPit|crate/golden fallback row. This test-only registry update has no figure or fight runtime effect. The audit reran with exit 0; no checks were weakened. Its corrected output is /tmp/ui-1b-icon-final.log.
-
-The first complete PURE pass finished at 168 green, 2 red, 0 unproven. In addition to the icon registry, map-playtest-audit.mjs extracted the remote-den card without supplying its new portrait dependency. tests/map-playtest-audit.mjs now provides that presentation dependency in its Node harness and asserts the portrait receives the actual remote boss name and mage flag. Its existing availability, handler, payout and tomorrow assertions are unchanged. It reran with exit 0, 13 passed, 0 failed. This test-only harness update cannot affect production figures or the arena.
-
-The first 21 suites that completed before the font correction were also rerun successfully (21 green) in /tmp/ui-1b-pure-recheck. A second complete PURE pass was then started against the final source and test registries. Original run logs remain in /tmp/ui-1b-pure; final pass logs are in /tmp/ui-1b-pure-final.
-
-
-Final complete PURE pass: **170 green, 0 red, 0 unproven**, 170 suites executed. Enumeration used the exact r6-guards-audit regexes and node:vm evaluation of BOTH the const PURE literal and every line-anchored PURE.push/unshift statement. Final inventory: 77 literal entries plus 93 added entries. Every child exit code was read directly from spawnSync.status, never through a pipeline. Exit 97 is classified as unproven. No child ended by signal or timeout.
-
-Agreed proof in the final pass: **node tests/unit.test.js**, exit **0**, final output **390 passed, 0 failed**. Full output: /tmp/ui-1b-pure-final/unit.test.js.log. Final per-suite names and direct exit codes: /tmp/ui-1b-pure-final/results.json. Exact enumeration: /tmp/ui-1b-pure-final/inventory.json. Runner output: /tmp/ui-1b-pure-final.log. All 169 inherited suites and the new Pit guard are green on this pass, including icon inventory, map playtest, guard hygiene and r6-guards-audit.
-
-node --check js/app.js and git diff --check passed before the final PURE pass. No production or test source was changed during that pass; only this evidence record was completed afterward. Browser checks are excluded from these counts and remain unproven as described above.
-
-# Screen 1C: Crew, frozen work order, 2026-09-10
-
-Authority: plan SHA256 9c6cf7adc07fe947af69d3346aac642981053dea4084f7a21cfd7d5019427f21 verified against the supplied plan file. Read IMPLEMENTATION.md in full and the reference CSS/JS. MOCK.html was not read. All implementation paths resolve within this checkout. Screens 1A and 1B are preserved.
-
-## Changes and source boundary
-
-- js/app.js: renderFriends markup and paintFanSel presentation only, plus APP_BUILD v564. Separate identity and action rows; existing pixel star at 48px with real aria-pressed state; dense stats remain in the existing full profile; search placeholder simplified. Race precedes the still-visible podium; discovery and code sharing precede community/history. All original control IDs, handlers, states and the webdriver fixture seam remain. No changes to the fan card/art helpers, applyFan, swiping, filter/sort logic, profile, race/leaderboard hydration or shared figure machinery.
-- app.css: scoped Crew rules listed below. Disabled the existing fan-only base scrim with an appended Crew override. Solid dark nameplates, artwork, card transforms, pet placement and animation rules remain unchanged. The scrim removal intentionally changes visible fan art by removing an overlay; it does not change figure geometry or layers. No arena selector or shared figure rule is changed.
-- js/changelog.js, sw.js, version.json: v564 stamps and one matching changelog item. No figure or arena presentation rules.
-- docs/CLAIMS.md: matching exact Changelog item and numbered PROOF/REACH row. Documentation only.
-- tests/crew-ui-1c-audit.mjs: new Node source guard and mutation controls, no production effects.
-- tests/release-gate.mjs: register the new guard in PURE. No suite removed or weakened.
-- UI-IMPLEMENTATION-PROOF.md: append this advisory evidence record.
-
-The fan's bounded mounting code is untouched: all friend records retain cards, only the seven seated stages mount crewCardArtHtml, and off-seat stages clear their children. No additional art mounting path was introduced. Pet instance, shiny, morph and wear remain passed through the original renderer. This is source evidence of preserving the existing bound, not a measured runtime memory claim.
-
-## Exact selector inventory
-
-Added: `#cfanDeck .cfan-stage::after`, disabling the Crew-only gradient scrim with content: none and background: none. The original declaration remains untouched to preserve the pre-Studio CSS boundary. This is the only changed selector over figure artwork, deliberately removing the forbidden overlay. It cannot select the fight arena.
-
-Added overrides:
-
-1. `#cfanSel`: selected-friend panel surface.
-2. `#cfanSel .cfan-identity`: identity row layout.
-3. `#cfanSel .cfan-star`: 46px target, centered content.
-4. `#cfanSel .cfan-star img`: 48px pixel asset.
-5. `#cfanSel .cfan-star:not(.on) img`: visibly distinct off state.
-6. `#cfanSel .cfan-star.on`: selected border/background state.
-7. `#cfanSel .cfan-sel-nm`: name wrapping.
-8. `#cfanSel .cfan-status`: secondary truthful recency.
-9. `#cfanSel .cfan-acts`: separate two-column action row.
-10. `#cfanSel .cfan-acts .btn`: action size and scalable type.
-11. `#cfanSel .cfan-acts .btn.gift`: approved gold action treatment.
-12. `#cfanSearchRow`: toolbar wrapping.
-13. `#cfanSearchRow input`: simplified input treatment.
-14. `#cfanOnline`: online button treatment.
-15. `#cfanOnline.on`: active filter treatment.
-16. `#cfanClear`: in-flow 44px clear control, preventing overlap with Online.
-17. `#cfanSnapshot`: secondary operational detail, still visible when relevant.
-
-All added selectors are rooted in IDs emitted only by renderFriends. Their descendants contain identity, icons, text and controls, not Bonehead or pet layers. They cannot select Pit or fight content. Existing `.cfan-sel-tx` is reused inside the identity row. Existing `.cfan-chips`, `.cfan-chip`, `.cfan-chip.lvl` and `.cfan-chip.pet` markup is removed only from the selected panel; level/title remain on cards and full stats remain in profiles. The old selectors are not globally edited. IDs moved in document order without selector changes: raceCard, deliveriesCard, newcomersCard, crewCodeBig, crewShare, crewCopy, crewWhatsNew. Existing thanks/community renderers also move intact.
-
-## Deviations and factual limitations
-
-- Omit Crew since as authorized. GET /friends exposes `since: r.ts`, but requestFriendship can overwrite ts on an already-accepted reciprocal request, and /friends/accept unconditionally resets ts on repeat acceptance. It cannot reliably establish original friendship creation. No backend field or substitute date added. The initial source-reading statement that no timestamp was exposed was corrected after tracing the server writers.
-- Preserve existing small-Crew search thresholds, actionable notification cards, race disclosure behavior, pending request presentation, discovery expansion and history controls. The mock's samples and generic sheets are not imported. The actual friend list is not reduced.
-- The order describes only kinChips as a pre-existing figure finding. The baseline static audit actually has one failing COVERAGE row listing six sites: original lines 20428, 21465, 21501, 21504, 21505 and 21530. The final static run has the same six sites at lines 20425, 21462, 21498, 21501, 21502 and 21527. Both runs: 6 green rows, 1 red row. Zero additional findings. No pre-existing failure fixed.
-
-## Proof and blocked actions
-
-New source guard before implementation: node tests/crew-ui-1c-audit.mjs, exit 1, "identity must have its own row". After implementation, source assertions pass. Its undersized-target mutation initially matched an unrelated earlier CSS rule and failed to trigger; the mutation now targets the exact #cfanSel rule. Both mutation controls now pass by rejecting their broken inputs. This guard proves source structure and declared dimensions, not rendered overlap or visible ink.
-
-Static figure evidence: /tmp/ui-1c-figure-baseline.log and /tmp/ui-1c-figure-final.log. Executed the unchanged prefix of figure-audit before its SETUP GATE in a temporary test file, with baseline app source substituted for the baseline run. Both exit 1. The temporary test was removed. These are explicitly NOT full figure-audit runs.
-
-Impeccable mechanical detector exit 2; output /tmp/ui-1c-design-detect.json. Its existing warnings do not constitute browser proof. An attempted guard-hygiene-audit.mjs command failed because that filename does not exist; corrected to guard-hygiene-lint.mjs. No permission denial occurred.
-
-No browser audits, screenshots, socket binding, decoded-ink measurements, actual control operation, safe-area checks or hit tests attempted, per the work order's listen EPERM restriction. All browser acceptance scenarios remain UNPROVEN: 375px/390px/wider, long names, favourite states, filters, large Crew, loading/stale/empty/offline/error, requests, gift/cheer/cheer-back, profiles, race, podium/standings, code sharing and history. Full figure-audit and pit-figures-audit remain unproven here.
-
-No commit, push, merge, publish, deployment, production mutation, original-checkout write, art edit or native/ASC-SUBMISSION.md edit attempted. No impossible requirement was silently redesigned.
-
-Final PURE census, direct child exit codes and agreed unit proof follow below after execution. The inherited tier is 170; the new guard makes 171. Both the literal and every push/unshift site are enumerated as r6-guards-audit does. Exit 97 is UNPROVEN.
-
-
-Guard hygiene initially exited 1 because the new source guard checks the existing webdriver seam without operating browser controls. tests/guard-hygiene-lint.mjs now explicitly inventories crew-ui-1c-audit.mjs with its source-only limitation and separately owed browser coverage. This test-only classification has no figure/arena effect. No runtime guarantee is claimed or removed. The corrected lint is included in final PURE execution.
-
-Initial agreed command node tests/unit.test.js: exit 0, 390 passed, 0 failed. Detector reports 54 warnings, none in the appended Crew CSS. Syntax and diff whitespace checks passed before the final PURE run.
-
-
-First full PURE pass found studio-v4-audit red because deleting the legacy Crew scrim altered CSS before the Studio boundary. Corrected by restoring that exact legacy declaration and appending #cfanDeck .cfan-stage::after with content: none and background: none. The existing Studio guard is unchanged. The Crew guard now checks that explicit suppression. This is an implementation adjustment, not a visual deviation: the base overlay is still absent, with the solid nameplate preserved. All suites are rerun below against the corrected final source.
-
-
-## Final corrected verification
-
-Final complete PURE pass: **171 green, 0 red, 0 unproven**, overall exit **0**. Census: **78 literal entries + 93 push/unshift additions = 171**. All 170 inherited suites plus the new Crew guard executed. Enumeration uses the exact r6-guards-audit regexes and node:vm evaluation of the literal and additions. Every child exit is read directly from spawnSync.status, never through a pipe. No child ended by signal, and none exited 97.
-
-Agreed proof on final source: **node tests/unit.test.js**, exit **0**, output **390 passed, 0 failed**. Full output: /tmp/ui-1c-pure-final/unit.test.js.log. Final suite inventory: /tmp/ui-1c-pure-final/inventory.json. Per-suite direct exit codes: /tmp/ui-1c-pure-final/results.json. Runner log: /tmp/ui-1c-pure-final.log. The corrected Studio guard and guard hygiene are green. The new Crew guard also rejects removal of the explicit scrim suppression, in addition to the missing identity-row class and undersized target controls.
-
-The first pass logs remain under /tmp/ui-1c-pure-first and /tmp/ui-1c-pure-first.log: 170 green, 1 red, 0 unproven. The one red was the CSS-boundary finding described above. No production or test source changed during the final corrected pass; only this evidence record was completed afterward. The original fan art helpers, crewCardHtml, applyFan, full profile and fight through EOF compare unchanged against HEAD. Existing Crew browser-audit selectors remain compatible with the retained IDs/classes and those audit files are unchanged.
-
-These PURE counts exclude all browser checks. Rendered ink, overlap, safe-area behavior, operated controls and runtime mounting measurements remain UNPROVEN for independent review. Static figure coverage retains only the six baseline findings described above. No denied action, commit, push, merge or publish occurred.
-
-# Screen 1D readiness, frozen lane, v565 (2026-09-10)
-
-Authority: supplied work order SHA256 a3ee655774ef00a99110bd128b6f1e956af437998206bf9e3eabdfd1aa5f0199 verified. IMPLEMENTATION.md read in full, with reference/layout.css and reference/layout.js. The kit does not exist at its relative path here, so the named external kit was read only. MOCK.html was not read. All edits resolve within this checkout.
-
-## Files and boundaries
-
-- js/app.js: readinessHtml adds the approved heart/pulse SVG paths and existing moon PNG, and consistent icon/label/value/delta spans. Heart recency moves below the value; stale sleep retains date and "not last night". Missing sleep remains a non-actionable tile with an explicit No reading caption. Missing heart tiles and calibration retain existing behavior. Existing data-metric and data-sleepdetail bindings remain intact. The gauge and readinessScore are unchanged, with scoring bytes compared against HEAD. The existing sleep-sheet fallback sentence now says "this night" because it previously mislabeled stale unstaged watch readings. No teardown changes. Activity mix adds existing boot art for walking/hiking and dumbbell for strength. Other supported activities, real counts, ordering and history remain intact. APP_BUILD advances to v565. No figure call site is edited or added; a line-by-line comparison of figure call sites matches HEAD.
-- app.css: appended selectors only, enumerated below. No old CSS changed, preserving 1A, 1B, 1C and the Studio boundary.
-- sw.js: VERSION advances to tally-v565 and boot.png is precached for the newly used existing asset. Moon and dumbbell were already precached. Cache machinery is unchanged. This affects asset availability, not scoring or geometry.
-- version.json: tally-v565 metadata only.
-- js/changelog.js: fourth version stamp, n:565, and the player-facing note only.
-- docs/CLAIMS.md: exact matching Changelog item and numbered PROOF/REACH row. No runtime effects.
-- tests/readiness-ui-1d-audit.mjs: Node VM executes the real scoring and readiness renderer with test-only inputs, checks the locked score tuple, calibration, no-heart result, tile anatomy, stale dates, icon paths, retained action attributes and declared tile minimum height. A missing-icon mutation must fail. This does not prove browser controls or geometry.
-- tests/release-gate.mjs: adds this new PURE guard without removing inherited entries. No runtime effects.
-- UI-IMPLEMENTATION-PROOF.md: this advisory evidence record only.
-
-## Every touched CSS selector
-
-1. .rd-card .rd-tiles: equal grid columns, 7px gaps, stretched heights.
-2. .rd-card .rd-tile: 148px minimum height, flat surface, left alignment and consistent padding.
-3. .rd-card .rd-tile::after: suppresses the legacy decorative top stripe.
-4. .rd-card .rd-icon: common 30px icon row and 9px spacing.
-5. .rd-card .rd-icon svg: approved 22px SVG size.
-6. .rd-card .rd-icon img: contained pixel moon.
-7. .rd-card .rd-tile .rl: common label type.
-8. .rd-card .rd-tile .rv: common value type and spacing.
-9. .rd-card .rd-tile .rv small: real unit type.
-10. .rd-card .rd-delta: common delta/recency type and wrapping.
-11. .rd-card .rd-delta i: existing delta arrows inherit the common size.
-12. .rd-activities .rd-activity-icon: contained 32px existing pixel assets.
-
-All selectors require readiness-only roots. Their descendants are metric text/icons or activity icons, with no figure or arena content. CSS cannot alter the scoring function. No global selector, figure sizing, art file, battle layout, historical navigation or shared handler was modified.
-
-## Proof, failures and limitations
-
-New guard before implementation: node tests/readiness-ui-1d-audit.mjs exited 1, "icon label value delta anatomy". After implementation it exits 0 and rejects the missing-icon mutation. It evaluates the real score tuple as 72 / 96 / 47 / 49 / 72. This is Node proof, not the seven-row browser audit or its seedHealth seam. tests/readiness-audit.mjs is unchanged.
-
-Guard hygiene initially failed because the console evidence did not contain an uppercase CONTROL label. Corrected the evidence label for the existing mutation assertion, without changing or exempting lint rules; guard-hygiene-lint.mjs then exited 0. A patch script stopped at an unmatched release-gate registration string; corrected to insert in the literal. The temporary static figure runner initially exceeded Node's git output buffer, then exposed replacement-string expansion in its source injection. Both runner defects were corrected before accepting any result.
-
-Static figure audit only: executed the unchanged prefix before SETUP GATE with baseline and final app source. Both exit 1 with 6 green rows and the same ONE failing coverage row containing SIX identical call-site contents. Baseline lines: 20425, 21462, 21498, 21501, 21502, 21527. Final lines: 20429, 21466, 21502, 21505, 21506, 21531. These are the work order's six pre-existing sites shifted by inherited and current source line changes. Logs: /tmp/ui-1d-figure-baseline.log and /tmp/ui-1d-figure-final.log. Temporary audit source removed. No seventh site introduced and no baseline finding fixed.
-
-No browser audits, socket binding, screenshots, safe-area or decoded-ink measurements attempted, per the frozen restriction. Readiness browser 7/7, Pit figures 25/25, full figure audit, live controls, tile heights/overflow at 375px/390px/wider, historical navigation and complete sheet dismissal remain UNPROVEN for independent review. No permissions were denied. No commit, push, merge, publish, production data mutation, external-checkout edit, native/ASC-SUBMISSION.md edit or art change attempted.
-
-Reference clarification: the kit's approved moon is assets/icons-pix/moon.png, not an SVG. The existing asset is used exactly. The existing live sleep-score headline and supported activities remain, rather than copying example values or limiting activities to the mock. No impossible requirement was silently redesigned; no functional deviation proposed. Existing health guidance is retained without additions.
-
-Final PURE enumeration and direct exit results will be appended after execution. The inherited tier has 171 entries; the new guard makes 172. Enumeration includes the literal plus every push/unshift using exactly the r6-guards-audit regexes and VM evaluation. Exit 97 counts as UNPROVEN.
-
-Initial agreed unit proof exited 1: 389 passed, 1 failed. The fontscale census correctly rejected four newly declared fixed pixel font sizes. Converted those four to rem equivalents without changing the intended default sizes; no guard weakened. The in-progress first PURE run was interrupted (exit 130) and is not a final census. Process inspection with ps was denied by the sandbox; cancellation succeeded through the existing command session. This was the only permission denial. Final full PURE is restarted against the corrected source.
-
-The fontscale follow-up also requires named ramp tokens, not raw rem values. Final declarations use --fs-micro, --fs-tiny and calc(var(--fs-body) * 1.4375). The second prematurely started PURE pass was also interrupted, exit 130; neither partial pass is claimed.
-
-The next PURE pass found icon-inventory-audit.mjs red: activityRecoveryHtml is now an image emitter and requires inventory classification. Added its exact EMITTERS row as a chart with existing activity artwork. This additional test-file change has no runtime, scoring, figure or arena effect and does not weaken its discovery assertion. The pass was interrupted (exit 130) to restart all entries after this required registration.
-
-A later PURE entry, studio-v4-audit.mjs, rejected the two pixelated declarations because its source guard scans all CSS after the Studio boundary, including unrelated scoped readiness styles. Reused the existing .ico.pix-cur class on the moon/activity PNGs and removed the two new image-rendering declarations. Its existing declaration is unchanged and retains the exact requested pixel treatment. The two readiness selectors now only declare containment (and activity flex sizing). No Studio code, test, existing selector or baseline changed. This is an implementation adjustment, not a visual deviation. That pass was interrupted, exit 130; all entries are restarted after the correction.
-
-## Final verification on corrected source
-
-- Full PURE: **172 green, 0 red, 0 unproven**, overall exit **0**. Census is **79 literal entries + 93 push/unshift additions = 172**. All 171 inherited entries plus the new readiness guard executed. Direct spawnSync.status values were recorded, without pipes. No exit 97, null status or signal in this completed run.
-- Agreed proof: **node tests/unit.test.js**, direct exit **0**, final output **390 passed, 0 failed**.
-- Full unit output: /tmp/ui-1d-pure/unit.test.js.log. Exact literal, additions and resulting inventory: /tmp/ui-1d-pure/inventory.json. Per-entry exits: /tmp/ui-1d-pure/results.json. Runner output: /tmp/ui-1d-pure.log. Runner source: /tmp/ui-1d-pure.cjs.
-- New guard is green and its missing-icon mutation is rejected. Fontscale, icon inventory, Studio v4, inherited 1A/1B/1C guards and guard hygiene all green in the final complete run. No production/test source changed during that run. Only this evidence record was completed afterward.
-- git diff --check passed. Changed files are exactly js/app.js, app.css, sw.js, version.json, js/changelog.js, docs/CLAIMS.md, tests/readiness-ui-1d-audit.mjs, tests/icon-inventory-audit.mjs, tests/release-gate.mjs and UI-IMPLEMENTATION-PROOF.md.
-- Final denied action: ps process inspection, operation not permitted. It did not block completion. Browser verification remains unproven under the work order's socket restriction. No commit, push, merge or publish attempted.
-- Deviations: no functional or visual redesign. Use the reference's actual PNG moon; preserve existing live sleep-score behavior and unsupported-icon activity labels. Reuse existing pixel-image styling and named scalable type tokens to satisfy repository contracts. Four interrupted PURE passes are retained as partial logs under /tmp/ui-1d-pure-interrupted* and are excluded from the final count. The known six static figure findings remain, with unchanged contents.
-
-This is advisory evidence for independent review, not browser approval or publish authorization.
-
-# Screen 1E Today, frozen lane, v566 (2026-09-10)
-
-Work order SHA256 verified: 9e34d91323d4cce378efc92a479b5f623ab9d115a7927c4c0b7e0876ac5b317d. IMPLEMENTATION.md read in full, plus reference/layout.css and layout.js. The relative implementation kit is absent, so the named external kit was read only. MOCK.html was not read. All edits are in this checkout.
-
-## Files and implementation boundary
-
-- js/app.js: import the existing LEVEL_NAMES table, add Today-only todayEarnedTitle, read the existing social display name (truthful Your Bonehead fallback when absent), render name and one level chip on the same row, render the earned title separately, and refresh level/title/XP from real totalXp. No arbitrary digit stripping or shared levelFor change. News uses the exact reference newsIcon paths inline. Existing handlers, unread counts, claim counts and disclosure destinations remain. APP_BUILD v565 to v566.
-- app.css: append only the scoped selectors listed below. All inherited CSS remains byte-identical, including screens 1A to 1D. No art, figure renderer, animation, scene height, --fig sizing, pet instance, fight or readiness changes.
-- sw.js, version.json, js/changelog.js: remaining three version stamps advance 565 to 566; player-facing changelog added. No cache machinery changes.
-- docs/CLAIMS.md: matching Changelog item and numbered PROOF/REACH row.
-- tests/today-ui-1e-audit.mjs: new PURE source contract, title lookup and refresh assertions; omitted-pet-lift negative control. This is not browser proof.
-- tests/release-gate.mjs: register one new PURE entry. Inherited 172 entries remain; final census is 173.
-- UI-IMPLEMENTATION-PROOF.md: append this evidence.
-
-## Every touched selector and exact geometry
-
-All rules are appended, scoped to .screen--today:
-
-1. #bhStage > .hero-char: original top calc(--gw-top + --gw-h + --bleed) becomes the same expression minus 16px. Bottom 79px to 95px. If height = sceneHeight - top - bottom, new height = sceneHeight - (top - 16) - (bottom + 16) = original height. Left/right, --fig and animation transforms are untouched.
-2. #bhStage > .hero-companion: bottom 92px to 108px. Auto width/height, --pet-rel, big-pet sizing and horizontal anchors unchanged.
-3. #bhStage > .gw-row: original top calc(--gw-top + --bleed) minus 16px. The row contains only Gwart and his associated speech. Wallet, metadata, scene and unrelated content do not move.
-4. #bhStage > .hero-fade: replace the old fixed-colour fade with the existing --bg and --app-backdrop, fixed attachment matching .today-plate, feathered by standard and WebKit mask-image from transparent at 70% to opaque at 100%. No equipped backdrop is hardcoded.
-5. #bhStage > .hero-meta: remove the separate dark gradient. Existing 96px height and padding remain.
-6. .hero-meta .hero-name: display font at --fs-5, min-width 0, single-row ellipsis for long names.
-7. .hero-meta .hero-lv: flex none and --fs-body instead of --fs-5. Existing padding, border and gold state remain.
-8. .hero-meta .hero-title: --fs-tiny instead of --fs-body.
-9. .hero-actions #pitBtn and .hero-actions .hero-act:active: dark --surface-2, transparent border and inset 0 -3px lime underline. Pit remains visibly emphasized as approved; existing attention badge remains state-driven. No rarity or destructive controls matched.
-10. #newsBanner and .q-collapse: common 1px --line border, 12px radius and 10px bottom margin. News border was 2px; Quests radius was 16px and bottom margin 12px. Existing News shadow and meaningful Quests claim shadow remain.
-11. #newsBanner > summary and .q-collapse > summary: common 48px minimum height, 9px 13px padding, 10px gap, inherited font family, --fs-1, weight 800 and .06em tracking. Previously News used 10px 12px padding/8px gap and Quests 14px 16px/8px. Both retain real content and can grow with accessibility text sizing.
-12. #newsBanner .nb-ico and .q-collapse .q-sum-ico: common 24px square, flex none, centered alignment. News icon was 16px, now the reference 24px newspaper; Quests keeps its 24px icon box.
-13. .q-collapse.has-claim: retain a conspicuous accent border after the common row border rule.
-
-375px arithmetic against Tom's supplied real baseline: heroChar y 178.3 - 16 = 162.3; heroCompanion y 439.6 - 16 = 423.6. Relative top separation remains 439.6 - 178.3 = 423.6 - 162.3 = 261.3px. Expected heights remain 380.7px and 106.5px. These are derived expectations, not fresh browser measurements. Safe-area --bleed stays in both top formulas. Actual safe-area and large-gear clearance are unproven.
-
-## Proof and limitations
-
-The new guard was run before production changes and exited 1 on the missing character lift. After implementation it exits 0; removing just the pet lift is rejected. The title guard checks level 8, level 21 and a title containing digits, preserving real title-table content. A test regex initially matched xprow when intending row; corrected the word boundary. Guard hygiene initially mistook a source boundary containing a webdriver hook name for hook-only proof; the test now bounds the real function by its closing brace, without referencing the hook or adding exemptions.
-
-Initial agreed node tests/unit.test.js: exit 1, 389 passed, 1 failed. R41-16 requires a hero-lvrow selector in the refresh function. Scoped the live level lookup to .hero-lvrow .hero-lv, preserving that contract without changing tests. Full final PURE and unit results follow below.
-
-Static figure prefix evaluated separately for HEAD and final app source: six passing rows, one failing coverage row in both. Full unclaimed call-site CONTENT compared equal, exactly six sites, no seventh. Baseline lines 20429, 21466, 21502, 21505, 21506, 21531; final lines 20438, 21475, 21511, 21514, 21515, 21540. Logs: /tmp/ui-1e-figure-baseline.log, /tmp/ui-1e-figure-final.log and /tmp/ui-1e-figure-comparison.log. Temporary runner /tmp/ui-1e-static.cjs. Its first comparison hit a cross-VM array-prototype mismatch; converting to local arrays corrected the runner. The actual site strings were unchanged. This is only the static prefix, not a full figure-audit pass.
-
-No browser audits, sockets or screenshots attempted, as required. Full figure audit, Pit 25/25, readiness browser 7/7, controls, hit tests, decoded ink, backdrop feather, equal rendered row dimensions, safe-area and large-gear checks remain UNPROVEN for independent review. Pit and readiness code and audits are unchanged; inherited PURE guards will still run.
-
-No denied permission actions. No commit, push, merge, publish, external-checkout edit, native/ASC-SUBMISSION.md edit, art modification or production data mutation attempted. No functional redesign. Adapting the reference to real data uses the existing title table and a truthful unnamed-player fallback. The browser proof required by the general kit cannot be completed under the frozen lane's explicit prohibition; proposed disposition is independent browser review, not a substitute visual claim.
-
-## First complete PURE pass and fixture corrections
-
-First complete pass: 170 green, 3 red, 0 unproven; overall exit 1. The 173 entries were enumerated as 80 literal plus 93 push/unshift additions. The agreed unit command in that pass exited 0 with 390 passed, 0 failed.
-
-Three additional test files changed to support the approved markup, without exemptions or weakened production checks:
-
-- tests/icon-inventory-audit.mjs: classify newsBannerHtml as the existing Today news scene, now emitting an inline newspaper SVG. Its discovery census had correctly failed on the new emitter.
-- tests/r48-state-audit.mjs: replace the obsolete single innerHTML row stub with exact level/title/name/XP selectors. Actual win/loss settlement still runs with webdriver false, reads the real ledger and checks the paid totals and XP. It now asserts the separate real title and unchanged player name. A mutation deleting the level update must leave STALE text, which is explicitly rejected as a current level.
-- tests/today-playtest-audit.mjs: provide the newly used social.displayName dependency in the existing isolated renderToday-prefix fixture. Existing five-day protected-streak assertion is unchanged.
-
-All three targeted commands now exit 0. Full corrected PURE starts again from the beginning. Initial logs and results are retained under /tmp/ui-1e-pure-first and /tmp/ui-1e-pure-first.log. No browser checks are included in either PURE count.
-
-Additional boundary proof: inherited app.css prefix, readiness renderer/scoring region and openFight function compare byte-for-byte equal to HEAD. The figure content comparison remains unchanged after the fixture-only fixes.
-
-## Final corrected-tree results
-
-- Full PURE: 173 green, 0 red, 0 unproven. Runner exit 0. Enumeration exactly follows tests/r6-guards-audit.mjs: const PURE literal plus every PURE.push/unshift site, evaluated in VM. Census: 80 literal entries + 93 additions = 173. No inherited entry removed. Every child exit read directly from spawnSync.status, without a pipe; exit 97 would be UNPROVEN. No null exits or signals in this run.
-- Agreed command node tests/unit.test.js: exit 0, final output 390 passed, 0 failed. Executed as a full PURE entry on the corrected tree.
-- Complete unit output: /tmp/ui-1e-pure/unit.test.js.log. Every command and exit: /tmp/ui-1e-pure/results.json. Exact literal, push/unshift expressions and final inventory: /tmp/ui-1e-pure/inventory.json. Runner: /tmp/ui-1e-pure.cjs. Complete runner output: /tmp/ui-1e-pure.log.
-- New Today guard, its omitted-pet-lift control, corrected settlement guard and omitted-level-refresh control, icon census, Today read/playtest guards, inherited 1A to 1D guards and guard hygiene are all green in the complete final pass.
-- No production or test source changed during the final pass. Only this evidence section was appended afterward. git diff --check passes.
-- Final changed files: app.css; js/app.js; sw.js; version.json; js/changelog.js; docs/CLAIMS.md; tests/today-ui-1e-audit.mjs; tests/release-gate.mjs; tests/icon-inventory-audit.mjs; tests/r48-state-audit.mjs; tests/today-playtest-audit.mjs; UI-IMPLEMENTATION-PROOF.md.
-- Denied actions: none. Browser proof remains blocked by the frozen work order, with no sockets, screenshots or browser audits attempted. No commit, push, merge or publish.
-- Deviations: no functional or visual redesign. Browser geometry and controls require independent review. Existing title-table lookup is retained for the earned title, and absent social names use Your Bonehead. The new PURE guard increases the inherited 172-entry census to 173. All failures and fixture corrections are recorded above.
-
-Advisory evidence only. This does not claim browser approval or authorize publishing.
-
-# Wardrobe 1F advisory implementation evidence
-
-Frozen plan SHA256 verified: feef3f7a14ab4009f6d6f2568c5c6a8aadaad1075581d11efeafdbe4ab129cbe.
-The full IMPLEMENTATION.md and reference layout sources were read at the supplied authority path because the kit is absent from this checkout. MOCK.html was not opened. All source paths and edits resolve within this checkout.
-
-## Scope delivered and outstanding deviation
-
-This is a partial implementation of 1F, not acceptance of the whole screen. The compact toolbar, saved-fit switcher, explicit rename/delete access and navigation paint are implemented. Identity/title/currency regrouping and name/level alignment are deferred. The existing header already supplies one level chip and real currency/collection data, which remain unchanged. Moving its level chip onto the name row would change wrapping and could move the paperdoll for a reason other than toolbar height. That violates the narrower frozen hard lock unless proved otherwise. This limitation was reported during implementation, before changing the header. Proposed deviation: independent browser review establishes a header arrangement with the same total height, or the operator explicitly permits the measured header delta. No speculative header geometry was shipped.
-
-The reference uses a preview sheet for saved fits. The real implementation uses an inline, collapsed switcher panel inside the toolbar. Opening it expands document flow, never overlays the slots, and closing it restores the compact row. This is a disclosed presentation adaptation. All fit operations still use the existing real application handlers and sheets. Existing long-press editing remains available, in addition to explicit Rename and Delete buttons. Save fit still explains the real cap through aria-disabled; Studio keeps its camera and real route; Take off retains its availability gate and arm-then-confirm gear semantics.
-
-## Files changed and boundaries
-
-- js/app.js: Wardrobe-only navigation class; fit toolbar markup and its switcher/rename bindings; APP_BUILD v566 to v567. Header, collection counts, currency reads and all production gear/fit data functions are unchanged. New bindings only select toolbar descendants. No global scrolling, sheet manager, figure renderer, asset or lower-slot handler was changed.
-- app.css: append only the selectors enumerated below. The inherited CSS prefix is hash-checked byte-for-byte, including all 1A to 1E rules and paperdoll sizing. No inherited selector is edited.
-- sw.js, version.json, js/changelog.js: remaining version stamps advance to 567; one matching player-facing changelog item. No service-worker behavior changes.
-- docs/CLAIMS.md: matching Changelog item and numbered PROOF/REACH row, with the identity deferral and browser limits stated.
-- tests/wardrobe-ui-1f-audit.mjs: new PURE source/DOM-model guard. Hashes freeze the entire paperdoll-through-lower-markup range, lower equipment handlers and inherited CSS. It executes the real toolbar template at 0/1/6 fits and real event bindings for switcher, equip, rename and confirmed delete. These are source/behavior proofs, not visual or hit-target proof.
-- tests/wardrobe-noise-audit.mjs: update only the expected fit-help instruction from long-press instructions to the explicit Rename/Delete instructions. Existing quiet-state, paid-commit and legacy-fit-warning assertions remain.
-- tests/ui-audit.js: add the switcher to CONTROL_EXPECTATIONS and support checking its expanded state against actual list visibility, restoring the original state afterward. This browser check was written but not run. Per-fit actions need the independent Wardrobe browser driver with real saved-fit fixtures.
-- tests/release-gate.mjs: register the added guard; no inherited entry removed. The inherited 173 becomes 174.
-- UI-IMPLEMENTATION-PROOF.md: append this advisory record.
-
-## Every appended CSS selector
-
-1. #chTabs.ward-navigation > .ch-tab.on: background, border colour and inset underline only. Existing border widths, dimensions and navigation handlers remain.
-2. #chContent > .ward-toolbar: grid for the four toolbar controls and expandable list, 5px gaps, in-flow overflow and start alignment. It is a sibling preceding .mog-dock, not a wrapper around the locked area.
-3. #chContent > .ward-toolbar > .fit-chip: 44px minimum target, compact padding, gap, radius, type and line height. Direct children only.
-4. #chContent > .ward-toolbar > .ward-fit-switcher: two-line label/count alignment inside the toolbar button.
-5. #chContent > .ward-toolbar > .ward-fit-switcher > span: ellipsis confined to the button label.
-6. #chContent > .ward-toolbar > .ward-fit-switcher > small: count typography only.
-7. #chContent > .ward-toolbar > .fit-chip.arming: wraps the existing long gear-confirmation label within 100px. It remains visible and may grow toolbar height while armed.
-8. #chContent > .ward-toolbar > .ward-fit-list: full-width grid row for the expanded list. Native hidden state is preserved; no display override defeats it.
-9. #wardFitList > .ward-fit-row: columns for the real fit, Rename and Delete, with 7px row margins.
-10. #wardFitList > .ward-fit-row > .fit-chip: compact type and padding, retaining inherited 44px minimum targets.
-11. #wardFitList .ward-fit-name: long names ellipsize within their equip button; title and aria-label retain the full escaped name.
-12. #wardFitList > .ward-fit-row > [data-fit-del]: destructive text colour only.
-
-None can match paperdoll, pd-slot, pd-art, pd-bottom, stat or inventory descendants. The sole possible effect below the toolbar is the document-flow y displacement caused by toolbar height. No fixed/absolute overlays, parent dimensions, overflow clipping, art sizes, slot grid or scroll container were introduced or changed.
-
-## Geometry and blocked verification
-
-Actual paperdoll y delta: UNPROVEN. No measured zero or exact pixel equality is claimed. At the standard root font size, the unchanged rail padding is 2px top + 6px bottom and its bottom margin remains 4px. The new closed row has a 44px minimum. The old saved-fit help disclosure had a 44px summary, 2px total border and 8px top margin. Under normal sibling margin collapse, removing that closed disclosure from the surface predicts a 50px lift when saved fits exist, and 0px when no fits exist and both toolbar rows resolve to 44px. Conditional example against the supplied y374.9 baseline: y324.9 if that baseline has saved fits, closed help and the standard row height. This is source arithmetic, not the exact required browser measurement. Font scaling, an armed Take off label, an open list/help and the supplied baseline's unspecified fit state must be measured separately.
-
-The supplied x16, width343, height418, fourteen slots, first-slot66x78, last-slot80.5x69.5 and pd-art62x62 remain browser obligations. Their production markup, styles and lower handlers are untouched, but actual gear operation, lower-slot reachability, safe-area behavior and hit targets cannot be proved by hashes. No sockets, browser audits or screenshots were attempted, per the frozen work order's listen EPERM restriction. Independent review must operate all slots and toolbar actions at 375px, 390px and a wider phone, including long names and zero/full fits.
-
-## Proof observations before the final PURE pass
-
-New guard RED before implementation: exit 1, "compact saved-fit switcher missing". After implementation: exit 0. CONTROL mutations remove the switcher and alter the paperdoll markup; both are rejected. DOM doubles execute production event bindings and prove disclosure state, correct fit id routing, Rename sheet callback, no deletion before confirmation and only one delete for repeated confirmation. Lower markup/handlers and inherited CSS hashes pass.
-
-Initial agreed unit output: 389 passed, 1 failed. The failure was the inherited Studio guard expecting "The Studio", while the initial toolbar shortened it to "Studio". The production label was restored, with no change to the Studio guard. Initial shell output was followed by tail, so that shell's final status did not represent the unit child exit. It is not cited as direct exit-code proof. Final direct child status is recorded by the complete PURE run below.
-
-Wardrobe noise audit passed 5/5. Guard hygiene reported clean. node --check js/app.js and git diff --check passed. The mechanical design detector returned exit 2 with warnings in inherited source; its findings are outside the appended toolbar/navigation rules. It is not browser proof and was not used to change locked or unrelated UI. Output: /tmp/ui1f-detect.json.
-
-The figure audit STATIC prefix was executed against HEAD and current app.js without starting its browser setup. Both have six passing rows and exactly one failing coverage row. All six unregistered call sites' FULL text compares equal, not merely the number of failing rows. Current sites: 20425 (kinChips), 21462, 21498, 21501, 21502, 21527. No seventh site. Baseline/final full content and rows: /tmp/ui1f-figure-baseline.json and /tmp/ui1f-figure-final.json. Runner: /tmp/ui1f-static.cjs. Full figure, Pit 25/25 and readiness browser 7/7 remain unproven in this environment; their production code and inherited checks are unchanged.
-
-Denied actions: none. Blocked actions: browser geometry, browser audits, screenshots and real hit-target checks as specified by the work order. No commit, push, merge, publish, deployment, external-checkout write, native/ASC-SUBMISSION.md edit, Cam art edit or production data mutation was attempted. The work is advisory and awaits independent review.
-
-## Final current-tree proof results
-
-- Agreed proof: node tests/unit.test.js. Direct child exit 0. Final output: 390 passed, 0 failed. Full output: /tmp/ui1f-pure/unit.test.js.log.
-- LAST full PURE execution: 174 green, 0 red, 0 unproven. Runner exit 0. All inherited 173 entries passed, plus the new Wardrobe guard. No source changed during the run; only this evidence section was appended afterward.
-- Enumeration exactly follows tests/r6-guards-audit.mjs: evaluate the const PURE literal and every /^PURE\.(?:push|unshift)\([^;]+\);/gm match with node:vm. Census: 81 literal entries + 93 additions = 174. Both original expressions and the exact final ordered list are in /tmp/ui1f-pure/inventory.json.
-- Each command was spawned as node tests/<entry>. Exit codes were read directly from child close events, not through a pipeline or a trailing shell command. Exit 97 is classified as UNPROVEN. No null exit codes or signals occurred. Every command, code and duration: /tmp/ui1f-pure/results.json. Counts: /tmp/ui1f-pure/summary.json. Complete run output: /tmp/ui1f-pure.log. Runner: /tmp/ui1f-pure.cjs.
-- The new guard, Wardrobe noise, Studio, guard hygiene, all inherited 1A to 1E guards and r6-guards-audit passed in the final full run. These counts exclude prohibited browser audits.
-- Final files changed: UI-IMPLEMENTATION-PROOF.md; app.css; docs/CLAIMS.md; js/app.js; js/changelog.js; sw.js; tests/release-gate.mjs; tests/ui-audit.js; tests/wardrobe-noise-audit.mjs; tests/wardrobe-ui-1f-audit.mjs; version.json.
-- Denied actions: none. Browser checks remain blocked by the frozen order. No commit, push, merge or publish.
-- Outstanding deviations: header identity regrouping/name-level alignment deferred; saved fits expand inline instead of using a switcher sheet; exact rendered paperdoll y delta and lower-slot reachability remain unproven. The source-derived conditional delta above is not a measured result. This is advisory evidence for independent review, not full 1F acceptance.
-
-## 1G Backpack, v568 (2026-09-11)
-
-Frozen plan SHA256 verified: e4b3786f9605c407bd0c3e696d705fb9c04697003845e1d5a09597673cbd8ca6.
-Read IMPLEMENTATION.md in full, reference/layout.css and reference/layout.js. MOCK.html was not read. All implementation paths resolve inside this checkout. The kit was read as authority only.
-
-### Scope and data
-
-- js/app.js, renderCharacter crates branch: two stable crate slots derived from CRATES (daily/Common and golden/Bone), plus any stored unknown crate kinds retained through the existing daily fallback. The legacy egg crate is migrated by the unchanged migrateLegacyEggs call. Explicit zero quantities and disabled opening buttons. Odds and the existing daily bulk-open button are inside each crate's native details disclosure, reachable even with no crates. No detached odds/footer row.
-- Step Eggs span both grid columns, with no cap. The unchanged eggs.map(e => ...) calls eggProgress(e, lifeSteps) inside each iteration. Each record supplies stepsAtStart and goal; each HATCH button carries e.id. No separate queued Step Egg state exists in loot.js; all unhatched records use their existing per-record incubation/ready model. Laboratory incubator queues remain in their existing flow. Empty eggs render no progress bars. Stale-step messaging no longer hides a ready egg's completed counts.
-- Both CONSUMABLES types remain present: xp2/Battle Charm and vigor/Vigor Draught. USE/ACTIVE and existing consumption bindings remain intact. All six POTIONS definitions render, using potionsInv counts and recipeIconHtml assets. VIEW IN KITCHEN opens the existing Kitchen, without consuming anything. All seven ingredient definitions render actual counts with zero fallback. The ingredient grid rules are unchanged.
-- Kitchen heading contains the existing bpKitchen control, now labelled Cook. Active dishes and cook slot/ready state remain visible with unchanged expressions. Salvage gains only a cohesive section wrapper. Gear selection, per-item confirmation, bulk confirmation, dust updates, grants, consumption and hatch functions are unchanged.
-
-### Touched selectors and files
-
-Production CSS is appended and scoped beneath #chContent: .bp-grid; .bp-card; .bp-card-top; .bp-qty; .bp-card > b; .bp-card p; .bp-card small; .bp-card > .btn; .bp-crate-details summary; .bp-crate-details .t3-sect; .bp-eggs; .bp-eggs > .t3-sect; .bp-eggs .t3-egg; .bp-eggs .t3-egg .tx; .bp-salvage; .bp-salvage > .t3-sect. Uses existing type tokens and two minmax(0, 1fr) columns. No inherited stylesheet rule was edited.
-
-Markup changes also affect .t3-sect, .t3-cells/.t3-cell/.t3-qty (replaced in this branch only), .t3-row/.t3-med/.t3-tx/.t3-lock (replaced for consumables only), .art, .tx, .bar, .note, .ingredient-grid, .ing-cell, .ing-ico, .ing-n, .ing-name, #bpKitchen, #useBoost, #useVigor, [data-open], [data-open-all] and [data-hatch]. New controls: [data-bp-potion] and #bp-potion-<real potion id>. Existing lab and salvage descendants retain their markup and bindings except the enclosing salvage section.
-
-Changed files: js/app.js; app.css; js/changelog.js; sw.js; version.json; docs/CLAIMS.md; tests/backpack-ui-1g-audit.mjs; tests/release-gate.mjs; tests/ui-audit.js; UI-IMPLEMENTATION-PROOF.md. The four version stamps are APP_BUILD, service-worker VERSION, version.json and the newest CHANGES entry, all v568. UI audit now registers six potion buttons and Cook, entering the real Backpack tab before exercising each.
-
-### Proof and negative controls
-
-New guard initially exited 1 on the original renderer: all seven ingredients must render including zeros, actual 0 versus expected 7 for empty inventory. An earlier syntax error in the new test was corrected before this meaningful RED run. Green guard renders the actual complete Backpack template with empty and mixed data: 10 inventory cards, seven ingredients, no fake empty egg bars, disabled empty crate actions, real first crate IDs, and odds/bulk buttons confined to details. These are test-only inputs, not production fixtures.
-
-The egg guard renders the actual eggs.map expression with three records at lifetime 600: anchor 100/goal 1000 gives 500/1000; anchor 400/goal 2000 gives 200/2000; goal 0 is ready with its own hatch id. Mutating eggProgress(e, lifeSteps) to eggProgress(eggs[0], lifeSteps) is rejected. Reintroducing the positive-count ingredient filter is rejected. Both controls run on every guard invocation. The new potion click binding is executed against six event doubles and invokes openKitchen six times; this is binding proof, not browser operation.
-
-Initial agreed unit command exited 1: 389 passed, 1 failed. The fontscale census rejected two new fixed font sizes. After using existing named type tokens, fontscale-audit.mjs exits 0 at 1007/1007, with its regression controls intact. An intermediate rem-only attempt also failed the named-ramp rule and was corrected. No tests were weakened.
-
-wardrobe-playtest-audit.mjs exits 0: 13 passed, 0 failed, including real crate odds and ownership conservation. Static figure prefix comparison exits 0: baseline and current each have one failing coverage row, exactly six unregistered call sites, and identical full site text. Evidence: /tmp/ui1g-static.log, /tmp/ui1g-figure-baseline.json, /tmp/ui1g-figure-final.json. No browser setup was run. New guard output: /tmp/ui1g-backpack.log. Preliminary unit stdout: /tmp/ui1g-unit.log.
-
-### Blocked checks and deviations
-
-This checkout does not contain the measured illustrated Laboratory entrance or animated host asset. Its first Backpack content is .lab-egg-help, a text entrance using data-lab-open. It remains unchanged and opens the live Laboratory. Proposed deviation: retain that truthful existing entrance until the approved host asset/entrance is supplied in this checkout. No substitute pet renderer or art was invented. Requirement 1's illustrated host/animation is therefore BLOCKED, not complete.
-
-Potion VIEW opens the actual Kitchen rather than inventing an item-specific preview or a new drink action. Crate details are inline native disclosures inside their cards. Supported counts and existing actions remain intact. Reference card typography uses the existing named type ramp to retain text scaling. No separate Step Egg queue or concurrency rule was introduced.
-
-Browser audits, screenshots, real control operation, 375/390/wider-phone overflow, safe areas and geometry are UNPROVEN under the frozen order's socket restriction. Pit 25/25, readiness 7/7, Today 16px lift/261.203 gap and Wardrobe x16 y374.9 w343 h418/14 slots remain the independent reviewer's browser locks. Their code was not edited. No claim of zero measured overflow is made.
-
-Denied actions: none. No sockets or prohibited browser checks were attempted. No commit, push, merge, publish, deployment, original-checkout edits, Cam art edits, native/ASC-SUBMISSION.md edits or production data mutation. Advisory implementation evidence for independent review.
-
-### LAST full PURE results on the final source tree
-
-- Agreed command: node tests/unit.test.js. Direct child exit 0. Output: 390 passed, 0 failed. Complete stdout/stderr: /tmp/ui1g-pure/unit.test.js.log.
-- Full PURE: 175 green, 0 red, 0 unproven. Runner exit 0. This includes every inherited entry and backpack-ui-1g-audit.mjs. No source changed during or after this run; only this results section was appended.
-- Enumeration matches tests/r6-guards-audit.mjs exactly: evaluate the const PURE literal and all /^PURE\.(?:push|unshift)\([^;]+\);/gm sites. 81 literal entries + 94 additions = 175. Exact literal expression, all addition expressions and final ordered entry list: /tmp/ui1g-pure/inventory.json.
-- Commands and direct child close-event exit codes, grades and elapsed times: /tmp/ui1g-pure/results.json. Summary: /tmp/ui1g-pure/summary.json. Complete per-entry streams: /tmp/ui1g-pure/<entry>.log. Runner: /tmp/ui1g-pure.cjs. Run output: /tmp/ui1g-pure.log. Exit 97 and missing child exit codes are classified UNPROVEN, never green. No such exits occurred. No pipe was used to infer command success.
-- Final changed-file list is the ten files listed above. Denied actions: 0. Prohibited commit/push/publish actions: 0 attempted. Illustrated Laboratory host remains blocked by absent source/asset; browser operation and geometry remain unproven. All reported proof is advisory for independent review.
+# UI implementation proof: the seven approved screens
+
+Baseline `cb2ef0fb` (v561), the exact commit the kit was cut against. Screens
+land as v562 to v568 on seven stacked branches. **Nothing is merged and nothing
+is deployed**: the kit authorizes implementation and verification only.
+
+Codex wrote the code. Every number below is mine, from a real render, because
+Codex cannot bind a socket (`listen EPERM`) and therefore cannot run a browser
+audit or take a screenshot. Where Codex predicted a number it could not measure,
+that is called out.
+
+## Branches
+
+| screen | build | branch |
+|---|---|---|
+| 1A Fight | v562 | `ui/1a-fight` |
+| 1B The Pit | v563 | `ui/1b-pit` |
+| 1C Crew | v564 | `ui/1c-crew` |
+| 1D Readiness | v565 | `ui/1d-readiness` |
+| 1E Today | v566 | `ui/1e-today` |
+| 1F Wardrobe | v567 | `ui/1f-wardrobe` |
+| 1G Backpack | v568 | `ui/1g-backpack` |
+
+Each branch is cut from the previous verified one, so `ui/1g-backpack` contains
+all seven.
+
+## Locked geometry, measured before and after
+
+All at 375px unless stated. Captured on `cb2ef0fb` BEFORE any change, re-run
+after every screen.
+
+### Fight arena (`pit-figures-audit`, painted pixels)
+
+    @393x852  Wanderer ink x125..369.5 · player x45..102.5 · 22.5px daylight
+              210 vs 77 = 2.7x · painted 244.5x210 in a 361x330 arena
+              Bumbleseal ink 72.5x60.5 · 0 gold px outside · Live Wire 154x202
+    @320x568  Wanderer ink x103.5..298 · player x33..86.5 · 17px daylight
+
+25 of 25 rows, exit 0, unchanged across all seven screens. Two fields vary and
+BOTH were shown to oscillate on identical code across repeated runs: the
+painted-pixel counts, and `PET-MASS` ink height (60.5 / 60.5 / 61.5 on one
+tree), which samples a bobbing pet at an arbitrary animation frame.
+
+### Today figures (1E, the approved 16px lift)
+
+    hero char y   177.463 -> 161.463   = 16.000px
+    char height   380.7   -> 380.7     art scale unchanged
+    pet height    106.5   -> 106.5     art scale unchanged
+    char-to-pet   261.203 -> 261.203   IDENTICAL to three decimals
+
+The gap is the check that matters: it proves the figures were lifted TOGETHER
+rather than re-spaced or rescaled to fake a tighter gap. Still 261.203 on 1F and
+1G.
+
+### Wardrobe paperdoll (1F)
+
+    paperdoll  343 x 418   identical
+    pd-art     62 x 62     identical
+    slots      14          identical, first 66x78, last 80.5x69.5
+    y          374.9 -> 391.3   +16.4px  (see Deviations)
+
+All 14 slots hit-tested with `elementFromPoint` at each centre after
+`scrollIntoView`: **14 of 14 reachable, zero blockers.**
+
+### Readiness scoring (1D), which the kit says not to change
+
+    score=72  better=96  flat=72  worse=47  spread=49  withNap=72
+
+7 of 7 rows, exit 0, identical before and after. `readinessScore` has zero diff
+lines.
+
+### Figure contract
+
+`figure-audit` exits 1 on clean `cb2ef0fb` before any change, with ONE row
+listing **SIX** pre-existing unregistered pet call sites: `kinChips` plus five
+Laboratory sites. All seven screens were compared by **site content**, not row
+count, because the row count stays 1 however many sites appear and would have
+hidden a seventh being added. Six identical snippets on every screen.
+
+## Controls exercised, not simulated
+
+Real controls were clicked and the resulting state read; handlers were never
+called directly.
+
+- **1A** Flee 50x44 at 375/390/430. ITEMS closed reads exactly `ITEMS` with no
+  subtitle; potions granted, the real button clicked, tray shows both with
+  counts and `1 AP to drink`.
+- **1B** 13 opponent portraits, **13 distinct art sets, none shared**. The
+  Bouncer Below carries real layered art and **0 Build icons**. Build entry
+  retained. 0 broken images.
+- **1C** star 46x46 tap target with a 48x48 image; Cheer and Gift 175x45 side by
+  side; **0 actions under 44px**; star bottom 652 clear of actions top 659, so
+  identity and actions genuinely do not overlap; podium, race and standings
+  present.
+- **1D** three tiles **all exactly 148px**; 3 of 3 carry icons; real units
+  58bpm / 60ms / 7h11; a deliberately stale sleep row renders
+  `09-04 · not last night`, with a negative control confirming the page never
+  claims "last night" in any other form.
+- **1E** News and Quests measured like-for-like (summary vs summary, not summary
+  vs the details wrapper): both `x17 w341 h48`, padding `9px 13px`, 24x24 icons.
+  Exactly one `Lv N` on the page. Hero fade is a `radial-gradient` with **zero**
+  opaque black bars.
+- **1F** fit toolbar and switcher present; 14 of 14 slots reachable.
+- **1G** all **7 ingredient tiles** with zeros visible (`2,0,0,0,0,1,0`), grid
+  `109px x3`; bulk-open row **gone**; three eggs seeded to 1200 / 4000 / 7500 of
+  8000 render **three distinct bars** (15% / 50% / 94%, `aria-valuenow`
+  1200 / 4000 / 7500).
+
+## Test tier
+
+`PURE` grew 168 -> 175 as each screen registered its guard. Enumerated the way
+`r6-guards-audit` itself does it: the `const PURE = [...]` literal in
+`release-gate.mjs` PLUS its `PURE.push`/`unshift` sites.
+
+    1A 169/169   1B 170/170   1C 171/171   1D 172/172
+    1E 173/173   1F 174/174   1G 175/175      all green, 0 red, 0 unproven
+
+On 1F, Codex reported 1 red and 1 unproven. Both pass with exit 0 when run here,
+on that tree and the previous one, with `acorn` resolving: artifacts of its run
+environment, not real failures.
+
+## Deviations
+
+1. **1F paperdoll +16.4px.** Section 1F mandates "one compact fit toolbar above
+   the paperdoll" AND hard-locks the paperdoll. A required 52px element cannot
+   be inserted above something without moving it unless 52px is deleted
+   elsewhere. Three rounds recovered ~40px of 56px by collapsing the wallet and
+   collection pills into one shared flow. Closing the last 16.4px means deleting
+   pills the kit says to preserve. Everything the lock NAMES is unchanged and
+   all 14 slots are reachable. **Tom's call to overrule.**
+
+2. **1G Laboratory entrance.** The kit says to preserve "the existing
+   illustrated full-width entrance" with "the host asset and animation". No such
+   entrance exists in this codebase: `js/app.js:16481` is a plain
+   `<button class="btn ghost">Open Laboratory</button>` and the only lab asset is
+   `assets/icons-pix/lab.png`. The real text entrance was preserved rather than
+   art invented.
+
+3. **1C "Crew since" line omitted.** No reliable friendship-created date exists,
+   and the kit forbids substituting account-created, last-sync or last-seen.
+   Omission is the kit's own specified fallback.
+
+4. **1C pre-existing Crew failures.** `crew-fan-audit` fails two rows on the
+   BASELINE (`PLATE` 72.3px over a 62px limit, and an `ONLINE` wording
+   mismatch). Both are byte-identical after 1C: untouched, not weakened.
+   `crew-layout-audit`'s GIFT row was ALSO failing on the baseline (gift bottom
+   859 against an 844 screen) and now **passes**, so 1C ends better than it
+   started.
+
+## Not proven
+
+- No native device. iOS and Android shells are untested; every measurement is
+  desktop Chrome at emulated phone widths.
+- `ui-audit.js` control rows added by 1F and 1G were written but not executed;
+  that audit is a console-paste harness and is separately known to drift.
+- Real purchase, real haptics and VoiceOver order remain person-only checks.
