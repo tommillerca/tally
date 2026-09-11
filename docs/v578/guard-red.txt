@@ -11,3 +11,71 @@ ok    CONTROL Today drew its five door tiles  Trends 16,652.8 63.8x65.8 | Backpa
 FAIL  CLEAR a live toast covers none of the door tiles  toast 26.3,651.7 322.5x64.5 covers Trends, Backpack 2, Stable, Kitchen, The Pit !
 ok    SHADOW the contact shadow reads as contact, not a smudge  soles lum 60.2 with the shadow element hidden, 33.1 with it shown at 338,1078; the element contributes 45.0%
 FAILED  toast-today-audit
+
+=== Round 2 wardrobe stack guard, 2026-09-11 ===
+Acceptance BLOCKED, not proven: both runs stopped before assertions under the managed sandbox.
+
+$ node tests/wardrobe-stack-audit.mjs https://tommillerca.github.io/tally/
+AUDIT START wardrobe-stack-audit.mjs: completion pending; planned rows undeclared
+/bin/sh: /bin/ps: Operation not permitted
+[godmode] puppeteer 24.43.1 via repo node_modules: /Users/tommiller/Documents/Hyperframes Editor/tally/node_modules/puppeteer/lib/cjs/puppeteer/puppeteer.js
+INTERRUPTED wardrobe-stack-audit.mjs: Error: Failed to launch the browser process:  Code: null
+
+stderr:
+[0911/161312.850323:ERROR:base/power_monitor/thermal_state_observer_mac.mm:140] ThermalStateObserverMac unable to register to power notifications. Result: 9
+[0911/161312.852849:ERROR:net/dns/dns_config_service_posix.cc:138] DNS config watch failed to start.
+[0911/161312.854012:WARNING:net/dns/dns_config_service_posix.cc:197] Failed to read DnsConfig.
+[0911/161312.854841:FATAL:content/browser/sandbox_parameters_mac.mm:67] Check failed: . : Input/output error (5)
+
+TROUBLESHOOTING: https://pptr.dev/troubleshooting
+
+    at ChildProcess.onClose (/Users/tommiller/Documents/Hyperframes Editor/tally/node_modules/@puppeteer/browsers/lib/cjs/launch.js:350:24)
+    at ChildProcess.emit (node:events:531:35)
+    at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+AUDIT END wardrobe-stack-audit.mjs: FAILED; INCOMPLETE; rows=0/undeclared; failed=0; unproven=0; exit=1
+/Users/tommiller/Documents/Hyperframes Editor/tally/node_modules/@puppeteer/browsers/lib/cjs/launch.js:350
+                reject(new Error([
+                       ^
+
+Error: Failed to launch the browser process:  Code: null
+
+stderr:
+[0911/161312.850323:ERROR:base/power_monitor/thermal_state_observer_mac.mm:140] ThermalStateObserverMac unable to register to power notifications. Result: 9
+[0911/161312.852849:ERROR:net/dns/dns_config_service_posix.cc:138] DNS config watch failed to start.
+[0911/161312.854012:WARNING:net/dns/dns_config_service_posix.cc:197] Failed to read DnsConfig.
+[0911/161312.854841:FATAL:content/browser/sandbox_parameters_mac.mm:67] Check failed: . : Input/output error (5)
+
+TROUBLESHOOTING: https://pptr.dev/troubleshooting
+
+    at ChildProcess.onClose (/Users/tommiller/Documents/Hyperframes Editor/tally/node_modules/@puppeteer/browsers/lib/cjs/launch.js:350:24)
+    at ChildProcess.emit (node:events:531:35)
+    at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+
+Node.js v22.22.2
+Exit: 1 (infrastructure failure, not a feature regression)
+
+$ node tests/wardrobe-stack-audit.mjs
+AUDIT START wardrobe-stack-audit.mjs: completion pending; planned rows undeclared
+INTERRUPTED wardrobe-stack-audit.mjs: Error: listen EPERM: operation not permitted 127.0.0.1
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+AUDIT END wardrobe-stack-audit.mjs: FAILED; INCOMPLETE; rows=0/undeclared; failed=0; unproven=0; exit=1
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted 127.0.0.1
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '127.0.0.1'
+}
+
+Node.js v22.22.2
+Exit: 1 (infrastructure failure, not a feature regression)
