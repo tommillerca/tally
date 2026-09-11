@@ -364,7 +364,7 @@ export async function composeStudio(look, options = {}, runtime = studioBrowserR
   // Scoped cache is released after this render, and includes masks. No partial exports.
   const assets = new Map();
   const load = async src => {
-    if (!assets.has(src)) assets.set(src, runtime.loadImage(src).catch(() => fail(`Download required art and retry: ${src}`)));
+    if (!assets.has(src)) assets.set(src, runtime.loadImage(src).catch(err => fail(`Download required art and retry: ${src} (${err?.message ?? String(err)})`)));
     return assets.get(src);
   };
   const required = [...new Set([...plan.layers, ...plan.stickers.flatMap(s => s.layers || []), { src: 'assets/brand/wordmark.png' }].flatMap(l => [l.src, l.mask, ...(l.tints || []).map(t => t.mask)]).filter(Boolean))];

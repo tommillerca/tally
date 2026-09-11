@@ -1,5 +1,6 @@
 // PURE. Run STUDIO_V4_BASELINE=1 against the frozen pre-edit checkout sources.
 import assert from 'node:assert/strict';
+import { studioArtPath } from './lib/studio-art-path.mjs';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { importAuditPackage } from './lib/audit-dependencies.mjs';
@@ -14,9 +15,9 @@ if (baseline) {
 const url = 'data:text/javascript;base64,' + Buffer.from(source.replace(/from '([^']+)'/g, (_, p) => `from '${new URL(p, new URL('js/studio.js', root)).href}'`)).toString('base64');
 const studio = await import(url);
 const { createCanvas, loadImage, GlobalFonts } = await importAuditPackage('@napi-rs/canvas');
-GlobalFonts.registerFromPath(new URL('assets/fonts/bangers.woff2', root).pathname, 'StudioBangers');
-GlobalFonts.registerFromPath(new URL('assets/fonts/boldpixels.woff2', root).pathname, 'StudioDialogue');
-const runtime = { createCanvas, loadImage: p => loadImage(new URL(p, root).pathname), ready: async () => {}, encode: async c => new Blob([await c.encode('png')], { type: 'image/png' }) };
+GlobalFonts.registerFromPath(studioArtPath('assets/fonts/bangers.woff2', root), 'StudioBangers');
+GlobalFonts.registerFromPath(studioArtPath('assets/fonts/boldpixels.woff2', root), 'StudioDialogue');
+const runtime = { createCanvas, loadImage: p => loadImage(studioArtPath(p, root)), ready: async () => {}, encode: async c => new Blob([await c.encode('png')], { type: 'image/png' }) };
 const decode = async blob => { const im = await loadImage(Buffer.from(await blob.arrayBuffer())), c = createCanvas(im.width, im.height); c.getContext('2d').drawImage(im, 0, 0); return c; };
 const rgba = c => c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
 const hash = c => createHash('sha256').update(rgba(c)).digest('hex');
