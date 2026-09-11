@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { boot, sleep, setWidth, serveTree } from './godmode.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-/* SERVE THIS TREE, NOT PRODUCTION. boot() with no base defaults to the live
-   site, so a lane's audit would have graded whatever is deployed and reported
-   green while proving nothing about the code under it. Caught 2026-09-11 by
-   submission-preflight-audit's COVERAGE row, not by reading the file. */
+/* SERVE THIS TREE WHEN NO URL IS GIVEN. boot(undefined) defaults to the LIVE
+   site, so a bare `node tests/<this>.mjs` would grade production and report
+   green while proving nothing about the code under it. Flagged twice in one
+   day by submission-preflight-audit's COVERAGE row. */
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const base = process.argv[2] || process.env.URL || null;
 const srv = base ? null : await serveTree(ROOT);
@@ -43,11 +43,48 @@ try {
     const matching = tiles.filter(n => ids.includes(n.getAttribute(`data-${attr}`)) || n.dataset.famIds?.split(' ').some(id => ids.includes(id)));
     return { tiles: matching.length, badge: matching.find(n => n.dataset.famIds?.includes(ids[0]))?.querySelector('.ward-fam-n')?.textContent };
   }, { selector, attr, ids: fixture.ids });
-  const stacked = await count(grid, 'equip');
-  assert.equal(stacked.tiles, 3, 'STACK five items become three tiles');
-  assert.equal(stacked.badge, '3', 'STACK exact variant count');
-  console.log('STACK', stacked);
-  await page.click(`${grid} [data-family="${fixture.key}"]`);
+  // Select another slot so H is represented by the newly added overview stacks.
+  await page.click('[data-pd="S"]');
+  await page.waitForSelector('[data-ward-pieces] .ward-grid[data-wslot="S"]');
+  const stacked = await page.evaluate(async () => {
+    const { BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, BH_SLOTS, bhFamilyKey } = await import('./data/boneheadz.js');
+    const { GEAR_ITEMS } = await import('./js/gear.js');
+    const loot = await import('./js/loot.js');
+    const owned = await loot.ownedCosmeticIds();
+    const gear = await loot.ownedGearIds();
+    const expected = [];
+    for (const { code } of BH_SLOTS.filter(s => !['S', 'C'].includes(s.code))) {
+      const counts = new Map();
+      const arts = [...BH_ITEMS_WITH_UNRELEASED.filter(i => i.slot === code && owned.has(i.id)),
+        ...GEAR_ITEMS.filter(g => g.slot === code && gear.has(g.id)).map(g => BH_BY_ID[g.artId])];
+      for (const art of arts) {
+        const key = bhFamilyKey(art);
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+      for (const [key, owned] of counts) expected.push({ slot: code, key, owned });
+    }
+    const sections = [...document.querySelectorAll('.ward-other-slots > section')];
+    const tiles = [...document.querySelectorAll('.ward-other-slots [data-slot-stack]')];
+    return { sections: sections.length, tiles: tiles.length,
+      sectionSlots: sections.map(s => s.querySelector('[data-slot-heading]')?.dataset.slotHeading).sort(),
+      expected, actual: tiles.map(t => ({ slot: t.dataset.slotStack, key: t.dataset.stackFamily,
+        badge: t.querySelector('.ward-fam-n')?.textContent ?? null })) };
+  });
+  console.log('STACK', JSON.stringify(stacked));
+  assert.ok(stacked.expected.length > 0, 'CONTROL owned overview families');
+  const expectedSlots = [...new Set(stacked.expected.map(f => f.slot))].sort();
+  assert.equal(stacked.sections, expectedSlots.length, 'STACK exact other-slot section count');
+  assert.deepEqual(stacked.sectionSlots, expectedSlots, 'STACK each owned slot has its section');
+  assert.equal(stacked.tiles, stacked.expected.length, 'STACK exact owned family tile count');
+  for (const family of stacked.expected) {
+    const matches = stacked.actual.filter(t => t.slot === family.slot && t.key === family.key);
+    assert.equal(matches.length, 1, `STACK one tile for ${family.slot}/${family.key}`);
+    assert.equal(matches[0].badge, family.owned > 1 ? String(family.owned) : null,
+      `STACK exact owned count for ${family.slot}/${family.key}`);
+  }
+  assert.equal(stacked.expected.find(f => f.slot === 'H' && f.key === fixture.key)?.owned, 3,
+    'STACK fixture owns three variants');
+  await page.click(`.ward-other-slots [data-slot-stack="H"][data-stack-family="${fixture.key}"]`);
   await sleep(500);
   for (const id of fixture.ids.slice(0, 3)) {
     assert.ok(await page.$(`${grid} .fam-rail [data-equip="${id}"]:not(:disabled)`), `REACHABLE ${id}`);
@@ -67,9 +104,9 @@ try {
   await page.waitForSelector('[data-ward-looks]:not([hidden]) .ward-grid');
   const looks = '[data-ward-looks] .ward-grid';
   const transmog = await count(looks, 'look');
-  assert.equal(transmog.tiles, 3, 'TRANSMOG STACK five items become three tiles');
-  assert.equal(transmog.badge, '3', 'TRANSMOG STACK count');
-  console.log('TRANSMOG STACK', transmog);
+  assert.equal(transmog.tiles, 3, 'TRANSMOG PRE-EXISTING grouping five items become three tiles');
+  assert.equal(transmog.badge, '3', 'TRANSMOG PRE-EXISTING grouping count');
+  console.log('TRANSMOG PRE-EXISTING grouping', transmog);
   await page.click(`${looks} [data-family="${fixture.key}"]`);
   for (const id of fixture.ids.slice(0, 3)) {
     assert.ok(await page.$(`${looks} .fam-rail [data-look="${id}"]:not(:disabled)`), `TRANSMOG REACHABLE ${id}`);
