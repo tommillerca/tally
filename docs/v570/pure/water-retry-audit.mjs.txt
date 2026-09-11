@@ -1,0 +1,10 @@
+PASS CONTROL healthy host delivers and stops its timer
+GREEN intervals (seconds): 13.5, 27, 54, 108, 108, 108, 108
+PASS same URL retry intervals grow to a literal 120-second cap with jitter
+PASS BOOT host returns and delivers queued tiles without another lookup
+PASS tile-only outage heals with no walking or additional lookup
+CONTROL reconstructed flat loader: 507 requests; first intervals 15.6, 15.6, 15.6, 15.6, 15.6, 15.6, 15.6, 15.6 seconds
+GREEN walking loader: 104 requests; first intervals 13.5, 27, 54, 108, 108, 108, 108 seconds
+PASS CONTROL walking comparison detects flat retries and reports interval AND count
+PASS CONTROL disabled timer cannot self-heal a boot outage
+WATER RETRY: 6 passed, 0 failed

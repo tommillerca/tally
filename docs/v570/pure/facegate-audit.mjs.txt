@@ -1,0 +1,6 @@
+face zone [198,66,389,174], 16020 ink px, 62 held items
+
+PASS  CONTROL a face-covering item measures 100% and is rejected by the 35% limit.
+PASS  every held item clears the face. Worst is 22.64% of a 35% limit.
+
+facegate clean

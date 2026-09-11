@@ -6273,7 +6273,7 @@ test('QA round 28 P5: the stale "eat well, walk far" sentence is gone and both d
   assert.match(def[1], /hitting your protein target, closing a day on budget, and every 25,000 steps you walk/, 'the sentence is not the Build tab\'s own Training-points copy');
   // CONTROL: the copy it reuses still exists where it came from
   assert.match(app, /Points come from hitting your protein target, closing a day on budget, and every 25,000 steps you walk, so the build grows/, 'the Build tab source sentence moved: re-check the reuse');
-  assert.equal((app.match(/\$\{DEFEAT_STATS_NOTE\}/g) || []).length, 2, 'the note must be used on both defeat surfaces (the DOWN, NOT OUT panel and the settle note)');
+  assert.equal((app.match(/\$\{(?:downed.phase === 'lost' \? )?DEFEAT_STATS_NOTE(?: : '')?\}/g) || []).length, 2, 'the note must be used on both defeat surfaces (the DOWN, NOT OUT panel and the settle note)');
 });
 
 test('a downloaded build can actually start: boot posts SKIP_WAITING to a waiting worker', () => {

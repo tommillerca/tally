@@ -1,0 +1,6 @@
+PASS  APP_BUILD and APP_SOCIAL_V are both declared  APP_BUILD=v570 APP_SOCIAL_V=v68
+PASS  the two differ, so passing the wrong one is detectable  v570 vs v68
+PASS  there is at least one initAnalytics call site to judge  2 found
+PASS  every initAnalytics call tags the batch with the real running build  2 call site(s), all APP_BUILD: js/app.js:1870, js/app.js:15955
+
+analytics build tag holds

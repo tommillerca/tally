@@ -1,0 +1,16 @@
+BASTIONS REP SIM — days to each rank
+
+archetype   rep/day   Sturdy(1200)   Hardened(5000)   Unbreakable(15000)
+----------------------------------------------------------------------------
+Casual          13          96d            392d               never
+Regular         60          21d             85d                253d
+Engaged         96          13d             53d                157d
+Hardcore       100          12d             50d                150d
+
+SANITY CHECKS
+ok   an Engaged player reaches Unbreakable inside a year  157d
+ok   Unbreakable takes at least four months even for the hardest player  hardcore 150d
+ok   grinding does not beat showing up: the top two land within 30 days  hardcore 150d vs engaged 157d
+ok   a Casual player can still reach Sturdy  96d
+ok   Sturdy lands in the first fortnight for an Engaged player  13d
+ok   the earning spread between Casual and Hardcore is under 9x  7.8x

@@ -1,0 +1,9 @@
+PASS R4-11 failed save survives OS-kill model with wholly fresh VM and session storage
+PASS R4-11 CONTROL confirmed saves and another writer cannot erase failure evidence
+PASS R4-6 failed erase proactively tells peer truth and reload recovery
+PASS R4-6 CONTROL successful erase still clears data and reloads peers
+N=4 launches, 1 error notices
+PASS R4-12 N=4 consecutive launches restamp draft but emit exactly one error notice
+Account notices: ["This device is not connected to a Crew account. No profile request started.","Your Crew profile has not finished syncing for a while. Your progress is still on this phone. Check Profile sync in Settings."]
+PASS R4-14 missing and existing accounts produce DIFFERENT exact notice strings
+R4 SILENCE: 6 passed, 0 failed

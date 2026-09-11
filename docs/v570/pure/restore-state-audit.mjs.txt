@@ -1,0 +1,22 @@
+PASS TYPE paidlooks refuses before any store changes
+PASS TYPE equipped refuses before any store changes
+PASS TYPE petInst refuses before any store changes
+PASS TYPE coins refuses before any store changes
+PASS TYPE grantCursor refuses before any store changes
+PASS TYPE pettalents refuses before any store changes
+PASS DUPLICATE kv keys cannot bypass revision selection
+PASS NULL declared store refuses rather than silently skipping
+PASS FUTURE level-bank format refuses without downgrading data
+PASS FUTURE talent-bank format refuses without downgrading data
+PASS CONTROL unknown kv values survive import and export byte-for-byte
+PASS STALE paidlooks merge retains both devices receipts
+PASS STALE looks merge retains both devices receipts
+PASS STALE redeemed merge retains both devices receipts
+PASS STALE grantsSeen merge retains both devices receipts
+PASS UNRESOLVED equipped art is hidden with slot defaults and no storage loss
+PASS UNRESOLVED transmog cannot display art in the wrong slot
+PASS FUTURE equipped instance stays selected in storage when opened
+PASS FUTURE equipment survives a cosmetic equip
+PASS FUTURE equipment survives a known gear equip
+PASS FUTURE equipment survives a known pet slot repair
+21 passed, 0 failed

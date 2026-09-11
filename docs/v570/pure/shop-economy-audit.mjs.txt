@@ -1,0 +1,19 @@
+PASS PET receipt abort preserves 50000 coins and retry charges once
+PASS PET paid legacy receipt recovers with zero coins
+PASS EGG receipt abort preserves 60 dust and retry pays once
+PASS EGG delivery abort preserves dust and an unspent weekly allowance
+PASS EGG paid legacy receipt recovers at zero dust exactly once
+PASS DROP delivery abort preserves 3000 coins and retry charges once
+PASS REROLL abort preserves coins and the current shelf
+PASS CONTROL concurrent pet, drop and egg buys charge and deliver once
+PASS CONTROL empty wallets refuse unpaid goods; supplies really arrive
+PASS FOOTBALL interrupted colourway delivery preserves coins and grants nothing
+PASS FOOTBALL legacy partial garment recovers every colour at zero coins
+PASS FOOTBALL concurrent receipts report the actual coins spent
+PASS CONTROL rack coin and dust prices grant paid looks; aura wear is reversible
+PASS CONTROL real dust egg template prices and limits agree with storage
+PASS EGG paid recovery stays clickable in the real zero-dust template
+PASS FOOTBALL partial owned garment renders a free recovery control
+PASS CONTROL real Shop egg button requires two taps, delivers and reports balance
+PASS FOOTBALL real recovery handler accepts zero coins and refreshes the shelf
+SHOP ECONOMY: 18 passed, 0 failed (Node only, no pixel claim)

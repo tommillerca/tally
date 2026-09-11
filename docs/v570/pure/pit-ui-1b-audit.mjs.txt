@@ -1,0 +1,2 @@
+PASS Pit 1B: live outfits, all special figures, five row bindings, supporting ranks and distinct Build
+PASS CONTROL: lost opponent outfit rejected

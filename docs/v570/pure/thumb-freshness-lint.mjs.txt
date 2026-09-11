@@ -1,0 +1,8 @@
+ok    SETUP the checker ran at all after dependency preflight  checked 1300 committed thumbnails against a fresh render of their masters (10 of them cut product shots)
+ok    SAMPLE the checker examined the whole sheet, not a corner of it  1300 thumbnails compared against a fresh render of their masters
+ok    FRESH every committed thumbnail is what the generator makes from today's master  1300 fresh
+ok    PARITY the generator builds exactly the slots js/app.js serves a tier for  20 slots, both lists agree
+ok    CONTROL the checker sees a thumbnail whose pixels are not its master's  STALE    thumb/192/G/GS1.png  137x100 px differ from (30,45), worst channel 255/255
+ok    CONTROL the checker sees a tier that is missing from disk  MISSING  thumb/384/G/GS1.png  (a surface asking for this tier gets a 404)
+
+thumb freshness: clean

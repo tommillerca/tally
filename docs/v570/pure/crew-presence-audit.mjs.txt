@@ -1,0 +1,5 @@
+PASS fresh state is Online now through the unchanged six-minute boundary
+PASS CONTROL stale minute and hour states unchanged
+PASS CONTROL day-old and older states retain delayed-sync notice without day counts
+PASS CONTROL missing, invalid and future clocks remain unknown
+CREW PRESENCE: 4 passed, 0 failed

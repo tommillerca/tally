@@ -140,7 +140,7 @@ await check('interrupted fight and food entry are disclosed from persisted evide
   await kvSet('pitFight', { phase: 'open', foe: 'Rattles', at: 123 });
   await kvSet('addDraft', { ts: Date.now(), q: 'rice' });
   const u = ui(); await unfinished(u);
-  errorPaint(u, /fight against Rattles.*Open the Pit.*food entry was open.*Check Today/);
+  errorPaint(u, /fight against Rattles.*No loss was recorded.*Restart the app.*food entry was open.*Check Today/);
   const again = ui(); await unfinished(again);
   assert.equal(again.paints.length, 0, 'unchanged action was nagged about again');
   await kvSet('pitFight', null); await kvSet('addDraft', null);

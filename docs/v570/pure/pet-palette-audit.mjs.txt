@@ -1,0 +1,9 @@
+C1: 15 pairs, minimum base/toxic 21.399511
+C2: 15 pairs, minimum base/ember 21.138601
+C3: 15 pairs, minimum ember/rose 21.349882
+C4: 15 pairs, minimum base/rose 23.599592
+C5: 15 pairs, minimum ember/midnight 21.185836
+C6: 15 pairs, minimum ember/rose 21.776558
+90 pairs checked; 0 below required > 20.00
+CONTROL: shipped pre-fix C1 frost rejected at 10.130837 (exit 1)
+

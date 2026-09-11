@@ -2,7 +2,7 @@
 // VIGOR that you earn ONLY from healthy behaviour — logging food and getting
 // steps. It never hard-locks (the free floor is always there) and never rewards
 // eating less: Vigor comes from logging + walking, not from a calorie deficit.
-import { db, kvGet, kvUpdate, claimDay } from './db.js';
+import { db, kvGet, kvUpdate, claimDay, payAtomic } from './db.js';
 import { dateKey } from './nutrition.js';
 
 export const FREE_FIGHTS = 3;          // free Pit fights every day, no strings attached
@@ -28,7 +28,7 @@ const clampVigor = v => Math.max(0, Math.min(VIGOR_CAP, v));
 function view(st) {
   const free = Math.max(0, FREE_FIGHTS - (st.freeUsed || 0));
   const vigor = clampVigor(st.vigor || 0);
-  return { free, freeMax: FREE_FIGHTS, vigor, vigorCap: VIGOR_CAP, ready: free + vigor };
+  return { free, freeMax: FREE_FIGHTS, vigor, vigorCap: VIGOR_CAP, ready: free + vigor + (st.refunded || 0), refunded: st.refunded || 0 };
 }
 
 // today's healthy-behaviour signal: steps walked. Meals deliberately excluded.
@@ -134,6 +134,7 @@ export async function spendPitFight() {
   let used = null;
   await kvUpdate('pitEnergy', cur => {
     const s = cur || {};
+    if (s.refunded > 0) { used = 'refunded'; return { ...s, refunded: s.refunded - 1 }; }
     if ((s.freeUsed || 0) < FREE_FIGHTS) { used = 'free'; return { ...s, freeUsed: (s.freeUsed || 0) + 1 }; }
     if ((s.vigor || 0) > 0) { used = 'vigor'; return { ...s, vigor: clampVigor(s.vigor - 1) }; }
     return undefined;   // tapped out: nothing owed, so nothing is written
@@ -158,10 +159,25 @@ export async function spendPitFight() {
  * (already reset) free floor. Bounded to one charge, and only reachable by a
  * refusal that straddles midnight; not worth a dated receipt. */
 export async function refundPitFight(used) {
-  if (used !== 'free' && used !== 'vigor') return;
+  if (used !== 'free' && used !== 'vigor' && used !== 'refunded') return;
   await kvUpdate('pitEnergy', cur => {
     const s = cur || {};
+    if (used === 'refunded') return { ...s, refunded: (s.refunded || 0) + 1 };
     if (used === 'free') return { ...s, freeUsed: Math.max(0, (s.freeUsed || 0) - 1) };
     return { ...s, vigor: clampVigor((s.vigor || 0) + 1) };
   }, {});
+}
+
+// Recovery and refund commit together. Credits survive midnight and a full
+// Vigor bank. Legacy records do not identify the original payment source.
+export async function recoverInterruptedPitFight() {
+  return payAtomic({ snapshot: { keys: ['pitEnergy', 'pitFight'] },
+    decide: ({ pitEnergy: energy = {}, pitFight }) => {
+      if (pitFight?.phase !== 'open') return { result: { ok: false } };
+      return { result: { ok: true }, kv: {
+        pitEnergy: () => ({ ...energy, refunded: (energy.refunded || 0) + 1 }),
+        pitFight: () => ({ ...pitFight, phase: 'interrupted' }),
+      } };
+    },
+  });
 }

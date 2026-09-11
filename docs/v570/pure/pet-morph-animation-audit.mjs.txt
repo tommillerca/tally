@@ -1,0 +1,4 @@
+PASS MORPH-PATH, NAMED-FALLBACK; pre-fix gate/resolver CONTROL rejected
+PASS REST-WIDTH: largest alpha > 8 body component, neutral t=0, 1% tolerance; pre-fix FILL CONTROL rejected
+PASS LAYERS: 15 reproducible PNGs, unchanged alpha/ink, approved source transfers
+PASS PRESERVE: base, CX, shiny priority, football, cached morph, static portraits, reduced-motion CSS
