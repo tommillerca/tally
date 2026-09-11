@@ -1,0 +1,2 @@
+PASS Crew 1C source: separate rows, pixel star and state, handlers, race/podium order, no base gradient, fixture and unmount seam
+PASS CONTROL: missing identity row, undersized target and restored base gradient rejected. Browser layout and ink remain UNPROVEN.

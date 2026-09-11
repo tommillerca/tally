@@ -1,0 +1,2 @@
+PASS CONTROL: 19 parser fixtures
+PASS after-await-event: 0 hazards, 363 async functions scanned

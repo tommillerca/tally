@@ -8435,6 +8435,7 @@ test('Crew empty state applies before enrichment and survives stale paints', asy
   const nodes = new Map();
   const node = id => {
     if (!nodes.has(id)) nodes.set(id, {hidden: true, textContent: '', innerHTML: '',
+      querySelectorAll(selector) { assert.equal(selector, '.cfan-card'); return [...this.innerHTML.matchAll(/class="cfan-card"/g)]; },
       dataset: {}, classList: {toggle() {}}, setAttribute() {}, addEventListener() {}, remove() {}});
     return nodes.get(id);
   };
@@ -8444,7 +8445,7 @@ test('Crew empty state applies before enrichment and survives stale paints', asy
     favs: new Set(), fanOrder: [], fanQuery: '', fanFavouritesOnly: false,
     snapshotNotice: () => '', crewCount: rows => rows.length, crewTruncText: () => '',
     paintFaves() {}, applyFan() {}, fanFriend: id => ({playerId: id}),
-    crewCardHtml: f => `<card>${f.playerId}</card>`,
+    crewCardHtml: f => `<card class="cfan-card">${f.playerId}</card>`,
     friendSinceYesterdayMap: () => new Promise(resolve => pending.push(resolve)),
   });
   vm.runInContext(`
@@ -8476,7 +8477,7 @@ test('Crew empty state applies before enrichment and survives stale paints', asy
   pending.shift()({});
   await fullPaint;
   assert.equal(node('#cfanNoHit').hidden, true);
-  assert.match(node('#cfanDeck').innerHTML, /<card>a<\/card>/);
+  assert.match(node('#cfanDeck').innerHTML, /<card class="cfan-card">a<\/card>/);
   context.data = {friends: []};
   await context.paintFan();
   assert.equal(node('#cfanEmpty').hidden, false);

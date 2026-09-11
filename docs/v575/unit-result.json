@@ -1,0 +1,6 @@
+{
+  "command": "node tests/unit.test.js",
+  "exitCode": 0,
+  "passed": 391,
+  "failed": 0
+}

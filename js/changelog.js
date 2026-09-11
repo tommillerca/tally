@@ -9,6 +9,8 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 575, date: '2026-09-11', title: 'Crew empty selections explained', items: [
+    'Crew explains empty favourites and search selections and how to clear them.',
   { n: 574, date: '2026-09-11', title: 'Calmer Today, bigger daily challenge', items: [
     'Today has calmer figures and a larger identity footer. The Pit combines fight readiness and build access, with a brighter poster and a larger daily Remote Den.',
   { n: 573, date: '2026-09-11', title: 'Backpack and Laboratory polish', items: [

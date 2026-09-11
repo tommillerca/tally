@@ -1,0 +1,6 @@
+PASS R47-3 rival response contains only combat and appearance fields
+PASS R47-3 self, flagged owners, absent and malformed defenders stay private
+PASS R47-7 expired siege delivery says dormant while takeover says lost
+PASS R47-8 defense clock ticks, clamps at zero and stops on close
+PASS R47-8 info clock ticks, clamps at zero and stops on close
+5 passed, 0 failed

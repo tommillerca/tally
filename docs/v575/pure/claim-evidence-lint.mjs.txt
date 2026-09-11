@@ -1,0 +1,14 @@
+ok    SETUP the changelog was parsed and has entries to grade  333 entries
+ok    SETUP the newest entry (v575) has items to grade  1 items
+ok    SETUP docs/CLAIMS.md exists  found
+ok    CLAIMS docs/CLAIMS.md carries no merge conflict markers  clean
+ok    CLAIMS docs/CLAIMS.md has a section for v575  found
+ok    CLAIMS every item in the newest entry is answered  1 answered of 1 claims
+ok    PROOF every claim names an audit that exists and the gate actually runs  1 claims backed
+ok    REACH no claim in a shipped entry is GATED, PENDING-DEPLOY or NEEDS-PEER  all 1 reachable
+ok    REACH the route is written out, not left as a word  every route spelled out
+
+    WHAT v575 CLAIMS, AND WHAT BACKS IT:
+      1. Production resortFan and paintFan in a Node DOM model, empty favouri  <- crew-empty-audit.mjs
+
+claim-evidence: clean

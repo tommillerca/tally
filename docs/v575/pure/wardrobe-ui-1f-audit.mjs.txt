@@ -1,0 +1,3 @@
+PASS CONTROL switcher removal and locked doll mutation rejected; 0/1/6 fits, escaped names, prices, management, cap and strip visibility. Inherited CSS and lower handlers unchanged. Browser UNPROVEN.
+PASS real fit bindings in DOM model: toggle state, equip, explicit rename, confirmed delete and duplicate-confirm lock. Browser UNPROVEN.
+PASS wardrobe header: separate earned title preserves digits, live wallet/collection values, one name-row level chip and tab restoration. Geometry UNPROVEN.

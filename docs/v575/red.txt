@@ -1,0 +1,16 @@
+PASS empty favourites explain undo
+FAIL search explains undo: The input did not match the regular expression /Clear search/. Input:
+
+'Nobody in your Crew matches "absent".'
+
+FAIL combined filters explain both controls: The input did not match the regular expression /Filter: favourites/. Input:
+
+'Nobody in your Crew matches "absent".'
+
+PASS empty crew
+FAIL mounted-result refusal control: zero cards must carry an explanation
+FAIL cards mount while enrichment is pending: zero cards must carry an explanation
+PASS full crew control
+PASS matching favourite control
+PASS unreachable explains failure
+CREW EMPTY: 5 passed, 4 failed

@@ -13122,25 +13122,32 @@ async function renderFriends(el) {
       onBtn.classList.toggle('on', fanFavouritesOnly);
       onBtn.setAttribute('aria-pressed', String(fanFavouritesOnly));
     }
-    // Apply empty-state visibility before any asynchronous card enrichment.
-    const empty = fanOrder.length === 0;
-    if (noHit) {
-      noHit.hidden = !empty;
-      // Explain the active filter and how to return to the full Crew.
-      noHit.textContent = !empty ? ''
-        : fanQuery.trim() ? `Nobody in your Crew matches "${fanQuery}".`
-        : fanFavouritesOnly ? 'No favourites in this selection. Tap Filter: favourites to see everyone.'
-        : 'Nobody in your Crew yet.';
-    }
-    wrap.hidden = empty;
-    pager.hidden = empty || fanOrder.length < 2;
-    $('#cfanSel', el).hidden = empty;
+    // Mount the filtered deck first; empty-state truth comes from its cards.
+    deck.innerHTML = fanOrder.map(id => crewCardHtml(fanFriend(id), null)).join('');
+    const explainDeck = () => {
+      const empty = deck.querySelectorAll('.cfan-card').length === 0;
+      if (noHit) {
+        noHit.hidden = !empty;
+        // Explain the active filter and how to return to the full Crew.
+        noHit.textContent = !empty ? ''
+          : fanQuery.trim() ? `Nobody in this selection matches "${fanQuery}". Clear search${fanFavouritesOnly ? ' or tap Filter: favourites' : ''} to see more friends.`
+          : fanFavouritesOnly ? 'No favourites in this selection. Tap Filter: favourites to see everyone.'
+          : 'No Crew cards could be displayed. Reopen Crew to try again.';
+      }
+      wrap.hidden = empty;
+      pager.hidden = empty || fanOrder.length < 2;
+      $('#cfanSel', el).hidden = empty;
+      return empty;
+    };
+    const empty = explainDeck();
     paintFaves();
     if (empty) { deck.innerHTML = ''; return; }
+    applyFan();
     // Only the latest paint may mount cards after enrichment finishes.
     const sinceMap = await friendSinceYesterdayMap(data.friends);
     if (revision !== fanPaintRevision) return;
     deck.innerHTML = fanOrder.map(id => crewCardHtml(fanFriend(id), sinceMap[id])).join('');
+    if (explainDeck()) return;
     applyFan();
   };
 
@@ -24715,7 +24722,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v574'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v575'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

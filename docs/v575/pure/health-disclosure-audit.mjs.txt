@@ -1,0 +1,9 @@
+PASS CONTROL healthy step sync produces NONE, including a readable zero
+PASS failed bridge query discloses once across relaunch and preserves last success
+PASS stale sync discloses at 36 hours, fresh timestamp is a positive CONTROL
+PASS native error/empty results cannot overwrite steps or certify success
+PASS missing timestamp observes a grace period without inventing historical success
+PASS recovery clears failure and re-arms only a later episode
+PASS CONTROL never-connected player gets no health disclosure
+PASS production UI and Swift bridge retain actionable evidence plumbing
+8 passed, 0 failed

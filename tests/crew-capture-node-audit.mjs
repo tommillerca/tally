@@ -40,6 +40,7 @@ async function harness(scenario, webdriver = true) {
   const fixture = crewFixture({ scenario, now }), nodes = new Map();
   const node = key => {
     if (!nodes.has(key)) nodes.set(key, { innerHTML: '', textContent: '', hidden: false, isConnected: true, events: {},
+      querySelectorAll(selector) { assert.equal(selector, '.cfan-card'); return [...this.innerHTML.matchAll(/class="cfan-card"/g)]; },
       classList: { toggle() {} }, remove() {}, setAttribute() {}, addEventListener(k, f) { this.events[k] = f; } });
     return nodes.get(key);
   };
