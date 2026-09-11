@@ -12202,6 +12202,10 @@ button.t3-price::before {
 .hub-title.ward-identity > .hub-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hub-title.ward-identity > .ward-lv { flex: none; }
 .ward-head > .ward-rank { flex-basis: 100%; }
+/* Share the tally row: one fewer 27.5px row, with three 13.15px row gaps
+   instead of four 9px gaps, predicts 24.1px recovered at 375px. */
+.ward-head { row-gap: 13.15px; }
 .ward-head > .ward-wallet,
-.ward-head > .ward-collection { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; width: 100%; }
+.ward-head > .ward-collection { display: contents; }
+.ward-head .ward-looks { min-height: 44px; }
 .ward-head .bh-pill:first-of-type { margin-left: 0; }
