@@ -2,6 +2,8 @@
 
 ## v560 (2026-09-10)
 
+Changelog item: Internal builds can copy device measurements from Settings, with keyboard and edge-swipe probes and clear labels for checks that still need a person.
+
 1. PROOF: device-report-audit.mjs | REACH: Non-store Settings, Device report. Pure lookup, state classification, safe-area arithmetic and plain-text serialization. Runtime geometry, clipboard, plugin readbacks, lifecycle, keyboard, edge swipe and store visibility require simulator review; not exercised here.
 
 ## v559 (2026-09-10)
