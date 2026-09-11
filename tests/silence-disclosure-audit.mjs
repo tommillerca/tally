@@ -53,7 +53,8 @@ function ui(extra = {}) {
   };
   const c = vm.createContext({
     ...notices, sessionStorage, localStorage, kvGet, onWriteFailure, $: () => el, reducedMotion: true,
-    trackEvent() {}, lastWriteFailToast: -Infinity, WRITE_FAIL_QUIET_MS: 8000,
+    // Disclosure-only harness; real geometry is covered by toast-seat.test.mjs.
+    seatToast() {}, trackEvent() {}, lastWriteFailToast: -Infinity, WRITE_FAIL_QUIET_MS: 8000,
     setTimeout(fn) { timers.set(++id, fn); return id; }, clearTimeout(i) { timers.delete(i); },
     ...extra,
   });

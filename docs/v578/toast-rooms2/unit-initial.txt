@@ -1,0 +1,258 @@
+PASS asset resolution from a directory containing a space
+PASS friendly art failure preserves underlying cause
+BASELINE {"minimum":1.0383052372016175,"edgeMinimum":1,"samples":28767}
+CONTROL RED v553: opaque-core contrast 1.04:1 below 4.5:1; all-pixel minimum 1.00:1.
+CONTRAST {"backdrop":null,"markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":null,"markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":null,"markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG1","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG1","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG1","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG10","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG10","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG10","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG2-1","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG2-1","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG2-1","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG2-2","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG2-2","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG2-2","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG2-3","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG2-3","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG2-3","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG3-1","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG3-1","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG3-1","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG3-2","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG3-2","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG3-2","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG3-3","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG3-3","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG3-3","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG4-1","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG4-1","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG4-1","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG4-2","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG4-2","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG4-2","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG4-3","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG4-3","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG4-3","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG5-1","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG5-1","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG5-1","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG5-2","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG5-2","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG5-2","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG5-3","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG5-3","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG5-3","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG6-1","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG6-1","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG6-1","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG6-2","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG6-2","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG6-2","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG6-3","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG6-3","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG6-3","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG7-1","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG7-1","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG7-1","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG7-2","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG7-2","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG7-2","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG7-3","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG7-3","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG7-3","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG8","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG8","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG8","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG9","markPosition":"top","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG9","markPosition":"bottom","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+CONTRAST {"backdrop":"BG9","markPosition":"right","minimum":12.637812847638706,"edgeMinimum":1,"samples":13772,"positions":[{"id":"caption","x":67,"y":336,"width":390,"height":158,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0}]}
+MEASURE decoded PNG: {"body":{"x":66,"y":341,"width":821,"height":1119},"safeAreaPercent":76.14579361790302,"pet":{"x":660,"y":1116,"width":349,"height":344},"petGround":1460,"figureFeet":1460}
+ROUND1 {"inkPercent":37.237961044343145,"largestComponentBoxPercent":76.14579361790302,"petGroundMinusFeet":0,"bounds":{"x":66,"y":341,"width":943,"height":1119},"figureShrinkPercent":0}
+PLACEMENT {"bubblePosition":"left","markPosition":"top","positions":[{"id":"caption","x":65,"y":279,"width":406,"height":209,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":611,"y":271,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0},{"id":"friend-code","x":83,"y":1485,"width":236.6165771484375,"height":43}],"actualOverlap":[{"id":"caption","ink":61567,"overlapPixels":0,"overlapPercent":0},{"id":"brand","ink":16122,"overlapPixels":0,"overlapPercent":0}]}
+PLACEMENT {"bubblePosition":"left","markPosition":"bottom","positions":[{"id":"caption","x":65,"y":279,"width":406,"height":209,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0},{"id":"friend-code","x":83,"y":1485,"width":236.6165771484375,"height":43}],"actualOverlap":[{"id":"caption","ink":61567,"overlapPixels":0,"overlapPercent":0},{"id":"brand","ink":16122,"overlapPixels":0,"overlapPercent":0}]}
+PLACEMENT {"bubblePosition":"left","markPosition":"right","positions":[{"id":"caption","x":65,"y":279,"width":406,"height":209,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":643,"y":329,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0},{"id":"friend-code","x":83,"y":1485,"width":236.6165771484375,"height":43}],"actualOverlap":[{"id":"caption","ink":61567,"overlapPixels":0,"overlapPercent":0},{"id":"brand","ink":16122,"overlapPixels":0,"overlapPercent":0}]}
+PLACEMENT {"bubblePosition":"right","markPosition":"top","positions":[{"id":"caption","x":609,"y":318,"width":406,"height":209,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":79,"y":270,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0},{"id":"friend-code","x":83,"y":1485,"width":236.6165771484375,"height":43}],"actualOverlap":[{"id":"caption","ink":62084,"overlapPixels":0,"overlapPercent":0},{"id":"brand","ink":16122,"overlapPixels":0,"overlapPercent":0}]}
+PLACEMENT {"bubblePosition":"right","markPosition":"bottom","positions":[{"id":"caption","x":609,"y":318,"width":406,"height":209,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":65,"y":293,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0},{"id":"friend-code","x":83,"y":1485,"width":236.6165771484375,"height":43}],"actualOverlap":[{"id":"caption","ink":62084,"overlapPixels":0,"overlapPercent":0},{"id":"brand","ink":16122,"overlapPixels":0,"overlapPercent":0}]}
+PLACEMENT {"bubblePosition":"right","markPosition":"right","positions":[{"id":"caption","x":609,"y":318,"width":406,"height":209,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":74,"y":288,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0},{"id":"friend-code","x":83,"y":1485,"width":236.6165771484375,"height":43}],"actualOverlap":[{"id":"caption","ink":62084,"overlapPixels":0,"overlapPercent":0},{"id":"brand","ink":16122,"overlapPixels":0,"overlapPercent":0}]}
+FAIL M5 toast retains the four-job backlog cap and each retained job gets its dwell
+  Cannot read properties of undefined (reading 'setProperty')
+FAIL CONTROL normal session saves and returns with no error-shaped disclosure: evalmachine.<anonymous>:44
+  t.style.setProperty('--toast-seat', '0px');
+          ^
+
+TypeError: Cannot read properties of undefined (reading 'setProperty')
+    at seatToast (evalmachine.<anonymous>:44:11)
+    at nextToast (evalmachine.<anonymous>:94:3)
+    at toast (evalmachine.<anonymous>:37:19)
+    at evalmachine.<anonymous>:1:1
+    at Script.runInContext (node:vm:149:12)
+    at Object.runInContext (node:vm:301:6)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:92:6
+    at async check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:81:9)
+    at async file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:85:1
+FAIL write failure is error-shaped, preempts routine traffic and survives 108 routine mutations: evalmachine.<anonymous>:44
+  t.style.setProperty('--toast-seat', '0px');
+          ^
+
+TypeError: Cannot read properties of undefined (reading 'setProperty')
+    at seatToast (evalmachine.<anonymous>:44:11)
+    at nextToast (evalmachine.<anonymous>:94:3)
+    at toast (evalmachine.<anonymous>:37:19)
+    at evalmachine.<anonymous>:1:1
+    at Script.runInContext (node:vm:149:12)
+    at Object.runInContext (node:vm:301:6)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:113:6
+    at check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:81:15)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:111:7
+FAIL failed save remains disclosed on return even if later writes succeed: AssertionError [ERR_ASSERTION]: []
+    at errorPaint (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:77:10)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:129:3
+    at async check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:81:9)
+    at async file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:126:1
+FAIL interrupted fight and food entry are disclosed from persisted evidence on any return route: TypeError: Cannot read properties of undefined (reading 'setProperty')
+    at seatToast (evalmachine.<anonymous>:44:11)
+    at nextToast (evalmachine.<anonymous>:94:3)
+    at toast (evalmachine.<anonymous>:37:19)
+    at evalmachine.<anonymous>:12:16
+    at async unfinished (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:74:3)
+    at async file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:142:19
+    at async check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:81:9)
+    at async file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:139:1
+FAIL queued errors survive routine backlog pressure and normal exit animation callbacks: evalmachine.<anonymous>:44
+  t.style.setProperty('--toast-seat', '0px');
+          ^
+
+TypeError: Cannot read properties of undefined (reading 'setProperty')
+    at seatToast (evalmachine.<anonymous>:44:11)
+    at nextToast (evalmachine.<anonymous>:94:3)
+    at toast (evalmachine.<anonymous>:37:19)
+    at evalmachine.<anonymous>:1:1
+    at Script.runInContext (node:vm:149:12)
+    at Object.runInContext (node:vm:301:6)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:164:6
+    at check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:81:15)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:162:7
+FAIL an interrupted in-flight write discloses uncertainty on return: evalmachine.<anonymous>:44
+  t.style.setProperty('--toast-seat', '0px');
+          ^
+
+TypeError: Cannot read properties of undefined (reading 'setProperty')
+    at seatToast (evalmachine.<anonymous>:44:11)
+    at nextToast (evalmachine.<anonymous>:94:3)
+    at toast (evalmachine.<anonymous>:37:19)
+    at evalmachine.<anonymous>:11:24
+    at Script.runInContext (node:vm:149:12)
+    at Object.runInContext (node:vm:301:6)
+    at boot (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:71:6)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:183:78
+    at async check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:81:9)
+    at async file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:173:1
+FAIL refused journal storage does not prevent the live failure disclosure: evalmachine.<anonymous>:44
+  t.style.setProperty('--toast-seat', '0px');
+          ^
+
+TypeError: Cannot read properties of undefined (reading 'setProperty')
+    at seatToast (evalmachine.<anonymous>:44:11)
+    at nextToast (evalmachine.<anonymous>:94:3)
+    at toast (evalmachine.<anonymous>:37:19)
+    at evalmachine.<anonymous>:1:1
+    at Script.runInContext (node:vm:149:12)
+    at Object.runInContext (node:vm:301:6)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:193:8
+    at check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:81:15)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:186:7
+FAIL L6 silence disclosure guard includes a normal-session CONTROL
+  Command failed: /Users/tommiller/.nvm/versions/node/v22.22.2/bin/node /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs
+FAIL CONTROL normal session saves and returns with no error-shaped disclosure: evalmachine.<anonymous>:44
+  t.style.setProperty('--toast-seat', '0px');
+          ^
+
+TypeError: Cannot read properties of undefined (reading 'setProperty')
+    at seatToast (evalmachine.<anonymous>:44:11)
+    at nextToast (evalmachine.<anonymous>:94:3)
+    at toast (evalmachine.<anonymous>:37:19)
+    at evalmachine.<anonymous>:1:1
+    at Script.runInContext (node:vm:149:12)
+    at Object.runInContext (node:vm:301:6)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:92:6
+    at async check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:81:9)
+    at async file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:85:1
+FAIL write failure is error-shaped, preempts routine traffic and survives 108 routine mutations: evalmachine.<anonymous>:44
+  t.style.setProperty('--toast-seat', '0px');
+          ^
+
+TypeError: Cannot read properties of undefined (reading 'setProperty')
+    at seatToast (evalmachine.<anonymous>:44:11)
+    at nextToast (evalmachine.<anonymous>:94:3)
+    at toast (evalmachine.<anonymous>:37:19)
+    at evalmachine.<anonymous>:1:1
+    at Script.runInContext (node:vm:149:12)
+    at Object.runInContext (node:vm:301:6)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:113:6
+    at check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:81:15)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:111:7
+FAIL failed save remains disclosed on return even if later writes succeed: AssertionError [ERR_ASSERTION]: []
+    at errorPaint (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:77:10)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:129:3
+    at async check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:81:9)
+    at async file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:126:1
+FAIL interrupted fight and food entry are disclosed from persisted evidence on any return route: TypeError: Cannot read properties of undefined (reading 'setProperty')
+    at seatToast (evalmachine.<anonymous>:44:11)
+    at nextToast (evalmachine.<anonymous>:94:3)
+    at toast (evalmachine.<anonymous>:37:19)
+    at evalmachine.<anonymous>:12:16
+    at async unfinished (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:74:3)
+    at async file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:142:19
+    at async check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:81:9)
+    at async file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:139:1
+FAIL queued errors survive routine backlog pressure and normal exit animation callbacks: evalmachine.<anonymous>:44
+  t.style.setProperty('--toast-seat', '0px');
+          ^
+
+TypeError: Cannot read properties of undefined (reading 'setProperty')
+    at seatToast (evalmachine.<anonymous>:44:11)
+    at nextToast (evalmachine.<anonymous>:94:3)
+    at toast (evalmachine.<anonymous>:37:19)
+    at evalmachine.<anonymous>:1:1
+    at Script.runInContext (node:vm:149:12)
+    at Object.runInContext (node:vm:301:6)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:164:6
+    at check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:81:15)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:162:7
+FAIL an interrupted in-flight write discloses uncertainty on return: evalmachine.<anonymous>:44
+  t.style.setProperty('--toast-seat', '0px');
+          ^
+
+TypeError: Cannot read properties of undefined (reading 'setProperty')
+    at seatToast (evalmachine.<anonymous>:44:11)
+    at nextToast (evalmachine.<anonymous>:94:3)
+    at toast (evalmachine.<anonymous>:37:19)
+    at evalmachine.<anonymous>:11:24
+    at Script.runInContext (node:vm:149:12)
+    at Object.runInContext (node:vm:301:6)
+    at boot (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:71:6)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:183:78
+    at async check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:81:9)
+    at async file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:173:1
+FAIL refused journal storage does not prevent the live failure disclosure: evalmachine.<anonymous>:44
+  t.style.setProperty('--toast-seat', '0px');
+          ^
+
+TypeError: Cannot read properties of undefined (reading 'setProperty')
+    at seatToast (evalmachine.<anonymous>:44:11)
+    at nextToast (evalmachine.<anonymous>:94:3)
+    at toast (evalmachine.<anonymous>:37:19)
+    at evalmachine.<anonymous>:1:1
+    at Script.runInContext (node:vm:149:12)
+    at Object.runInContext (node:vm:301:6)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:193:8
+    at check (file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:81:15)
+    at file:///private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/l-toast-rooms2/tests/silence-disclosure-audit.mjs:186:7
+
+
+389 passed, 2 failed

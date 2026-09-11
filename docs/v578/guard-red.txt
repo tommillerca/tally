@@ -11,3 +11,34 @@ ok    CONTROL Today drew its five door tiles  Trends 16,652.8 63.8x65.8 | Backpa
 FAIL  CLEAR a live toast covers none of the door tiles  toast 26.3,651.7 322.5x64.5 covers Trends, Backpack 2, Stable, Kitchen, The Pit !
 ok    SHADOW the contact shadow reads as contact, not a smudge  soles lum 60.2 with the shadow element hidden, 33.1 with it shown at 338,1078; the element contributes 45.0%
 FAILED  toast-today-audit
+
+
+Round 2 red control attempt: TOAST_SHIPPED_96=1 node tests/toast-reach-audit.mjs
+The injected CSS restores bottom: calc(var(--sab) + 96px), top: auto.
+BLOCKED: localhost listen EPERM prevents browser measurement. No failing screens measured; red proof is UNPROVEN.
+
+AUDIT START toast-reach-audit.mjs: completion pending; planned rows undeclared
+INTERRUPTED toast-reach-audit.mjs: Error: listen EPERM: operation not permitted 127.0.0.1
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+AUDIT END toast-reach-audit.mjs: FAILED; INCOMPLETE; rows=0/undeclared; failed=0; unproven=0; exit=1
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted 127.0.0.1
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '127.0.0.1'
+}
+
+Node.js v22.22.2
+
+EXIT 1

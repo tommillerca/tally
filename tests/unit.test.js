@@ -5491,7 +5491,8 @@ test('M5 toast retains the four-job backlog cap and each retained job gets its d
   const timers = [], seen = [];
   const el = { classList: { add() {}, remove() {}, toggle() {} }, dataset: {}, hidden: true, textContent: '' };
   const context = vm.createContext({
-    $: () => el, reducedMotion: true, toastTimer: 0, clearTimeout() {},
+    // Queue-only harness; real geometry is covered by toast-seat.test.mjs.
+    seatToast() {}, $: () => el, reducedMotion: true, toastTimer: 0, clearTimeout() {},
     setTimeout(fn, ms) { timers.push({ fn, ms }); return timers.length; },
   });
   vm.runInContext(app.slice(start, end), context);
