@@ -12226,3 +12226,85 @@ button.t3-price::before {
 #chContent .bp-eggs .t3-egg .tx { flex-basis: 150px; }
 #chContent .bp-salvage { margin-top: 20px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
 #chContent .bp-salvage > .t3-sect { margin-top: 0; }
+
+/* v569: recover 16.4px across the measured header's three row gaps.
+   Keep every row, tap target and paperdoll dimension intact. */
+.ward-head { row-gap: 7.683333px; }
+
+/* The two synchronized axes traverse the original 16 by 15 sheet at 50fps.
+   Repeated frames in the source already encode the authored exposure timing. */
+.lab-banner { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 80px; padding: 12px; margin: 0 0 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+.lab-banner-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 4px; }
+.lab-banner-copy b { font-family: var(--display); font-size: var(--fs-4); font-weight: 400; }
+.lab-banner-copy small { color: var(--text-2); font-size: var(--fs-1); }
+.lab-banner-recipes { color: var(--accent); font-size: var(--fs-1); }
+.lab-banner:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lab-slime { display: block; flex: none; width: 48px; height: 48px; background-image: url('assets/slime/slime-spritesheet.png'); background-repeat: no-repeat; background-size: 768px 720px; image-rendering: pixelated; animation: slime-columns 0.32s steps(16) infinite, slime-rows 4.8s steps(15) infinite; }
+@keyframes slime-columns { to { background-position-x: -768px; } }
+@keyframes slime-rows { to { background-position-y: -720px; } }
+.lab-banner:hover .lab-slime, .lab-banner:focus-within .lab-slime { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .lab-slime { animation: none; background-position: 0 0; }
+}
+
+/* Board 1A sets every move name in caps (JAB, SWING, HAYMAKER, BONE GUARD), and
+   ITEMS and END TURN with them. Bangers carries a lowercase, so without this the
+   names render title case and do not match the approved board. Appended rather
+   than edited in place: wardrobe-ui-1f-audit hash-freezes the inherited CSS
+   prefix, and that guard is correct. Same selectors, later in the cascade. */
+#fightBody > .fight-actions > .fight-act[data-act] > b,
+#fightBody > .fight-actions > .fight-act.items > b,
+#fightBody > .fight-endrow > .fight-act.endturn > b { text-transform: uppercase; }
+
+
+/* Approved 1A move anatomy: cost, name, then effect. Append to preserve the
+   inherited Wardrobe CSS prefix. */
+#fightBody > .fight-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: 1fr; gap: 7px;
+}
+#fightBody > .fight-actions > .fight-act[data-act] {
+  min-width: 0; min-height: 64px; padding: 7px 4px;
+  grid-template-rows: auto auto 1fr; gap: 3px;
+  background: var(--surface); border: 1px solid var(--line);
+  text-align: center;
+}
+#fightBody > .fight-actions > .fight-act[data-act] > b {
+  font-size: var(--fs-body); line-height: 1.1; color: var(--text);
+  overflow-wrap: anywhere;
+}
+#fightBody > .fight-actions > .fight-act[data-act="titan"] > b { color: var(--gold); }
+#fightBody > .fight-actions > .fight-act[data-act="rage"] > b { color: var(--coral); }
+#fightBody > .fight-actions > .fight-act[data-act] > small.cost {
+  position: static; max-width: 100%;
+  font-size: calc(var(--fs-body) * .5); line-height: 1.2;
+  color: var(--text-3); text-align: center; overflow-wrap: anywhere;
+}
+#fightBody > .fight-actions > .fight-act[data-act] > small.effect {
+  font-size: var(--fs-micro); line-height: 1.2;
+  color: var(--text-2); font-weight: 400; overflow-wrap: anywhere;
+}
+#fightBody > .fight-actions > .fight-act[data-act] .move-unavailable {
+  display: block; margin-top: 3px;
+}
+#fightBody > .fight-actions > .fight-act.items {
+  min-height: 40px; grid-column: 1 / -1;
+}
+#fightBody > .fight-actions > .fight-act.items > b {
+  font-size: calc(var(--fs-body) * 1.0625); line-height: 1.1;
+}
+#fightBody > .fight-meta > .range-pill {
+  font-family: var(--display); font-size: calc(var(--fs-body) * .875);
+  font-weight: 400; padding: 2px 10px; border: 0; border-radius: 6px; box-shadow: none;
+  background: var(--danger); color: #2a0d09; text-transform: uppercase;
+}
+#fightBody > .fight-endrow > .fight-act.endturn {
+  width: 100%; min-height: 40px; padding: 8px 16px; gap: 2px;
+}
+#fightBody > .fight-endrow > .fight-act.endturn > b {
+  font-size: calc(var(--fs-body) * 1.0625); line-height: 1.1;
+}
+#fightBody > .fight-endrow > .fight-act.endturn > small {
+  font-size: var(--fs-tiny); font-weight: 400; line-height: 1.2;
+  color: var(--accent-ink);
+}

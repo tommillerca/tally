@@ -1,0 +1,2419 @@
+{
+  "image": "slime-spritesheet.png",
+  "frameWidth": 48,
+  "frameHeight": 48,
+  "columns": 16,
+  "rows": 15,
+  "frameCount": 240,
+  "fps": 50,
+  "durationSeconds": 4.8,
+  "loop": true,
+  "filter": "nearest",
+  "pivot": {
+    "x": 24,
+    "y": 44
+  },
+  "timing": "Unequal pose holds and speed ramps are baked into the frame sequence.",
+  "frames": [
+    {
+      "name": "slime_000",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_001",
+      "frame": {
+        "x": 48,
+        "y": 0,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_002",
+      "frame": {
+        "x": 96,
+        "y": 0,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_003",
+      "frame": {
+        "x": 144,
+        "y": 0,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_004",
+      "frame": {
+        "x": 192,
+        "y": 0,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_005",
+      "frame": {
+        "x": 240,
+        "y": 0,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_006",
+      "frame": {
+        "x": 288,
+        "y": 0,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_007",
+      "frame": {
+        "x": 336,
+        "y": 0,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_008",
+      "frame": {
+        "x": 384,
+        "y": 0,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_009",
+      "frame": {
+        "x": 432,
+        "y": 0,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_010",
+      "frame": {
+        "x": 480,
+        "y": 0,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_011",
+      "frame": {
+        "x": 528,
+        "y": 0,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_012",
+      "frame": {
+        "x": 576,
+        "y": 0,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_013",
+      "frame": {
+        "x": 624,
+        "y": 0,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_014",
+      "frame": {
+        "x": 672,
+        "y": 0,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_015",
+      "frame": {
+        "x": 720,
+        "y": 0,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_016",
+      "frame": {
+        "x": 0,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_017",
+      "frame": {
+        "x": 48,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_018",
+      "frame": {
+        "x": 96,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_019",
+      "frame": {
+        "x": 144,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_020",
+      "frame": {
+        "x": 192,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_021",
+      "frame": {
+        "x": 240,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_022",
+      "frame": {
+        "x": 288,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_023",
+      "frame": {
+        "x": 336,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_024",
+      "frame": {
+        "x": 384,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_025",
+      "frame": {
+        "x": 432,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_026",
+      "frame": {
+        "x": 480,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_027",
+      "frame": {
+        "x": 528,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_028",
+      "frame": {
+        "x": 576,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_029",
+      "frame": {
+        "x": 624,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_030",
+      "frame": {
+        "x": 672,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_031",
+      "frame": {
+        "x": 720,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_032",
+      "frame": {
+        "x": 0,
+        "y": 96,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_033",
+      "frame": {
+        "x": 48,
+        "y": 96,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_034",
+      "frame": {
+        "x": 96,
+        "y": 96,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_035",
+      "frame": {
+        "x": 144,
+        "y": 96,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_036",
+      "frame": {
+        "x": 192,
+        "y": 96,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_037",
+      "frame": {
+        "x": 240,
+        "y": 96,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_038",
+      "frame": {
+        "x": 288,
+        "y": 96,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_039",
+      "frame": {
+        "x": 336,
+        "y": 96,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_040",
+      "frame": {
+        "x": 384,
+        "y": 96,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_041",
+      "frame": {
+        "x": 432,
+        "y": 96,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_042",
+      "frame": {
+        "x": 480,
+        "y": 96,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_043",
+      "frame": {
+        "x": 528,
+        "y": 96,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_044",
+      "frame": {
+        "x": 576,
+        "y": 96,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_045",
+      "frame": {
+        "x": 624,
+        "y": 96,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_046",
+      "frame": {
+        "x": 672,
+        "y": 96,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_047",
+      "frame": {
+        "x": 720,
+        "y": 96,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_048",
+      "frame": {
+        "x": 0,
+        "y": 144,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_049",
+      "frame": {
+        "x": 48,
+        "y": 144,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_050",
+      "frame": {
+        "x": 96,
+        "y": 144,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_051",
+      "frame": {
+        "x": 144,
+        "y": 144,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_052",
+      "frame": {
+        "x": 192,
+        "y": 144,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_053",
+      "frame": {
+        "x": 240,
+        "y": 144,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_054",
+      "frame": {
+        "x": 288,
+        "y": 144,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_055",
+      "frame": {
+        "x": 336,
+        "y": 144,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_056",
+      "frame": {
+        "x": 384,
+        "y": 144,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_057",
+      "frame": {
+        "x": 432,
+        "y": 144,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_058",
+      "frame": {
+        "x": 480,
+        "y": 144,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_059",
+      "frame": {
+        "x": 528,
+        "y": 144,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_060",
+      "frame": {
+        "x": 576,
+        "y": 144,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_061",
+      "frame": {
+        "x": 624,
+        "y": 144,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_062",
+      "frame": {
+        "x": 672,
+        "y": 144,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_063",
+      "frame": {
+        "x": 720,
+        "y": 144,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_064",
+      "frame": {
+        "x": 0,
+        "y": 192,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_065",
+      "frame": {
+        "x": 48,
+        "y": 192,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_066",
+      "frame": {
+        "x": 96,
+        "y": 192,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_067",
+      "frame": {
+        "x": 144,
+        "y": 192,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_068",
+      "frame": {
+        "x": 192,
+        "y": 192,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_069",
+      "frame": {
+        "x": 240,
+        "y": 192,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_070",
+      "frame": {
+        "x": 288,
+        "y": 192,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_071",
+      "frame": {
+        "x": 336,
+        "y": 192,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_072",
+      "frame": {
+        "x": 384,
+        "y": 192,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_073",
+      "frame": {
+        "x": 432,
+        "y": 192,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_074",
+      "frame": {
+        "x": 480,
+        "y": 192,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_075",
+      "frame": {
+        "x": 528,
+        "y": 192,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_076",
+      "frame": {
+        "x": 576,
+        "y": 192,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_077",
+      "frame": {
+        "x": 624,
+        "y": 192,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_078",
+      "frame": {
+        "x": 672,
+        "y": 192,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_079",
+      "frame": {
+        "x": 720,
+        "y": 192,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_080",
+      "frame": {
+        "x": 0,
+        "y": 240,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_081",
+      "frame": {
+        "x": 48,
+        "y": 240,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_082",
+      "frame": {
+        "x": 96,
+        "y": 240,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_083",
+      "frame": {
+        "x": 144,
+        "y": 240,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_084",
+      "frame": {
+        "x": 192,
+        "y": 240,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_085",
+      "frame": {
+        "x": 240,
+        "y": 240,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_086",
+      "frame": {
+        "x": 288,
+        "y": 240,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_087",
+      "frame": {
+        "x": 336,
+        "y": 240,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_088",
+      "frame": {
+        "x": 384,
+        "y": 240,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_089",
+      "frame": {
+        "x": 432,
+        "y": 240,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_090",
+      "frame": {
+        "x": 480,
+        "y": 240,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_091",
+      "frame": {
+        "x": 528,
+        "y": 240,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_092",
+      "frame": {
+        "x": 576,
+        "y": 240,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_093",
+      "frame": {
+        "x": 624,
+        "y": 240,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_094",
+      "frame": {
+        "x": 672,
+        "y": 240,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_095",
+      "frame": {
+        "x": 720,
+        "y": 240,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_096",
+      "frame": {
+        "x": 0,
+        "y": 288,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_097",
+      "frame": {
+        "x": 48,
+        "y": 288,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_098",
+      "frame": {
+        "x": 96,
+        "y": 288,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_099",
+      "frame": {
+        "x": 144,
+        "y": 288,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_100",
+      "frame": {
+        "x": 192,
+        "y": 288,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_101",
+      "frame": {
+        "x": 240,
+        "y": 288,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_102",
+      "frame": {
+        "x": 288,
+        "y": 288,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_103",
+      "frame": {
+        "x": 336,
+        "y": 288,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_104",
+      "frame": {
+        "x": 384,
+        "y": 288,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_105",
+      "frame": {
+        "x": 432,
+        "y": 288,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_106",
+      "frame": {
+        "x": 480,
+        "y": 288,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_107",
+      "frame": {
+        "x": 528,
+        "y": 288,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_108",
+      "frame": {
+        "x": 576,
+        "y": 288,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_109",
+      "frame": {
+        "x": 624,
+        "y": 288,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_110",
+      "frame": {
+        "x": 672,
+        "y": 288,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_111",
+      "frame": {
+        "x": 720,
+        "y": 288,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_112",
+      "frame": {
+        "x": 0,
+        "y": 336,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_113",
+      "frame": {
+        "x": 48,
+        "y": 336,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_114",
+      "frame": {
+        "x": 96,
+        "y": 336,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_115",
+      "frame": {
+        "x": 144,
+        "y": 336,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_116",
+      "frame": {
+        "x": 192,
+        "y": 336,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_117",
+      "frame": {
+        "x": 240,
+        "y": 336,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_118",
+      "frame": {
+        "x": 288,
+        "y": 336,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_119",
+      "frame": {
+        "x": 336,
+        "y": 336,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_120",
+      "frame": {
+        "x": 384,
+        "y": 336,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_121",
+      "frame": {
+        "x": 432,
+        "y": 336,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_122",
+      "frame": {
+        "x": 480,
+        "y": 336,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_123",
+      "frame": {
+        "x": 528,
+        "y": 336,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_124",
+      "frame": {
+        "x": 576,
+        "y": 336,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_125",
+      "frame": {
+        "x": 624,
+        "y": 336,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_126",
+      "frame": {
+        "x": 672,
+        "y": 336,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_127",
+      "frame": {
+        "x": 720,
+        "y": 336,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_128",
+      "frame": {
+        "x": 0,
+        "y": 384,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_129",
+      "frame": {
+        "x": 48,
+        "y": 384,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_130",
+      "frame": {
+        "x": 96,
+        "y": 384,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_131",
+      "frame": {
+        "x": 144,
+        "y": 384,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_132",
+      "frame": {
+        "x": 192,
+        "y": 384,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_133",
+      "frame": {
+        "x": 240,
+        "y": 384,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_134",
+      "frame": {
+        "x": 288,
+        "y": 384,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_135",
+      "frame": {
+        "x": 336,
+        "y": 384,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_136",
+      "frame": {
+        "x": 384,
+        "y": 384,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_137",
+      "frame": {
+        "x": 432,
+        "y": 384,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_138",
+      "frame": {
+        "x": 480,
+        "y": 384,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_139",
+      "frame": {
+        "x": 528,
+        "y": 384,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_140",
+      "frame": {
+        "x": 576,
+        "y": 384,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_141",
+      "frame": {
+        "x": 624,
+        "y": 384,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_142",
+      "frame": {
+        "x": 672,
+        "y": 384,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_143",
+      "frame": {
+        "x": 720,
+        "y": 384,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_144",
+      "frame": {
+        "x": 0,
+        "y": 432,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_145",
+      "frame": {
+        "x": 48,
+        "y": 432,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_146",
+      "frame": {
+        "x": 96,
+        "y": 432,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_147",
+      "frame": {
+        "x": 144,
+        "y": 432,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_148",
+      "frame": {
+        "x": 192,
+        "y": 432,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_149",
+      "frame": {
+        "x": 240,
+        "y": 432,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_150",
+      "frame": {
+        "x": 288,
+        "y": 432,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_151",
+      "frame": {
+        "x": 336,
+        "y": 432,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_152",
+      "frame": {
+        "x": 384,
+        "y": 432,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_153",
+      "frame": {
+        "x": 432,
+        "y": 432,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_154",
+      "frame": {
+        "x": 480,
+        "y": 432,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_155",
+      "frame": {
+        "x": 528,
+        "y": 432,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_156",
+      "frame": {
+        "x": 576,
+        "y": 432,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_157",
+      "frame": {
+        "x": 624,
+        "y": 432,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_158",
+      "frame": {
+        "x": 672,
+        "y": 432,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_159",
+      "frame": {
+        "x": 720,
+        "y": 432,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_160",
+      "frame": {
+        "x": 0,
+        "y": 480,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_161",
+      "frame": {
+        "x": 48,
+        "y": 480,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_162",
+      "frame": {
+        "x": 96,
+        "y": 480,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_163",
+      "frame": {
+        "x": 144,
+        "y": 480,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_164",
+      "frame": {
+        "x": 192,
+        "y": 480,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_165",
+      "frame": {
+        "x": 240,
+        "y": 480,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_166",
+      "frame": {
+        "x": 288,
+        "y": 480,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_167",
+      "frame": {
+        "x": 336,
+        "y": 480,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_168",
+      "frame": {
+        "x": 384,
+        "y": 480,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_169",
+      "frame": {
+        "x": 432,
+        "y": 480,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_170",
+      "frame": {
+        "x": 480,
+        "y": 480,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_171",
+      "frame": {
+        "x": 528,
+        "y": 480,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_172",
+      "frame": {
+        "x": 576,
+        "y": 480,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_173",
+      "frame": {
+        "x": 624,
+        "y": 480,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_174",
+      "frame": {
+        "x": 672,
+        "y": 480,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_175",
+      "frame": {
+        "x": 720,
+        "y": 480,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_176",
+      "frame": {
+        "x": 0,
+        "y": 528,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_177",
+      "frame": {
+        "x": 48,
+        "y": 528,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_178",
+      "frame": {
+        "x": 96,
+        "y": 528,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_179",
+      "frame": {
+        "x": 144,
+        "y": 528,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_180",
+      "frame": {
+        "x": 192,
+        "y": 528,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_181",
+      "frame": {
+        "x": 240,
+        "y": 528,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_182",
+      "frame": {
+        "x": 288,
+        "y": 528,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_183",
+      "frame": {
+        "x": 336,
+        "y": 528,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_184",
+      "frame": {
+        "x": 384,
+        "y": 528,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_185",
+      "frame": {
+        "x": 432,
+        "y": 528,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_186",
+      "frame": {
+        "x": 480,
+        "y": 528,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_187",
+      "frame": {
+        "x": 528,
+        "y": 528,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_188",
+      "frame": {
+        "x": 576,
+        "y": 528,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_189",
+      "frame": {
+        "x": 624,
+        "y": 528,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_190",
+      "frame": {
+        "x": 672,
+        "y": 528,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_191",
+      "frame": {
+        "x": 720,
+        "y": 528,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_192",
+      "frame": {
+        "x": 0,
+        "y": 576,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_193",
+      "frame": {
+        "x": 48,
+        "y": 576,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_194",
+      "frame": {
+        "x": 96,
+        "y": 576,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_195",
+      "frame": {
+        "x": 144,
+        "y": 576,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_196",
+      "frame": {
+        "x": 192,
+        "y": 576,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_197",
+      "frame": {
+        "x": 240,
+        "y": 576,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_198",
+      "frame": {
+        "x": 288,
+        "y": 576,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_199",
+      "frame": {
+        "x": 336,
+        "y": 576,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_200",
+      "frame": {
+        "x": 384,
+        "y": 576,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_201",
+      "frame": {
+        "x": 432,
+        "y": 576,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_202",
+      "frame": {
+        "x": 480,
+        "y": 576,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_203",
+      "frame": {
+        "x": 528,
+        "y": 576,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_204",
+      "frame": {
+        "x": 576,
+        "y": 576,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_205",
+      "frame": {
+        "x": 624,
+        "y": 576,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_206",
+      "frame": {
+        "x": 672,
+        "y": 576,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_207",
+      "frame": {
+        "x": 720,
+        "y": 576,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_208",
+      "frame": {
+        "x": 0,
+        "y": 624,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_209",
+      "frame": {
+        "x": 48,
+        "y": 624,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_210",
+      "frame": {
+        "x": 96,
+        "y": 624,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_211",
+      "frame": {
+        "x": 144,
+        "y": 624,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_212",
+      "frame": {
+        "x": 192,
+        "y": 624,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_213",
+      "frame": {
+        "x": 240,
+        "y": 624,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_214",
+      "frame": {
+        "x": 288,
+        "y": 624,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_215",
+      "frame": {
+        "x": 336,
+        "y": 624,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_216",
+      "frame": {
+        "x": 384,
+        "y": 624,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_217",
+      "frame": {
+        "x": 432,
+        "y": 624,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_218",
+      "frame": {
+        "x": 480,
+        "y": 624,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_219",
+      "frame": {
+        "x": 528,
+        "y": 624,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_220",
+      "frame": {
+        "x": 576,
+        "y": 624,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_221",
+      "frame": {
+        "x": 624,
+        "y": 624,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_222",
+      "frame": {
+        "x": 672,
+        "y": 624,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_223",
+      "frame": {
+        "x": 720,
+        "y": 624,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_224",
+      "frame": {
+        "x": 0,
+        "y": 672,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_225",
+      "frame": {
+        "x": 48,
+        "y": 672,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_226",
+      "frame": {
+        "x": 96,
+        "y": 672,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_227",
+      "frame": {
+        "x": 144,
+        "y": 672,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_228",
+      "frame": {
+        "x": 192,
+        "y": 672,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_229",
+      "frame": {
+        "x": 240,
+        "y": 672,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_230",
+      "frame": {
+        "x": 288,
+        "y": 672,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_231",
+      "frame": {
+        "x": 336,
+        "y": 672,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_232",
+      "frame": {
+        "x": 384,
+        "y": 672,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_233",
+      "frame": {
+        "x": 432,
+        "y": 672,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_234",
+      "frame": {
+        "x": 480,
+        "y": 672,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_235",
+      "frame": {
+        "x": 528,
+        "y": 672,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_236",
+      "frame": {
+        "x": 576,
+        "y": 672,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_237",
+      "frame": {
+        "x": 624,
+        "y": 672,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_238",
+      "frame": {
+        "x": 672,
+        "y": 672,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    },
+    {
+      "name": "slime_239",
+      "frame": {
+        "x": 720,
+        "y": 672,
+        "w": 48,
+        "h": 48
+      },
+      "duration": 20.0
+    }
+  ]
+}
