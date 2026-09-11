@@ -6225,7 +6225,7 @@ test('QA round 28 P2: every move button carries its cost in visible text, the re
   // CONTROL: the hint itself still renders, so the slice is the real renderer
   const on = render({ ap: 2, over: false }, { wind: 80, hype: 0 }, { ...hay, enabled: true });
   assert.match(visible(on), /~45 dmg · 88% hit/, 'the slice did not render the hint: this test is looking at the wrong code');
-  assert.match(visible(on), /2 AP · 35 Stamina/, 'an enabled Haymaker does not print its 2 AP / 35 Stamina outside title=');
+  assert.match(visible(on), /2 AP · 35 STAM/, 'an enabled Haymaker does not print its 2 AP / 35 Stamina outside title=');
   assert.ok(!/ disabled/.test(on), 'an enabled move rendered disabled');
   // disabled for AP: the reason, with the same value actionsFor compared
   const noAp = render({ ap: 1, over: false }, { wind: 80, hype: 0 }, { ...hay, enabled: false });
@@ -6236,40 +6236,22 @@ test('QA round 28 P2: every move button carries its cost in visible text, the re
   assert.match(visible(noWind), /Stamina 12\/35/, 'a Haymaker disabled for Stamina does not say "Stamina 12/35"');
   assert.ok(!/Needs 2 AP/.test(visible(noWind)), 'the Stamina case is misreported as an AP case');
   // Bone Guard's +22 (GUARD_STAMINA) and Signature's Hype are values, not prose.
-  // "Stamina" dropped from the guard clause 2026-09-06: with it, Bone Guard was
-  // the only cost line with three clauses and the one wide enough to wrap to a
-  // second line inside the button, painting over the label below it
-  // (small.cost is position:absolute, see app.js costLine and app.css). The
-  // unit was already named by the clause before it.
   const guard = render({ ap: 1, over: false }, { wind: 50, hype: 0 }, { id: 'guard', label: 'Bone Guard', ap: 1, windCost: 12, enabled: true });
-  assert.match(visible(guard), /1 AP · 12 Stamina · \+22\b/, 'Bone Guard does not print its +22 Stamina');
+  assert.match(visible(guard), /1 AP · 12 STAM/, 'Bone Guard keeps its live cost');
+  assert.match(visible(guard), /\+22 STAM/, 'Bone Guard keeps its live recovery value');
   assert.ok(!/\+22 Stamina/.test(visible(guard)), 'Bone Guard still carries the redundant trailing "Stamina" that wraps its cost to a second line');
   const sig = render({ ap: 2, over: false }, { wind: 50, hype: 100 }, { id: 'signature', label: 'Signature', ap: 2, windCost: 0, enabled: true });
   assert.match(visible(sig), /2 AP · 100 Hype/, 'Signature does not print the Hype it spends');
-  // the full-width SIGNATURE button in renderActions carries the same sub-line
-  assert.match(app, /data-act="signature"[^\n]*<span class="cost">\$\{costLine\(sig\)\}<\/span><\/small>/, 'the SIGNATURE button has no cost on its hint line');
-  /* CORRECTED 2026-09-04: the line this replaces asserted a move row can NEVER
-     carry a second <small>, on the theory that .fight-act's `display:grid`
-     always turns one into an extra row. That theory was itself the bug, not a
-     caution: deleting the element also deleted the only thing fight-hint-
-     audit's `small.cost` selector can find, and folding its text onto the
-     hint's own <small> instead (1) wrapped the hint to two lines at 375/393
-     (fight-hint-audit's "every move label is one line") and (2) put "Stamina"
-     back into the Bone Guard hint even on the build where actionsFor had
-     already dropped it to make the hint fit (fight-press-audit). Tom's round
-     28 P2 ticket (~/Downloads/round28tickets.md) asked for the cost to be
-     VISIBLE outside title=, "Haymaker was disabled on 71 of 111 turns while
-     still advertising its damage, with no reason" - not for the hint to be
-     kept safe from a second element. The real fix keeps small.cost real and
-     separate and takes it OUT of .fight-act's grid row flow instead
-     (app.css: `.fight-act small.cost { position: absolute; ... }`), so this
-     now asserts the element exists on its own and that the CSS is what keeps
-     it from costing a row, not the element's absence. */
-  assert.ok(src.includes('</small><small class="cost">${costLine(a)}</small>'),
-    'a move row needs its own <small class="cost">, separate from the hint\'s <small>, for fight-hint-audit to find');
+  // Frozen 1A: cost, name, effect in DOM order. Disabled reasons supplement
+  // the effect without hiding either the live cost or the damage preview.
+  for (const html of [on, noAp, noWind, guard, sig]) {
+    assert.match(html, /<small class="cost">[^<]+<\/small><b>[^<]+<\/b><small class="effect">/);
+  }
+  assert.match(visible(noAp), /2 AP · 35 STAM/);
+  assert.match(visible(noWind), /~45 dmg · 88% hit/);
+  assert.match(app, /data-act="signature"[^\n]*<small class="cost">[^\n]*<\/small><b>SIGNATURE<\/b><small class="effect">/);
   const css = readFileSync(join(here, '..', 'app.css'), 'utf8');
-  assert.match(css, /\.fight-act small\.cost\s*\{[^}]*position:\s*absolute/s,
-    'small.cost must be taken out of the grid row flow (position:absolute), or it costs the tray a row again (fight-layout ROWS)');
+  assert.match(css, /#fightBody > \.fight-actions > \.fight-act\[data-act\] > small\.cost\s*\{\s*position:\s*static/);
   // HP number: printed in the HUD, updated from the same value that drives the width
   assert.match(app, /<span id="youHpN">\$\{Math\.round\(player\.hp\)\}\/\$\{player\.d\.maxHp\}<\/span>/, 'the You HUD has no HP number');
   assert.match(app, /<span id="foeHpN">\$\{Math\.round\(foe\.hp\)\}\/\$\{foe\.d\.maxHp\}<\/span>/, 'the foe HUD has no HP number');

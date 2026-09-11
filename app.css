@@ -12246,3 +12246,13 @@ button.t3-price::before {
 @media (prefers-reduced-motion: reduce) {
   .lab-slime { animation: none; background-position: 0 0; }
 }
+
+/* Board 1A sets every move name in caps (JAB, SWING, HAYMAKER, BONE GUARD), and
+   ITEMS and END TURN with them. Bangers carries a lowercase, so without this the
+   names render title case and do not match the approved board. Appended rather
+   than edited in place: wardrobe-ui-1f-audit hash-freezes the inherited CSS
+   prefix, and that guard is correct. Same selectors, later in the cascade. */
+#fightBody > .fight-actions > .fight-act[data-act] > b,
+#fightBody > .fight-actions > .fight-act.items > b,
+#fightBody > .fight-endrow > .fight-act.endturn > b { text-transform: uppercase; }
+

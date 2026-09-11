@@ -18056,7 +18056,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         <span class="lab-slime" aria-hidden="true"></span>
         <span class="lab-banner-copy"><b>THE LABORATORY</b><small>Spare pets become new colours.</small><span class="lab-banner-recipes">Recipes ›</span></span>
       </button>
-      <div class="lab-egg-help"><p>Hatch eggs to discover species. Keep spare pets of the same species for The Laboratory. Its recipes show the path to new colours.</p><p>New eggs hatch Base pets, with the existing rare shiny chance. Colours are now made in The Laboratory. Your pets and the colours already stored in your eggs stay yours.</p><button class="btn ghost" data-lab-open>Explore Laboratory recipes</button></div>
+
       ${(pendingLoot || []).length ? `<div class="t3-sect" style="margin-top:2px"><b>Boss loot · keep one per drop</b><i></i></div>
       ${pendingLoot.map((p, i) => `
         <div class="loot-pending" data-lootkey="${esc(p.key)}">
@@ -21620,7 +21620,7 @@ function labBenchHtml(s, selected, sp, q = null, choosingSpecies = false) {
   const recovery = s.unseen?.length ? '<section class="lab-recovery"><p>Your last session ended before you saw your experiment. The result is saved. Open it to review.</p><button class="btn ghost" data-lab-recover>Review saved experiment</button></section>' : '';
   const noPair = !s.pets.length || !s.hasEligiblePair || (sp && s.species[sp]?.hasEligiblePair === false);
   return `${labReconciledHtml(s)}${recovery}<p>Make a new colour from two pets of the same species.</p>${labSpeciesHtml(s, sp, choosingSpecies)}<section class="lab-availability">${canWork ? `<details class="lab-clock"><summary>${available}</summary><p>${s.used}/${s.capacity} experiments used</p><p>Experiments reset at ${esc(s.resetTime)}, ${esc(s.zone)}.</p></details>` : ''}${status !== available && status !== prompt ? `<p role="status">${esc(status)}</p>` : ''}${noPair ? '<nav class="lab-links" aria-label="Find a pair"><button class="btn ghost" data-lab-nav="eggs">Eggs</button>' + (sp ? '<button class="btn ghost" data-lab-change-species>Change species</button>' : '') + '</nav>' : ''}</section>${working}${labRecipesHtml(s, sp)}
-<details id="labHelp" ${s.ui?.introRead ? '' : 'open'}><summary>How the recipes work</summary><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>
+<details id="labHelp" ${s.ui?.introRead ? '' : 'open'}><summary>How the recipes work</summary><p>Hatch eggs to discover species. Keep spare pets of the same species for The Laboratory. Its recipes show the path to new colours.</p><p>New eggs hatch Base pets, with the existing rare shiny chance. Colours are now made in The Laboratory. Your pets and the colours already stored in your eggs stay yours.</p><p>Your collection, spare pets and previous results never change the odds. Three Frost before your first Ember is possible.</p><p>Spending your last copy can remove a colour from your collection. Trained pets are allowed, but all their investment is lost.</p></details>
 <button class="${sp && !canWork ? 'btn lab-next' : 'link lab-collection'}" data-lab-nav="collection">Your collection: ${s.collectionCount} of ${labTotal()} colours</button><details class="lab-more"><summary>More pet actions</summary>${s.status !== 'ready' ? '<p>One experiment each day is free. Permanent incubators can add two more.</p>' : ''}<div class="lab-eggs">${s.eggs.length ? s.eggs.map(e => `<p>Egg: ${e.ready ? 'Ready to hatch' : `${e.steps.toLocaleString()}/${e.goal.toLocaleString()} steps`}. Open eggs to ${e.ready ? 'hatch it' : 'check progress'}.</p>`).join('') : '<p>No eggs in your Backpack. Keep logging and walking to earn eggs through daily activities.</p>'}</div>${labSinksHtml()}${s.status === 'ready' ? '<button class="link" data-lab-incubators>Incubators</button>' : ''}</details>`;
 }
 // LAB UI PURE END
@@ -26556,44 +26556,17 @@ async function openFight(pitWrap, fighter, foeCfg) {
        hover. It is the same title= pattern the wardrobe, gear and Crew tiles
        already use. The third route needs no code: the Talents sheet renders the
        very same sentence at full width, which is where it comes from. */
-    /* QA round 28 P2: WHAT A MOVE COSTS WAS ONLY IN title=, which is hover or
-       long-press and does not exist on a phone. Haymaker sat disabled on 71 of
-       111 driven turns still advertising "~45 dmg · 88% hit" with no reason.
-       One extra <small> under the hint, same values actionsFor already decided
-       on: the cost when the move is legal, the reason when it is not (AP first,
-       then Stamina; flurry's floor is the 30 actionsFor tests, not its windCost,
-       which is "all of it"). No new copy beyond the value strings.
-       IT IS A REAL, SEPARATE <small class="cost">, not text folded into the
-       hint (2026-09-04 correction). ea987dd7 shipped it that way first and it
-       cost ~14px of extra button height, because .fight-act is `display:grid`
-       and grid auto-places a second small sibling into its own implicit row;
-       fight-layout-audit's ROWS went red (2 of 3 rows fit a 188px tray at
-       393x852). 190b5eb1 "fixed" the height by deleting the element and
-       appending its text onto the hint's <small> instead, which then wrapped
-       the hint to two lines at 375/393 (fight-hint-audit) and made the Bone
-       Guard hint always carry "Stamina" even when it had been shortened to
-       drop it (fight-press-audit). Both were real regressions of the OTHER
-       audit's rule, not a false alarm.
-       The element stays real and separate; app.css takes it OUT of the grid's
-       row flow with `position:absolute` (.fight-act small.cost) so it costs
-       the button zero extra height without folding its text into the hint. */
+    // Costs, names and effects occupy separate in-flow rows in the move grid.
     const costLine = a => {
       if (!a.enabled && !fight.over) {
         if (fight.ap < a.ap) return `Needs ${a.ap} AP`;
         return `Stamina ${Math.floor(player.wind)}/${a.id === 'flurry' ? 30 : a.windCost}`;
       }
-      /* "Stamina" dropped from the guard clause (2026-09-06): with it, Bone
-         Guard's is the only cost line with three clauses ("1 AP · 12 Stamina ·
-         +22 Stamina"), and it is the one wide enough to wrap to a second line
-         inside the button, which runs straight into the label sitting right
-         below (small.cost is absolutely positioned over the button's own
-         content, not laid out in flow). The unit was already stated by the
-         clause before it; repeating the word bought nothing. */
       return `${a.ap} AP${a.windCost ? ` · ${a.windCost} Stamina` : ''}${a.id === 'guard' ? ` · +${GUARD_STAMINA}` : ''}${a.id === 'signature' ? ` · ${player.hype} Hype` : ''}`;
     };
     const btn = (a, { hint = '', glow = false, weak = false } = {}) => a ? `
       <button class="fight-act ${glow ? 'glow' : ''} ${weak ? 'weak' : ''}" data-act="${a.id}" title="${esc(moveDetail(a.id))}" ${a.enabled ? '' : 'disabled'}>
-        <b>${a.label}</b><small>${hint || `<span class="ap-pips">${'<i></i>'.repeat(a.ap)}</span>`}</small><small class="cost">${costLine(a)}</small>
+        <small class="cost">${a.ap} AP${a.windCost ? ` · ${a.windCost} STAM` : ''}${a.id === 'signature' ? ` · ${player.hype} Hype` : ''}</small><b>${a.label}</b><small class="effect">${hint || `<span class="ap-pips">${'<i></i>'.repeat(a.ap)}</span>`}${a.id === 'guard' ? ` · +${GUARD_STAMINA} STAM` : ''}${!a.enabled ? `<span class="move-unavailable">${costLine(a)}</span>` : ''}</small>
       </button>` : '';
     const dmgHint = id => {
       const est = expectedDamage(id, player, null, foe);
@@ -26611,7 +26584,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
     let html = '';
     const sig = get('signature');
-    if (sig) html += `<button class="fight-act sig" data-act="signature" title="${esc(moveDetail('signature'))}" ${sig.enabled ? '' : 'disabled'} style="grid-column:1/-1"><b>SIGNATURE</b><small>${sig.enabled || fight.over ? `~${Math.round(120 * player.d.powerMult * (player.talents.has('showstopper') ? 1.25 : 1) * Math.pow(0.75, player.sigsUsed || 0))} dmg · full power${player.sigsUsed ? ' · encore' : ''} · ` : ''}<span class="cost">${costLine(sig)}</span></small></button>`;
+    if (sig) html += `<button class="fight-act sig" data-act="signature" title="${esc(moveDetail('signature'))}" ${sig.enabled ? '' : 'disabled'}><small class="cost">${sig.ap} AP${sig.windCost ? ` · ${sig.windCost} STAM` : ''} · ${player.hype} Hype</small><b>SIGNATURE</b><small class="effect">~${Math.round(120 * player.d.powerMult * (player.talents.has('showstopper') ? 1.25 : 1) * Math.pow(0.75, player.sigsUsed || 0))} dmg · full power${player.sigsUsed ? ' · encore' : ''}${!sig.enabled ? `<span class="move-unavailable">${costLine(sig)}</span>` : ''}</small></button>`;
 
     const casterRow = () => {
       let h = '';
