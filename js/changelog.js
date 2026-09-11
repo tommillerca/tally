@@ -10,6 +10,10 @@ export const NEXT_CHANGES = [
 
 export const CHANGES = [
 
+  { n: 568, date: '2026-09-11', title: 'A clearer Backpack', items: [
+    'Backpack keeps empty inventory visible, groups crates and battle items into cards, and shows each egg with its own progress.',
+  ] },
+
   { n: 567, date: '2026-09-11', title: 'Compact fit controls', items: [
     'Wardrobe has a compact fit toolbar with a saved-fit switcher and visible rename and delete actions.',
   ] },

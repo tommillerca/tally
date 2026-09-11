@@ -1,5 +1,11 @@
 # What each patch note claims, and what backs it
 
+## v568 (2026-09-11)
+
+Changelog item: Backpack keeps empty inventory visible, groups crates and battle items into cards, and shows each egg with its own progress.
+
+1. PROOF: backpack-ui-1g-audit.mjs | REACH: Rendered zero ingredients, per-record egg progress and inventory card coverage. Browser geometry and controls remain unproven; animated Laboratory host is absent from this checkout.
+
 ## v567 (2026-09-11)
 
 Changelog item: Wardrobe has a compact fit toolbar with a saved-fit switcher and visible rename and delete actions.

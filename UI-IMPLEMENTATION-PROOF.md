@@ -434,3 +434,51 @@ Denied actions: none. Blocked actions: browser geometry, browser audits, screens
 - Final files changed: UI-IMPLEMENTATION-PROOF.md; app.css; docs/CLAIMS.md; js/app.js; js/changelog.js; sw.js; tests/release-gate.mjs; tests/ui-audit.js; tests/wardrobe-noise-audit.mjs; tests/wardrobe-ui-1f-audit.mjs; version.json.
 - Denied actions: none. Browser checks remain blocked by the frozen order. No commit, push, merge or publish.
 - Outstanding deviations: header identity regrouping/name-level alignment deferred; saved fits expand inline instead of using a switcher sheet; exact rendered paperdoll y delta and lower-slot reachability remain unproven. The source-derived conditional delta above is not a measured result. This is advisory evidence for independent review, not full 1F acceptance.
+
+## 1G Backpack, v568 (2026-09-11)
+
+Frozen plan SHA256 verified: e4b3786f9605c407bd0c3e696d705fb9c04697003845e1d5a09597673cbd8ca6.
+Read IMPLEMENTATION.md in full, reference/layout.css and reference/layout.js. MOCK.html was not read. All implementation paths resolve inside this checkout. The kit was read as authority only.
+
+### Scope and data
+
+- js/app.js, renderCharacter crates branch: two stable crate slots derived from CRATES (daily/Common and golden/Bone), plus any stored unknown crate kinds retained through the existing daily fallback. The legacy egg crate is migrated by the unchanged migrateLegacyEggs call. Explicit zero quantities and disabled opening buttons. Odds and the existing daily bulk-open button are inside each crate's native details disclosure, reachable even with no crates. No detached odds/footer row.
+- Step Eggs span both grid columns, with no cap. The unchanged eggs.map(e => ...) calls eggProgress(e, lifeSteps) inside each iteration. Each record supplies stepsAtStart and goal; each HATCH button carries e.id. No separate queued Step Egg state exists in loot.js; all unhatched records use their existing per-record incubation/ready model. Laboratory incubator queues remain in their existing flow. Empty eggs render no progress bars. Stale-step messaging no longer hides a ready egg's completed counts.
+- Both CONSUMABLES types remain present: xp2/Battle Charm and vigor/Vigor Draught. USE/ACTIVE and existing consumption bindings remain intact. All six POTIONS definitions render, using potionsInv counts and recipeIconHtml assets. VIEW IN KITCHEN opens the existing Kitchen, without consuming anything. All seven ingredient definitions render actual counts with zero fallback. The ingredient grid rules are unchanged.
+- Kitchen heading contains the existing bpKitchen control, now labelled Cook. Active dishes and cook slot/ready state remain visible with unchanged expressions. Salvage gains only a cohesive section wrapper. Gear selection, per-item confirmation, bulk confirmation, dust updates, grants, consumption and hatch functions are unchanged.
+
+### Touched selectors and files
+
+Production CSS is appended and scoped beneath #chContent: .bp-grid; .bp-card; .bp-card-top; .bp-qty; .bp-card > b; .bp-card p; .bp-card small; .bp-card > .btn; .bp-crate-details summary; .bp-crate-details .t3-sect; .bp-eggs; .bp-eggs > .t3-sect; .bp-eggs .t3-egg; .bp-eggs .t3-egg .tx; .bp-salvage; .bp-salvage > .t3-sect. Uses existing type tokens and two minmax(0, 1fr) columns. No inherited stylesheet rule was edited.
+
+Markup changes also affect .t3-sect, .t3-cells/.t3-cell/.t3-qty (replaced in this branch only), .t3-row/.t3-med/.t3-tx/.t3-lock (replaced for consumables only), .art, .tx, .bar, .note, .ingredient-grid, .ing-cell, .ing-ico, .ing-n, .ing-name, #bpKitchen, #useBoost, #useVigor, [data-open], [data-open-all] and [data-hatch]. New controls: [data-bp-potion] and #bp-potion-<real potion id>. Existing lab and salvage descendants retain their markup and bindings except the enclosing salvage section.
+
+Changed files: js/app.js; app.css; js/changelog.js; sw.js; version.json; docs/CLAIMS.md; tests/backpack-ui-1g-audit.mjs; tests/release-gate.mjs; tests/ui-audit.js; UI-IMPLEMENTATION-PROOF.md. The four version stamps are APP_BUILD, service-worker VERSION, version.json and the newest CHANGES entry, all v568. UI audit now registers six potion buttons and Cook, entering the real Backpack tab before exercising each.
+
+### Proof and negative controls
+
+New guard initially exited 1 on the original renderer: all seven ingredients must render including zeros, actual 0 versus expected 7 for empty inventory. An earlier syntax error in the new test was corrected before this meaningful RED run. Green guard renders the actual complete Backpack template with empty and mixed data: 10 inventory cards, seven ingredients, no fake empty egg bars, disabled empty crate actions, real first crate IDs, and odds/bulk buttons confined to details. These are test-only inputs, not production fixtures.
+
+The egg guard renders the actual eggs.map expression with three records at lifetime 600: anchor 100/goal 1000 gives 500/1000; anchor 400/goal 2000 gives 200/2000; goal 0 is ready with its own hatch id. Mutating eggProgress(e, lifeSteps) to eggProgress(eggs[0], lifeSteps) is rejected. Reintroducing the positive-count ingredient filter is rejected. Both controls run on every guard invocation. The new potion click binding is executed against six event doubles and invokes openKitchen six times; this is binding proof, not browser operation.
+
+Initial agreed unit command exited 1: 389 passed, 1 failed. The fontscale census rejected two new fixed font sizes. After using existing named type tokens, fontscale-audit.mjs exits 0 at 1007/1007, with its regression controls intact. An intermediate rem-only attempt also failed the named-ramp rule and was corrected. No tests were weakened.
+
+wardrobe-playtest-audit.mjs exits 0: 13 passed, 0 failed, including real crate odds and ownership conservation. Static figure prefix comparison exits 0: baseline and current each have one failing coverage row, exactly six unregistered call sites, and identical full site text. Evidence: /tmp/ui1g-static.log, /tmp/ui1g-figure-baseline.json, /tmp/ui1g-figure-final.json. No browser setup was run. New guard output: /tmp/ui1g-backpack.log. Preliminary unit stdout: /tmp/ui1g-unit.log.
+
+### Blocked checks and deviations
+
+This checkout does not contain the measured illustrated Laboratory entrance or animated host asset. Its first Backpack content is .lab-egg-help, a text entrance using data-lab-open. It remains unchanged and opens the live Laboratory. Proposed deviation: retain that truthful existing entrance until the approved host asset/entrance is supplied in this checkout. No substitute pet renderer or art was invented. Requirement 1's illustrated host/animation is therefore BLOCKED, not complete.
+
+Potion VIEW opens the actual Kitchen rather than inventing an item-specific preview or a new drink action. Crate details are inline native disclosures inside their cards. Supported counts and existing actions remain intact. Reference card typography uses the existing named type ramp to retain text scaling. No separate Step Egg queue or concurrency rule was introduced.
+
+Browser audits, screenshots, real control operation, 375/390/wider-phone overflow, safe areas and geometry are UNPROVEN under the frozen order's socket restriction. Pit 25/25, readiness 7/7, Today 16px lift/261.203 gap and Wardrobe x16 y374.9 w343 h418/14 slots remain the independent reviewer's browser locks. Their code was not edited. No claim of zero measured overflow is made.
+
+Denied actions: none. No sockets or prohibited browser checks were attempted. No commit, push, merge, publish, deployment, original-checkout edits, Cam art edits, native/ASC-SUBMISSION.md edits or production data mutation. Advisory implementation evidence for independent review.
+
+### LAST full PURE results on the final source tree
+
+- Agreed command: node tests/unit.test.js. Direct child exit 0. Output: 390 passed, 0 failed. Complete stdout/stderr: /tmp/ui1g-pure/unit.test.js.log.
+- Full PURE: 175 green, 0 red, 0 unproven. Runner exit 0. This includes every inherited entry and backpack-ui-1g-audit.mjs. No source changed during or after this run; only this results section was appended.
+- Enumeration matches tests/r6-guards-audit.mjs exactly: evaluate the const PURE literal and all /^PURE\.(?:push|unshift)\([^;]+\);/gm sites. 81 literal entries + 94 additions = 175. Exact literal expression, all addition expressions and final ordered entry list: /tmp/ui1g-pure/inventory.json.
+- Commands and direct child close-event exit codes, grades and elapsed times: /tmp/ui1g-pure/results.json. Summary: /tmp/ui1g-pure/summary.json. Complete per-entry streams: /tmp/ui1g-pure/<entry>.log. Runner: /tmp/ui1g-pure.cjs. Run output: /tmp/ui1g-pure.log. Exit 97 and missing child exit codes are classified UNPROVEN, never green. No such exits occurred. No pipe was used to infer command success.
+- Final changed-file list is the ten files listed above. Denied actions: 0. Prohibited commit/push/publish actions: 0 attempted. Illustrated Laboratory host remains blocked by absent source/asset; browser operation and geometry remain unproven. All reported proof is advisory for independent review.

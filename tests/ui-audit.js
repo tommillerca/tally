@@ -24,6 +24,8 @@ const SAFE_AREA_PX = 59;          // iPhone 14 Pro Dynamic Island
 
 // Where each control must land. Add a row whenever you add a control.
 const CONTROL_EXPECTATIONS = [
+  ...['vital-tonic', 'fury-flask', 'stoneskin', 'second-wind', 'revenant-draught', 'spectral-fury'].map(id => ({ id: 'bp-potion-' + id, on: 'bonehead', enterHubTab: 'crates', expect: { sheet: 'Kitchen' } })),
+  { id: 'bpKitchen', on: 'bonehead', enterHubTab: 'crates', expect: { sheet: 'Kitchen' } },
   { id: 'wardFitSwitcher', on: 'bonehead', expect: { toggle: 'wardFitList' } },
   // Per-fit equip, rename and confirmed delete need saved-fit fixtures in the Wardrobe driver.
   { id: 'wardrobeStudio', on: 'bonehead', expect: { hash: '#/studio' } },
@@ -72,6 +74,7 @@ export async function uiAudit({ routes = ['today', 'bonehead', 'shop', 'friends'
   // 1. Every control goes where it claims. Rendering proves nothing.
   for (const c of CONTROL_EXPECTATIONS) {
     await goto(c.on);
+    if (c.enterHubTab) { q(`[data-tab="${c.enterHubTab}"]`)?.click(); await sleep(1700); }
     // controls that live inside a collapsed <details> (the pinned banners): expand
     // it first, the way a user would, so the click starts from a visible control
     if (c.open) { q(c.open)?.setAttribute('open', ''); await sleep(250); }

@@ -18044,7 +18044,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
        progress bar with no explanation. Re-anchoring to now costs the player
        nothing they had and unsticks it. */
     await repairEggAnchors();
-    const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook, dust, pCounts, gearLoNow] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState(), boneDust(), petCounts(), gearLoadout()]);
+    const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook, dust, pCounts, gearLoNow, bpPotions] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState(), boneDust(), petCounts(), gearLoadout(), potionsInv()]);
     // an egg that is not moving because STEPS are not arriving says so instead of
     // showing a bar that never fills
     const eggStale = !!(await hkStaleInfo());
@@ -18060,27 +18060,22 @@ async function renderCharacter(wrap, tab, opts = {}) {
           <div class="loot-cards">${p.choices.map(id => GEAR_BY_ID[id] ? lootCardHtml(GEAR_BY_ID[id]) : '').join('')}</div>
           <button class="btn loot-keep" disabled>Tap a piece to preview</button>
         </div>`).join('')}` : ''}
-      ${/* Tier 3 (mockup t3-backpack.html): crates as crackable cells with a
-            quantity badge, the egg as a card with its own bar, consumables as
-            rows. Crates group BY TYPE now: eight identical rows each saying
-            "Golden Crate / Open" was a list to grind, not a stash to raid. */''}
-      <div class="t3-sect"><b>Crates · tap to crack</b><i></i>${crates.length ? `<span class="r chip" style="font-size:var(--fs-0)">${crates.length} to open</span>` : ''}</div>
-      ${crates.length ? `<div class="t3-cells">${(() => {
-        const byType = new Map();
-        for (const c of crates) { if (!byType.has(c.crate)) byType.set(c.crate, []); byType.get(c.crate).push(c); }
-        return [...byType.entries()].map(([kind, list]) => {
-          const def = CRATES[kind] || CRATES.daily;
-          return `<div class="t3-cell">
-            ${list.length > 1 ? `<span class="t3-qty">${list.length}</span>` : ''}
-            <span class="art">${crateIcon(kind, 56)}</span>
-            <b>${esc(def.label).toUpperCase()}</b>
-            <button class="btn" data-open="${list[0].id}">OPEN</button>
-            ${kind === 'daily' && list.length > 1 ? '<button class="btn ghost" data-open-all="daily">OPEN ALL</button>' : ''}
-          </div>`;
-        }).join('');
-      })()}</div>` : '<p class="note" style="text-align:center;padding:12px 0 16px">No unopened crates. Finish quests, close days on budget, and walk 10k steps to earn more.</p>'}
+      <div class="t3-sect"><b>Crates</b><i></i></div>
+      <div class="bp-grid">
       ${(() => {
-        /* CRATE ODDS, ALWAYS ON THIS SCREEN (playtest P2, 2026-08-30). Every
+        const kinds = [...new Set([...Object.keys(CRATES).filter(kind => kind !== 'egg'), ...crates.map(c => c.crate)])];
+        return kinds.map(kind => {
+          const list = crates.filter(c => c.crate === kind);
+          const def = CRATES[kind] || CRATES.daily;
+          return `<div class="bp-card">
+            <div class="bp-card-top"><span class="art">${crateIcon(kind, 56)}</span><span class="bp-qty">${list.length}</span></div>
+            <b>${esc(def.label).toUpperCase()}</b>
+            <p>${def.rolls} pull${def.rolls === 1 ? '' : 's'} · ${def.floor ? 'First cosmetic Rare or better' : 'Looks, supplies and coins'}</p>
+            <button class="btn" ${list.length ? `data-open="${list[0].id}"` : 'disabled'}>${list.length ? 'OPEN' : 'NONE TO OPEN'}</button>
+            <details class="bp-crate-details"><summary>Details &amp; odds</summary>
+            ${kind === 'daily' && list.length > 1 ? '<button class="btn ghost" data-open-all="daily">OPEN ALL</button>' : ''}
+      ${(() => {
+        /* CRATE ODDS, AVAILABLE IN EACH CRATE DETAIL (playtest P2, 2026-08-30). Every
            number below is COMPUTED at render time by crateOdds() in loot.js off
            the same RARITIES weights rollRarity spends, so a weight change ships
            its own disclosure and nothing here can drift. This is also the App
@@ -18100,7 +18095,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
         Any ordinary pull: ${line('daily')}. Rare or better: about 1 in ${crateOdds('daily').rareUpOneIn}.<br>
         Bone Crate: 3 pulls, and the first is always Rare or better: ${line('golden')}.</p>`;
       })()}
-      ${eggs.length ? `<div class="t3-sect"><b>Incubating</b><i></i></div>
+            </details>
+          </div>`;
+        }).join('');
+      })()}
+      <section class="bp-eggs"><div class="t3-sect"><b>Step Eggs</b><i></i><span>${eggs.length} owned</span></div>
+      ${eggs.length ? `
       ${eggs.map(e => {
         const p = eggProgress(e, lifeSteps);
         const pct = p.goal > 0 ? Math.min(100, Math.round(p.walked / p.goal * 100)) : 100;
@@ -18111,30 +18111,32 @@ async function renderCharacter(wrap, tab, opts = {}) {
           <span class="art${eTint ? ' tinted' : ''}"${eTint ? ` style="--shell:${eTint}"` : ''}>${crateIcon('egg', 48)}</span>
           <div class="tx">
             <b>${p.ready ? 'READY TO HATCH' : 'STEP EGG'}</b>
-            <div class="bar"><i style="width:${pct}%"></i></div>
-            <small>${eggStale ? 'Your steps are not reaching the app, so this is not moving. Tap the banner on Today to reconnect.' : `${p.walked.toLocaleString()} / ${p.goal.toLocaleString()} steps${p.ready ? ' · a pet is inside' : ` · ${(p.goal - p.walked).toLocaleString()} to go`}`}</small>
+            <div class="bar" role="progressbar" aria-label="Step Egg hatch progress" aria-valuemin="0" aria-valuemax="${p.goal}" aria-valuenow="${p.walked}"><i style="width:${pct}%"></i></div>
+            <small>${eggStale && !p.ready ? 'Your steps are not reaching the app, so this is not moving. Tap the banner on Today to reconnect.' : `${p.walked.toLocaleString()} / ${p.goal.toLocaleString()} steps${p.ready ? ' · a pet is inside' : ` · ${(p.goal - p.walked).toLocaleString()} to go`}`}</small>
           </div>
           ${p.ready ? `<button class="btn" style="width:auto;padding:9px 16px;font-size:var(--fs-body);box-shadow:var(--sh-sm)" data-hatch="${e.id}">HATCH</button>` : ''}
         </div>`;
-      }).join('')}` : ''}
-      <div class="t3-sect"><b>Consumables</b><i></i></div>
-      <div class="t3-row">
-        <span class="t3-med">${consumableIcon('xp2', 24)}</span>
-        <div class="t3-tx"><b>Battle Charm</b><small>${CONSUMABLES.xp2.desc}</small></div>
-        <span class="t3-lock">x${boosts}</span>
+      }).join('')}` : '<p class="note">0 owned. Collected eggs will appear here, each with its own progress.</p>'}
+      </section></div>
+      <div class="t3-sect"><b>Potions &amp; battle items</b><i></i></div>
+      <div class="bp-grid">
+      <div class="bp-card">
+        <div class="bp-card-top">${consumableIcon('xp2', 56)}<span class="bp-qty">${boosts}</span></div>
+        <b>Battle Charm</b><p>${CONSUMABLES.xp2.desc}</p>
         <!-- The state that makes the action illegal must also hide the button
              (rewarded-actions SOP rule 4): while a charm is running, USE becomes
              a disabled "ACTIVE" chip instead of a live control that refuses. -->
-        ${boosts ? (boost ? '<button class="btn ghost" id="useBoost" disabled>ACTIVE</button>' : '<button class="btn" id="useBoost">USE</button>') : ''}
+        ${boosts ? (boost ? '<button class="btn ghost" id="useBoost" disabled>ACTIVE</button>' : '<button class="btn" id="useBoost">USE</button>') : '<button class="btn" disabled>NONE OWNED</button>'}
       </div>
-      <div class="t3-row">
-        <span class="t3-med">${consumableIcon('vigor', 24)}</span>
-        <div class="t3-tx"><b>Vigor Draught</b><small>${CONSUMABLES.vigor.desc}</small></div>
-        <span class="t3-lock">x${vigors}</span>
-        ${vigors ? '<button class="btn" id="useVigor">USE</button>' : ''}
+      <div class="bp-card">
+        <div class="bp-card-top">${consumableIcon('vigor', 56)}<span class="bp-qty">${vigors}</span></div>
+        <b>Vigor Draught</b><p>${CONSUMABLES.vigor.desc}</p>
+        ${vigors ? '<button class="btn" id="useVigor">USE</button>' : '<button class="btn" disabled>NONE OWNED</button>'}
+      </div>
+      ${POTIONS.map(p => `<div class="bp-card"><div class="bp-card-top">${recipeIconHtml(p, 56)}<span class="bp-qty">${bpPotions[p.id] || 0}</span></div><b>${esc(p.name)}</b><p>${esc(p.desc)}</p><button class="btn ghost" id="bp-potion-${p.id}" data-bp-potion="${p.id}">VIEW IN KITCHEN</button></div>`).join('')}
       </div>
       ${boost ? `<p class="note" style="margin:6px 2px">${consumableIcon('xp2', 14)} Charm active: ${boost} Pit win${boost === 1 ? '' : 's'} left at +25% coins</p>` : ''}
-      <div class="t3-sect"><b>Kitchen · food &amp; buffs</b><i></i></div>
+      <div class="t3-sect"><b>Kitchen</b><i></i><button class="btn ghost small" id="bpKitchen">Cook ›</button></div>
       ${/* SAME EXPRESSION AS THE KITCHEN'S OWN "Active dishes" ROW (openKitchen,
            above): the hub was rendering the recipe's EMOJI in a .crate-ico slot,
            which app.css sets to font-size 24 -- so a 24px emoji sat where the
@@ -18143,9 +18145,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
            recipe id no longer resolves. */''}
       ${(foodActive || []).length ? (foodActive.map(b => `<div class="crate-row"><span class="crate-ico">${RECIPE_BY_ID[b.recipe] ? recipeIconHtml(RECIPE_BY_ID[b.recipe], 26) : (b.icon || '🍲')}</span><div style="flex:1"><b>${esc(b.name || 'Dish')} active</b><small>${b.kind === 'combat' ? `${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left` : `${Math.max(0, Math.ceil((b.untilMs - Date.now()) / 3600e3))}h left`}</small></div></div>`).join('')) : '<p class="note" style="margin:2px 2px 6px">No dish active. Cook one in the Kitchen for a Pit or coin buff.</p>'}
       ${(() => { const busy = cook.slots.filter(s => !s.empty); if (!busy.length) return ''; const rc = cook.readyCount, cc = busy.length - rc; const label = rc && cc ? `${rc} ready · ${cc} cooking` : rc ? `${rc} dish${rc === 1 ? '' : 'es'} ready!` : `${cc} cooking...`; return `<div class="crate-row"><span class="crate-ico">${rc ? '✅' : '🍳'}</span><div style="flex:1"><b>${label}</b><small>${busy.map(s => esc(s.recipe.name)).join(', ')}</small></div></div>`; })()}
-      ${(() => { const owned = INGREDIENT_IDS.filter(id => (ingInv[id] || 0) > 0); return owned.length ? `<div class="ingredient-grid" style="margin-top:6px">${owned.map(id => `<div class="ing-cell"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${ingInv[id]}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}</div>` : '<p class="note" style="margin:2px 2px">No ingredients yet. Collect them on the Boneyard map.</p>'; })()}
-      <button class="btn ghost small" id="bpKitchen" style="margin-top:8px">Open the Kitchen to cook</button>
-      <div class="t3-sect"><b>Salvage Bench · nothing wasted</b><i></i></div>
+      <div class="ingredient-grid" style="margin-top:6px">${INGREDIENT_IDS.map(id => `<div class="ing-cell"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${ingInv[id] || 0}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}</div>
+      <section class="bp-salvage"><div class="t3-sect"><b>Salvage Bench · nothing wasted</b><i></i></div>
       <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">${ICONS.dust(13)}</span> ${dust.toLocaleString()}</b></div>
       <p class="note">Every piece pays Bone Dust. Use dust for looks in the Dressing Room and the weekly Rack. Melting consumes the gear and its stats. Its look is yours forever.</p>
       ${/* THE BENCH STOPS PROMISING A LIST THAT IS NOT THERE. On a new account the
@@ -18220,7 +18221,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
                    : `<span class="melt-val on">+${gearDustValue(g)}</span>`}
           </label>`;
         }).join('') + `</details>`;
-      })()}`;
+      })()}</section>`;
     /* Scroll only when the USER opens the fold. The fold renders with `open`
        whenever spares exist, and a <details> born open fires 'toggle' on
        parse, so a toggle-driven scroll yanked every Backpack render (fresh
@@ -18383,6 +18384,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     /* The Backpack's own dust grid moved to the Shop screen in v410 and its
        handler has bound nothing since: no dust cell is rendered into this
        scope. It went with the shop it belonged to. */
+    $$('[data-bp-potion]', content).forEach(b => b.addEventListener('click', () => openKitchen()));
     $('#bpKitchen', content)?.addEventListener('click', () => openKitchen());
     $$('[data-buy]', content).forEach((b => {
       let t = null;
@@ -24678,7 +24680,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v567'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v568'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

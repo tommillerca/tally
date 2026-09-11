@@ -12209,3 +12209,20 @@ button.t3-price::before {
 .ward-head > .ward-collection { display: contents; }
 .ward-head .ward-looks { min-height: 44px; }
 .ward-head .bh-pill:first-of-type { margin-left: 0; }
+
+/* 1G: Backpack inventory only. The shared hub and ingredient grid stay intact. */
+#chContent .bp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+#chContent .bp-card { min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow-wrap: anywhere; }
+#chContent .bp-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+#chContent .bp-qty { color: var(--accent); font-family: var(--display); font-size: var(--fs-5); font-variant-numeric: tabular-nums; }
+#chContent .bp-card > b { font-family: var(--display); font-weight: 400; font-size: var(--fs-4); }
+#chContent .bp-card p, #chContent .bp-card small { color: var(--text-2); font-size: var(--fs-1); line-height: 1.45; margin: 0; }
+#chContent .bp-card > .btn { width: 100%; min-height: 44px; margin-top: auto; padding: 8px 4px; }
+#chContent .bp-crate-details summary { min-height: 44px; padding: 12px 0; font-size: var(--fs-1); cursor: pointer; }
+#chContent .bp-crate-details .t3-sect { flex-wrap: wrap; }
+#chContent .bp-eggs { grid-column: 1 / -1; min-width: 0; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+#chContent .bp-eggs > .t3-sect { margin-top: 0; }
+#chContent .bp-eggs .t3-egg { padding: 10px 0; border: 0; border-radius: 0; box-shadow: none; flex-wrap: wrap; }
+#chContent .bp-eggs .t3-egg .tx { flex-basis: 150px; }
+#chContent .bp-salvage { margin-top: 20px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+#chContent .bp-salvage > .t3-sect { margin-top: 0; }
