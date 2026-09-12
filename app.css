@@ -12448,3 +12448,29 @@ body:has(.screen--today):not(:has(#sheets .sheet)) .toast { top: calc(var(--sat)
 /* Measured toast seat supersedes the historical map, sheet and Today offsets.
    Specificity intentionally exceeds those rules; inherited CSS is frozen. */
 body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(var(--sat) + 175px)); bottom: auto; z-index: 320; pointer-events: none; }
+/* Selected Laboratory/Kitchen headers. Art does not intercept room controls. */
+.bh-room-header { position: relative; isolation: isolate; flex: none; min-height: 144px; padding-top: 12px; margin-bottom: 12px; overflow: hidden; border-radius: 16px; background: linear-gradient(180deg, #202715, #0d0c12); --header-accent: #a5e847; --fs-room-title: 2.25rem; }
+.bh-room-header.bh-room-kitchen { background: linear-gradient(180deg, #302319, #0d0c12); --header-accent: #ffc961; }
+.bh-room-header .bh-room-title { position: relative; z-index: 2; margin: 0; padding: 0 8px; font: 400 var(--fs-room-title)/1 var(--display); letter-spacing: .015em; color: #f2e9d7; text-align: center; overflow-wrap: anywhere; }
+.bh-room-cast { position: relative; height: 96px; max-width: 375px; margin: auto; transform: scale(.875); transform-origin: center bottom; pointer-events: none; }
+.bh-room-art { position: absolute; display: block; width: var(--art-size); height: var(--art-size); object-fit: contain; image-rendering: pixelated; pointer-events: none; z-index: 1; }
+.bh-room-inward { transform: scaleX(-1); }
+.bh-room-stage { position: absolute; left: 18px; right: 18px; bottom: 15px; height: 1px; background: color-mix(in srgb, var(--header-accent) 22%, transparent); pointer-events: none; }
+.lab-sheet .bh-room-header { margin-bottom: 0; }
+.lab-sheet #labBody { padding-bottom: 0; }
+
+/* Room headers: keep the approved default composition. When the available
+   inline width falls below 10 root ems, use a compact 1.125rem title with
+   breathing room for wrapped glyphs. At root 53px: 59.625px type, 71.55px
+   line boxes, above the 1rem body size. All four illustrations stay intact.
+   The audit budget is 340px at 375x812, leaving over 58% for room content.
+   No height cap: longer future copy grows instead of being truncated. */
+.bh-room-header {
+  container-type: inline-size;
+}
+@container (width < 10em) {
+  .bh-room-header .bh-room-title {
+    --fs-room-title: 1.125rem;
+    line-height: 1.2;
+  }
+}

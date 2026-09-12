@@ -8559,58 +8559,25 @@ function showHarvest(res) {
   $$('.sheet-close', wrap).forEach(b => b.addEventListener('click', () => history.back()));
 }
 
+// Selected dark A header, 144px at default text size. Decorative art only.
+function roomHeaderHtml(room) {
+  const lab = room === 'lab';
+  const cast = lab
+    ? [['chamber', '96px;left:4px;bottom:14px'], ['slime', '88px;left:76px;bottom:7px'], ['lab', '90px;right:8px;bottom:15px'], ['slime-puddle', '80px;right:72px;bottom:10px']]
+    : [['cute_monster_chef', '80px;left:0;bottom:5px'], ['ghost_chef_cute', '96px;left:48px;bottom:10px'], ['ghost_chef_fat', '96px;right:54px;bottom:8px'], ['donut_that_s_alive', '88px;right:0;bottom:4px']];
+  return `<div class="bh-room-header ${lab ? 'bh-room-lab' : 'bh-room-kitchen'}">
+    <h3 class="bh-room-title">THE ${lab ? 'LABORATORY' : 'KITCHEN'}</h3>
+    <div class="bh-room-cast" aria-hidden="true">${cast.map(([name, style]) => `<img class="bh-room-art${name === 'ghost_chef_fat' ? ' bh-room-inward' : ''}" src="assets/room-headers/${name}.png" alt="" width="48" height="48" style="--art-size:${style}">`).join('')}</div>
+    <div class="bh-room-stage" aria-hidden="true"></div>
+  </div>`;
+}
+
 async function openKitchen() {
   _cookBanked = 0;   // the Pantry is on screen from here: the announcement is delivered (O15)
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Kitchen</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
-      <!-- the scene sits BESIDE the render target: render() replaces
-           #kitchenBody on every tick and would otherwise wipe it, and
-           restart every animation each time the pot state changed. -->
-      <div class="marquee">
-    <svg class="garland" width="100%" height="26" viewBox="0 0 375 26" preserveAspectRatio="none">
-      <path d="M-4 2 Q 60 22 130 12 Q 200 2 260 14 Q 320 24 380 6" fill="none" stroke="#2A2D28" stroke-width="2.5"/>
-      <g fill="#F0EDD6" stroke="#2A2D28" stroke-width="1.4">
-        <rect x="52" y="12" width="5" height="12" rx="2.5" transform="rotate(8 54 18)"/>
-        <rect x="126" y="10" width="5" height="12" rx="2.5" transform="rotate(-6 128 16)"/>
-        <rect x="196" y="6" width="5" height="12" rx="2.5" transform="rotate(5 198 12)"/>
-        <rect x="268" y="12" width="5" height="12" rx="2.5" transform="rotate(-9 270 18)"/>
-      </g>
-    </svg>
-    <h2>THE HAUNTED KITCHEN</h2>
-    <p>SOMETHING IS ALWAYS SIMMERING.</p>
-    <div class="scene">
-      <svg width="190" height="108" viewBox="0 0 190 108">
-        <!-- steam wisps -->
-        <path class="wisp" style="--wo:.28" d="M78 44 C 72 32, 84 28, 80 16" fill="none" stroke="#F0EDD6" stroke-width="3.4" stroke-linecap="round"/>
-        <path class="wisp w2" style="--wo:.38" d="M98 40 C 104 28, 92 24, 98 10" fill="none" stroke="#F0EDD6" stroke-width="3.4" stroke-linecap="round"/>
-        <path class="wisp w3" style="--wo:.24" d="M116 46 C 112 36, 122 32, 118 22" fill="none" stroke="#F0EDD6" stroke-width="3" stroke-linecap="round"/>
-        <!-- fire glow + logs -->
-        <ellipse cx="95" cy="102" rx="52" ry="9" fill="#0a0e0a"/>
-        <path d="M70 99 l16 -8 M86 99 l-16 -8 M104 99 l16 -8 M120 99 l-16 -8" stroke="#5a4632" stroke-width="4.5" stroke-linecap="round"/>
-        <g class="flame"><path d="M88 96 c-2 -7 3 -9 4 -14 c4 5 8 6 7 12 c-1 4 -3 6 -5 6 c-3 0 -5 -1 -6 -4z" fill="#E2AB36" stroke="#2A2D28" stroke-width="1.6"/>
-        <path d="M92 95 c-1 -3 1.5 -4 2 -7 c2 2.5 4 3 3.5 6 c-.4 2 -1.6 3 -2.7 3 c-1.4 0 -2.4 -.7 -2.8 -2z" fill="#FCF35E"/></g>
-        <!-- cauldron -->
-        <path d="M48 56 h94 c2 26 -14 44 -47 44 s-49 -18 -47 -44z" fill="#3a3f3a" stroke="#2A2D28" stroke-width="3"/>
-        <ellipse cx="95" cy="56" rx="47" ry="12" fill="#A2E0A6" stroke="#2A2D28" stroke-width="3"/>
-        <ellipse cx="80" cy="54" rx="6" ry="3.4" fill="#c9f0cb"/><circle class="bub b4" cx="88" cy="57" r="2.6" fill="#c9f0cb"/>
-        <circle cx="112" cy="58" r="3.4" fill="#c9f0cb"/>
-        <circle class="bub" cx="66" cy="50" r="3" fill="#A2E0A6" stroke="#2A2D28" stroke-width="1.6"/>
-        <circle class="bub b2" cx="124" cy="46" r="4" fill="#A2E0A6" stroke="#2A2D28" stroke-width="1.6"/>
-        <circle class="bub b3" cx="103" cy="42" r="2.6" fill="#A2E0A6" stroke="#2A2D28" stroke-width="1.4"/>
-        <!-- a bone stirring out of the pot -->
-        <g class="stir"><rect x="125" y="14" width="6" height="34" rx="3" fill="#F0EDD6" stroke="#2A2D28" stroke-width="1.8"/>
-        <circle cx="125" cy="14" r="4.4" fill="#F0EDD6" stroke="#2A2D28" stroke-width="1.8"/>
-        <circle cx="132" cy="12" r="4.4" fill="#F0EDD6" stroke="#2A2D28" stroke-width="1.8"/></g>
-      </svg>
-      <i class="spore" style="left:14%; bottom:64px; width:5px; height:5px; --dur:7s; --dx:6px; --so:.55"></i>
-      <i class="spore g" style="left:22%; bottom:34px; width:4px; height:4px; --dur:5.5s; --del:-2s; --dx:-5px; --so:.45"></i>
-      <i class="spore" style="left:79%; bottom:70px; width:6px; height:6px; --dur:6.5s; --del:-3.5s; --dx:-7px; --so:.55"></i>
-      <i class="spore g" style="left:86%; bottom:40px; width:4px; height:4px; --dur:5s; --del:-1.2s; --dx:5px; --so:.45"></i>
-      <i class="spore" style="left:70%; bottom:22px; width:3px; height:3px; --dur:4.5s; --del:-2.8s; --dx:4px; --so:.4"></i>
-      <i class="spore" style="left:30%; bottom:84px; width:3px; height:3px; --dur:6s; --del:-4.4s; --dx:-4px; --so:.4"></i>
-    </div>
-  </div>
+      ${roomHeaderHtml('kitchen')}
       <div id="kitchenBody"></div>
     </div>`, { cls: '', onClose: () => refresh() });
   const body = $('#kitchenBody', wrap);
@@ -21855,7 +21822,7 @@ async function openLaboratory() {
   const origin = document.activeElement;
   let selected = [null, null], species = '', choosingSpecies = false, snapshot, quote = null, generation = 0, observer, clockTimer;
   const resume = () => { if (!document.hidden && sheetStack.at(-1)?.wrap === wrap) draw(); };
-  const wrap = openSheet('<div class="sheet-head"><h2>The Laboratory</h2><button class="sheet-close">Back</button></div><div class="sheet-body lab-room" id="labBody"><p role="status">Opening The Laboratory...</p></div>', { cls: 'full pet-a11y lab-sheet', name: 'Laboratory', onClose: () => { generation++; clearInterval(clockTimer); observer?.disconnect(); document.removeEventListener('visibilitychange', resume); window.removeEventListener('focus', resume); origin?.isConnected && origin.focus(); if (currentTab() === 'today') refresh(); } });
+  const wrap = openSheet(`<div class="sheet-head"><h2>The Laboratory</h2><button class="sheet-close">Back</button></div><div class="sheet-body lab-room">${roomHeaderHtml('lab')}<div class="lab-room" id="labBody"><p role="status">Opening The Laboratory...</p></div></div>`, { cls: 'full pet-a11y lab-sheet', name: 'Laboratory', onClose: () => { generation++; clearInterval(clockTimer); observer?.disconnect(); document.removeEventListener('visibilitychange', resume); window.removeEventListener('focus', resume); origin?.isConnected && origin.focus(); if (currentTab() === 'today') refresh(); } });
   const body = $('#labBody', wrap);
   observer = new MutationObserver(resume);
   observer.observe($('#sheets'), { childList: true });

@@ -1,0 +1,57 @@
+Audit room-header removals against branch and main history
+
+Proposed commit message only. No commit is authorized or created.
+
+Round 1 is 4f4deb5f; its parent/main is bdf7325d. Header branch is
+4767f7f1, with verified merge base b13e7fd2. app.js has 15 added lines
+and 48 deleted lines, net -33, not net -48. Every added/deleted line
+matches the original header branch diff exactly. No unrelated removal
+or post-base main regression was found. No app.js restoration is needed
+under the intended no-unrelated-revert rule.
+
+Hunk 1: @@ -8509,58 +8509,25 @@
+Removes parent lines 8517-8563 (47 lines): the three-line scene-lifetime
+comment and the complete old Kitchen marquee, garland, title, tagline,
+SVG cauldron/steam/fire/stirrer and six spore elements, with closing tags.
+The exact removed block was introduced at this call site by d74721ad
+(v276: the Wardrobe, the Pit and the Kitchen). All 47 lines blame there.
+The older Haunted Kitchen text originated in 209b5027 (v78: cooking
+overhaul); v276 placed the scene outside the render target.
+Intentional replacement in 4767f7f1: roomHeaderHtml('kitchen') takes its
+place. The shared helper adds 13 lines; the Kitchen call adds one line.
+The new header remains outside #kitchenBody, preserving redraw isolation.
+No cooking logic or controls were removed.
+
+Hunk 2: @@ -21756,7 +21723,7 @@
+Replaces parent line 21759 (one removed, one added): the Laboratory's
+openSheet markup. Original Laboratory opening markup is from 39e4049a
+(v523: the Laboratory is open). The exact removed line last changed in
+fdbafb96 (v525: the Stable rebuilt around your pet), adding clockTimer
+cleanup. Intentional structural replacement in 4767f7f1: add the header
+as a sibling outside #labBody so redraws preserve it. Opening status,
+Back button, sheet classes/name, generation invalidation, timer cleanup,
+observer disconnection, listener removal, focus return and Today refresh
+are all retained on the replacement line.
+
+NO-REVERT: independently read git log b13e7fd2..main, then ran per-symbol
+log -S over that interval. Confirmed the existing guard's selections:
+- recoverInterruptedPitFight: d29682d1, v570.
+- leaderboardLastOnline: 7dcd8c18, v571.
+- fanPaintRevision: 6041ef56, v571.
+The audit comments now name the precise interval and each version.
+All three static checks pass. Full commands, blame and removed lines
+are recorded in room-headers-provenance.txt.
+
+Explicit deviations and unresolved acceptance:
+- Literal restoration of all code originating outside the header branch
+  would restore the superseded scene and undo the approved replacement.
+  Proposed exception: retain these two intentional branch replacements;
+  restore any unrelated removal. None was found. Design is unchanged.
+- This file substitutes for an actual commit message because commits
+  are explicitly prohibited.
+- No maximum text size is defined by this tree; inherited SCALE uses a
+  labelled 53px root stress case. A defined native largest-size target
+  is still required before claiming that acceptance criterion.
+- Browser and mutation audits exit 97: local server listen is denied
+  with EPERM. HEADER, ART, SCALE and CONTROL remain UNPROVEN. The
+  removal attempt in guard-red.txt does not satisfy red proof.
