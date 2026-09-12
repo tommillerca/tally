@@ -2684,8 +2684,12 @@ export default {
           '(SELECT COUNT(*) FROM spires sp WHERE sp.owner = pa.id AND sp.tended_at > ?) a_spires, ' +
           'pb.handle b_handle, pb.name b_name, pb.friend_code b_code, pb.profile b_profile, pb.app_v b_v, pb.last_seen b_seen, ' +
           '(SELECT COUNT(*) FROM spires sp WHERE sp.owner = pb.id AND sp.tended_at > ?) b_spires ' +
-          'FROM friendships f JOIN players pa ON pa.id = f.a JOIN players pb ON pb.id = f.b ' +
-          'WHERE (f.a = ? OR f.b = ?) AND COALESCE(pa.is_test, 0) = 0 AND COALESCE(pb.is_test, 0) = 0 AND ' + where + ' ORDER BY f.ts DESC LIMIT ?');
+          /* The is_test suppression lives in the JOIN conditions, not the WHERE:
+             an extra AND term beside the (f.a = ? OR f.b = ?) pair talks SQLite
+             out of the multi-index OR and the route walks every friendship row
+             three times per call. schema-plan.test.mjs guards the seek. */
+          'FROM friendships f JOIN players pa ON pa.id = f.a AND COALESCE(pa.is_test, 0) = 0 JOIN players pb ON pb.id = f.b AND COALESCE(pb.is_test, 0) = 0 ' +
+          'WHERE (f.a = ? OR f.b = ?) AND ' + where + ' ORDER BY f.ts DESC LIMIT ?');
         const dormantSince = Date.now() - SPIRE_DORMANT_MS;
         /* LIMIT is the page PLUS ONE: the extra row is how truncation is known
            without a second COUNT query. It is dropped before the payload. */
