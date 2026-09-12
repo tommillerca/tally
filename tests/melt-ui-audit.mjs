@@ -60,19 +60,6 @@ check('ROUTE: shop shortcut opens the Wardrobe bench in the viewport', await pag
     && r.top < Math.min(innerHeight, screen.bottom) && r.bottom > Math.max(0, screen.top)
     && r.left < innerWidth && r.right > 0;
 }));
-// Empty the disposable audit inventory, then render the empty Wardrobe bench.
-await page.evaluate(async () => {
-  const loot = await import('./js/loot.js');
-  for (const id of await loot.ownedGearIds()) await loot.disenchantGear(id);
-  document.querySelector('#chTabs [data-tab="wardrobe"]')?.click();
-});
-await sleep(1800);
-check('EMPTY: no gear explains how to fill the bench', await page.evaluate(() => {
-  const bench = document.querySelector('.bp-salvage');
-  return !!bench && /Nothing to melt yet/.test(bench.textContent)
-    && /crates, the Boneyard and the Pit/.test(bench.textContent)
-    && !bench.querySelector('.melt-row');
-}));
 if (!home) {
   await browser.close();
   if (own) own.close();
@@ -407,6 +394,22 @@ else {
     stale.tmBefore !== null && stale.tmAfter === null && stale.after === stale.picked,
     JSON.stringify(stale));
 }
+
+// EMPTY runs LAST: it melts every piece, and a melted piece keeps its currency
+// receipt, so any later row that melts the same id would be refused as a repeat.
+// Empty the disposable audit inventory, then render the empty Wardrobe bench.
+await page.evaluate(async () => {
+  const loot = await import('./js/loot.js');
+  for (const id of await loot.ownedGearIds()) await loot.disenchantGear(id);
+  document.querySelector('#chTabs [data-tab="wardrobe"]')?.click();
+});
+await sleep(1800);
+check('EMPTY: no gear explains how to fill the bench', await page.evaluate(() => {
+  const bench = document.querySelector('.bp-salvage');
+  return !!bench && /Nothing to melt yet/.test(bench.textContent)
+    && /crates, the Boneyard and the Pit/.test(bench.textContent)
+    && !bench.querySelector('.melt-row');
+}));
 
 await browser.close();
 if (own) own.close();
