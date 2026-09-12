@@ -475,29 +475,29 @@ export async function grantLevelRewards(fromLevel, toLevel) {
   let coins = 0, crates = 0, dust = 0, eggs = 0, milestone = null;
   for (let L = fromLevel + 1; L <= toLevel; L++) {
     await award(`levelup-${L}`, 'levelup', 0, `Reached level ${L}`);
-    /* THE PAYOUT CLAIM IS ITS OWN ROW, AND MINTING IT IS ATOMIC.
-       It used to be a `claimed` flag on the levelup row, set with a get and
-       then a put, which is two transactions: two overlapping level crossings
-       both read claimed=false and both paid. Measured 2026-08-17, two
-       concurrent grantLevelRewards(199, 200) paid 2290 coins and 300 dust for
-       one level. `levelpaid-<L>` is claimed with addIfAbsent, so exactly one
-       caller can ever take it. The old flag is still honoured so nobody who
-       already collected a level gets paid for it again, and initGameIfNeeded's
-       retroactive baseline (which sets the flag WITHOUT paying) keeps working
-       unchanged. */
+    // Transition: an unpaid level becomes paid with its entire reward in one
+    // transaction. Legacy claimed flags still suppress retroactive payments.
     const legacy = await db.get('xp', `levelup-${L}`);
     if (legacy && legacy.claimed) continue;
-    if (!(await db.addIfAbsent('xp', { key: `levelpaid-${L}`, type: 'levelup', xp: 0, label: `Level ${L} rewards`, date: dateKey(), ts: Date.now() }))) continue;
-    await coinsAdd(levelCoins(L));
-    await grantCrate('golden', 'level-' + L);
-    coins += levelCoins(L); crates += 1;
-    // the milestone rides the SAME claimed-once ledger row, so a multi-level
-    // jump pays each milestone it passed exactly once and a retry pays nothing
     const m = levelMilestone(L);
+    const rows = [crateRow('golden', 'level-' + L)];
+    for (let i = 0; i < (m?.crates || 0); i++) rows.push(crateRow('golden', `milestone-${L}-${i}`));
+    if (m?.egg) rows.push(await eggRow(`milestone-${L}`));
+    const amount = levelCoins(L);
+    const kv = {
+      coins: cur => Math.max(0, (Number(cur) || 0) + amount),
+      coinsRev: cur => (Number(cur) || 0) + Math.max(1, Math.abs(amount)),
+    };
+    if (m?.dust) {
+      kv.bonedust = cur => Math.max(0, (Number(cur) || 0) + m.dust);
+      kv.dustRev = cur => (Number(cur) || 0) + Math.max(1, Math.abs(m.dust));
+    }
+    if (!(await db.claimAndPay('xp', {
+      key: `levelpaid-${L}`, type: 'levelup', xp: 0,
+      label: `Level ${L} rewards`, date: dateKey(), ts: Date.now(),
+    }, { kv, puts: rows.map(val => ({ store: 'inv', val })) }))) continue;
+    coins += amount; crates += 1;
     if (!m) continue;
-    for (let i = 0; i < m.crates; i++) await grantCrate('golden', `milestone-${L}-${i}`);
-    if (m.dust) await boneDustAdd(m.dust);
-    if (m.egg) await grantEgg(`milestone-${L}`);
     crates += m.crates; dust += m.dust; eggs += m.egg ? 1 : 0;
     // the biggest one reached in this jump is the one the celebration announces
     if (!milestone || m.tier === 'marquee' || (m.tier === 'big' && milestone.tier === 'small')) milestone = { ...m, level: L };
