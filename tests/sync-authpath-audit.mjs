@@ -131,6 +131,8 @@ async function check(name, fn) {
   catch (error) { failed++; console.error(`FAIL ${name}: ${error.message}`); }
 }
 async function accepts(snapshot) {
+  // Fresh canonical request identity, including when the fixture clock is frozen.
+  now += 1;
   assert.equal(await syncProfile(snapshot, 'v68'), true, JSON.stringify(lastResponse));
   assert.equal(lastResponse.status, 200);
   assert.equal(lastResponse.body.ok, true);

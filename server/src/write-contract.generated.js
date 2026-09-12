@@ -135,6 +135,7 @@ export const WRITE_COLUMNS = {
     "owner_name",
     "siege_name",
     "siege_until",
+    "takeover_id",
     "tended_at",
     "updated_at"
   ]

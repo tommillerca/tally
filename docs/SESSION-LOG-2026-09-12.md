@@ -68,3 +68,9 @@ Held out of v588: pet growth (D2), and l-ackpriv (recovery save must see a real 
 - Server lanes running: gift/cheer stable key (also closes server #10), spire takeover receipts, replay identity (#2), flagged friends (#5), local race weeks (F21).
 - The meal chip (F16, option 3) is built and proven: a meal older than two hours loses to the clock, red on main.
 - v590 will carry all of the above once v589 is live. Every Worker change waits on Tom running server/deploy.sh; docs/SERVER-DEPLOY-PENDING.md lists them.
+
+## 14:05 v589 live, v590 assembled
+
+- v589 verified live: version.json, sw.js, APP_BUILD and changelog all v589; relativeAgo and petGrowth in the served app.js, the standalone-document branch in the served sw.js.
+- v590 assembled from ten lanes: meal chip option 3, all six economy claim-then-pay fixes, replay identity, flagged friends, local race weeks. Unit suite on the merged train: 400 passed. Gate next, diffed against main's 48.
+- One deploy bundle for Tom is written up in docs/SERVER-DEPLOY-PENDING.md: apply the spire receipt migration, then server/deploy.sh. Until then the Worker fixes (podium, gift and cheer keys, spire receipts, replay, flagged friends, local weeks) are code on main only.

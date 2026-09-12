@@ -41,6 +41,7 @@ const ctx = vm.createContext({ ...art, ...pets, ...anim, ...syncHealth,
   petWear: async () => input.wear, championTitle: async () => '',
   platformTag: () => 'web', RACE_RULES: 1,
   kvGet: async (_key, fallback) => fallback, kvSet: async () => {},
+  resumeGiftIntents: async () => [], // v590: renderFriends resumes pending gift intents; nothing pending in this fixture
   // Transport is replaced at signedFetch, before any network can be used.
   signedFetch: async (method, path, body) => {
     if (method === 'PUT') {

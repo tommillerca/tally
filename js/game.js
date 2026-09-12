@@ -159,7 +159,7 @@ export async function awardCapped(prefix, type, xp, label, cap, date, ref = null
    number cannot say whether a 0-XP slot was taken (0 is both "capped" and "a
    payload with no XP"), and the spar ledger below pays COINS off a 0-XP row, so
    anything gating money on the slot must read `claimed` (QA round 28 P4). */
-async function claimCapped(prefix, type, xp, label, cap, date, ref = null) {
+async function claimCapped(prefix, type, xp, label, cap, date, ref = null, pay = null) {
   const d = date || dateKey();
   for (let n = 1; n <= cap; n++) {
     const key = `${prefix}-${d}-${n}`;
@@ -181,7 +181,7 @@ async function claimCapped(prefix, type, xp, label, cap, date, ref = null) {
        write. Measured before this: two tabs each pushing 12 awards against a
        12/day ceiling wrote the correct 12 rows and PAID 190 XP against a cap
        of 120, because both were told they had granted the same key. */
-    const r = await awardOnce(key, type, xp, label, d, ref != null ? { ref } : null);
+    const r = await awardOnce(key, type, xp, label, d, ref != null ? { ref } : null, pay);
     if (r.claimed) return r;
     /* Lost the claim. If the winner was our own twin (two overlapping calls
        for one entry: reward-sop's "twoAtOnce" line paid 320 against 310), the
@@ -205,9 +205,30 @@ async function claimCapped(prefix, type, xp, label, cap, date, ref = null) {
    Whether a spar should also spend a Pit charge is Tom's call and unchanged. */
 export const SPAR_DAILY_CAP = XP_DAILY_CAP.fight;
 export const SPAR_COINS = { win: 15, loss: 5 };
-export async function claimSpar(fightId, won, date) {
-  const r = await claimCapped('spar', 'spar', 0, won ? 'Sparring win' : 'Sparring loss', SPAR_DAILY_CAP, date, fightId);
-  return { claimed: r.claimed, coins: r.claimed ? (won ? SPAR_COINS.win : SPAR_COINS.loss) : 0 };
+export async function claimSpar(fightId, won, date, coinMult = 1) {
+  let coins = won ? SPAR_COINS.win : SPAR_COINS.loss;
+  const extras = [];
+  // A new daily slot and its full payment commit together. Request order in
+  // claimAndPay applies the charm before food, with the shipped rounding.
+  const pay = { kv: {
+    buffs: cur => {
+      if (!won || !(cur?.xp2 > 0)) return undefined;
+      const bonus = Math.round(coins * BATTLE_CHARM_BONUS);
+      coins += bonus; extras.push(`Battle Charm +${bonus} coins`);
+      return { ...cur, xp2: cur.xp2 - 1 };
+    },
+    coins: cur => {
+      if (won && coinMult > 1) {
+        const bonus = Math.round(coins * (coinMult - 1));
+        coins += bonus; extras.push(`Feast +${bonus} coins`);
+      }
+      return Math.max(0, (Number(cur) || 0) + coins);
+    },
+    coinsRev: cur => (Number(cur) || 0) + Math.max(1, Math.abs(coins)),
+  } };
+  const r = await claimCapped('spar', 'spar', 0, won ? 'Sparring win' : 'Sparring loss', SPAR_DAILY_CAP, date, fightId, pay);
+  return { claimed: r.claimed, coins: r.claimed ? coins : 0,
+    ...(r.claimed && extras.length ? { extras } : {}) };
 }
 
 // A decided staked win survives closing the arena or a process death. Keep its
@@ -410,6 +431,12 @@ export async function awardOnce(key, type, xp, label, date, extra = null, pay = 
     ? { v: base + (claimed ? (xp || 0) : 0), epoch: e0 + 1 }
     : null;
   if (!claimed) return { claimed: false, xp: 0 };
+  await finishAward(xp, type);
+  return { claimed: true, xp };
+}
+
+// Run the existing level-up effects after an external atomic XP commit.
+export async function finishAward(xp, type = 'wellness') {
   // any XP source can cross a level: steps, quests, pit wins, the road
   if (type !== 'levelup' && !quietLevelups) {
     const after = await totalXp();
@@ -422,27 +449,27 @@ export async function awardOnce(key, type, xp, label, date, extra = null, pay = 
       }
     }
   }
-  return { claimed: true, xp };
 }
 
 // v136: battling a friend's AI bonehead. Pays ONCE per friend per day (win pays
 // more, a loss still gives a shame-free consolation) so the incentive is to battle
 // MANY friends, not farm one. Records a `friendbattle` ledger row tagged with the
 // friendId so the daily/weekly friend quests can count total + distinct friends.
-// Returns {firstToday, coins, xp, won}; caller adds the coins.
+// Returns the committed {firstToday, coins, xp, won} payment for display.
 export async function claimFriendBattle(friendId, won, date) {
   const d = date || dateKey();
   const key = `friendbattle-${d}-${friendId}`;
   const xp = won ? 12 : 5;
-  /* The claim IS the check. `if (await db.get(...)) return firstToday:false`
-     followed by an award was two operations with an await between them, and
-     the caller pays 25 coins on firstToday, so two tabs battling the same
-     friend at the same moment were both paid. */
-  const claim = await awardOnce(key, 'friendbattle', xp, won ? "Beat a friend's bonehead" : 'Battled a friend', d);
+  // Transition: this friend's first battle today. Metadata and coins belong
+  // to the same ledger claim, so neither a crash nor a twin can split them.
+  const coins = won ? 25 : 8;
+  const claim = await awardOnce(key, 'friendbattle', xp, won ? "Beat a friend's bonehead" : 'Battled a friend', d,
+    { friendId, won: won ? 1 : 0 }, { kv: {
+      coins: cur => Math.max(0, (Number(cur) || 0) + coins),
+      coinsRev: cur => (Number(cur) || 0) + Math.max(1, Math.abs(coins)),
+    } });
   if (!claim.claimed) return { firstToday: false, coins: 0, xp: 0, won };
-  const row = await db.get('xp', key);
-  if (row) { row.friendId = friendId; row.won = won ? 1 : 0; await db.put('xp', row); }
-  return { firstToday: true, coins: won ? 25 : 8, xp, won };
+  return { firstToday: true, coins, xp, won };
 }
 
 export function levelCoins(level) { return 20 + level * 5; }
@@ -475,29 +502,29 @@ export async function grantLevelRewards(fromLevel, toLevel) {
   let coins = 0, crates = 0, dust = 0, eggs = 0, milestone = null;
   for (let L = fromLevel + 1; L <= toLevel; L++) {
     await award(`levelup-${L}`, 'levelup', 0, `Reached level ${L}`);
-    /* THE PAYOUT CLAIM IS ITS OWN ROW, AND MINTING IT IS ATOMIC.
-       It used to be a `claimed` flag on the levelup row, set with a get and
-       then a put, which is two transactions: two overlapping level crossings
-       both read claimed=false and both paid. Measured 2026-08-17, two
-       concurrent grantLevelRewards(199, 200) paid 2290 coins and 300 dust for
-       one level. `levelpaid-<L>` is claimed with addIfAbsent, so exactly one
-       caller can ever take it. The old flag is still honoured so nobody who
-       already collected a level gets paid for it again, and initGameIfNeeded's
-       retroactive baseline (which sets the flag WITHOUT paying) keeps working
-       unchanged. */
+    // Transition: an unpaid level becomes paid with its entire reward in one
+    // transaction. Legacy claimed flags still suppress retroactive payments.
     const legacy = await db.get('xp', `levelup-${L}`);
     if (legacy && legacy.claimed) continue;
-    if (!(await db.addIfAbsent('xp', { key: `levelpaid-${L}`, type: 'levelup', xp: 0, label: `Level ${L} rewards`, date: dateKey(), ts: Date.now() }))) continue;
-    await coinsAdd(levelCoins(L));
-    await grantCrate('golden', 'level-' + L);
-    coins += levelCoins(L); crates += 1;
-    // the milestone rides the SAME claimed-once ledger row, so a multi-level
-    // jump pays each milestone it passed exactly once and a retry pays nothing
     const m = levelMilestone(L);
+    const rows = [crateRow('golden', 'level-' + L)];
+    for (let i = 0; i < (m?.crates || 0); i++) rows.push(crateRow('golden', `milestone-${L}-${i}`));
+    if (m?.egg) rows.push(await eggRow(`milestone-${L}`));
+    const amount = levelCoins(L);
+    const kv = {
+      coins: cur => Math.max(0, (Number(cur) || 0) + amount),
+      coinsRev: cur => (Number(cur) || 0) + Math.max(1, Math.abs(amount)),
+    };
+    if (m?.dust) {
+      kv.bonedust = cur => Math.max(0, (Number(cur) || 0) + m.dust);
+      kv.dustRev = cur => (Number(cur) || 0) + Math.max(1, Math.abs(m.dust));
+    }
+    if (!(await db.claimAndPay('xp', {
+      key: `levelpaid-${L}`, type: 'levelup', xp: 0,
+      label: `Level ${L} rewards`, date: dateKey(), ts: Date.now(),
+    }, { kv, puts: rows.map(val => ({ store: 'inv', val })) }))) continue;
+    coins += amount; crates += 1;
     if (!m) continue;
-    for (let i = 0; i < m.crates; i++) await grantCrate('golden', `milestone-${L}-${i}`);
-    if (m.dust) await boneDustAdd(m.dust);
-    if (m.egg) await grantEgg(`milestone-${L}`);
     crates += m.crates; dust += m.dust; eggs += m.egg ? 1 : 0;
     // the biggest one reached in this jump is the one the celebration announces
     if (!milestone || m.tier === 'marquee' || (m.tier === 'big' && milestone.tier === 'small')) milestone = { ...m, level: L };
@@ -839,77 +866,83 @@ export function disciplineOf(type) {
 }
 
 export async function onHealthSync(date, { steps, activeKcal, exerciseMin, cycleKm, workouts, wtypes } = {}) {
-  let gained = await award(`hk-${date}`, 'hk', 10, 'Apple Health sync', date);
+  let gained = 0;
+  // Transition: an unclaimed daily milestone and its entire reward commit
+  // together. Only a committed receipt contributes to the sync toast.
+  const claim = async (key, type, xp, label, date, reward = {}) => {
+    const kv = {};
+    for (const [key, rev, amount] of [['coins', 'coinsRev', reward.coins], ['bonedust', 'dustRev', reward.dust]]) {
+      if (!amount) continue;
+      kv[key] = cur => Math.max(0, (Number(cur) || 0) + amount);
+      kv[rev] = cur => (Number(cur) || 0) + Math.max(1, Math.abs(amount));
+    }
+    const receipt = await awardOnce(key, type, xp, label, date, null,
+      { kv, puts: (reward.rows || []).map(val => ({ store: 'inv', val })) });
+    if (receipt.claimed) { gained += receipt.xp; coinsEarned += reward.coins || 0; }
+    return receipt.claimed;
+  };
   let egg = false, coinsEarned = 0, workout = false;
   const themed = []; // themed consumables granted this sync (for the toast)
+  await claim(`hk-${date}`, 'hk', 10, 'Apple Health sync', date);
   if (steps != null) {
     for (const m of STEP_MILESTONES) {
       if (steps < m.at) break;
-      const g = await award(`stepms-${date}-${m.at}`, 'stepms', 15, `${m.at.toLocaleString()} steps`, date);
-      if (g) { gained += g; coinsEarned += m.coins; }
+      await claim(`stepms-${date}-${m.at}`, 'stepms', 15, `${m.at.toLocaleString()} steps`, date, { coins: m.coins });
     }
     // a Step Egg only on a genuinely big day
     if (steps >= EGG_STEP_THRESHOLD) {
-      const g = await award(`egg-${date}`, 'egg', 15, 'Big-day Step Egg', date);
-      if (g) { gained += g; await grantCrate('egg', 'steps-' + date); egg = true; }
+      const g = await claim(`egg-${date}`, 'egg', 15, 'Big-day Step Egg', date, { rows: [await eggRow('steps-' + date)] });
+      if (g) egg = true;
     }
     for (const o of STEP_OVER) {
       if (steps < o.at) break;
-      const g = await award(`stepx-${date}-${o.at}`, 'stepx', 5, `Extra steps past the cap: ${o.at.toLocaleString()}`, date);
-      if (g) { gained += g; coinsEarned += o.coins; }
+      await claim(`stepx-${date}-${o.at}`, 'stepx', 5, `Extra steps past the cap: ${o.at.toLocaleString()}`, date, { coins: o.coins });
     }
   }
   // Active energy: rewards every kind of workout (bike/run/gym/swim all burn it).
   if (activeKcal != null) {
     for (const m of ACTIVE_MILESTONES) {
       if (activeKcal < m.at) break;
-      const g = await award(`actms-${date}-${m.at}`, 'actms', 15, `${m.at.toLocaleString()} active kcal`, date);
-      if (g) { gained += g; coinsEarned += m.coins; }
+      await claim(`actms-${date}-${m.at}`, 'actms', 15, `${m.at.toLocaleString()} active kcal`, date, { coins: m.coins });
     }
     // a real workout's worth of burn -> a daily crate (once/day, idempotent)
     if (activeKcal >= ACTIVE_WORKOUT_KCAL) {
-      const g = await award(`actcrate-${date}`, 'actcrate', 15, 'Workout of the day', date);
-      if (g) { gained += g; await grantCrate('daily', 'active-' + date); workout = true; }
+      const g = await claim(`actcrate-${date}`, 'actcrate', 15, 'Workout of the day', date, { rows: [crateRow('daily', 'active-' + date)] });
+      if (g) workout = true;
     }
     for (const o of ACTIVE_OVER) {
       if (activeKcal < o.at) break;
-      const g = await award(`actx-${date}-${o.at}`, 'actx', 5, `Extra burn past the cap: ${o.at.toLocaleString()} kcal`, date);
-      if (g) { gained += g; coinsEarned += o.coins; }
+      await claim(`actx-${date}-${o.at}`, 'actx', 5, `Extra burn past the cap: ${o.at.toLocaleString()} kcal`, date, { coins: o.coins });
     }
   }
   // Completed workout SESSIONS (capped/day so it can't be farmed).
   if (workouts != null && workouts > 0) {
     for (let i = 1; i <= Math.min(workouts, WORKOUT_CAP); i++) {
-      const g = await award(`wk-${date}-${i}`, 'wk', 15, `Workout ${i}`, date);
-      if (g) { gained += g; coinsEarned += WORKOUT_COINS; workout = true; }
+      const g = await claim(`wk-${date}-${i}`, 'wk', 15, `Workout ${i}`, date, { coins: WORKOUT_COINS });
+      if (g) workout = true;
     }
   }
   // Apple Exercise ring.
   if (exerciseMin != null && exerciseMin >= EXERCISE_RING_MIN) {
-    const g = await award(`exring-${date}`, 'exring', 20, `${EXERCISE_RING_MIN} exercise minutes`, date);
-    if (g) { gained += g; coinsEarned += 20; }
+    await claim(`exring-${date}`, 'exring', 20, `${EXERCISE_RING_MIN} exercise minutes`, date, { coins: 20 });
   }
   // Cycling distance (every CYCLE_KM_STEP km up to the cap).
   if (cycleKm != null && cycleKm > 0) {
     for (let km = CYCLE_KM_STEP; km <= CYCLE_KM_CAP; km += CYCLE_KM_STEP) {
       if (cycleKm < km) break;
-      const g = await award(`cyc-${date}-${km}`, 'cyc', 8, `${km} km ridden`, date);
-      if (g) { gained += g; coinsEarned += 10; }
+      await claim(`cyc-${date}-${km}`, 'cyc', 8, `${km} km ridden`, date, { coins: 10 });
     }
   }
   // Type-themed reward: one per DISCIPLINE done today (cardio->Vigor,
   // strength->Battle Charm, flex->Bone Dust). Idempotent per date+discipline.
   if (wtypes && wtypes.length) {
     for (const disc of new Set(wtypes.map(disciplineOf))) {
-      const g = await award(`wtype-${date}-${disc}`, 'wtype', 10, `${disc} session`, date);
-      if (!g) continue;
-      gained += g;
       const r = DISCIPLINE_REWARD[disc];
-      if (r?.consumable) { await grantConsumable(r.consumable, `workout-${disc}-${date}`); themed.push(r.label); }
-      else if (r?.dust) { await boneDustAdd(r.dust); themed.push(r.label); }
+      const g = await claim(`wtype-${date}-${disc}`, 'wtype', 10, `${disc} session`, date,
+        { dust: r?.dust, rows: r?.consumable ? [consumableRow(r.consumable, `workout-${disc}-${date}`)] : [] });
+      if (g && r) themed.push(r.label);
     }
   }
-  if (coinsEarned) await coinsAdd(coinsEarned);
   const newBadges = await evaluateBadges();
   gained += newBadges.length * 25;
   return { xp: gained, newBadges, egg, coins: coinsEarned, workout, themed };

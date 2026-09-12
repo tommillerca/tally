@@ -67,7 +67,7 @@ import { talkBoxHtml, runTalkBox } from './talkbox.js';
 import { BED_BOX, hlwBedArt, hlwChipHtml, hlwPriceSignHtml, hlwGhostBedHtml } from './hollow-beds.js';
 import { hollowBackdropHtml } from './hollow-scene.js';
 import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor,
-  setSpireLevel, boonBonusFor, spireNow, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
+  setSpireLevel, boonBonusFor, spireNow, syncSieges, paySpireTakeover, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
   SPIRE_RADIUS_M, SPIRE_CAP, SPIRE_SHIELD_MS, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
   BOON_PER_SPIRE, BOON_SPIRE_CAP, TRIBUTE_PER_DAY, TRIBUTE_DUST_PER_DAY } from './spires.js';
 import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
@@ -2363,7 +2363,9 @@ const raceSeenKey = wk => 'race:' + wk;
 /* The week that has just finished, or null before the first one ever has. */
 function lastSettledWeek() {
   const wk = raceWeekKey(dateKey());
-  const prev = dateKey(new Date(Date.parse(wk + 'T00:00:00') - RACE_DAYS * 86400000));
+  const previous = new Date(wk + 'T00:00:00');
+  previous.setDate(previous.getDate() - RACE_DAYS);
+  const prev = dateKey(previous);
   return prev < RACE_EPOCH ? null : prev;
 }
 
@@ -8989,11 +8991,10 @@ function mealBlock(name, i, entries, yEntries, budget = 0, sourceDate = null) {
 
 /* ================= meal defaults ================= */
 
-// Last-used meal tracker: when logging multiple items within the same day,
-// default to the meal the player used previously, not the hour-of-day. This
-// prevents the "logged lunch at 12pm, then logged lunch again at 5:10pm" case
-// where mealForHour() would flip to dinner and force a re-selection.
-// Reads lastMealToday kv; on day boundary, falls back to mealForHour().
+// Last-used meal tracker: remember the last meal for two hours on the same day.
+// F16 (Tom, 2026-09-12): after two hours the clock picks again. Lunch logged
+// at noon now becomes Dinner at 5:10pm, as chosen in option 3.
+// Legacy lastMealToday rows without a timestamp count as expired.
 // P0 ORIGIN: playtest found players flipped away from their meal by the clock.
 /* THE MEAL YOU PICKED IS REMEMBERED (QA round 24 L10). Measured: open the sheet
    on Snacks, tap Dinner, close, reopen: Snacks. curMeal was closure state in
@@ -9002,25 +9003,26 @@ function mealBlock(name, i, entries, yEntries, budget = 0, sourceDate = null) {
    picked the meal BY THE CLOCK: a fifth commit path around the memory the other
    four share (tests/meal-memory-audit.mjs, row MYFOODS). ONE precedence, in ONE
    place, read by every reopen (the fab, restoreAddDraft, renderFoods):
-     a usable draft's meal  >  the meal remembered today  >  the clock.
+     a usable draft's meal  >  the meal remembered within two hours today  >  the clock.
    The draft wins because it is the flow that was live at the reload; the
    memory is lastMealToday, now written on every chip tap as well as on commit.
    mealPrecedence is pure so tests/unit.test.js can run it; mealDefault only
    fetches its two rows. */
 function mealPrecedence({ draft, last, date, hour, now = Date.now() }) {
   if (addDraftUsable(draft, now) && Number.isInteger(draft.meal)) return draft.meal;
-  if (last !== null && typeof last === 'object' && last.date === date) return last.meal;
+  if (last !== null && typeof last === 'object' && last.date === date && now - last.at < 2 * 3600e3) return last.meal;
   return mealForHour(hour);
 }
 async function mealDefault() {
   const [draft, last] = await Promise.all([kvGet('addDraft', null), kvGet('lastMealToday', null)]);
   const now = new Date();
-  return mealPrecedence({ draft, last, date: S.date, hour: now.getHours() + now.getMinutes() / 60 });
+  return mealPrecedence({ draft, last, date: S.date, hour: now.getHours() + now.getMinutes() / 60, now: now.getTime() });
 }
 
 // Record the meal a player just used, so the next log defaults to it.
 async function recordMealUsed(meal) {
-  await kvSet('lastMealToday', { date: S.date, meal });
+  const now = Date.now();
+  await kvSet('lastMealToday', { date: S.date, meal, at: now });
 }
 
 /* ================= add flow ================= */
@@ -13591,12 +13593,14 @@ async function renderFriends(el) {
         : 'Could not reach the Crew server. Your steps are still counting.';
       card.innerHTML = `<summary>
         <span class="gbn-ico race-ico">${badgePixHtml('badge-footprint', 24)}</span>
-        <span class="gbn-txt"><span class="race-h"><b>THE STEP RACE</b></span><small>${esc(line)}</small></span>
+        <span class="gbn-txt"><small>resets Friday at midnight, your time</small><span class="race-h"><b>THE STEP RACE</b></span><small>${esc(line)}</small></span>
         <span class="gbn-chev">›</span></summary>`;
       card.hidden = false;
       return;
     }
-    const endsMs = Date.parse(wk + 'T00:00:00') + RACE_DAYS * 86400000;
+    const ends = new Date(wk + 'T00:00:00');
+    ends.setDate(ends.getDate() + RACE_DAYS);
+    const endsMs = ends.getTime();
     const msLeft = Math.max(0, endsMs - Date.now());
     // CREW-6: split out as social.raceClockLabel so a fake clock proves the
     // "settles tonight" fix without a browser (see its own comment there).
@@ -13636,7 +13640,7 @@ async function renderFriends(el) {
         <span class="race-art">${avatarLayersHtml(myFit, { noYard: true, skip: ['BG', 'C'] })}</span>
         <span class="gbn-ico race-ico">${badgePixHtml('badge-footprint', 24)}</span>
         <span class="gbn-txt">
-          <span class="race-h"><b>THE STEP RACE</b><span class="race-clock">${clock.toUpperCase()}</span></span>
+          <small>resets Friday at midnight, your time</small><span class="race-h"><b>THE STEP RACE</b><span class="race-clock">${clock.toUpperCase()}</span></span>
           <small>${!rows.length ? 'No steps have reached this board yet.' : ownFresh ? 'Last shared standings: ' + ownStanding : 'Standings await recent updates.'}</small>
         </span>
         <span class="gbn-chev">›</span>
@@ -14006,6 +14010,7 @@ function giftRewardLabel(reward) {
 
 // Send-a-gift sheet: one free server-rolled gift/day, plus spend-your-own coins.
 async function openGiftSheet(f) {
+  await social.resumeGiftIntents();
   const bal = await coins();
   const day = dateKey();
   const freeMap = (await kvGet('giftFreeSent', {})) || {};
@@ -14061,37 +14066,31 @@ async function openGiftSheet(f) {
      different cooloff windows, and that drift is what the helper was written to
      stop. The label stays short: the sheet header already names who this is
      going to, and a long label reflows the chip row on a small phone. */
-  /* ONE KEY PER AMOUNT, REUSED BY ITS RETRIES, and this one is about coins
-     rather than confetti. The refund below runs on any answer that is not ok,
-     including a send that was DELIVERED and lost its reply on the 12s deadline:
-     the friend keeps the coins, the sender gets them back, and coins are minted
-     out of nothing. Tapping the same chip again then charged twice for one
-     gift. The server collapses two sends carrying the same key into one grant
-     and answers the second ok, so the retry keeps its deduction and the friend
-     is credited exactly once. Dropped on success, so a deliberate second gift
-     of the same amount is a real one. */
-  const giftKeys = new Map();
   $$('.gift-amt', wrap).forEach(b => armToConfirm(b, `Send ${b.dataset.amt}?`, async () => {
     if (b.disabled) return;
     const amt = +b.dataset.amt;
     b.disabled = true;
     // Check and debit together: two confirmed chips can otherwise both spend
     // the same pre-send balance. Refund a refused send below as before.
-    if (await spendCoins(amt) === null) {
+    const pending = Object.values(await kvGet('giftPending', {})).find(x => x.to === f.playerId && x.amount === amt);
+    const intent = pending || await social.beginGiftIntent(f.playerId, amt);
+    if (!intent) {
       b.disabled = false;
       toast("You don't have that many coins.");
       return;
     }
-    if (!giftKeys.has(amt)) giftKeys.set(amt, social.newSendKey());
-    const r = await social.sendGift(f.playerId, 'spend', amt, giftKeys.get(amt));
+    const r = await social.resolveGiftIntent(intent);
     if (r.ok) {
-      giftKeys.delete(amt);
       coinSound(S.sounds);
       toast(`You sent ${f.alias || f.name} ${amt} coins!`, 3400);
       const nb = await coins(); const bl = $('#giftBal', wrap); if (bl) bl.textContent = `you have ${nb}`;
       $$('.gift-amt', wrap).forEach(x => { x.disabled = (+x.dataset.amt) > nb; });
     } else {
-      await coinsAdd(amt); // refund
+      if (r.pending) {
+        b.disabled = false;
+        toast('Gift pending. We will retry when you reopen this sheet or sync.');
+        return;
+      }
       b.disabled = false;
       /* SOC-5, r34 SOCIAL lane, 2026-09-05: driven live (round 34 SOCIAL run 6),
          B sent A a gift after A deleted their account: 403 'not friends',
@@ -24933,7 +24932,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v589'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v590'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
@@ -25086,16 +25085,12 @@ const RACE_DAYS = 7;
 const RACE_RULES = 2;
 
 function raceWeekKey(date = dateKey()) {
-  const ms = Date.parse(date + 'T00:00:00') - Date.parse(RACE_EPOCH + 'T00:00:00');
-  /* A DAY BEFORE THE EPOCH STILL COUNTS. Shipped 2026-08-07 with the epoch dated
-     2026-08-08, so raceWeekDates() covered the 8th to the 14th, TODAY was not in
-     it, and every player's weekSteps summed to zero: the board was empty half an
-     hour after launch and nobody could take the lead. The period key was right,
-     the day window was not. Clamping here means an epoch that is off by a day
-     (or a phone whose clock is behind) counts today instead of discarding it. */
-  if (!(ms >= 0)) return RACE_EPOCH;                     // before launch: everything is period one
-  const period = Math.floor(ms / (RACE_DAYS * 86400000));
-  return dateKey(new Date(Date.parse(RACE_EPOCH + 'T00:00:00') + period * RACE_DAYS * 86400000));
+  if (date < RACE_EPOCH) return RACE_EPOCH;
+  const day = new Date(date + 'T00:00:00');
+  if (!Number.isFinite(day.getTime())) return RACE_EPOCH;
+  // Friday to Friday in the player's calendar, including DST weeks.
+  day.setDate(day.getDate() - (day.getDay() + 2) % RACE_DAYS);
+  return dateKey(day);
 }
 // Test hook (webdriver only): the race period boundary is the one rule a player
 // cannot see, so it has to be measurable without waiting a week.
@@ -25110,7 +25105,7 @@ function ordinal(n) {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 function raceWeekDates(weekKey) {
-  const t0 = Date.parse(weekKey + 'T00:00:00');
+  const start = new Date(weekKey + 'T00:00:00');
   /* EXACTLY the seven days from this period's start. NOTHING before it.
      v296 tried to be safe about clock skew by also counting the two days BEFORE
      the epoch, and that quietly backdated the race: Tom opened it to 31,000 steps
@@ -25118,7 +25113,11 @@ function raceWeekDates(weekKey) {
      week is not a race. The epoch is today and raceWeekKey already clamps an
      earlier date into period one, so there is nothing left for the padding to
      protect against. */
-  return Array.from({ length: RACE_DAYS }, (_, i) => dateKey(new Date(t0 + i * 86400000)));
+  return Array.from({ length: RACE_DAYS }, (_, i) => {
+    const day = new Date(start);
+    day.setDate(day.getDate() + i);
+    return dateKey(day);
+  });
 }
 
 async function weekStepsNow(date = dateKey()) {
@@ -25192,6 +25191,7 @@ async function socialSnapshot() {
   };
   return {
     weekKey: wk.weekKey,
+    utcOffsetMinutes: -new Date().getTimezoneOffset(),
     weekSteps: wk.steps,
     raceV: RACE_RULES,   // which rules counted it; the server ranks only current ones
     plat: platformTag(), // which shell they are on, so support is a lookup not a guess
@@ -27105,6 +27105,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (fight.over.winner === 'p' && add && el('addStage')) el('addStage').classList.add('ko'); // both enemies drop
     markDowned();   // and anything already at zero stays down
     renderActions();
+    let takeoverPaid = 0;
     let coins = 0, xp = 0, extras = [], extraCards = [], bossLoot = null;
     // item rewards render as pack cards (extras keeps coin-modifier notes only)
     const crateCard = kind => ({ iconHtml: crateIcon(kind, 120), name: CRATES[kind].label, rarity: kind === 'daily' ? 'uncommon' : 'rare', kind: 'CRATE', stats: kind === 'egg' ? 'Incubates · walk to hatch it' : 'Open it in your Backpack' });
@@ -27114,7 +27115,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
       const r = await claimFriendBattle(foeCfg.friendId, won);
       xp = r.xp; coins = r.coins; foeCfg._friendFirst = r.firstToday;
       trackEvent('friend_battle', { won });
-      if (coins) await coinsAdd(coins);
       if (won) {
         confettiRain(90); levelSound(S.sounds);
         const badges = await evaluateBadges();
@@ -27141,7 +27141,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
          ledger key and no cap (start() skips spendPitFight on purpose). The
          coins now come off claimSpar's daily slot; past SPAR_DAILY_CAP, or on a
          repeated settle of this fight, it pays 0. */
-      if (foeCfg.mode === 'spar') { coins = (await claimSpar(fightId, true)).coins; }
+      if (foeCfg.mode === 'spar') {
+        const r = await claimSpar(fightId, true, undefined, await foodCoinMult());
+        coins = r.coins; extras.push(...(r.extras || []));
+      }
       else if (foeCfg.mode === 'boss') {
         const r = await claimDenWin(foeCfg.den);
         if (r) {
@@ -27277,7 +27280,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
            tests/unit.test.js (one of which pins THIS branch by name) and
            tests/reward-sop-audit.mjs. `tests/repeat-audit.mjs`, named here
            since v389, has never existed in this repo. */
-        const already = !!(remote && remote.ok === true && remote.already === true);
+        takeoverPaid = remote?.ok === true ? await paySpireTakeover(remote.takeover_id) : 0;
+        const already = !!(remote && remote.ok === true && remote.already === true) && !takeoverPaid;
         const r = (refused || already) ? { ok: false, reason: already ? 'already' : remote.reason } : await claimSpire(foeCfg.spire).catch(() => ({ ok: false, reason: 'storage' }));
         if (pending) {
           coins = 0;
@@ -27300,7 +27304,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           if (!r.ok) toast('Tower claimed. Local ownership is waiting for sync.', 4000);
           const owned = await social.fetchMySpires().catch(() => null);
           if (owned !== null) await syncSieges(owned).catch(() => {});
-          coins = 80;
+          coins = takeoverPaid;
           // the server owns the level; mirror what it just told us
           if (remote && remote.ok && remote.level) await setSpireLevel(foeCfg.spire.id, remote.level).catch(() => {});
           const lvl = (remote && remote.level) || r.level || 1;
@@ -27381,8 +27385,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
         }
         dispatchEvent(new CustomEvent('bh-wanderer-beaten', { detail: { key: foeCfg.claimKey } }));
       }
-      // The Wanderer already paid coins and consumed its charm atomically.
-      if (foeCfg.mode !== 'wanderer') {
+      // The Wanderer and spar already paid coins and consumed their charm atomically.
+      if (foeCfg.mode !== 'wanderer' && foeCfg.mode !== 'spar') {
       // Battle Charm: spend a charge on the win for +25% coins.
       if (coins > 0) {
         const bonusPct = await consumeBattleCharmCharge();
@@ -27399,7 +27403,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         coins += bonus;
         extras.push(`Feast +${bonus} coins`);
       }
-      if (coins) await coinsAdd(coins);
+      if (coins > takeoverPaid) await coinsAdd(coins - takeoverPaid);
       }
       window.__refreshWalletPill?.();   // the hub behind this sheet shows the balance this just changed
       const badges = await evaluateBadges();
@@ -27422,7 +27426,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
          same daily slot as a spar win. Staked modes are unchanged: their 5 is
          already bounded by the Pit charge spendPitFight took. */
       coins = foeCfg.mode === 'spar' ? (await claimSpar(fightId, false)).coins : 5;
-      if (coins) await coinsAdd(coins);
+      if (coins && foeCfg.mode !== 'spar') await coinsAdd(coins);
       window.__refreshWalletPill?.();
       refreshLevelChip();   // R41-16: no xp on a loss, but stays true to "like the wallet pill does"
     }

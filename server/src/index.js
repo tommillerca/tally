@@ -1185,36 +1185,16 @@ async function recordPruneRun(env, row) {
 }
 
 /* ---------------- signature auth ----------------
-
-   ONE SIGNATURE, ONE EFFECT. Everything below used to check exactly two things:
-   the signature, and that the timestamp was inside MAX_SKEW_MS. Neither of them
-   says a request is NEW. A captured signed POST re-sent byte for byte verified
-   again and landed a fresh effect every time, for as long as that five-minute
-   window stayed open, and this was PROVEN against /cheer: one original plus two
-   replays delivered three cheers to the recipient.
-
-   The `ck` idempotency key closes it for a cheer sent by a client that mints
-   one -- the replay carries the same ck, so the grant's UNIQUE (player_id, key)
-   absorbs it -- but that is a per-route patch: it does nothing for an older
-   client that sends no ck, nothing for a spire claim, and nothing for the next
-   signed route somebody adds. So the guard lives HERE, once, in front of every
-   signed write there will ever be.
-
-   ECDSA signing is randomised, so two honest requests never share a signature,
-   and a real retry re-signs with a fresh ts (js/social.js signedFetch mints
-   both per call): nothing legitimate is ever refused by this. That is also why
-   it is not a substitute for `ck` -- a retry is a DIFFERENT signature, which
-   this cannot dedupe and the client's key can.
-
-   `rate_limits` rather than a new table, because a nonce IS a limiter: a budget
-   of one per subject, in a table nothing but the limiter writes, with an
-   `expires_at` sweeper that already runs. The digest is UNKEYED, unlike
-   rlBucket, on purpose: a signature is 512 bits with nothing to reverse it to,
-   so there is no rainbow table to build, and the per-isolate fallback secret
-   would give the same replay a different bucket on a different isolate, which
-   is exactly how this guard would quietly stop catching anything. */
-async function claimSignature(env, sig, tsNum) {
-  const digest = hexOf(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sig)), 16);
+   One verified request per player, regardless of Base64 spelling or ECDSA
+   randomness. A retry needs a fresh timestamp or other signed request field.
+   Route operation keys still deduplicate legitimate retries across timestamps.
+   Use an unkeyed, domain-separated digest so all isolates agree on identity.
+   The existing rate_limits table provides an atomic claim and expiry sweep. */
+async function claimSignature(env, playerId, method, path, ts, bodyText, tsNum) {
+  const encoder = new TextEncoder();
+  const bodyHash = hexOf(await crypto.subtle.digest('SHA-256', encoder.encode(bodyText || '')), 32);
+  const identity = JSON.stringify(['request-v1', playerId, method, path, ts, bodyHash]);
+  const digest = hexOf(await crypto.subtle.digest('SHA-256', encoder.encode(identity)), 32);
   const r = await env.DB.prepare(
     "INSERT OR IGNORE INTO rate_limits (bucket, name, window_start, hits, expires_at) VALUES (?,'sig',?,1,?)")
     // Swept at twice the skew window, so the row always outlives the signature
@@ -1258,7 +1238,7 @@ async function verifySigned(request, env, bodyText) {
      /friends poll pay for a row would turn the guard into the write
      amplification it is here to prevent. The claim is OUTSIDE the try above so
      a database failure can never be laundered into 'bad signature'. */
-  if (request.method !== 'GET' && !(await claimSignature(env, sig, tsNum))) {
+  if (request.method !== 'GET' && !(await claimSignature(env, playerId, request.method, url.pathname + url.search, ts, bodyText, tsNum))) {
     return { err: 'replayed request' };
   }
   return { playerId };
@@ -1308,10 +1288,9 @@ const RACE_RULES = 2;
    The race week, mirrored from js/app.js (raceWeekKey / RACE_EPOCH / RACE_DAYS).
    KEEP IN SYNC, exactly like ADJ/NOUN and RACE_RULES above.
 
-   The client computes its week key in LOCAL time and the server computes it in
-   UTC, so the two disagree for up to a day around a boundary. That skew is why
-   validateWeek() accepts the previous and next key as well as the current one,
-   and why each of the three gets a different rule rather than a blanket pass. */
+   The client uses local calendar Fridays. Accept calendar keys within one day
+   of the current, previous or next UTC period start. Classifying chooses the
+   existing bounds/settlement rule; storage always retains the supplied key. */
 const RACE_EPOCH = '2026-08-07';
 const RACE_DAYS = 7;
 const RACE_PERIOD_MS = RACE_DAYS * 86400000;
@@ -1430,11 +1409,12 @@ const ordinal = n => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n
 function classifyWeekKey(key, nowMs) {
   if (typeof key !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(key)) return null;
   const t = Date.parse(key + 'T00:00:00Z');
-  if (!Number.isFinite(t)) return null;
+  if (!Number.isFinite(t) || dayKeyUTC(t) !== key) return null;
   const cur = raceWeekStartMs(nowMs);
-  if (t === cur) return 'current';
-  if (t === cur - RACE_PERIOD_MS) return 'previous';
-  if (t === cur + RACE_PERIOD_MS) return 'next';
+  // Accept adjacent calendar dates without rewriting the supplied key.
+  if (Math.abs(t - cur) <= 86400000) return 'current';
+  if (Math.abs(t - (cur - RACE_PERIOD_MS)) <= 86400000) return 'previous';
+  if (Math.abs(t - (cur + RACE_PERIOD_MS)) <= 86400000) return 'next';
   return null;
 }
 
@@ -1478,7 +1458,7 @@ function classifyWeekKey(key, nowMs) {
    likeliest cause of a strange key is our own next feature, and taking a
    player's whole yard offline over it is the worse failure. */
 const SNAP_KEYS = new Set([
-  'weekKey', 'weekSteps', 'raceV', 'plat',
+  'weekKey', 'weekSteps', 'utcOffsetMinutes', 'raceV', 'plat',
   'level', 'levelName', 'stats', 'talents', 'title', 'outfit', 'gearLo', 'gear', 'badges',
   'pet', 'yard',
 ]);
@@ -1600,6 +1580,14 @@ function sanitizeSnapshot(rawSnap, row, nowMs) {
   if (Array.isArray(snap.gear) && snap.gear.length > MAX_GEAR_IDS) {
     snap.gear = snap.gear.slice(0, MAX_GEAR_IDS);
     bounded.push('gear');
+  }
+
+  // UTC offset minutes east of UTC, supplied by the phone. Keep this metadata
+  // in the profile JSON; it never rewrites or merges the player's race key.
+  if (snap.utcOffsetMinutes !== undefined &&
+      (!Number.isInteger(snap.utcOffsetMinutes) || snap.utcOffsetMinutes < -720 || snap.utcOffsetMinutes > 840)) {
+    delete snap.utcOffsetMinutes;
+    bounded.push('utcOffsetMinutes');
   }
 
   /* ---- raceV ----
@@ -1775,7 +1763,7 @@ async function requestFriendship(env, meId, otherId) {
   const row = await env.DB.prepare(
     `INSERT INTO friendships (a, b, status, requested_by, ts)
      SELECT ?,?,'pending',?,?
-      WHERE NOT EXISTS (SELECT 1 FROM players WHERE id IN (?,?) AND COALESCE(is_test, 0) = 1)
+      WHERE NOT EXISTS (SELECT 1 FROM players WHERE id IN (?,?) AND COALESCE(is_test, 0) <> 0)
      ON CONFLICT(a, b) DO UPDATE SET
        status = CASE WHEN friendships.requested_by <> excluded.requested_by THEN 'accepted' ELSE friendships.status END,
        ts     = CASE WHEN friendships.requested_by <> excluded.requested_by THEN excluded.ts   ELSE friendships.ts     END
@@ -1856,14 +1844,16 @@ async function notifyFriendship(env, aId, bId, now = Date.now()) {
 
    Returns true when a row landed, false when the cap refused it (or, with an
    explicit key, when this exact request already landed). */
-async function insertCappedGrant(env, { to, prefix, cap, type, payload, now, key = null }) {
-  const hi = prefix + '￿'; // prefix-range count: no LIKE, playerIds contain '_'
-  const count = 'SELECT COUNT(*) FROM grants WHERE player_id = ? AND key >= ? AND key < ?';
+async function insertCappedGrant(env, { to, prefix, cap, type, payload, now, key = null, countPrefix = prefix }) {
+  const hi = countPrefix + '￿'; // Range count also includes older day-keyed grants.
+  const dayStart = Math.floor(now / 86400000) * 86400000;
+  const countArgs = [to, countPrefix, hi, dayStart, dayStart + 86400000];
+  const count = 'SELECT COUNT(*) FROM grants WHERE player_id = ? AND key >= ? AND key < ? AND ts >= ? AND ts < ?';
   const r = await env.DB.prepare(
     `INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts)
      SELECT ?, ${key ? '?' : `? || (${count})`}, ?, ?, ?
       WHERE (${count}) < ?`)
-    .bind(to, ...(key ? [key] : [prefix, to, prefix, hi]), type, payload, now, to, prefix, hi, cap).run();
+    .bind(to, ...(key ? [key] : [prefix, ...countArgs]), type, payload, now, ...countArgs, cap).run();
   return !!(r.meta && r.meta.changes);
 }
 
@@ -2641,11 +2631,12 @@ export default {
         if (auth.err) return json({ error: auth.err }, 401);
         const other = String(JSON.parse(bodyText || '{}').id || '');
         const [a, b] = pairKey(auth.playerId, other);
-        const ex = await env.DB.prepare('SELECT requested_by FROM friendships WHERE a = ? AND b = ?').bind(a, b).first();
+        const ex = await env.DB.prepare('SELECT requested_by FROM friendships WHERE a = ? AND b = ? AND EXISTS (SELECT 1 FROM players WHERE id = friendships.a AND COALESCE(is_test, 0) = 0) AND EXISTS (SELECT 1 FROM players WHERE id = friendships.b AND COALESCE(is_test, 0) = 0)').bind(a, b).first();
         if (!ex) return json({ error: 'no such request' }, 404);
         if (ex.requested_by === auth.playerId) return json({ error: 'cannot accept your own request' }, 400);
         const acceptedAt = Date.now();
-        await env.DB.prepare('UPDATE friendships SET status = ?, ts = ? WHERE a = ? AND b = ?').bind('accepted', acceptedAt, a, b).run();
+        const accepted = await env.DB.prepare('UPDATE friendships SET status = ?, ts = ? WHERE a = ? AND b = ? AND EXISTS (SELECT 1 FROM players WHERE id = friendships.a AND COALESCE(is_test, 0) = 0) AND EXISTS (SELECT 1 FROM players WHERE id = friendships.b AND COALESCE(is_test, 0) = 0) RETURNING a').bind('accepted', acceptedAt, a, b).first();
+        if (!accepted) return json({ error: 'no such request' }, 404);
         await notifyFriendship(env, a, b, acceptedAt);
         return json({ ok: true });
       }
@@ -2694,7 +2685,7 @@ export default {
           'pb.handle b_handle, pb.name b_name, pb.friend_code b_code, pb.profile b_profile, pb.app_v b_v, pb.last_seen b_seen, ' +
           '(SELECT COUNT(*) FROM spires sp WHERE sp.owner = pb.id AND sp.tended_at > ?) b_spires ' +
           'FROM friendships f JOIN players pa ON pa.id = f.a JOIN players pb ON pb.id = f.b ' +
-          'WHERE (f.a = ? OR f.b = ?) AND ' + where + ' ORDER BY f.ts DESC LIMIT ?');
+          'WHERE (f.a = ? OR f.b = ?) AND COALESCE(pa.is_test, 0) = 0 AND COALESCE(pb.is_test, 0) = 0 AND ' + where + ' ORDER BY f.ts DESC LIMIT ?');
         const dormantSince = Date.now() - SPIRE_DORMANT_MS;
         /* LIMIT is the page PLUS ONE: the extra row is how truncation is known
            without a second COUNT query. It is dropped before the payload. */
@@ -2775,7 +2766,7 @@ export default {
         if (auth.err) return json({ error: auth.err }, 401);
         const now = Date.now();
         const rs = await env.DB.prepare(
-          `SELECT id, name, lat, lng, owner, owner_name, claimed_at, tended_at, level, siege_until, siege_name
+          `SELECT id, name, lat, lng, owner, owner_name, claimed_at, tended_at, level, siege_until, siege_name, takeover_id
              FROM spires WHERE owner = ?`).bind(auth.playerId).all();
         let rows = await sweepSieges(env, rs.results || [], now);
 
@@ -2806,7 +2797,7 @@ export default {
           serverNow: now,
           spires: rows.map(r => ({
             id: r.id, name: r.name, lat: r.lat, lng: r.lng, level: r.level || 1,
-            claimedAt: r.claimed_at, tendedAt: r.tended_at,
+            claimedAt: r.claimed_at, tendedAt: r.tended_at, takeover_id: r.takeover_id,
             siegeUntil: r.siege_until || null, siegeName: r.siege_name || null,
           })),
         });
@@ -2966,17 +2957,17 @@ export default {
            and the takeover then mints a spire-lost grant addressed to a deleted
            account, which is a second orphan minted by the first. */
         const won = await env.DB.prepare(
-          `INSERT INTO spires (id, name, lat, lng, owner, owner_name, defender, claimed_at, tended_at, level, updated_at)
-             SELECT ?,?,?,?,?,?,?,?,?,?,?
+          `INSERT INTO spires (id, name, lat, lng, owner, owner_name, defender, claimed_at, tended_at, level, updated_at, takeover_id)
+             SELECT ?,?,?,?,?,?,?,?,?,?,?,?
               WHERE (SELECT COUNT(*) FROM spires WHERE owner = ? AND tended_at > ?) < 3
                 AND NOT EXISTS (SELECT 1 FROM spires WHERE id = ? AND (owner = ? OR claimed_at > ?))
                 AND EXISTS (SELECT 1 FROM players WHERE id = ?)
              ON CONFLICT(id) DO UPDATE SET name=excluded.name, owner=excluded.owner, owner_name=excluded.owner_name,
                defender=excluded.defender, claimed_at=excluded.claimed_at, tended_at=excluded.tended_at,
-               level=spires.level+1, updated_at=excluded.updated_at
-           RETURNING level`)
+               level=spires.level+1, updated_at=excluded.updated_at, takeover_id=excluded.takeover_id
+           RETURNING level, takeover_id`)
           .bind(id, spireName, b.lat, b.lng, auth.playerId, me?.name || me?.handle || null,
-                me?.profile || null, now, now, 1, now,
+                me?.profile || null, now, now, 1, now, `${id}:${now}`,
                 auth.playerId, now - SPIRE_DORMANT_MS,
                 id, auth.playerId, now - SPIRE_SHIELD_MS,
                 auth.playerId).first();
@@ -3014,9 +3005,9 @@ export default {
              nothing, falls through, and is answered by the rules under it. */
           const tend = await env.DB.prepare(
             `UPDATE spires SET tended_at = ?, updated_at = ?, defender = ? WHERE id = ? AND owner = ?
-             RETURNING level`)
+             RETURNING level, takeover_id`)
             .bind(now, now, me?.profile || null, id, auth.playerId).first();
-          if (tend) return json({ ok: true, already: true, level: tend.level || 1 });
+          if (tend) return json({ ok: true, already: true, level: tend.level || 1, takeover_id: tend.takeover_id });
           // Nothing landed, so say WHICH rule refused it. Read after the write,
           // never before: this only picks the message, it decides nothing.
           const nowRow = await env.DB.prepare('SELECT claimed_at FROM spires WHERE id = ?').bind(id).first();
@@ -3041,7 +3032,7 @@ export default {
               note: `${me?.name || me?.handle || 'Someone'} toppled ${spireName}. Walk back and take it.`,
             }), now, prev.owner).run();
         }
-        return json({ ok: true, tookFrom: prev ? (prev.owner_name || 'someone') : null, level: won.level });
+        return json({ ok: true, tookFrom: prev ? (prev.owner_name || 'someone') : null, level: won.level, takeover_id: won.takeover_id });
       }
 
       // A visit restores resolve. Owner only.
@@ -3423,57 +3414,55 @@ export default {
         const to = String(bd.to || '');
         const mode = bd.mode === 'spend' ? 'spend' : 'free';
         if (!to || to === auth.playerId) return json({ error: 'bad recipient' }, 400);
+        const ck = String(bd.ck || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+        const operationKey = ck ? `gift-${mode}-${auth.playerId}-ck-${ck}` : null;
+        const originalAck = async () => {
+          if (!operationKey) return null;
+          const row = await env.DB.prepare('SELECT payload FROM grants WHERE player_id = ? AND key = ?')
+            .bind(to, operationKey).first();
+          if (!row) return null;
+          const p = JSON.parse(row.payload);
+          return p.ack || { ok: true, reward: { coins: p.coins }, mode: p.mode };
+        };
+        const prior = await originalAck();
+        if (prior) return json(prior);
         const [a, b] = pairKey(auth.playerId, to);
-        const fr = await env.DB.prepare('SELECT status FROM friendships WHERE a = ? AND b = ?').bind(a, b).first();
+        const fr = await env.DB.prepare('SELECT status FROM friendships WHERE a = ? AND b = ? AND EXISTS (SELECT 1 FROM players WHERE id = friendships.a AND COALESCE(is_test, 0) = 0) AND EXISTS (SELECT 1 FROM players WHERE id = friendships.b AND COALESCE(is_test, 0) = 0)').bind(a, b).first();
         if (!fr || fr.status !== 'accepted') return json({ error: 'not friends' }, 403);
         const me = await env.DB.prepare('SELECT handle, name FROM players WHERE id = ?').bind(auth.playerId).first();
         const fromName = (me && (me.name || me.handle)) || 'A Bonehead';
         const day = new Date(Date.now()).toISOString().slice(0, 10);
         const now = Date.now();
         if (mode === 'free') {
-          /* ONCE PER DAY, and the UNIQUE (player_id, key) is what enforces it.
-             The check used to be a SELECT followed by an INSERT, which is not a
-             once-per-day check at all across an await: measured locally on
-             2026-08-17, three of eight concurrent free gifts passed it, three
-             rewards were rolled, and one grant was delivered. INSERT OR IGNORE
-             against the constraint is atomic, and `changes` is the honest answer
-             to "was mine the one that landed". Nothing is written on the losing
-             path, so a refused caller has cost the recipient nothing. */
-          const key = `gift-free-${auth.playerId}-${day}`;
+          const prefix = `gift-free-${auth.playerId}-`;
           const reward = rollFreeGift();
-          const payload = JSON.stringify({ ...reward, from: fromName, note: `${fromName} sent you a gift!`, gift: true, mode });
-          const r = await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
-            .bind(to, key, 'gift', payload, now).run();
-          if (!(r.meta && r.meta.changes)) return json({ error: 'already sent today', code: 'daily-done' }, 409);
-          return json({ ok: true, reward, mode });
+          const ack = { ok: true, reward, mode };
+          const payload = JSON.stringify({ ...reward, from: fromName, note: `${fromName} sent you a gift!`, gift: true, mode, ack });
+          const landed = await insertCappedGrant(env, {
+            to, prefix: `${prefix}${day}`, countPrefix: prefix, cap: 1,
+            type: 'gift', now, key: operationKey || `${prefix}${day}`, payload,
+          });
+          if (!landed) {
+            const prior = await originalAck();
+            if (prior) return json(prior);
+            return json({ error: 'already sent today', code: 'daily-done' }, 409);
+          }
+          return json(ack);
         }
+
         const coins = Math.max(1, Math.min(1000, Math.floor(bd.coins || 0)));
         const reward = { coins };
-        /* A RETRY IS NOT A SECOND GIFT, and here that is not merely untidy, it
-           MINTS COINS. js/app.js deducts the sender locally BEFORE the send and
-           refunds only when the answer says it failed, so a gift that was
-           delivered but whose answer was lost refunds the sender while the
-           recipient keeps the coins. Two of them, both succeeding, debits the
-           sender twice and credits the friend twice. The counted cap key made
-           that unavoidable: it is the opposite of dedup, minting the NEXT n for
-           every retry. Same `ck` treatment as /cheer, for the same reason, with
-           the same shape: the client mints one key per amount chip and reuses
-           it for every retry of that chip, the grant's UNIQUE (player_id, key)
-           collapses them, and no ck (older clients) keeps the counted key. */
-        const ck = String(bd.ck || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
         const prefix = `gift-spend-${auth.playerId}-${day}-`;
         const landed = await insertCappedGrant(env, {
           to, prefix, cap: 5, type: 'gift', now,
-          key: ck ? `${prefix}ck-${ck}` : null,
+          key: operationKey, countPrefix: `gift-spend-${auth.playerId}-`,
           payload: JSON.stringify({ ...reward, from: fromName, note: `${fromName} sent you ${coins} coins!`, gift: true, mode }),
         });
         /* `false` has two causes with a ck: the cap refused it, or this exact
-           tap already landed. The retry MUST be answered ok, because the client
-           refunds itself on anything else and the friend keeps the coins. */
+           tap already landed. Return the stored reward on a delivered retry. */
         if (!landed && ck) {
-          const dupe = await env.DB.prepare('SELECT 1 FROM grants WHERE player_id = ? AND key = ?')
-            .bind(to, `${prefix}ck-${ck}`).first();
-          if (dupe) return json({ ok: true, duplicate: true, reward, mode });
+          const ack = await originalAck();
+          if (ack) return json(ack);
         }
         if (!landed) return json({ error: 'daily spend-gift limit', code: 'limit' }, 429);
         return json({ ok: true, reward, mode });
@@ -3491,21 +3480,24 @@ export default {
         const cheer = Math.floor(Number(bd.cheer));
         if (!to || to === auth.playerId) return json({ error: 'bad recipient' }, 400);
         if (!(cheer >= 0 && cheer < 64)) return json({ error: 'bad cheer' }, 400);
+        const ck = String(bd.ck || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+        const operationKey = ck ? `cheer-${auth.playerId}-ck-${ck}` : null;
+        const originalAck = async () => {
+          if (!operationKey) return null;
+          const row = await env.DB.prepare('SELECT payload FROM grants WHERE player_id = ? AND key = ?')
+            .bind(to, operationKey).first();
+          if (!row) return null;
+          const p = JSON.parse(row.payload);
+          return { ok: true };
+        };
+        const prior = await originalAck();
+        if (prior) return json(prior);
         const [a, b] = pairKey(auth.playerId, to);
-        const fr = await env.DB.prepare('SELECT status FROM friendships WHERE a = ? AND b = ?').bind(a, b).first();
+        const fr = await env.DB.prepare('SELECT status FROM friendships WHERE a = ? AND b = ? AND EXISTS (SELECT 1 FROM players WHERE id = friendships.a AND COALESCE(is_test, 0) = 0) AND EXISTS (SELECT 1 FROM players WHERE id = friendships.b AND COALESCE(is_test, 0) = 0)').bind(a, b).first();
         if (!fr || fr.status !== 'accepted') return json({ error: 'not friends' }, 403);
         const me = await env.DB.prepare('SELECT handle, name FROM players WHERE id = ?').bind(auth.playerId).first();
         const fromName = (me && (me.name || me.handle)) || 'A Bonehead';
         const day = new Date(Date.now()).toISOString().slice(0, 10);
-        /* A RETRY IS NOT A SECOND CHEER. The cap key counts rows, so a client
-           that re-sends after a lost answer (the app's own network deadline
-           fires at 12s and the tap is re-armed) mints the NEXT n and delivers a
-           duplicate. The client mints one `ck` per tap and reuses it on retry;
-           the same UNIQUE (player_id, key) + INSERT OR IGNORE that enforces the
-           gift's once-a-day does the deduping here, and a duplicate answers ok
-           without a second cheer, because the sender did what they meant to do
-           exactly once. No ck (older clients) keeps the counted key. */
-        const ck = String(bd.ck || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
         const prefix = `cheer-${auth.playerId}-${day}-`;
         // same COUNT-then-key shape as the spend gift, and the same fix: the
         // count is evaluated inside the insert, so no two concurrent cheers can
@@ -3514,7 +3506,7 @@ export default {
         // the deduping; the cap is counted over both shapes either way.
         const landed = await insertCappedGrant(env, {
           to, prefix, cap: 10, type: 'cheer', now: Date.now(),
-          key: ck ? `${prefix}ck-${ck}` : null,
+          key: operationKey, countPrefix: `cheer-${auth.playerId}-`,
           payload: JSON.stringify({ from: fromName, cheer, cheerFrom: auth.playerId, note: `${fromName} cheered you` }),
         });
         /* A REFUSAL HAS TWO CAUSES AND ONLY ONE OF THEM IS AN ERROR. With a ck,
@@ -3523,9 +3515,8 @@ export default {
            the player it failed and they send a third. One SELECT, only on the
            rare path, and it is the row's own existence that decides. */
         if (!landed && ck) {
-          const dupe = await env.DB.prepare('SELECT 1 FROM grants WHERE player_id = ? AND key = ?')
-            .bind(to, `${prefix}ck-${ck}`).first();
-          if (dupe) return json({ ok: true, duplicate: true });
+          const ack = await originalAck();
+          if (ack) return json(ack);
         }
         if (!landed) return json({ error: 'daily cheer limit', code: 'limit' }, 429);
         /* THE SENDER GETS A RECEIPT TOO (S12). A cheer was the one thing in the

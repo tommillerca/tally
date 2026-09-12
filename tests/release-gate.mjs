@@ -253,6 +253,8 @@ const coverageOnly = process.argv.includes('--coverage-only');
    the evidence in the failure line. */
 // Frozen loss-prevention work order, 2026-09-08: real UI and service controls, Node only.
 const PURE = [
+  'gift-intent-audit.mjs',
+  'cheer-retry-key-audit.mjs',
   'forms-state-audit.mjs', // Profile units, suggested name number, recovery availability and copy; Node DOM doubles.
   'wardrobe-ui-1f-audit.mjs',
   'wardrobe-unlock-audit.mjs', // Family variants, stats and duplicate-tile mutation control; Node only.
@@ -274,7 +276,9 @@ const PURE = [
   'whatsnew-boot-audit.mjs',
   'wardrobe-noise-audit.mjs',
   'sync-clientpath-audit.mjs', // Real boot/snapshot/signing over mem-idb; failed profile retries, no sockets.
+  'race-week-local-audit.mjs', // PURE: signed in-process Worker and memory SQLite.
   'sync-authpath-audit.mjs', // Real signed client to in-process Worker and SQLite; mature profiles and rejection controls, no sockets.
+  'replay-identity-audit.mjs', // PURE: in-process Worker and in-memory SQLite, no sockets.
   'sync-path-audit.mjs', // Behavioural profile sync, real snapshot/modules and boot/resume callbacks over mem-idb; no sockets.
   'wardrobe-playtest-audit.mjs', 'lab-room2-audit.mjs', 'stable-stale-disclosure-audit.mjs', 'breed-last-colour-audit.mjs', 'stable-loss-disclosure-audit.mjs', 'lab-health-recovery-audit.mjs',
   'lab-integration-audit.mjs', 'lab-ui-audit.mjs', 'laboratory-audit.mjs', 'lab-foundation-audit.mjs', 'pet-stress-guard.mjs', 'crew-pet-node-guard.mjs',
@@ -285,8 +289,9 @@ const PURE = [
   'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'rack-rotate-audit.mjs', 'pet-accessory-lint.mjs',
   'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs',
   'render-sink-lint.mjs', 'lapse-witness-audit.mjs', 'spawn-claim-atomic-audit.mjs', 'wardrobe-family-audit.mjs', 'football-kit-audit.mjs', 'restore-latch-audit.mjs',
-  'first-pet-audit.mjs', 'shop-economy-audit.mjs', 'recovery-status-audit.mjs', 'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs', 'take-and-pay-audit.mjs',
+  'first-pet-audit.mjs', 'shop-economy-audit.mjs', 'recovery-status-audit.mjs', 'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs', 'take-and-pay-audit.mjs', 'level-rewards-atomic-audit.mjs',
 ];
+PURE.push('flagged-friend-audit.mjs'); // F22: retroactive suppression in Worker friends, accepts, gifts and cheers.
 PURE.push('lab-banner-audit.mjs'); // Original sprite metadata, CSS clocks and Backpack route; Node only.
 PURE.push('backpack-ui-1g-audit.mjs'); // 1G rendered inventory and independent egg progress controls.
 PURE.push('c6-price-audit.mjs'); // One-off beta correction: real purchase, hatch, refund, retries, abort, merge and boot disclosure.
@@ -303,6 +308,7 @@ PURE.push('water-retry-audit.mjs'); // R4-20: loader backoff and boot recovery, 
 PURE.push('cloud-off-audit.mjs'); // R4-13/R4-16: real garment callback, profile opt-out and Settings disclosure; no sockets.
 PURE.push('r4-silence-audit.mjs'); // R4: fresh-context journal, aborted multi-tab erase, four draft launches and both account notices.
 PURE.push('silence-disclosure-audit.mjs'); // L6: interrupted saves, failed writes and a normal-session control; no sockets.
+PURE.push('health-milestone-atomic-audit.mjs'); // Health claim rollback, committed payouts and identical retries; Node only.
 PURE.push('health-disclosure-audit.mjs'); // h1: failed/stale step sync, durable deduplication and healthy controls; Node only.
 PURE.push('paddock-pack-audit.mjs');   // 2026-09-08 R44-12/20/25: the Paddock packer honours its own header contract at 200 pets (76 pairs overlapped >20px in both axes, worst 121x72, among the 50 drawn), a breeding-armed and an equipped pet are marked in the field, and the Stable copy row keeps its scroll position (2,160px lost per tap); node-only source and geometry proof, the real-render half is paddock-pack-browser-audit.mjs
 PURE.push('numbers-honesty-audit.mjs'); // L4: Node-driven numeric save handler, rendered counts, full weight SVG and history-window coverage.
@@ -312,6 +318,7 @@ PURE.push('branch-graveyard-audit.mjs');   // 2026-09-08: the branch classifier 
 PURE.push('store-runtime-audit.mjs'); // M4/K1: Node-only real web bundle, local paths, scheme condition, App Store refresh/background checks and web update controls.
 PURE.push('r47-rest-audit.mjs');   // 2026-09-08 round 47 remainder: GET /spires returns only what a rival needs (the profile blob carried nine more fields than /leaderboard, including yard, gear and plat, against the app's own friends-only comment), the lost-tower card stops contradicting itself, the siege clock ticks
 PURE.push('podium-settlement-audit.mjs'); // Atomic Worker settlement, SQLite rollback and retry.
+PURE.push('spire-takeover-atomic-audit.mjs'); // economy #4: takeover receipt and payout commit together; recovery pays an unpaid transition once.
 PURE.push('leaderboard-seen-audit.mjs'); // F20: relative last-seen phrases, no UTC on the leaderboard (Tom, 2026-09-12)
 PURE.push('r47-economy-audit.mjs');   // 2026-09-08 round 47: a lost tower stops paying (measured 90 coins / 12 Bone Dust), an offline re-fight stays pending and cannot mint a rival's tower, a stale restore cannot resurrect the income, and a grant's receipt and payout commit together; mem-idb + the Worker source, no browser
 PURE.push('submission-build-audit.mjs'); // R45-9: PURE runs refusal/control fixtures. Explicit artifact paths require SUBMISSION=1, hash-bound build marker and native store-content preflight; native producer integration remains out of lane.
@@ -330,7 +337,7 @@ PURE.unshift('no-debug-markers-lint.mjs');
    so each call gets a genuine turn), the exact shape that paid 20 XP against
    a documented 15 XP ceiling (measured 2026-09-06): the cap was read via a
    ledger scan, then decided several awaits later, off that stale count. */
-PURE.push('routine-race-audit.mjs');
+PURE.push('routine-race-audit.mjs', 'wellness-atomic-audit.mjs');
 PURE.unshift('version-align-lint.mjs');
 /* dayone-topup-audit is PURE for the same reason spawn-claim-atomic-audit is:
    mem-idb under the real js/db.js, js/game.js and js/loot.js, no browser, ~2s.

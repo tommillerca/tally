@@ -1,8 +1,23 @@
+## v590 spire takeover receipts (2026-09-12)
+
+Pending, not deployed. Tom owns deployment. Apply
+`server/migrations/2026-09-12-spire-takeover-receipt.sql` before deploying
+this Worker. Neither action was run here. Fresh schema includes takeover_id.
+The ownership write stores a spire-id plus claim timestamp receipt and returns
+it on successful and already-owned claims and the authenticated ownership sync.
+Legacy NULL receipts are treated as already paid. No production inspection,
+D1 writes or secrets were used for this work.
+
 # The Worker is behind main, on purpose
+
+## v590 gift and cheer retries (2026-09-12, pending)
+
+F23 and F22: server/src/index.js uses sender, recipient and stable client keys independently of UTC day, and returns original acknowledgements before checking friendship. Daily caps count grant timestamps for new keys. Existing 90-day grant retention exceeds the required seven days. No schema migration is needed. This Worker change is not deployed. Deployment belongs to Tom; no deployment, production D1 access or secret changes were performed.
+
 
 Written 2026-08-23, after #77 merged.
 
-> ## CORRECTION, 2026-08-25 — READ THIS BEFORE THE TABLE BELOW
+> ## CORRECTION, 2026-08-25 , READ THIS BEFORE THE TABLE BELOW
 >
 > **Everything under "State" was already stale when I read it, and it cost a
 > round of wrong assumptions. Derive schema truth from the LIVE DATABASE, never
@@ -232,3 +247,10 @@ The existing five-place payouts, ranks, week keys and per-player uniqueness stay
 unchanged. No migration or secret change is required by this patch. No deployment,
 production D1 access or migration execution was performed. Existing partial
 settlements are not repaired. Local proof: podium-settlement-audit.mjs (PURE).
+
+
+## v590 deploy bundle (2026-09-12), one deploy by Tom
+
+Order: 1) apply `server/migrations/2026-09-12-spire-takeover-receipt.sql` to D1; 2) run `server/deploy.sh`. Nothing was run here.
+
+The Worker on main now carries, none of it live yet: atomic podium settlement (v589, one D1 batch for every prize and finish notice); gift and cheer dedupe on a stable client key independent of the UTC day, original acknowledgement returned before the friendship check; spire takeover receipts (needs the migration; legacy NULL receipts count as paid); replay identity derived from the verified request fields and the player, not the signature text; flagged test accounts suppressed from every friends bucket and from gift, cheer and accept; player-local race week keys accepted within one day of a UTC period start, settled under the supplied key. Proofs: podium-settlement-audit, cheer-retry-key-audit, spire-takeover-atomic-audit, replay-identity-audit, flagged-friend-audit, race-week-local-audit, all PURE and green on main after v590.
