@@ -319,6 +319,7 @@ PURE.push('store-runtime-audit.mjs'); // M4/K1: Node-only real web bundle, local
 PURE.push('r47-rest-audit.mjs');   // 2026-09-08 round 47 remainder: GET /spires returns only what a rival needs (the profile blob carried nine more fields than /leaderboard, including yard, gear and plat, against the app's own friends-only comment), the lost-tower card stops contradicting itself, the siege clock ticks
 PURE.push('podium-settlement-audit.mjs'); // Atomic Worker settlement, SQLite rollback and retry.
 PURE.push('spire-takeover-atomic-audit.mjs'); // economy #4: takeover receipt and payout commit together; recovery pays an unpaid transition once.
+PURE.push('seed-currency-audit.mjs'); // v591: the shared browser seed funds currency through the revisioned writers; a broken seed fails here, not in a dozen browser audits.
 PURE.push('leaderboard-seen-audit.mjs'); // F20: relative last-seen phrases, no UTC on the leaderboard (Tom, 2026-09-12)
 PURE.push('r47-economy-audit.mjs');   // 2026-09-08 round 47: a lost tower stops paying (measured 90 coins / 12 Bone Dust), an offline re-fight stays pending and cannot mint a rival's tower, a stale restore cannot resurrect the income, and a grant's receipt and payout commit together; mem-idb + the Worker source, no browser
 PURE.push('submission-build-audit.mjs'); // R45-9: PURE runs refusal/control fixtures. Explicit artifact paths require SUBMISSION=1, hash-bound build marker and native store-content preflight; native producer integration remains out of lane.

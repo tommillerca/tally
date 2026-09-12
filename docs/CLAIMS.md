@@ -1,5 +1,13 @@
 # What each patch note claims, and what backs it
 
+## v591 (2026-09-12)
+
+Changelog item: The app keeps working offline when a module or icon was never cached.
+1. PROOF: precache-audit.mjs, 6 of 6 rows green on the train; on main the rows "every module the app imports is precached" (the hero-ground and laboratory modules were missing) and "every pixel icon pixCur can serve is precached" (the camera and lab pixel icons were missing) were red. Found by the Codex triage of main's 48 gate reds (docs/GATE-REDS-2026-09-12.md, the one PRODUCT row). | REACH: four entries added to sw.js PRECACHE; sw.js changed, so this release carries its version bump. A ready-cache offline browser proof is still owed.
+
+Changelog item: Test seeds fund coins the way the game does, so a dozen guards can grade again.
+2. PROOF: seed-currency-audit.mjs (PURE): after a seeded balance a revisioned credit succeeds and export does not refuse, 4 rows green; 3 rows red against the old helper. the godmode seed helper now funds coins and bone dust through kvBumpRevisioned as deltas after boot settles and validates with exportAll(). remote-den-audit, red on main with "currency history does not match the balance", is green on the lane tree. | REACH: every browser audit that calls seed() with a balance. The five audits with their own raw-wallet fixtures (purchase-firewall, freeze-refund, garden-retire, merchant-retire, backup-roundtrip) still crash and are the next fixture lane. No product file changed.
+
 ## v590 (2026-09-12)
 
 Assembled from ten Codex lanes by the commander. Every pure audit was run on its lane tree and proven red on a throwaway worktree of main; the unit suite on the merged train is 400 passed. Worker changes ship as code only: nothing changes live until Tom runs server/deploy.sh (docs/SERVER-DEPLOY-PENDING.md, one bundle).
