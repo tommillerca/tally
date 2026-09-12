@@ -2412,7 +2412,7 @@ async function hydrateRaceResult(el) {
       <span class="gbn-ico rr-ico">${badgePixHtml('badge-trophy', 21)}</span>
       <span class="gbn-txt">
         <i>THE STEP RACE · SETTLED</i>
-        <span class="race-h"><b>${esc(w.name).toUpperCase()} TOOK IT</b><span class="pill">PAID</span></span>
+        <span class="race-h"><b>${esc(w.name)} TOOK IT</b><span class="pill">PAID</span></span>
         <small><b>${w.steps.toLocaleString()}</b> steps. Prizes are paid.</small>
       </span>
       <span class="gbn-chev">›</span>
@@ -12569,7 +12569,7 @@ async function renderFriends(el) {
 
   const dispName = me.name || me.handle;
   el.innerHTML = `
-    <h1 class="page-h1">The Crew<span class="sub">You're <b>${esc(dispName)}</b> · <button class="link" id="crewEditName">${me.name ? 'change name' : 'pick a name'}</button></span></h1>
+    <h1 class="page-h1">The Crew<span class="sub crew-greeting">You're <b>${esc(dispName)}</b> · <button class="link" id="crewEditName">${me.name ? 'change name' : 'pick a name'}</button></span></h1>
 
     <!-- Tom, 2026-09-09: greet with the fan, then notifications. Gifts stay
          immediately below the fan with their OPEN control and pending tab badge. -->
@@ -13977,7 +13977,7 @@ async function openGiftSheet(f) {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Send a gift</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
-      <p class="note" style="margin:0 0 14px">To <b>${esc(f.alias || f.name)}</b>. They open your gift in Crew the next time they use the app. Coins go to their balance; items go to their Backpack.</p>
+      <p class="note gift-recipient" style="margin:0 0 14px">To <b>${esc(f.alias || f.name)}</b>. They open your gift in Crew the next time they use the app. Coins go to their balance; items go to their Backpack.</p>
       <div class="gift-free ${alreadyFree ? 'done' : ''}" id="giftFreeCard">
         <div class="gift-free-l"><div class="gift-free-t">${ICONS.coin(16)} Free daily gift</div><div class="note">A surprise drop: coins, a crate, sometimes an egg. Once a day per friend, on the house.</div></div>
         <button class="btn small" id="giftFree"${alreadyFree ? ' disabled' : ''}>${alreadyFree ? `Sent ${ICONS.check(11)}` : 'Send'}</button>
@@ -14072,7 +14072,7 @@ function openCheerSheet(f) {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Send a cheer</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
-      <p class="note" style="margin:0 0 14px">To <b>${esc(f.alias || f.name)}</b>. A quick shout, no typing.</p>
+      <p class="note gift-recipient" style="margin:0 0 14px">To <b>${esc(f.alias || f.name)}</b>. A quick shout, no typing.</p>
       <div class="cheer-grid">${CHEERS.map((c, i) => `<button class="cheer-chip" data-cheer="${i}"><span class="cheer-emo">${c.emo}</span><span class="cheer-txt">${esc(c.txt)}</span></button>`).join('')}</div>
     </div>
   `, { cls: 'sheet-cheer' });
@@ -23887,8 +23887,8 @@ async function renderBoneyard(el) {
         rec.el.classList.toggle('dormant', dormant);
         rec.el.classList.toggle('inrange', s.dist <= SPIRE_RADIUS_M);
         $('.spire-flag', rec.el).textContent = besieged ? 'UNDER SIEGE'
-          : rival ? (rival.ownerName || 'RIVAL').toUpperCase()
-          : held ? (myName ? myName.toUpperCase() : 'YOURS')
+          : rival ? (rival.ownerName || 'RIVAL')
+          : held ? (myName || 'YOURS')
           : view.pending ? 'PENDING' : dormant ? 'DORMANT' : 'UNCLAIMED';
         // A tower's level is its history: every takeover and every repelled siege
         // adds one, and it pays more tribute. Worth reading from across the map.
@@ -25661,7 +25661,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
             <div class="vs-impact"></div>
           </div>
           <div class="vs-vs">VS</div>
-          <div class="vs-name foe">${esc(foeCfg.name.toUpperCase())}</div>
+          <div class="vs-name foe">${esc(foeCfg.name)}</div>
           <div class="vs-venue">at ${esc(venue)}</div>
         </div>`;
       document.body.appendChild(vs);
@@ -27930,3 +27930,31 @@ async function seedDemo() {
 /* ================= go ================= */
 
 boot();
+
+/* Rare name surfaces use their production renderers in the geometry guard.
+   No seed or UI entry point is exposed in a player's browser. */
+if (typeof window !== 'undefined' && navigator.webdriver) {
+  window.__nameFitSurface = async (surface, pick) => {
+    if (!new URLSearchParams(location.search).has('demo')) throw new Error('Name audit requires demo storage');
+    if (surface === 'garden') {
+      await kvSet('hlwSeen', 0);
+      S.hlwSalt = HLW_SAY.first.findIndex(line => line.includes('{n}'));
+      return openHollow(() => {});
+    }
+    if (surface === 'builder') return openNameBuilder(null);
+    if (surface === 'gift') return openGiftSheet(window.__nameFitMember);
+    if (surface === 'cheer') return openCheerSheet(window.__nameFitMember);
+    if (surface === 'tower-action') return openSpireInfoSheet({
+      s: { id: 'name-fit-rival', name: 'Audit tower', dist: 0 },
+      view: { level: 1 }, held: false, lvl: 1, heldSince: Date.now(),
+      rival: { ownerName: window.__nameFitMember.name, level: 1 },
+    }, () => {});
+    if (surface === 'onboarding') {
+      const before = newPlayerConfirmed;
+      newPlayerConfirmed = true;
+      try { return renderOnboarding(1, { pick }); }
+      finally { newPlayerConfirmed = before; }
+    }
+    throw new Error(`Unknown name surface: ${surface}`);
+  };
+}

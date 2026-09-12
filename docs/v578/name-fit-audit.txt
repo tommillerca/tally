@@ -1,26 +1,8 @@
-=== MUTATION: v578 alpha rule deleted (the live v575 shadow state) ===
-ok    VISIBLE the toast itself is on the glass  toast 26.3,175 322.5x64.5 in 375x812
-ok    CONTROL Today drew its five door tiles  Trends 16,652.8 63.8x65.8 | Backpack 2 85.8,652.8 63.8x65.8 | Stable 155.6,652.8 63.8x65.8 | Kitchen 225.4,652.8 63.8x65.8 | The Pit ! 295.2,652.8 63.8x65.8
-ok    CLEAR a live toast covers none of the door tiles  toast 26.3,175 322.5x64.5, doors from 652.8
-FAIL  SHADOW the contact shadow reads as contact, not a smudge  soles lum 60.2 with the shadow element hidden, 42.7 with it shown at 338,1078; the element contributes 29.0%
-FAILED  toast-today-audit
-
-=== MUTATION: Today toast override deleted (the live v575 seat) ===
-ok    VISIBLE the toast itself is on the glass  toast 26.3,651.7 322.5x64.5 in 375x812
-ok    CONTROL Today drew its five door tiles  Trends 16,652.8 63.8x65.8 | Backpack 2 85.8,652.8 63.8x65.8 | Stable 155.6,652.8 63.8x65.8 | Kitchen 225.4,652.8 63.8x65.8 | The Pit ! 295.2,652.8 63.8x65.8
-FAIL  CLEAR a live toast covers none of the door tiles  toast 26.3,651.7 322.5x64.5 covers Trends, Backpack 2, Stable, Kitchen, The Pit !
-ok    SHADOW the contact shadow reads as contact, not a smudge  soles lum 60.2 with the shadow element hidden, 33.1 with it shown at 338,1078; the element contributes 45.0%
-FAILED  toast-today-audit
-
-
-=== NAME-FIT THROWAWAY RED ATTEMPT ===
-TREE /private/tmp/l-nameclip-red-xxjk074q
-CSS fix removed; DOM uppercasing restored. Test-only seams retained.
 AUDIT START name-fit-audit.mjs: completion pending; planned rows undeclared
 SOURCE js/app.js:2042 const me = await social.socialMe();
 SOURCE js/app.js:2135 spot.innerHTML += `<span class="tz-spot-name">${esc(it.name)}</span>`;
 SOURCE js/app.js:2374 <div class="nm"><b>${esc(p.name)}</b><span class="st">${p.steps.toLocaleString()}</span></div>
-SOURCE js/app.js:2415 <span class="race-h"><b>${esc(w.name).toUpperCase()} TOOK IT</b><span class="pill">PAID</span></span>
+SOURCE js/app.js:2415 <span class="race-h"><b>${esc(w.name)} TOOK IT</b><span class="pill">PAID</span></span>
 SOURCE js/app.js:4323 const todayName = await social.displayName() || 'Your Bonehead';
 SOURCE js/app.js:4914 <div class="q-name">${esc(q.name)} <span class="q-coins">+${q.coins}${ICONS.coin(11)}${q.crate ? ' ' + crateIcon(q.crate, 12) : ''}${q.dust ? ` <span class="dust-ico">${ICONS.dust(13)}</span>${q.dust}` : ''}${q.item ? ' ' + consumableIcon(q.item, 12) : ''}${q.ingredient ? ' ' + ingIconHtml(q.ingredient, 12) : ''}</span></div>
 SOURCE js/app.js:6943 <div class="well-body"><b>${esc(r.name)}</b><small>${done.has(r.id) ? 'Done today' : 'Tap when it is done'}</small></div>
@@ -147,6 +129,7 @@ SOURCE js/app.js:25212 <div class="t3-tx"><b>${esc(rDen.boss)}</b><small>${esc(r
 SOURCE js/app.js:25225 ${champOpen ? `<button class="btn ${champBeaten ? 'ghost' : ''}" id="champBtn" ${gate} aria-label="${champBeaten ? 'Rematch' : 'Fight'} ${esc(CHAMPION.name)}, the Champion">${champBeaten ? 'REMATCH' : 'FIGHT'}</button>` : `<span class="t3-lock">BEAT RUNG ${LADDER.length}</span>`}
 SOURCE js/app.js:25241 <div class="t3-tx"><b>${esc(fightFoe.name)}</b><small>Rank ${fightRank} · ${Math.round(fightFoe.mult * 100)}% stats · ${canNewRank ? `${fightFoe.xp} XP + ${ICONS.coin(12)}${fightFoe.coins}` : `<b>rematch only</b> · ${ICONS.coin(12)}${fightFoe.repeatCoins}, no new rank`}</small></div>
 SOURCE js/app.js:25271 ? `<p class="note" style="margin:2px 2px 8px">${pitCombatBuffs.map(b => `${b.icon} <b>${esc(b.name)}</b> active: ${esc(foodBuffLabel(b))}${dishWorth(b.recipe) ? ` ${esc(dishWorth(b.recipe))}` : ''}`).join(' · ')}</p>`
+SOURCE js/app.js:25664 <div class="vs-name foe">${esc(foeCfg.name)}</div>
 SOURCE js/app.js:25699 <div class="sheet-head fight-header"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
 SOURCE js/app.js:25821 <div class="fname">${esc(foe.name)} <span id="foeHpN">${Math.round(foe.hp)}/${foe.d.maxHp}</span></div>
 SOURCE js/app.js:25825 ${add ? `<div class="hud-add" id="hudAdd"><span class="aname">${esc(add.name)}</span><div class="bar fhp add"><i id="addHp" style="width:100%"></i></div></div>` : ''}
@@ -935,7 +918,3 @@ UNPROVEN CONTROL ["Bartholomew Bonecrusher WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
 UNPROVEN CONTROL ["Bartholomew Bonecrusher WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW",430,932,"53px","onboarding draft"]: audit did not reach this site
 NAME-FIT checked=0 failed=0 unproven=756
 AUDIT END name-fit-audit.mjs: UNPROVEN; NORMAL EXIT (row coverage undeclared); rows=0/undeclared; failed=0; unproven=0; exit=97
-
-EXIT 97
-RED PROOF UNPROVEN: listener denied. No failing widths measured.
-Required red sites: .hub-name and .hero-name. Frozen plan supplied .hub-name 293/227 and .hero-name 230/230 at 375x812 with the 23-character name. These are not measurements from this run. The Today red requires a longer name.
