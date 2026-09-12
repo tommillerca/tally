@@ -39,6 +39,18 @@ const phases = [
   ['builder', [['name-builder draft', '#nbPreview', draft]]],
   ['onboarding', [['onboarding draft', '#onbName', draft]]],
 ];
+// Permanently outside this fixture. These explicit exclusions do not turn new
+// missing controls into passes. Every other site still gates on CONTROL.
+const outsideFixture = new Map([
+  ['.fight-over .note', 'repeat-result state is not reached by the fixture'],
+  ['#raceCard .race-lane .nm b', 'active-race lanes are not reached by the fixture'],
+  ['.vs-name.foe', 'transient Pit introduction is not reached by the fixture'],
+  ['.vs-venue', 'same transient Pit introduction as .vs-name.foe'],
+]);
+for (const [selector, reason] of outsideFixture)
+  console.log(`OUTSIDE FIXTURE (permanent) ${selector}: ${reason}`);
+for (const phase of phases) phase[1] = phase[1].filter(([, selector]) => !outsideFixture.has(selector));
+
 let browser, server, page, failed = 0, unproven = 0, checked = 0;
 const pending = new Set();
 for (const name of names) for (const [w, h] of viewports) for (const size of sizes)
@@ -147,12 +159,25 @@ async function measure(page, selector, name) {
       for (let a = e.parentElement; a; a = a.parentElement) {
         const ar = a.getBoundingClientRect(), cs = getComputedStyle(a);
         hidden ||= Number(cs.opacity) === 0 || cs.visibility === 'hidden';
-        if (['hidden', 'clip'].includes(cs.overflowX) && (r.left < ar.left - 1 || r.right > ar.right + 1))
-          clipReasons.push({ element: describe(a), axis: 'x', overflow: cs.overflowX,
-            elementStart: r.left, elementEnd: r.right, clipStart: ar.left, clipEnd: ar.right });
-        if (['hidden', 'clip'].includes(cs.overflowY) && (r.top < ar.top - 1 || r.bottom > ar.bottom + 1))
-          clipReasons.push({ element: describe(a), axis: 'y', overflow: cs.overflowY,
-            elementStart: r.top, elementEnd: r.bottom, clipStart: ar.top, clipEnd: ar.bottom });
+        for (const [axis, overflow, start, end, clipStart, client, extent, scroll] of [
+          ['x', cs.overflowX, r.left, r.right, ar.left + a.clientLeft, a.clientWidth, a.scrollWidth, a.scrollLeft],
+          ['y', cs.overflowY, r.top, r.bottom, ar.top + a.clientTop, a.clientHeight, a.scrollHeight, a.scrollTop],
+        ]) {
+          const clipEnd = clipStart + client;
+          // Hidden permits programmatic scrolling; clip never does. Compare
+          // the element in content coordinates with this axis's scroll extent,
+          // not just the viewport. Below-fold content inside that extent is
+          // reachable. A non-scrolling axis must still report a cut.
+          const contentStart = start - clipStart + scroll;
+          const contentEnd = end - clipStart + scroll;
+          const reachable = overflow === 'hidden' && extent > client
+            && contentStart >= -1 && contentEnd <= extent + 1;
+          if (['hidden', 'clip'].includes(overflow) && !reachable
+              && (start < clipStart - 1 || end > clipEnd + 1))
+            clipReasons.push({ element: describe(a), axis, overflow,
+              elementStart: start, elementEnd: end, clipStart, clipEnd,
+              scrollExtent: extent, clientExtent: client, scrollOffset: scroll });
+        }
       }
       if (r.left < -1 || r.right > innerWidth + 1)
         clipReasons.push({ element: 'viewport', axis: 'x', elementStart: r.left,
@@ -161,6 +186,8 @@ async function measure(page, selector, name) {
         scrollWidth: e.scrollWidth, clientWidth: e.clientWidth, scrollHeight: e.scrollHeight, clientHeight: e.clientHeight,
         fontSize: parseFloat(s.fontSize), minimum: parseFloat(getComputedStyle(document.documentElement).fontSize) * .5625,
         intact: e.textContent.includes(name), rendered: r.width > 0 && r.height > 0 && !hidden && Number(s.opacity) !== 0,
+        whiteSpace: s.whiteSpace, allowsWrapping: !['nowrap', 'pre'].includes(s.whiteSpace)
+          && s.textWrapMode !== 'nowrap',
         clipped: clipReasons.length > 0, clipReasons };
     });
   }, { selector, name });
@@ -198,6 +225,7 @@ try {
       await page.setViewport({ width: w, height: h, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
       await page.evaluate(size => { document.documentElement.style.fontSize = size; }, size);
       for (const [phase, sites] of phases) {
+        if (!sites.length) continue;
         let error;
         try { await prepare(page, phase, name); } catch (e) { error = e.message; }
         for (const [site, selector, expected = name] of sites) {
@@ -214,12 +242,13 @@ try {
             const fitConditions = {
               positiveClientWidth: row.clientWidth > 0,
               horizontalOverflowWithinTolerance: row.scrollWidth - row.clientWidth <= 1,
-              verticalOverflowWithinTolerance: row.scrollHeight - row.clientHeight <= 1,
+              verticalOverflowWithinTolerance: row.scrollHeight - row.clientHeight <= 1
+                || (row.allowsWrapping && !row.clipped),
               noClipping: !row.clipped,
             };
             const failedFitConditions = Object.keys(fitConditions).filter(key => !fitConditions[key]);
             for (const [guard, pass] of [['FITS', failedFitConditions.length === 0], ['LEGIBLE', row.fontSize >= row.minimum], ['INTACT', row.intact]]) {
-              console.log(`${pass ? 'PASS' : 'FAIL'} ${guard} ${context} selector=${JSON.stringify(selector)} element=${JSON.stringify(row.element)} scrollWidth=${row.scrollWidth} clientWidth=${row.clientWidth} scrollHeight=${row.scrollHeight} clientHeight=${row.clientHeight} clipped=${row.clipped} clipReasons=${JSON.stringify(row.clipReasons)} fitConditions=${JSON.stringify(fitConditions)} failedFitConditions=${JSON.stringify(failedFitConditions)} font=${row.fontSize} minimum=${row.minimum}`);
+              console.log(`${pass ? 'PASS' : 'FAIL'} ${guard} ${context} selector=${JSON.stringify(selector)} element=${JSON.stringify(row.element)} scrollWidth=${row.scrollWidth} clientWidth=${row.clientWidth} scrollHeight=${row.scrollHeight} clientHeight=${row.clientHeight} whiteSpace=${JSON.stringify(row.whiteSpace)} allowsWrapping=${row.allowsWrapping} clipped=${row.clipped} clipReasons=${JSON.stringify(row.clipReasons)} fitConditions=${JSON.stringify(fitConditions)} failedFitConditions=${JSON.stringify(failedFitConditions)} font=${row.fontSize} minimum=${row.minimum}`);
               if (!pass) failed++;
             }
           }

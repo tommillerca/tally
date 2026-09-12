@@ -12479,3 +12479,11 @@ body:has(.screen--today):not(:has(#sheets .sheet)) .toast { top: calc(var(--sat)
 .crew-greeting b, .race-champ b, .sheet-rename .note b {
   display: inline-block; max-width: 100%; overflow-wrap: anywhere;
 }
+
+/* A fixed Cheer back button must yield a line before it squeezes the sender
+   below one glyph at large root text sizes. Keep the name's wrapping policy. */
+.cheer-row { flex-wrap: wrap; }
+.cheer-row .cheer-tx { flex: 1 1 8rem; }
+.cheer-row .btn.cheer-back {
+  max-width: 100%; white-space: normal; overflow-wrap: anywhere;
+}
