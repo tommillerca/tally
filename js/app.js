@@ -3788,6 +3788,53 @@ function bgRefresh() {
 
 /* ================= shared ui ================= */
 
+/* Measure once per queued message, before the browser paints it. Keep the
+   normal bottom seat when clear; otherwise try the gaps between visible rows.
+   Tall stages count only when at least a quarter of their area is covered.
+   Ordinary controls (<=160px high) always count. See toast-reach-audit. */
+function seatToast(t) {
+  t.style.setProperty('--toast-seat', '0px');
+  const box = t.getBoundingClientRect();
+  const height = t.offsetHeight; // animation translation must not affect seating
+  // Resolve env()/calc() through a real length, not parseFloat of a custom
+  // property (which would discard native safe-area insets).
+  t.dataset.seatClear = 'false';
+  t.style.setProperty('--toast-seat', 'calc(var(--sat) + 12px)');
+  const top = parseFloat(getComputedStyle(t).top);
+  t.style.setProperty('--toast-seat', 'calc(100vh - var(--sab) - 12px)');
+  const bottom = parseFloat(getComputedStyle(t).top);
+  const controls = [...document.querySelectorAll('button, a[href], input, select, textarea, summary, [role="button"], [tabindex], .map-act')]
+    .filter(el => !t.contains(el) && !el.closest('[hidden], [inert]'))
+    .map(el => {
+      const style = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      if (style.visibility === 'hidden' || style.display === 'none' || +style.opacity === 0 || !r.width || !r.height) return null;
+      // Clip scroll content to its visible ancestors before considering it.
+      let left = Math.max(0, r.left), right = Math.min(innerWidth, r.right);
+      let y = Math.max(0, r.top), end = Math.min(innerHeight, r.bottom);
+      for (let parent = el.parentElement; parent; parent = parent.parentElement) {
+        const ps = getComputedStyle(parent), pr = parent.getBoundingClientRect();
+        if (/(auto|scroll|hidden|clip)/.test(ps.overflowY)) { y = Math.max(y, pr.top); end = Math.min(end, pr.bottom); }
+        if (/(auto|scroll|hidden|clip)/.test(ps.overflowX)) { left = Math.max(left, pr.left); right = Math.min(right, pr.right); }
+      }
+      if (end <= y || right <= left) return null;
+      const hit = document.elementFromPoint((left + right) / 2, (y + end) / 2);
+      if (!hit || !(el.contains(hit) || hit.contains(el))) return null;
+      return { left, right, top: y, bottom: end, height: r.height, area: r.width * r.height };
+    }).filter(Boolean);
+  const clear = y => controls.every(r => {
+    const w = Math.max(0, Math.min(box.right, r.right) - Math.max(box.left, r.left));
+    const h = Math.max(0, Math.min(y + height, r.bottom) - Math.max(y, r.top));
+    return !w || !h || (r.height > 160 && w * h / r.area < .25);
+  });
+  const preferred = bottom - 84 - height; // safe-area + shipped 96px bottom
+  const candidates = [preferred, top, ...controls.flatMap(r => [r.bottom + 12, r.top - height - 12]).sort((a, b) => a - b)];
+  const seat = candidates.find(y => y >= top && y + height <= bottom && clear(y));
+  // An overfull surface has no geometrically valid seat. Keep feedback visible
+  // and expose the failure for diagnostics rather than silently claiming clear.
+  t.dataset.seatClear = String(seat !== undefined);
+  t.style.setProperty('--toast-seat', `${seat ?? Math.max(top, Math.min(preferred, bottom - height))}px`);
+}
 let toastTimer = 0;
 /* One write-failure message per this window. See the sink in boot(). */
 const WRITE_FAIL_QUIET_MS = 8000;
@@ -3838,6 +3885,7 @@ function nextToast() {
   t.dataset.severity = job.error ? 'error' : 'status';
   t.textContent = job.msg;
   t.hidden = false;
+  seatToast(t);
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
     if (generation !== toastGeneration) return;

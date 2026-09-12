@@ -57,11 +57,19 @@ Exit: 1 (infrastructure failure, not a feature regression)
 $ node tests/wardrobe-stack-audit.mjs
 AUDIT START wardrobe-stack-audit.mjs: completion pending; planned rows undeclared
 INTERRUPTED wardrobe-stack-audit.mjs: Error: listen EPERM: operation not permitted 127.0.0.1
+
+Round 2 red control attempt: TOAST_SHIPPED_96=1 node tests/toast-reach-audit.mjs
+The injected CSS restores bottom: calc(var(--sab) + 96px), top: auto.
+BLOCKED: localhost listen EPERM prevents browser measurement. No failing screens measured; red proof is UNPROVEN.
+
+AUDIT START toast-reach-audit.mjs: completion pending; planned rows undeclared
+INTERRUPTED toast-reach-audit.mjs: Error: listen EPERM: operation not permitted 127.0.0.1
     at Server.setupListenHandle [as _listen2] (node:net:1918:21)
     at listenInCluster (node:net:1997:12)
     at node:net:2206:7
     at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
 AUDIT END wardrobe-stack-audit.mjs: FAILED; INCOMPLETE; rows=0/undeclared; failed=0; unproven=0; exit=1
+AUDIT END toast-reach-audit.mjs: FAILED; INCOMPLETE; rows=0/undeclared; failed=0; unproven=0; exit=1
 node:net:1918
       const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
                     ^
@@ -79,3 +87,5 @@ Error: listen EPERM: operation not permitted 127.0.0.1
 
 Node.js v22.22.2
 Exit: 1 (infrastructure failure, not a feature regression)
+
+EXIT 1

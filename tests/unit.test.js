@@ -5491,7 +5491,13 @@ test('M5 toast retains the four-job backlog cap and each retained job gets its d
   const timers = [], seen = [];
   const el = { classList: { add() {}, remove() {}, toggle() {} }, dataset: {}, hidden: true, textContent: '' };
   const context = vm.createContext({
-    $: () => el, reducedMotion: true, toastTimer: 0, clearTimeout() {},
+    // Round 4 reaffirmation of the Round 3 diff: this protects the four-job backlog cap, retained-job
+    // order, dwell durations and final hide, not the historical 96px seat.
+    // Stubbing seatToast only supplies the new layout dependency to this VM;
+    // the exact seen sequence and hidden assertion below remain unchanged.
+    // Production geometry is exercised separately by toast-seat.test.mjs
+    // and the browser toast audits.
+    seatToast() {}, $: () => el, reducedMotion: true, toastTimer: 0, clearTimeout() {},
     setTimeout(fn, ms) { timers.push({ fn, ms }); return timers.length; },
   });
   vm.runInContext(app.slice(start, end), context);

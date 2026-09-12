@@ -12445,3 +12445,6 @@ body:has(.screen--today):not(:has(#sheets .sheet)) .toast { top: calc(var(--sat)
 #bhStage > .hero-char { --bh-shift: var(--hero-left-shift, 0px); transform: translateX(var(--bh-shift)); }
 #bhStage.sharing > .hero-char { --bh-shift: calc(var(--hero-left-shift, 0px) - var(--fig) * 0.0662); }
 #bhStage > .hero-companion { --bh-shift: var(--hero-left-shift, 0px); transform: translateX(var(--bh-shift)); }
+/* Measured toast seat supersedes the historical map, sheet and Today offsets.
+   Specificity intentionally exceeds those rules; inherited CSS is frozen. */
+body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(var(--sat) + 175px)); bottom: auto; z-index: 320; pointer-events: none; }
