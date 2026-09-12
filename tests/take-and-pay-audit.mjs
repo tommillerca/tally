@@ -43,7 +43,7 @@ import './mem-idb.mjs';   // installs globalThis.indexedDB before js/db.js opens
    switch arms, and every transaction created from then on aborts before it
    can do anything. The transaction that armed it is already running and
    commits normally: that is "the process died right after this write". */
-const CRASH = { pred: null, armed: false, killed: 0 };
+const CRASH = { abortClaim: false, pred: null, armed: false, killed: 0 };
 const realOpen = globalThis.indexedDB.open.bind(globalThis.indexedDB);
 globalThis.indexedDB.open = (...a) => {
   const req = realOpen(...a);
@@ -67,7 +67,15 @@ function wrapDb(d) {
       const put = s.put, add = s.add, del = s.delete;
       s.add = v => {
         if (CRASH.pred && CRASH.pred({ store: name, op: 'add', key: v && (v.k ?? v.id ?? v.key ?? v.date), v })) CRASH.armed = true;
-        return add(v);
+        const r = add(v);
+        if (CRASH.armed && CRASH.abortClaim) {
+          let success;
+          Object.defineProperty(r, 'onsuccess', {
+            get() { return e => { if (success) success(e); t.abort(); }; },
+            set(fn) { success = fn; },
+          });
+        }
+        return r;
       };
       s.put = v => {
         if (CRASH.pred && CRASH.pred({ store: name, op: 'put', key: v && (v.k ?? v.id ?? v.key ?? v.date), v })) CRASH.armed = true;
@@ -83,7 +91,7 @@ function wrapDb(d) {
   };
 }
 const dieAfter = pred => { CRASH.pred = pred; CRASH.armed = false; CRASH.killed = 0; };
-const reboot = () => { CRASH.pred = null; CRASH.armed = false; };
+const reboot = () => { CRASH.pred = null; CRASH.armed = false; CRASH.abortClaim = false; };
 const attempt = p => p.then(v => ({ ok: true, v }), e => ({ ok: false, err: String((e && e.message) || e) }));
 
 const dbm = await import('../js/db.js');
@@ -499,6 +507,85 @@ useDbName('tap-meal-backfill');
   await game.initGameIfNeeded(null);
   ok('ONCE meal: restored history cannot acquire an extra slot on retry', await foodXp() === 35, `XP=${await foodXp()}`);
 }
+
+// Friend and spar claims: exercise both rollback and death after commit.
+for (const kind of ['friend', 'spar']) for (const won of [true, false]) {
+  const tag = `${kind}-${won ? 'win' : 'loss'}`;
+  const amount = kind === 'friend' ? (won ? 25 : 8) : (won ? 15 : 5);
+  const type = kind === 'friend' ? 'friendbattle' : 'spar';
+  const act = () => kind === 'friend'
+    ? game.claimFriendBattle('eco5', won, '2031-09-12')
+    : game.claimSpar('eco5', won, '2031-09-12');
+  const rows = async () => (await db.all('xp')).filter(r => r.type === type);
+  useDbName(`tap-${tag}-rollback`);
+  dieAfter(e => e.store === 'xp' && e.v?.type === type);
+  CRASH.abortClaim = true;
+  const aborted = await attempt(act());
+  const armed = CRASH.armed;
+  reboot();
+  ok(`CRASH ${tag}: abort rolls back claim and payout`, armed && !aborted.ok &&
+    (await rows()).length === 0 && await kvGet('coins', 0) === 0);
+  const retry = await act();
+  ok(`CONTROL ${tag}: retry pays original amount`, retry.coins === amount &&
+    await kvGet('coins', 0) === amount && await kvGet('coinsRev', 0) === amount && (await rows()).length === 1);
+  if (kind === 'friend') {
+    const row = (await rows())[0];
+    ok(`CONTROL ${tag}: friend metadata and XP commit with coins`,
+      row.friendId === 'eco5' && row.won === (won ? 1 : 0) && row.xp === (won ? 12 : 5));
+  }
+  const again = await act();
+  ok(`ONCE ${tag}: repeat pays nothing`, again.coins === 0 && await kvGet('coins', 0) === amount && (await rows()).length === 1);
+  useDbName(`tap-${tag}-committed`);
+  dieAfter(e => e.store === 'xp' && e.v?.type === type);
+  await attempt(act());
+  const committedArmed = CRASH.armed;
+  reboot();
+  await act();
+  ok(`CRASH ${tag}: death after claim commit retains payment once`, committedArmed &&
+    (await rows()).length === 1 && await kvGet('coins', 0) === amount,
+    `coins=${await kvGet('coins', 0)}, want=${amount}`);
+  useDbName(`tap-${tag}-race`);
+  const race = await Promise.all([act(), act()]);
+  ok(`ONCE ${tag}: concurrent claims pay once`, race.filter(r => r.coins > 0).length === 1 &&
+    await kvGet('coins', 0) === amount && (await rows()).length === 1);
+}
+
+useDbName('tap-spar-bonuses');
+{
+  await kvSet('buffs', { xp2: 2 });
+  const act = id => game.claimSpar(id, true, '2031-09-12', 1.5);
+  dieAfter(e => e.store === 'xp' && e.v?.type === 'spar');
+  CRASH.abortClaim = true;
+  await attempt(act('bonus'));
+  const armed = CRASH.armed;
+  reboot();
+  ok('CRASH spar bonuses: abort restores charm and all coins', armed &&
+    (await kvGet('buffs', {})).xp2 === 2 && await kvGet('coins', 0) === 0 && (await db.all('xp')).length === 0);
+  const paid = await act('bonus');
+  ok('CONTROL spar bonuses: charm then food preserve rounding and receipt',
+    paid.coins === 29 && paid.extras?.join('|') === 'Battle Charm +4 coins|Feast +10 coins' &&
+    await kvGet('coins', 0) === 29 && await kvGet('coinsRev', 0) === 29 && (await kvGet('buffs', {})).xp2 === 1);
+  await act('bonus');
+  ok('ONCE spar bonuses: retry does not spend another charm',
+    await kvGet('coins', 0) === 29 && (await kvGet('buffs', {})).xp2 === 1);
+}
+useDbName('tap-spar-cap');
+{
+  const claims = await Promise.all(Array.from({ length: 16 }, (_, i) =>
+    game.claimSpar(`cap-${i}`, i % 2 === 0, '2031-09-12')));
+  const rows = (await db.all('xp')).filter(r => r.type === 'spar');
+  const total = claims.reduce((n, r) => n + r.coins, 0);
+  ok('CONTROL spar cap: concurrent wins and losses share exactly 12 paid slots',
+    rows.length === 12 && claims.filter(r => r.claimed).length === 12 &&
+    rows.every(r => r.xp === 0) && await kvGet('coins', 0) === total);
+  const next = await game.claimSpar('next-day', false, '2031-09-13');
+  ok('CONTROL spar cap: next day pays five again', next.coins === 5 && await kvGet('coins', 0) === total + 5);
+}
+ok('REACH arena: friend and both spar outcomes display committed coins',
+  !app.slice(app.indexOf("const r = await claimFriendBattle"), app.indexOf("} else if (won)", app.indexOf("const r = await claimFriendBattle"))).includes('coinsAdd(') &&
+  app.includes("if (foeCfg.mode !== 'wanderer' && foeCfg.mode !== 'spar') {") &&
+  app.includes("if (coins && foeCfg.mode !== 'spar') await coinsAdd(coins);") &&
+  app.includes('const r = await claimSpar(fightId, true, undefined, await foodCoinMult());'));
 
 // These two seams are ALREADY repaired in this checkout. They must remain
 // green on the baseline too; do not call that a newly proven-red fix.

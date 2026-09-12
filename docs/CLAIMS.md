@@ -1,5 +1,10 @@
 # What each patch note claims, and what backs it
 
+## v589 (2026-09-12)
+
+Changelog item: Friend battles and paid spars keep your earned coins if the app closes during the payout.
+1. PROOF: take-and-pay-audit.mjs CRASH, ONCE and CONTROL rows for friend wins/losses and spar wins/losses run over production db.js with mem-idb.mjs. The post-commit CRASH rows were red on main cb2aca568cf53661d5f9bd584831f618feda3cd7 (coins 0 instead of 25, 8, 15 and 5). Transaction-abort rows retain no claim and no payout; retries and concurrent duplicates pay once. Bonus rows preserve charm-before-food rounding, roll back charm consumption and reject repeat spending. Concurrent mixed spars retain the 12-slot ceiling and next-day reset. REACH source guard checks the arena uses receipts without a second payment. node tests/unit.test.js: 392 passed, 0 failed, exit 0. | REACH: friend battle settlement and paid spar wins/losses. PURE proof only, no browser claim. Amounts, caps, keys and player copy are unchanged. No version stamps advanced.
+
 ## v588 (2026-09-12)
 
 Assembled from five Codex lanes by the commander. Every browser audit below was run by the commander on the lane tree and again on the merged train; the lanes cannot bind a socket.

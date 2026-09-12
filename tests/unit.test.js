@@ -6220,7 +6220,7 @@ test('QA round 28 P4: N spars pay at most the daily cap, and one fight id pays o
   // the settle wires it: no bare literal for the spar win, and the loss branch routes spars too
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
   assert.equal((app.match(/mode === 'spar'\) \{ coins = 15/g) || []).length, 0, 'settle() still assigns the 15-coin spar win off a literal');
-  assert.match(app, /mode === 'spar'\) \{ coins = \(await claimSpar\(fightId, true\)\)\.coins/, 'the spar win does not read its coins off claimSpar');
+  assert.match(app, /const r = await claimSpar\(fightId, true, undefined, await foodCoinMult\(\)\);\s*coins = r\.coins/, 'the spar win must display its committed payment including food');
   assert.match(app, /coins = foeCfg\.mode === 'spar' \? \(await claimSpar\(fightId, false\)\)\.coins : 5/, 'the spar loss does not read its coins off claimSpar');
   assert.match(app, /const fightId = newId\(\);/, 'openFight mints no fightId for the spar ref');
   // awardCapped callers are untouched by the claimCapped split: the number still means "granted"
