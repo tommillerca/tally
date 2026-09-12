@@ -1,5 +1,20 @@
 # The Worker is behind main, on purpose
 
+## v590 replay identity, pending (2026-09-12)
+
+F22, server finding 2. Worker only, not deployed. Replay claims now hash the
+verified request fields and player identity, independent of signature encoding
+or ECDSA randomness. Existing skew and expiry remain unchanged. No schema change
+or migration is required. Client signing is unchanged. Identical signed fields
+are refused even if independently re-signed; a legitimate retry needs fresh
+signed fields. Deployment is Tom's. No deployment or production D1 action ran.
+
+replay-identity-audit.mjs: 10 passed, 0 failed locally; both Base64 alias rows
+fail on local main cb2aca568cf53661d5f9bd584831f618feda3cd7. In-memory proof only.
+The referenced podium-settlement-audit.mjs is absent in this checkout; the
+harness follows sync-authpath-audit.mjs instead.
+
+
 Written 2026-08-23, after #77 merged.
 
 > ## CORRECTION, 2026-08-25 — READ THIS BEFORE THE TABLE BELOW

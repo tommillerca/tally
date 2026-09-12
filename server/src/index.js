@@ -1185,36 +1185,16 @@ async function recordPruneRun(env, row) {
 }
 
 /* ---------------- signature auth ----------------
-
-   ONE SIGNATURE, ONE EFFECT. Everything below used to check exactly two things:
-   the signature, and that the timestamp was inside MAX_SKEW_MS. Neither of them
-   says a request is NEW. A captured signed POST re-sent byte for byte verified
-   again and landed a fresh effect every time, for as long as that five-minute
-   window stayed open, and this was PROVEN against /cheer: one original plus two
-   replays delivered three cheers to the recipient.
-
-   The `ck` idempotency key closes it for a cheer sent by a client that mints
-   one -- the replay carries the same ck, so the grant's UNIQUE (player_id, key)
-   absorbs it -- but that is a per-route patch: it does nothing for an older
-   client that sends no ck, nothing for a spire claim, and nothing for the next
-   signed route somebody adds. So the guard lives HERE, once, in front of every
-   signed write there will ever be.
-
-   ECDSA signing is randomised, so two honest requests never share a signature,
-   and a real retry re-signs with a fresh ts (js/social.js signedFetch mints
-   both per call): nothing legitimate is ever refused by this. That is also why
-   it is not a substitute for `ck` -- a retry is a DIFFERENT signature, which
-   this cannot dedupe and the client's key can.
-
-   `rate_limits` rather than a new table, because a nonce IS a limiter: a budget
-   of one per subject, in a table nothing but the limiter writes, with an
-   `expires_at` sweeper that already runs. The digest is UNKEYED, unlike
-   rlBucket, on purpose: a signature is 512 bits with nothing to reverse it to,
-   so there is no rainbow table to build, and the per-isolate fallback secret
-   would give the same replay a different bucket on a different isolate, which
-   is exactly how this guard would quietly stop catching anything. */
-async function claimSignature(env, sig, tsNum) {
-  const digest = hexOf(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sig)), 16);
+   One verified request per player, regardless of Base64 spelling or ECDSA
+   randomness. A retry needs a fresh timestamp or other signed request field.
+   Route operation keys still deduplicate legitimate retries across timestamps.
+   Use an unkeyed, domain-separated digest so all isolates agree on identity.
+   The existing rate_limits table provides an atomic claim and expiry sweep. */
+async function claimSignature(env, playerId, method, path, ts, bodyText, tsNum) {
+  const encoder = new TextEncoder();
+  const bodyHash = hexOf(await crypto.subtle.digest('SHA-256', encoder.encode(bodyText || '')), 32);
+  const identity = JSON.stringify(['request-v1', playerId, method, path, ts, bodyHash]);
+  const digest = hexOf(await crypto.subtle.digest('SHA-256', encoder.encode(identity)), 32);
   const r = await env.DB.prepare(
     "INSERT OR IGNORE INTO rate_limits (bucket, name, window_start, hits, expires_at) VALUES (?,'sig',?,1,?)")
     // Swept at twice the skew window, so the row always outlives the signature
@@ -1258,7 +1238,7 @@ async function verifySigned(request, env, bodyText) {
      /friends poll pay for a row would turn the guard into the write
      amplification it is here to prevent. The claim is OUTSIDE the try above so
      a database failure can never be laundered into 'bad signature'. */
-  if (request.method !== 'GET' && !(await claimSignature(env, sig, tsNum))) {
+  if (request.method !== 'GET' && !(await claimSignature(env, playerId, request.method, url.pathname + url.search, ts, bodyText, tsNum))) {
     return { err: 'replayed request' };
   }
   return { playerId };

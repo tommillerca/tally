@@ -1,5 +1,11 @@
 # What each patch note claims, and what backs it
 
+## v590 (2026-09-12)
+
+Changelog item: Signed writes reject replayed requests even when the signature uses a different encoding.
+1. PROOF: replay-identity-audit.mjs, PURE in-process Worker with real signatures and in-memory SQLite: 10 passed, 0 failed. Both Base64 alias rows are RED on local main cb2aca568cf53661d5f9bd584831f618feda3cd7 (200 instead of 401); the identical-request re-sign row is also RED. Fresh timestamp, query, body and player controls succeed; stale requests remain refused. sync-authpath-audit.mjs: 18 passed, 0 failed after advancing the fixture clock for fresh writes. Agreed proof node tests/unit.test.js: exit 0, 392 passed, 0 failed. | REACH: Worker only, not deployed. Shared signed-write guard hashes player, method, path plus query, timestamp and body hash after verification. Client signing and skew window are unchanged. An identical request re-signed within the same millisecond is a replay; fresh signed fields are required. No stamps.
+
+
 ## v588 (2026-09-12)
 
 Assembled from five Codex lanes by the commander. Every browser audit below was run by the commander on the lane tree and again on the merged train; the lanes cannot bind a socket.
