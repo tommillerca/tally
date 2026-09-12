@@ -12379,7 +12379,7 @@ button.t3-price::before {
 
 /* Wardrobe slot navigation: leave room for a heading and honour reduced motion. */
 [data-slot-heading], #chContent .paperdoll { scroll-margin-top: 12px; }
-.ward-other-slots section { margin-top: 24px; }
+/* .ward-other-slots retired in v586: the slot picker shows ONE slot. */
 @media (prefers-reduced-motion: reduce) {
   #chBody *, #chBody *::before, #chBody *::after { animation: none !important; transition: none !important; }
 }
@@ -12432,7 +12432,7 @@ body:has(.screen--today):not(:has(#sheets .sheet)) .toast { top: calc(var(--sat)
 .settings-data-action > .btn { flex: 0 0 7rem; width: 7rem; white-space: nowrap; }
 /* Wardrobe slot navigation: leave room for a heading and honour reduced motion. */
 [data-slot-heading], #chContent .paperdoll { scroll-margin-top: 12px; }
-.ward-other-slots section { margin-top: 24px; }
+
 @media (prefers-reduced-motion: reduce) {
   #chBody *, #chBody *::before, #chBody *::after { animation: none !important; transition: none !important; }
 }
@@ -12619,3 +12619,57 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
 }
 
 
+
+/* THE WARDROBE'S TWO NAVIGATION CONTROLS, GIVEN DIFFERENT JOBS AND DIFFERENT
+   WEIGHT. They shipped as two full-width ghost bars stacked flush: measured at
+   393x852, "Back to slots" y-77.2..-22.3 and "Dressing Room" y-22.3..32.6, both
+   361px wide, zero gap. Tom, 2026-09-12: "your dressing room and back to slots
+   buttons look like shit and are overlapping".
+   Neither is the primary action on this screen; the grid of pieces is. So both
+   become quiet, self-sized controls rather than bars competing with it, and
+   they no longer sit next to each other at all: the mode toggle belongs to the
+   paperdoll (it switches the whole wardrobe) and the return belongs to the slot
+   picker.
+   Sizing follows the system: .sect-h's 12/700/.06em uppercase idiom for the
+   label, the 13px small radius, and the 44px tap floor kept via padding rather
+   than a fixed height so large text still fits. */
+.ward-mode-row { display: flex; justify-content: center; margin: 14px 0 2px; }
+.ward-slot-nav { display: flex; margin: 18px 0 6px; }
+
+/* .btn.ghost is (0,2,0) and out-specifies a single class, so these carry .btn
+   too: measured without it, the return painted --surface-2 with full --text,
+   i.e. a second filled button rather than quiet navigation. */
+.btn.ward-mode,
+.btn.ward-back {
+  width: auto; min-height: 44px; padding: 11px 16px;
+  border-radius: var(--radius-sm, 13px);
+  font-size: var(--fs-1); font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; white-space: nowrap;
+}
+/* The return reads as navigation, not as an action: chevron first, the quietest
+   text colour in the system, and no filled ground. */
+.btn.ward-back {
+  display: inline-flex; align-items: center; gap: 8px;
+  color: var(--text-3); background: none; border: 0; padding-left: 4px;
+  /* .btn carries an elevation shadow. Without clearing it the return still drew
+     a rounded-rect outline under the label, which is the button box it is
+     meant to stop being. */
+  box-shadow: none;
+}
+.btn.ward-back > span { font-size: 1.25em; line-height: 1; }
+.btn.ward-back:hover, .btn.ward-back:focus-visible { color: var(--text); }
+/* The mode toggle is a real, if secondary, control: it changes what the whole
+   wardrobe is showing you, so it keeps a surface and a hairline. */
+.btn.ward-mode {
+  background: var(--surface-2); border: 1px solid var(--line);
+  color: var(--text-2);
+}
+.btn.ward-mode:hover, .btn.ward-mode:focus-visible { color: var(--text); border-color: var(--line-strong); }
+
+/* The wardrobe's rules collapse, matching the Backpack's item details. The same
+   prose used to sit open under every slot's grid as two centred paragraphs.
+   Left-aligned inside, because centred body copy is harder to read and this is
+   a paragraph, not a caption. */
+.ward-help { margin-top: 14px; }
+.ward-help > div { padding-bottom: 4px; }
+.ward-help .note { text-align: left; margin: 6px 0 0; }

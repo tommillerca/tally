@@ -9,6 +9,11 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 586, date: '2026-09-12', title: 'The Wardrobe shows one slot at a time', items: [
+    'Picking a slot shows that slot, instead of listing every other slot underneath it.',
+    'Back to slots and Dressing Room are no longer two bars stacked on each other.',
+    'The rules about stats and melting tuck into a dropdown instead of sitting open.',
+  ] },
   { n: 585, date: '2026-09-12', title: 'Two things put back the way they were', items: [
     'Hand-logged walks no longer count toward eggs. Eggs come from steps your phone counts.',
     'Crew cards show their art again instead of a name plate covering it.',

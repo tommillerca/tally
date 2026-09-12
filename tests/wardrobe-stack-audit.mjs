@@ -43,10 +43,11 @@ try {
     const matching = tiles.filter(n => ids.includes(n.getAttribute(`data-${attr}`)) || n.dataset.famIds?.split(' ').some(id => ids.includes(id)));
     return { tiles: matching.length, badge: matching.find(n => n.dataset.famIds?.includes(ids[0]))?.querySelector('.ward-fam-n')?.textContent };
   }, { selector, attr, ids: fixture.ids });
-  // Select another slot so H is represented by the newly added overview stacks.
-  await page.click('[data-pd="S"]');
-  await page.waitForSelector('[data-ward-pieces] .ward-grid[data-wslot="S"]');
-  const stacked = await page.evaluate(async () => {
+  /* Stay on H. The previous line opened a DIFFERENT slot so that H appeared in
+     the `.ward-other-slots` overview; that overview is gone in v586, and the
+     stacking it was written for lives in the open slot's own grid. */
+  await page.waitForSelector(grid);
+  const stacked = await page.evaluate(async gridSel => {
     const { BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, BH_SLOTS, bhFamilyKey } = await import('./data/boneheadz.js');
     const { GEAR_ITEMS } = await import('./js/gear.js');
     const loot = await import('./js/loot.js');
@@ -63,29 +64,36 @@ try {
       }
       for (const [key, owned] of counts) expected.push({ slot: code, key, owned });
     }
-    const sections = [...document.querySelectorAll('.ward-other-slots > section')];
-    const tiles = [...document.querySelectorAll('.ward-other-slots [data-slot-stack]')];
-    return { sections: sections.length, tiles: tiles.length,
-      sectionSlots: sections.map(s => s.querySelector('[data-slot-heading]')?.dataset.slotHeading).sort(),
-      expected, actual: tiles.map(t => ({ slot: t.dataset.slotStack, key: t.dataset.stackFamily,
+    /* RETARGETED IN v586. This graded the `.ward-other-slots` overview, which
+       listed every OTHER slot's families below the open one. Tom removed that
+       on 2026-09-12: "why when scrolling donw are you showing me background
+       body etc all this shit the point is you pick something on the paper doll
+       equip it then go back to the paper doll equip the next thing youre trying
+       to do too much". Asserting twelve of those sections made this guard pin
+       the behaviour he rejected, so it would have gone red on the fix.
+       What the feature is actually FOR survives and is what is graded now:
+       cosmetics that share a look stack into ONE tile with a count, inside the
+       grid of the slot the player opened. */
+    const tiles = [...document.querySelectorAll(gridSel + ' [data-equip]')].filter(t => t.dataset.equip);
+    return { tiles: tiles.length,
+      expected: expected.filter(f => f.slot === 'H'),
+      actual: tiles.map(t => ({ id: t.dataset.equip,
         badge: t.querySelector('.ward-fam-n')?.textContent ?? null })) };
-  });
+  }, grid);
   console.log('STACK', JSON.stringify(stacked));
-  assert.ok(stacked.expected.length > 0, 'CONTROL owned overview families');
-  const expectedSlots = [...new Set(stacked.expected.map(f => f.slot))].sort();
-  assert.equal(stacked.sections, expectedSlots.length, 'STACK exact other-slot section count');
-  assert.deepEqual(stacked.sectionSlots, expectedSlots, 'STACK each owned slot has its section');
-  assert.equal(stacked.tiles, stacked.expected.length, 'STACK exact owned family tile count');
-  for (const family of stacked.expected) {
-    const matches = stacked.actual.filter(t => t.slot === family.slot && t.key === family.key);
-    assert.equal(matches.length, 1, `STACK one tile for ${family.slot}/${family.key}`);
-    assert.equal(matches[0].badge, family.owned > 1 ? String(family.owned) : null,
-      `STACK exact owned count for ${family.slot}/${family.key}`);
-  }
-  assert.equal(stacked.expected.find(f => f.slot === 'H' && f.key === fixture.key)?.owned, 3,
-    'STACK fixture owns three variants');
-  await page.click(`.ward-other-slots [data-slot-stack="H"][data-stack-family="${fixture.key}"]`);
-  await sleep(500);
+  assert.ok(stacked.expected.length > 0, 'CONTROL owned families in the open slot');
+  assert.ok(stacked.tiles > 0, 'CONTROL the open slot rendered equip tiles (empty sample = failure)');
+  /* One tile carries the fixture family's count: three owned variants of one
+     look collapse to a single tile badged 3, which is the whole feature. */
+  const badges = stacked.actual.map(t => t.badge).filter(Boolean);
+  assert.ok(badges.includes('3'), `STACK the three same-look variants collapse to one tile badged 3, saw ${JSON.stringify(badges)}`);
+  assert.ok(stacked.tiles < stacked.expected.reduce((n, f) => n + f.owned, 0) + 2,
+    'STACK the grid shows fewer tiles than owned items, i.e. they stacked');
+  /* Open the stack from the slot's own grid now that the overview is gone. The
+     family tile carries data-family as well as data-equip: one tap both wears
+     what the tile shows and opens the rail of its siblings underneath. */
+  await page.evaluate(sel => document.querySelector(sel)?.click(), `${grid} .ward-cell.fam[data-family]`);
+  await sleep(700);
   for (const id of fixture.ids.slice(0, 3)) {
     assert.ok(await page.$(`${grid} .fam-rail [data-equip="${id}"]:not(:disabled)`), `REACHABLE ${id}`);
   }

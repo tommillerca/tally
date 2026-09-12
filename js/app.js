@@ -17233,8 +17233,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
       </div>
       <div class="pd-bottom">${BOTTOM.map(pdSlot).join('')}</div>
       <div class="pd-stats">${STAT_META.map(statChip).join('')}</div>
-      <button class="btn ghost" data-slot-return>Back to slots</button>
-      <button class="btn ghost" data-ward-mode>${S.wardrobeLookMode ? 'Choose pieces' : 'Dressing Room'}</button>
+      <div class="ward-mode-row"><button class="btn ghost ward-mode" data-ward-mode>${S.wardrobeLookMode ? 'Choose pieces' : 'Dressing Room'}</button></div>
+      <!-- ONE control here, and it is the way back. These shipped as two
+           full-width ghost bars stacked flush: measured at 393x852, Back to
+           slots y-77.2 to -22.3 and Dressing Room y-22.3 to 32.6, both 361px
+           wide with a ZERO gap, which is why Tom read them as overlapping. The
+           primary action on this screen is the grid below, so neither of these
+           should look like a bar competing with it. The Dressing Room toggle
+           switches the WHOLE wardrobe between pieces and looks, so it belongs
+           with the paperdoll and is rendered there instead. -->
+      <div class="ward-slot-nav"><button class="btn ghost ward-back" data-slot-return><span aria-hidden="true">&lsaquo;</span>Back to slots</button></div>
       <div data-ward-pieces${S.wardrobeLookMode ? ' hidden' : ''}>
       <div class="sect-h" data-slot-heading="${slot}" style="margin-top:10px">${esc(GEAR_SLOTS.includes(slot) ? GEAR_SLOT_LABELS[slot] : slotMeta.label)} · pick your piece</div>
       <div class="ward-grid" data-wslot="${slot}">
@@ -17315,22 +17323,19 @@ async function renderCharacter(wrap, tab, opts = {}) {
         </div>`;
       })()}
       </div>
-      <div class="ward-other-slots"${S.wardrobeLookMode ? ' hidden' : ''}>
-      ${BH_SLOTS.filter(meta => meta.code !== slot && meta.code !== 'C').map(meta => {
-        const cosmetics = BH_ITEMS_WITH_UNRELEASED.filter(i => i.slot === meta.code && owned.has(i.id));
-        const pieces = GEAR_ITEMS.filter(g => g.slot === meta.code && gOwnedSet.has(g.id));
-        const families = bhFamilies([...cosmetics, ...pieces.map(g => BH_BY_ID[g.artId])]);
-        if (!families.size) return '';
-        return `<section><h3 class="sect-h" data-slot-heading="${meta.code}">${esc(meta.label)}</h3>
-          <div class="ward-grid">${[...families].map(([key, arts]) => {
-            const variants = pieces.filter(g => bhFamilyKey(BH_BY_ID[g.artId]) === key);
-            const looks = cosmetics.filter(i => bhFamilyKey(i) === key);
-            const count = variants.length + looks.length;
-            const art = arts.find(i => i.id === look[meta.code]) || arts[0];
-            return `<button class="ward-cell" data-slot-stack="${meta.code}" data-stack-family="${esc(key)}" data-stack-art="${esc(art.id)}" aria-label="${esc(art.name)}, ${count} variants">${famArtHtml(art)}${count > 1 ? `<span class="ward-fam-n">${count}</span>` : ''}</button>`;
-          }).join('')}</div></section>`;
-      }).join('')}
-      </div>
+      <!-- THE SLOT PICKER SHOWS ONE SLOT. A ward-other-slots block used to list
+           every OTHER slot's items below this one, twelve sections deep
+           (Background, Body, Socks and nine more). Tom, 2026-09-12: "why when
+           scrolling donw are you showing me background body etc all this shit
+           the point is you pick something on the paper doll equip it then go
+           back to the paper doll equip the next thing youre trying to do too
+           much". The paperdoll is already the index, so listing every other
+           slot underneath repeated it and buried the one grid the player
+           opened. Removed, not hidden.
+           NO BACKTICKS IN THIS COMMENT. It sits inside a template literal, and
+           a backtick here ends the literal: the first version of this note
+           quoted the class name in backticks, node --check still passed because
+           they paired evenly, and the Wardrobe rendered an empty panel. -->
       <div data-ward-looks${S.wardrobeLookMode ? '' : ' hidden'}>
       ${(() => {
         /* TRANSMOG. Offered on EVERY gear slot that holds something. It used to
@@ -17473,8 +17478,22 @@ async function renderCharacter(wrap, tab, opts = {}) {
       </div>
       ${mogBarHtml()}
       </div>
-      ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; pieces marked with a bolt grant a talent. Rarer rolls hit harder. Melting a piece keeps its look forever.</p>' : ''}
-      ${lockedCount ? `<p class="note" style="text-align:center;margin-top:10px">More ${slotMeta.label.toLowerCase()} pieces are out there. Keep hunting.</p>` : ''}`;
+      <!-- ONE collapsed explainer, not three stacked paragraphs. This was a
+           centred prose block about stat rolls, bolts and melting, plus a
+           second line about undiscovered pieces, sitting under the grid on
+           every visit. Tom, 2026-09-12: "all that random explainer text
+           underneath at the bottom looks bad". It is also the same call he
+           already made for the Backpack on 2026-09-11: "lose the text that is
+           already explained in details and odds same with other items just
+           give them a drop down explanation too it's an elegant solution".
+           Same treatment, same component as the Backpack's item details, so a
+           player who wants the rules can open them and everyone else gets the
+           grid. -->
+      ${GEAR_SLOTS.includes(slot) || lockedCount ? `<details class="bp-item-details ward-help"><summary>How pieces work</summary><div>${
+        GEAR_SLOTS.includes(slot) ? '<p class="note">Statted gear boosts your Pit fighter. Same look can roll different stats; pieces marked with a bolt grant a talent. Rarer rolls hit harder. Melting a piece keeps its look forever.</p>' : ''
+      }${
+        lockedCount ? `<p class="note">More ${slotMeta.label.toLowerCase()} pieces are out there. Keep hunting.</p>` : ''
+      }</div></details>` : ''}`;
     $$('[data-look-source]', content).forEach(btn => btn.addEventListener('click', () => openCharacter(btn.dataset.lookSource)));
     // --- saved fits: existing equip, rename and confirmed delete semantics ---
     $('[data-fit-switcher]', content)?.addEventListener('click', e => {
@@ -24835,7 +24854,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v585'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v586'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

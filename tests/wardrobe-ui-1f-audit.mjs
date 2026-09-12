@@ -6,9 +6,20 @@ import vm from 'node:vm';
 const read = p => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const app = read('js/app.js'), css = read('app.css');
 const hash = s => createHash('sha256').update(s).digest('hex');
-// Wardrobe work order: rebaseline authorized section markup and slot handlers only.
+// v586 rebaseline, authorized by Tom on 2026-09-12: "your dressing room and back
+// to slots buttons look like shit and are overlapping give that a ui design grill
+// with impeccable" and "why when scrolling donw are you showing me background body
+// etc all this shit... youre trying to do too much".
+// Three markup changes inside the frozen region, all deliberate: the twelve
+// `.ward-other-slots` sections were removed (the paperdoll is already the index,
+// so listing every other slot underneath repeated it and buried the one grid the
+// player opened); the two flush full-width ghost bars became one compact return
+// in `.ward-slot-nav`; and the wardrobe-wide Dressing Room toggle moved out of the
+// slot picker into `.ward-mode-row` beside the paperdoll, because it switches the
+// whole wardrobe rather than anything about the open slot.
+// The inherited CSS prefix and paperdoll slot-definition locks are unchanged.
 // The inherited CSS prefix and paperdoll slot-definition locks remain unchanged.
-const locks = {"dollMarkup": "acf9e7599193672f65a84803fea1f225f8de9826c400fcfdb60c3354c5fc6fa9", "lowerHandlers": "3ac6bcbdd894142059adb4a1f9ef53b4a24a74ec62531b94b8d9600fda250345", "cssPrefixLength": 812158, "cssPrefixHash": "31e2702ba835e59fbea471754b76ba4381f678564bd5f371ac83e2df1209bed8"};
+const locks = {"dollMarkup": "c81d640267f7694649125d1d0db2f5429247dfe360dc60c7a4f96b4086ece5c5", "lowerHandlers": "3ac6bcbdd894142059adb4a1f9ef53b4a24a74ec62531b94b8d9600fda250345", "cssPrefixLength": 812158, "cssPrefixHash": "31e2702ba835e59fbea471754b76ba4381f678564bd5f371ac83e2df1209bed8"};
 function grade(source) {
   assert.equal(hash(source.slice(source.indexOf('    const pdSlot = code => {'), source.indexOf('    const statChip', source.indexOf('    const pdSlot = code => {')))), '7889f55f1ea010200eabeadf40cd189b69d32c156d4d58e010364ea53240c462', 'paperdoll slot definitions changed');
   assert.match(source, /data-fit-switcher/, 'compact saved-fit switcher missing');

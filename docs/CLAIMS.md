@@ -1,5 +1,20 @@
 # What each patch note claims, and what backs it
 
+## v586 (2026-09-12)
+
+Changelog item: Picking a slot shows that slot, instead of listing every other slot underneath it.
+1. PROOF: `node tests/wardrobe-stack-audit.mjs`, green, retargeted. Measured at 393x852 before: 12 `.ward-other-slots` sections (Background, Body, Socks and nine more) under the open slot's grid. After: 0, with `#chContent` scrollHeight down from 24217 to 20267 bytes of markup. Tom, 2026-09-12: "why when scrolling donw are you showing me background body etc all this shit the point is you pick something on the paper doll equip it then go back to the paper doll equip the next thing youre trying to do too much". The paperdoll is already the index, so listing every other slot repeated it and buried the one grid the player opened. | REACH: the Wardrobe slot picker at 393x852 and 320x568.
+
+Changelog item: Back to slots and Dressing Room are no longer two bars stacked on each other.
+2. PROOF: `node tests/backpack-wardrobe-f1-f2-audit.mjs` green, and measured directly at both viewports. Before: two full-width ghost bars, "Back to slots" y-77.2 to -22.3 and "Dressing Room" y-22.3 to 32.6, both 361px wide with a ZERO gap, which is why Tom read them as overlapping ("your dressing room and back to slots buttons look like shit and are overlapping"). After: the return is 101.2px wide and quiet (`--text-3`, transparent, no border, no shadow) and the mode toggle is 108.8px with a surface and a hairline, 18px apart, both clearing the 44px tap floor at 393x852 and 320x568. They are also no longer adjacent: the Dressing Room toggle switches the WHOLE wardrobe between pieces and looks, so it now renders with the paperdoll rather than inside one slot's picker. | REACH: those two controls at both viewports. The fit rail is unchanged.
+
+Changelog item: The rules about stats and melting tuck into a dropdown instead of sitting open.
+3. PROOF: `node tests/wardrobe-ui-1f-audit.mjs` holds the surrounding markup lock, and the change itself is a markup swap verified by render: two centred prose paragraphs under the grid (stat rolls, bolts, melting; plus an undiscovered-pieces line) are now one `<details class="bp-item-details ward-help">`, the same component the Backpack uses. Tom, 2026-09-12: "all that random explainer text underneath at the bottom looks bad", and the same ruling he made on 2026-09-11: "lose the text that is already explained in details and odds same with other items just give them a drop down explanation too it's an elegant solution". Body copy inside is left-aligned rather than centred. | REACH: the Wardrobe slot picker.
+
+Deviations: three guards asserted the removed design and were retargeted rather than deleted, each with the reason in the file. `wardrobe-stack-audit` asserted twelve `.ward-other-slots` sections, so it pinned the layout Tom rejected and would have gone red on the fix; it now grades what the stacking feature is actually for, same-look variants collapsing to one badged tile inside the open slot's grid (measured: 4 tiles for 6 owned items, the three-variant family badged 3). `wardrobe-slot-scroll-audit` required two item sections, which only existed because of that overview, and reported UNPROVEN on the corrected layout; it now requires one. `wardrobe-ui-1f-audit`'s markup lock was rebaselined, with the authorisation quoted.
+
+A trap worth recording: the first attempt at removing the overview put an HTML comment in its place whose text quoted the class name in BACKTICKS. That comment sits inside a JS template literal, so the backticks ended the literal; `node --check` passed because they paired evenly, and the Wardrobe rendered a completely empty panel with no page error. Isolated by applying the three edits one at a time. The replacement comment says so, in the file.
+
 ## v585 (2026-09-12)
 
 Changelog item: Hand-logged walks no longer count toward eggs. Eggs come from steps your phone counts.
