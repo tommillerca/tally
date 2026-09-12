@@ -9,6 +9,10 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 587, date: '2026-09-12', title: 'Tapping a piece shows its options where you tapped', items: [
+    'The options that open under a piece now fit on screen instead of running off the bottom.',
+    'Cosmetic cards in that row are drawn at the right size again.',
+  ] },
   { n: 586, date: '2026-09-12', title: 'The Wardrobe shows one slot at a time', items: [
     'Picking a slot shows that slot, instead of listing every other slot underneath it.',
     'Back to slots and Dressing Room are no longer two bars stacked on each other.',

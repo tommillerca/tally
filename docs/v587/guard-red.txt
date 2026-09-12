@@ -1,0 +1,15 @@
+=== GREEN: v587 ===
+ok    CONTROL a tile expanded and the rail opened with cards  tile bottom 577, rail 156.5px with 24 cards
+ok    NEAR the rail opens next to the tile that was tapped  rail top 578, tile bottom 577, gap 1.0px
+ok    FITS the rail ends inside the viewport  rail 578..734.5 in 852px
+ok    UNIFORM every card in the rail is one height  heights [144.5]
+ok    ART no art canvas is wider than its own card  8 art canvases within their cards
+OK  wardrobe-rail-fit-audit
+
+=== RED: canvas sizing removed (the shipped defect) ===
+ok    CONTROL a tile expanded and the rail opened with cards  tile bottom 577, rail 278.5px with 24 cards
+ok    NEAR the rail opens next to the tile that was tapped  rail top 578, tile bottom 577, gap 1.0px
+FAIL  FITS the rail ends inside the viewport  rail 578..856.5 in 852px
+ok    UNIFORM every card in the rail is one height  heights [266.5]
+FAIL  ART no art canvas is wider than its own card  8 oversized: [{"h":266.5,"w":104,"art":{"w":200,"h":200,"attr":200}},{"h":266.5,"w":104,"art":{"w":200,"h":200,"attr":200}}]
+FAILED  wardrobe-rail-fit-audit

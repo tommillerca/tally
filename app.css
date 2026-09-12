@@ -12673,3 +12673,38 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
 .ward-help { margin-top: 14px; }
 .ward-help > div { padding-bottom: 4px; }
 .ward-help .note { text-align: left; margin: 6px 0 0; }
+
+/* THE VARIANT RAIL IS SIZED AROUND ITS ART, not around the longest item name.
+   Tom, 2026-09-12, on tapping a statted piece: "this menu pops down below the
+   fold and not near the gear youre trying to click it feels like a glitch.
+   also youve fully miscaled the items".
+   Measured at 393x852, and PRE-EXISTING rather than new: each .pw-item.famr was
+   92px wide and 291px TALL, because .pw-item sets a width and lets height come
+   from content, and a name like "Necromancer's Bone Headband" wraps to five or
+   six lines in 92px. Four of those made the rail 303px, so it opened correctly
+   under the tapped tile at y578 and then ran to y880 on an 852px screen: the
+   piece you just tapped scrolls its own controls off the bottom, which is
+   exactly why it reads as nothing happening.
+   The name is now bounded to two lines and the card to the art plus its labels,
+   so the rail lands near the tile AND fits. The name still ellipsises rather
+   than being cut mid-glyph, and the tap target keeps its 44px floor. */
+/* Cards stretch to one height again, which is fine now that the tallest is 145px
+   rather than 267px: uneven card tops in a horizontal rail read as broken. */
+/* THE ART CANVAS IS SIZED. `.pw-item.famr .famr-art canvas.ward-art` sizes it to
+   100%, but that rule wants a `.famr-art` WRAPPER and the cosmetic cards in this
+   rail put the canvas as a DIRECT child of the button. So the rule never
+   matched and the canvas fell back to its intrinsic 200x200 attribute size
+   inside a 104px card: measured at 393x852, those cards were 267px tall against
+   110px for the gear cards beside them, which is the mismatch Tom saw as "youve
+   fully miscaled the items". 78px matches the `.famr-art` box the wrapped case
+   uses, so both paths now render the same size. */
+.fam-rail .pw-item.famr > canvas.ward-art {
+  display: block; width: 78px; height: 78px; flex: none;
+}
+.fam-rail .pw-item.famr { width: 104px; padding: 8px 6px 9px; }
+.fam-rail .pw-item.famr b {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; text-overflow: ellipsis;
+  min-height: calc(2 * 1.2em); line-height: 1.2;
+}
+.fam-rail .pw-item.famr small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
