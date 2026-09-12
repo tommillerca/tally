@@ -30,6 +30,56 @@ const { browser, page } = await boot(argUrl || own.url);
 let bad = 0;
 const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
 
+// Location and route checks run first so the old live build reports HOME and GONE.
+await page.evaluate(() => { location.hash = '#/bonehead'; });
+await sleep(1800);
+await page.evaluate(() => document.querySelector('#chTabs [data-tab="wardrobe"]')?.click());
+await sleep(1800);
+const home = await page.evaluate(() => {
+  const bench = document.querySelector('.bp-salvage');
+  const screen = bench?.closest('.screen');
+  return !!bench && !!screen?.querySelector('#chTabs [data-tab="wardrobe"][aria-selected="true"]')
+    && bench.closest('#chContent')?.dataset.characterTab === 'wardrobe';
+});
+check('HOME: bench belongs to the Wardrobe screen', home);
+await page.evaluate(() => document.querySelector('#chTabs [data-tab="crates"]')?.click());
+await sleep(1800);
+check('GONE: Backpack contains no bench', await page.evaluate(() =>
+  !!document.querySelector('#chTabs [data-tab="crates"][aria-selected="true"]')
+    && !document.querySelector('#chContent .bp-salvage')));
+await page.evaluate(() => document.querySelector('#chTabs [data-tab="shop"]')?.click());
+await sleep(1800);
+await page.locator('#shopSalvage').click();
+await sleep(1800);
+check('ROUTE: shop shortcut opens the Wardrobe bench in the viewport', await page.evaluate(() => {
+  const bench = document.querySelector('.bp-salvage');
+  const r = bench?.getBoundingClientRect();
+  const screen = bench?.closest('.screen')?.getBoundingClientRect();
+  return !!document.querySelector('#chTabs [data-tab="wardrobe"][aria-selected="true"]')
+    && !!r && !!screen && r.width > 0 && r.height > 0
+    && r.top < Math.min(innerHeight, screen.bottom) && r.bottom > Math.max(0, screen.top)
+    && r.left < innerWidth && r.right > 0;
+}));
+// Empty the disposable audit inventory, then render the empty Wardrobe bench.
+await page.evaluate(async () => {
+  const loot = await import('./js/loot.js');
+  for (const id of await loot.ownedGearIds()) await loot.disenchantGear(id);
+  document.querySelector('#chTabs [data-tab="wardrobe"]')?.click();
+});
+await sleep(1800);
+check('EMPTY: no gear explains how to fill the bench', await page.evaluate(() => {
+  const bench = document.querySelector('.bp-salvage');
+  return !!bench && /Nothing to melt yet/.test(bench.textContent)
+    && /crates, the Boneyard and the Pit/.test(bench.textContent)
+    && !bench.querySelector('.melt-row');
+}));
+if (!home) {
+  await browser.close();
+  if (own) own.close();
+  console.log(`${bad} FAILED`);
+  process.exit(1);
+}
+
 // a long list, so the bar really does sit over rows
 await page.evaluate(async () => {
   const loot = await import('./js/loot.js');
@@ -47,7 +97,7 @@ await page.evaluate(async () => {
 });
 await page.evaluate(() => { location.hash = '#/bonehead'; });
 await sleep(1800);
-await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="crates"]').click());
+await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="wardrobe"]').click());
 await sleep(1800);
 /* THE ENTRANCE, before anything is tapped. Tom's complaint was that melting is
    buried: it lived in a collapsed <details> three levels deep, so the spare count
@@ -244,6 +294,10 @@ console.log('rarities:', JSON.stringify(rar));
 check('every rarity in the catalogue melts and pays', rar.tiers.length > 0
   && rar.tiers.every(t => rar.out[t].ok && rar.out[t].paid > 0), JSON.stringify(rar.out));
 
+const el = await page.$('.melt-fold');
+if (el) await el.screenshot({ path: auditOutputPath(`${DIR}/melt-bar.png`) });
+console.log('shot melt-bar');
+
 /* ---- TRANSMOG ON A PLAIN COSMETIC (Tom's consistency call, 2026-08-11) -----
    The panel used to require a STATTED piece, so a slot holding a plain cosmetic
    showed nothing at all. It is offered everywhere now, and FREE where there are no
@@ -274,6 +328,8 @@ else {
   await page.evaluate(() => { location.hash = '#/bonehead'; });
   await sleep(1600);
   await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="wardrobe"]')?.click());
+  await sleep(1800);
+  await page.evaluate(() => document.querySelector('[data-pd="H"]')?.click());
   await sleep(1800);
   const panel = await page.evaluate(() => {
     const grid = document.querySelector('.look-grid');
@@ -352,9 +408,6 @@ else {
     JSON.stringify(stale));
 }
 
-const el = await page.$('.melt-fold');
-if (el) await el.screenshot({ path: auditOutputPath(`${DIR}/melt-bar.png`) });
-console.log('shot melt-bar');
 await browser.close();
 if (own) own.close();
 console.log(bad ? `\n${bad} FAILED` : '\nMELT BAR OK');

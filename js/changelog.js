@@ -9,6 +9,9 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 588, date: '2026-09-12', title: 'The Salvage Bench moves to the Wardrobe', items: [
+    'Find the Salvage Bench below your slots in the Wardrobe. The Shop shortcut takes you straight there.',
+  ] },
   { n: 587, date: '2026-09-12', title: 'Tapping a piece shows its options where you tapped', items: [
     'The options that open under a piece now fit on screen instead of running off the bottom.',
     'Cosmetic cards in that row are drawn at the right size again.',

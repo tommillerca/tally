@@ -12708,3 +12708,7 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
   min-height: calc(2 * 1.2em); line-height: 1.2;
 }
 .fam-rail .pw-item.famr small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+/* v588: the bench belongs below the Wardrobe slot list. */
+[data-ward-bench] .bp-salvage { margin-top: 16px; scroll-margin-top: 12px; }
+[data-ward-slot-view][hidden], [data-ward-bench][hidden] { display: none; }

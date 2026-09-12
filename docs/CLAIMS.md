@@ -1,5 +1,12 @@
 # What each patch note claims, and what backs it
 
+## v588 (2026-09-12)
+
+Changelog item: Find the Salvage Bench below your slots in the Wardrobe. The Shop shortcut takes you straight there.
+1. PROOF: `node tests/melt-ui-audit.mjs` retains the melt, payout, safeguard and transmog checks and adds HOME, GONE, ROUTE and EMPTY. Browser audit unrun here because the frozen work order forbids sockets. `node tests/melt-ui-audit.mjs https://tommillerca.github.io/tally/` is also unrun; HOME and GONE are expected to fail on the old live layout, not claimed as measured. `node tests/unit.test.js` exited 0: `392 passed, 0 failed`. JavaScript syntax checks and `git diff --check` also passed. | REACH: Wardrobe slot-list bench, Shop shortcut, bulk and worn-piece melt controls. Browser geometry and live negative proof await independent review.
+
+Deviations: this checkout has no separate slot-list view: Back to slots only scrolls to the paperdoll while the picker remains below it. The existing wardrobeReturnSlot state now hides the picker on return and shows the bench beneath the slots, hiding the bench while a slot is open. The referenced EMPTY audit row was absent, so it was added. CSS brace balance excluding comments remains 0; raw brace counting was already 1 in the original file because of comment text. No economy, build stamp or Kitchen changes.
+
 ## v587 (2026-09-12)
 
 Changelog item: The options that open under a piece now fit on screen instead of running off the bottom.
