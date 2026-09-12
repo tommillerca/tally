@@ -103,8 +103,18 @@ try {
   });
   check(settings(false) === '    <div class="settings-row"><div class="lab"><b>App version</b><span id="buildLine">Build v514 · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>',
     'CONTROL web Settings update row retains identical rendered bytes');
-  check(settings(true).includes('Updates are available through the App Store') && settings(true).includes('>How to update</button>'),
-    'store Settings names the update channel before the player taps');
+  /* ASSERT THE RULE, NOT THE SENTENCE. This row was pinned to the exact string
+     "Updates are available through the App Store" and went red in v581 when the
+     Settings tidy reworded it to "updates come through the App Store", which
+     satisfies the rule perfectly well. A guard pinned to copy goes red on
+     healthy code and gets relaxed by whoever is in a hurry, so it is fixed at
+     the assertion: the row must NAME the App Store before the player taps, and
+     must not offer the web build's action. Both halves still fail if the store
+     branch stops distinguishing itself. */
+  const storeRow = settings(true);
+  check(/app store/i.test(storeRow) && !storeRow.includes('>Get latest</button>')
+    && !/tap if the app looks out of date/i.test(storeRow),
+    'store Settings names the update channel before the player taps', storeRow);
   check(web.includes("$('#updateBtn')?.addEventListener('click', hardRefresh);"),
     'REACH Settings update button is bound to the audited handler');
   function runtime(source, store, online = true, withWorker = false) {

@@ -9,7 +9,19 @@
  */
 import { boot, serveTree } from './godmode.js';
 import { fileURLToPath } from 'node:url';
+/* EXPECTED: the eight cards Settings rendered on v580, read off a render of
+   main at 869a32d1 on 2026-09-11 before the reorder landed. It is a SET, not a
+   sequence: its job is to prove the reorder deleted nothing. The v581 change
+   moves whole card blocks in js/app.js, so a card dropped in a conflict
+   resolution is the realistic failure, and this row is what catches it. */
 const EXPECTED = ['THE CREW', 'YOUR DATA', 'NOTIFICATIONS', 'REDEEM A CODE', 'DAILY TARGETS', 'PREFERENCES', 'APPLE HEALTH', 'ABOUT'];
+/* ORDER: the sequence Tom approved on 2026-09-11 from a render of the rebased
+   Settings ("seems fine"), which is the "good flow" half of his instruction the
+   same day: "ruthlessly play test the settings tab to clean up the design it is
+   a mess. success looks like a clean and easy to understand settings tab with a
+   good flow and no fat on it." Proposed in
+   REVIEW-PACK-settings-tidy-2026-09-11.md section 2 item 7. Changing this order
+   is a product decision and needs Tom, not a test edit. */
 const ORDER = ['THE CREW', 'DAILY TARGETS', 'PREFERENCES', 'NOTIFICATIONS', 'APPLE HEALTH', 'YOUR DATA', 'REDEEM A CODE', 'ABOUT'];
 let browser, server, failed = 0;
 const check = (name, ok, detail) => {
