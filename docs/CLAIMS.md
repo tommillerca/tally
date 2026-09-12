@@ -1,5 +1,10 @@
 # What each patch note claims, and what backs it
 
+## v591 (2026-09-12)
+
+Changelog item: The app keeps working offline when a module or icon was never cached
+1. PROOF: precache-audit.mjs, 6 of 6 rows green; before the fix, 4 of 6 passed with hero-ground.js, laboratory.js, camera.png and lab.png missing. | REACH: the service worker shell now precaches both modules and both pixel icons for offline use after shell installation. The commander must stamp the service worker version for release.
+
 ## v590 (2026-09-12)
 
 Assembled from ten Codex lanes by the commander. Every pure audit was run on its lane tree and proven red on a throwaway worktree of main; the unit suite on the merged train is 400 passed. Worker changes ship as code only: nothing changes live until Tom runs server/deploy.sh (docs/SERVER-DEPLOY-PENDING.md, one bundle).

@@ -9,6 +9,9 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 591, date: '2026-09-12', title: 'Ready for offline use', items: [
+    'The app keeps working offline when a module or icon was never cached',
+  ] },
   { n: 590, date: '2026-09-12', title: 'Nothing you earned goes missing mid-save', items: [
     'The meal chip follows your last meal for two hours, then the time of day.',
     'Level rewards now save together, so an interrupted save cannot mark a level paid while leaving its coins, crates, dust or egg missing.',
