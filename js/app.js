@@ -15,13 +15,13 @@ import {
   initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, retireGardenIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
   awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats, claimSpar, sparBoardState,
-  bagPick, seedBagFromRecent, GW_RECENT_CAP,
+  bagPick, seedBagFromRecent, GW_RECENT_CAP, EGG_STEP_THRESHOLD,
 } from './game.js';
 import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, spendCoins, grantCrate, grantCosmetic, inventory, ownedCosmeticIds,
   unopenedCrates, openCrate, crateOdds, buyShopItem, equipped, equip, activateBattleCharm,
   ownedGearIds, grantGear, gearLoadout, equipGear,
-  migrateLegacyEggs, eggProgress, repairEggAnchors, hatchEgg, lifetimeStepsSum,
+  migrateLegacyEggs, eggProgress, STEPS_PER_ACTIVE_MIN, repairEggAnchors, hatchEgg, lifetimeStepsSum,
   battleCharmCharges, consumeBattleCharmCharge, consumableCount, consumeConsumable, VIGOR_DRAUGHT_AMOUNT, redeemCode,
   retireMerchantIfNeeded,
   boneDust, boneDustAdd, disenchantGear, salvagePet, gearDustValue, petDustValue, slimedGearIds,
@@ -5377,10 +5377,10 @@ async function renderToday(el) {
     });
   });
   $$('[data-walkmin]').forEach(b => b.addEventListener('click', async () => {
-    const r = await logManualWalk(Number(b.dataset.walkmin));
-    if (!r.ok) { toast(`${MANUAL_WALKS_PER_DAY} walks a day is the cap. See you tomorrow.`, 2600); refresh(); return; }
+    const r = await logManualWalk(Number(b.dataset.walkmin), S.date, Number(b.dataset.walkslot));
+    if (!r.ok) { toast(r.reason === 'capped' ? `${MANUAL_WALKS_PER_DAY} walks a day is the cap. See you tomorrow.` : r.reason === 'duplicate' ? 'That walk was already logged.' : 'Check your date and reconnect before logging a walk.', 2600); refresh(); return; }
     chimeSound(S.sounds); haptic.success();
-    toast(`Walk logged. +${r.xp} XP and +1 Vigor for the Pit.`, 2800);
+    toast(`Walk logged. +${r.xp} XP, +1 Vigor and ${r.eggCredit.toLocaleString()} egg progress.${r.egg ? ' New egg in your Backpack.' : ''}`, 2800);
     refresh();
   }));
   $$('[data-sleep]').forEach(b => b.addEventListener('click', async () => {
@@ -7028,13 +7028,13 @@ function sleepRowHtml(w) {
 
 // "Add a walk" for players without HealthKit/watch (walks === null hides the
 // row when Health is connected). Pays LOCAL rewards only: XP, the wellness
-// quests and Vigor, through logManualWalk in js/wellness.js. It never writes a
+// quests, Vigor and egg progress, through logManualWalk in js/wellness.js. It never writes a
 // `steps` field, so the step race (weekStepsNow) cannot see it; the rule and
 // the 2/day cap are documented and enforced there, not here.
 function walkRowHtml(walks) {
   if (!walks) return '';
   const capped = walks.length >= MANUAL_WALKS_PER_DAY;
-  const chips = [15, 30, 45, 60].map(m => `<button class="hchip" data-walkmin="${m}">${m}m</button>`).join('');
+  const chips = [15, 30, 45, 60].map(m => `<button class="hchip" data-walkmin="${m}" data-walkslot="${walks.length + 1}">${m}m</button>`).join('');
   return `
     <div class="well-row ${capped ? 'done' : ''}">
       <span class="well-ico">${badgePixHtml('badge-footprint', 24)}</span>
@@ -7042,7 +7042,7 @@ function walkRowHtml(walks) {
         <b>Add a walk</b>
         <small>${capped
           ? `${MANUAL_WALKS_PER_DAY} walks logged today. Good legs.`
-          : 'Counts for quests and energy. Step races only count steps your phone saw.'}</small>
+          : 'Counts for quests, energy and eggs. Step races only count steps your phone saw.'}</small>
         ${capped ? '' : `<div class="sleep-picks">${chips}</div>`}
       </div>
       ${capped ? `<span class="well-check">${ICONS.check(14)}</span>` : ''}
@@ -18220,6 +18220,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
         }).join('');
       })()}
       <section class="bp-eggs"><div class="t3-sect"><b>Step Eggs</b><i></i><span>${eggs.length} owned</span></div>
+      <p class="note egg-threshold">An egg needs ${EGG_STEP_THRESHOLD.toLocaleString('en-US')} steps in a day.</p>
+      <p class="note">That earns a new egg. Walk to hatch eggs you own. Manual walks count toward both at ${STEPS_PER_ACTIVE_MIN.toLocaleString('en-US')} per minute, up to ${MANUAL_WALKS_PER_DAY} walks a day.</p>
       ${eggs.length ? `
       ${eggs.map(e => {
         const p = eggProgress(e, lifeSteps);

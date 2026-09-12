@@ -759,6 +759,7 @@ requireLabFindingCoverage(onDisk, PURE);
  * 1, in the gate itself. The complement cannot be computed AND have teeth. One line
  * per file is the price, and it puts each omission on the record as a decision. */
 const DECLARED = {
+  'egg-progress-audit.mjs': ['full', "Manual walk CONTROL, PROGRESS, CAP, NO-RESET, RACE and rendered threshold TOLD; serves its own tree."],
   'backpack-wardrobe-f1-f2-audit.mjs': ['full', "Backpack content centring and Wardrobe rail order, nonempty pixel controls at both mobile sizes."],
   'settings-shape-audit.mjs': ['full', "Mobile Settings card preservation/order, nonempty controls, centre hit tests, folds and button shape at 393x852 and 320x568. Render proof blocked in sandbox; see docs/v580/guard-red.txt."],
   'settings-rows-audit.mjs': ['full', 'Settings 375x812 at 100%/200%: ROWS, COLUMN, signed-out PLUMBING and nonempty YOUR DATA CONTROL. Before/after measurements and RED proof BLOCKED by sandbox listen EPERM; no measured pass claimed. See docs/v577/guard-red.txt.'],
