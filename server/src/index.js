@@ -3429,7 +3429,7 @@ export default {
           return p.ack || { ok: true, reward: { coins: p.coins }, mode: p.mode };
         };
         const prior = await originalAck();
-        if (prior) return json(prior);
+        if (prior) return json({ ...prior, duplicate: true }); // a retry is answered with the original acknowledgement AND named as the duplicate it is (test/api.test.mjs contract)
         const [a, b] = pairKey(auth.playerId, to);
         const fr = await env.DB.prepare('SELECT status FROM friendships WHERE a = ? AND b = ? AND EXISTS (SELECT 1 FROM players WHERE id = friendships.a AND COALESCE(is_test, 0) = 0) AND EXISTS (SELECT 1 FROM players WHERE id = friendships.b AND COALESCE(is_test, 0) = 0)').bind(a, b).first();
         if (!fr || fr.status !== 'accepted') return json({ error: 'not friends' }, 403);
@@ -3448,7 +3448,7 @@ export default {
           });
           if (!landed) {
             const prior = await originalAck();
-            if (prior) return json(prior);
+            if (prior) return json({ ...prior, duplicate: true }); // a retry is answered with the original acknowledgement AND named as the duplicate it is (test/api.test.mjs contract)
             return json({ error: 'already sent today', code: 'daily-done' }, 409);
           }
           return json(ack);
@@ -3495,7 +3495,7 @@ export default {
           return { ok: true };
         };
         const prior = await originalAck();
-        if (prior) return json(prior);
+        if (prior) return json({ ...prior, duplicate: true }); // a retry is answered with the original acknowledgement AND named as the duplicate it is (test/api.test.mjs contract)
         const [a, b] = pairKey(auth.playerId, to);
         const fr = await env.DB.prepare('SELECT status FROM friendships WHERE a = ? AND b = ? AND EXISTS (SELECT 1 FROM players WHERE id = friendships.a AND COALESCE(is_test, 0) = 0) AND EXISTS (SELECT 1 FROM players WHERE id = friendships.b AND COALESCE(is_test, 0) = 0)').bind(a, b).first();
         if (!fr || fr.status !== 'accepted') return json({ error: 'not friends' }, 403);
