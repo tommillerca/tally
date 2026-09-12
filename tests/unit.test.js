@@ -2944,14 +2944,17 @@ test('EGG a normal egg still needs its full goal', () => {
 // These assertions extend the existing goal and stalled-anchor guards to the new
 // manual reward path. Banked progress and negative-credit refusal stay enforced;
 // the normal full-goal and zero-goal assertions above remain unchanged.
-test('EGG manual credit preserves banked steps and works without Health', () => {
-  const old = { stepsAtStart: 1000, goal: 8000 };
-  assert.equal(eggProgress(old, 3000).walked, 2000);
-  assert.equal(eggProgress({ ...old, manualWalkCredit: 3750 }, 3000).walked, 5750);
-  assert.equal(eggProgress({ stepsAtStart: 0, goal: 8000, manualWalkCredit: 15000 }, 0).ready, true);
-  assert.equal(eggProgress({ ...old, manualWalkCredit: -100 }, 3000).walked, 2000);
-  assert.equal(eggProgress({ stepsAtStart: 9000, goal: 8000, manualWalkCredit: 3750 }, 0).walked, 3750);
-});
+/* REMOVED IN v585. This asserted that a hand-logged walk credits egg progress,
+   which shipped in v584 and was reverted the same day on Tom's call: "i never
+   agreed to walks you log by hand adding to eggs people are going to scam that?
+   that is a decision you need to ask me first." He is right that it is
+   exploitable: 2 walks a day at 60 minutes and 250 steps a minute is 15,000
+   against an egg threshold of 14,000, so a person could mint roughly one egg a
+   day without moving, and no replay or clock guard stops somebody simply lying
+   about a walk. His ruling: "everyones phone can count steps these days if they
+   dont wanna connect it or carry their phone on a walk tough luck."
+   The underlying complaint stays open in ROADMAP.md as a DECISION: without a
+   step source you can never reach a second pet. */
 test('EGG STALL an anchor above lifetime unsticks instead of freezing forever', () => {
   // the device has 4,000 lifetime steps but the egg was anchored at 12,000
   const p = eggProgress({ stepsAtStart: 12000, goal: 8000 }, 4000);

@@ -1111,7 +1111,7 @@ export function eggProgress(row, lifetime) {
      than never. `stalled` is reported so the UI can say so. */
   const stalled = (row.stepsAtStart || 0) > lifetime;
   const anchor = stalled ? lifetime : (row.stepsAtStart || 0);
-  const walked = Math.max(0, lifetime - anchor) + Math.max(0, row.manualWalkCredit || 0);
+  const walked = Math.max(0, lifetime - anchor);
   return { walked: Math.min(walked, goal), goal, ready: walked >= goal, stalled };
 }
 /* Repair the anchors on disk, so a stalled egg starts counting from the next step

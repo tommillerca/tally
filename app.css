@@ -12475,23 +12475,23 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
   }
 }
 
-/* NAME-FIT policy: identities wrap, with no line cap or font reduction.
-   A second line handles ordinary long names; arbitrary imported names may need
-   more. Trade compact rows and the first-screen peek for the complete identity.
-   Keep this append-only: Wardrobe 1F freezes the inherited CSS prefix. */
+/* NAME-FIT, SCOPED TO THE TWO SURFACES TOM REPORTED.
+   He said: "my username is getting clipped. This has happened in a few places a
+   few times", and the measured cases were .hub-name on the Bonehead screen
+   (scrollWidth 293 in a 227px box, truncated with an ellipsis) and .hero-name
+   on Today (230/230, one character from the same fate).
+   The first version of this fix generalised that to roughly thirty selectors
+   across the app. That reached the Crew deck and took its name plate from
+   57.8px to 101px, where it covers the card art: Tom, 2026-09-12, "crew cards
+   dont show a photo anymore... it's just a bar with a name". Bisected line by
+   line against crew-fan-audit to this block.
+   Wrapping is right on a surface that can grow and wrong on one sized around
+   art, so it is applied per surface now rather than globally. The remaining
+   clipped sites found by tests/name-fit-audit.mjs (#newcomersList .t3-tx b at
+   3758px of text in a 143px box, #lbBody .lb-who b at 86 in 77) stay OPEN in
+   ROADMAP.md rather than being swept up by a broad rule. */
 .hub-title.ward-identity > .hub-name,
-.screen--today .hero-meta .hero-name,
-#crewName, .crew-greeting,
-.pname-iso, .cfan-plate b, .fl-main b, #fpTitle,
-.pod-name, .lb-who b, .race-lane .nm b,
-.spp-plate b, .spire-flag, .hlw-say,
-.sheet-rename .note, #nbPreview, #onbName,
-.fight-title h2, .fight-hud .fname, .fight-venue, .vs-name, .vs-venue,
-.gift-recipient, .sp-siege, .race-gap, #mapCount, #toast,
-.gift-sealed .tx b, .cheer-tx b, .pack-coins, .dlv-rows .t3-tx b,
-#flog, .fight-over .note, #spireAct,
-#raceResultCard .race-h b, .race-champ span,
-#lbYouAre span, #raceCard .gbn-txt small {
+.screen--today .hero-meta .hero-name {
   min-width: 0; max-width: 100%;
   white-space: normal; overflow-wrap: anywhere;
   overflow: visible; text-overflow: clip;
@@ -12500,7 +12500,12 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
 .hub-title.ward-identity, .hero-lvrow { align-items: baseline; }
 .hub-title.ward-identity > .hub-name,
 .screen--today .hero-meta .hero-name { flex: 1; }
-.crew-greeting, .pname-iso { display: block; }
+/* .pname-iso dropped from this rule. It also sits inside the Crew card's name
+   plate, and `display: block` stacks it there: bisected against crew-fan-audit,
+   this one line takes the plate from 57.8px to 79.4px and the name from 21.6 to
+   43.2, pushing it over the card art. The greeting surface can grow and keeps
+   the block display; the card cannot. */
+.crew-greeting { display: block; }
 .cfan-sel-nm, .fl-main, .lb-pod, .race-lane .bd,
 .fight-title, .fight-hud .hud-side { min-width: 0; }
 .race-lane .nm b { flex: 1 1 50%; }
@@ -12521,11 +12526,16 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
 /* A variable-height nameplate must not cover the pet or escape a fixed card.
    Grid stacks the existing fanned cards while reserving the tallest card's
    height. Their existing transforms still position each card in the fan. */
-#cfanWrap { height: auto; min-height: 348px; }
-#cfanDeck { position: relative; display: grid; padding: 10px 0 68px; }
-#cfanDeck .cfan-card { position: relative; grid-area: 1 / 1; top: 0; height: auto; align-self: start; }
-#cfanDeck .cfan-stage { height: 270px; }
-#cfanDeck .cfan-plate { position: relative; }
+/* REMOVED IN v585. The name-fit work rebuilt the Crew fan deck so a wrapping
+   name could push the card taller: #cfanWrap height auto, #cfanDeck as a grid,
+   and every .cfan-card position relative with height auto. On a deck of fixed
+   trading cards that let the name plate grow OVER the art. Measured by
+   crew-fan-audit: plate 72.3px before, 101px after, against its own 62px limit,
+   and Tom saw it as "crew cards dont show a photo anymore you fucked that up
+   too it's just a bar with a name".
+   A Crew card is sized around its art, so a long name ellipsises there; the
+   wrap treatment belongs on surfaces that have room to grow. The deck keeps its
+   original absolute layout. */
 
 .vs-inner { min-width: 0; max-width: 100%; }
 .vs-name { text-transform: uppercase; }
@@ -12607,3 +12617,5 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
 @media (prefers-reduced-motion: reduce) {
   .lab-reveal.lab-play [data-lab-result-art] { animation: none; animation-iteration-count: 1; }
 }
+
+

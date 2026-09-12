@@ -849,12 +849,9 @@ export async function onHealthSync(date, { steps, activeKcal, exerciseMin, cycle
       if (g) { gained += g; coinsEarned += m.coins; }
     }
     // a Step Egg only on a genuinely big day
-    const manual = ((await db.get('health', date))?.manualWalks || []).reduce((n, w) => n + (w.eggCredit || 0), 0);
-    if (steps + manual >= EGG_STEP_THRESHOLD) {
-      const row = await eggRow('steps-' + date);
-      const g = await awardOnce(`egg-${date}`, 'egg', 15, 'Big-day Step Egg', date, null,
-        { puts: [{ store: 'inv', val: row }] });
-      if (g.claimed) { gained += g.xp; egg = true; }
+    if (steps >= EGG_STEP_THRESHOLD) {
+      const g = await award(`egg-${date}`, 'egg', 15, 'Big-day Step Egg', date);
+      if (g) { gained += g; await grantCrate('egg', 'steps-' + date); egg = true; }
     }
     for (const o of STEP_OVER) {
       if (steps < o.at) break;
