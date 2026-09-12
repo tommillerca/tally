@@ -85,12 +85,20 @@ export async function uiAudit({ routes = ['today', 'bonehead', 'shop', 'friends'
     await sleep(1700);
     checked.controls++;
     if (c.expect.toggle) {
+      /* RE-QUERY THE CONTROL. Toggling a fit switcher runs a refresh(), which
+         REPLACES the node, so the `el` captured before the click is detached
+         and still carries its original aria-expanded. Reading it reported "did
+         not toggle" against a control that toggles perfectly: measured on live
+         v582 and on this tree, #wardFitSwitcher goes aria-expanded false to
+         true and #wardFitList hidden true to false, while this check called it
+         broken. A stale reference after a re-render, not a product defect. */
+      const now = q('#' + c.id) || el;
       const list = q('#' + c.expect.toggle);
-      const expanded = el.getAttribute('aria-expanded') === 'true';
+      const expanded = now.getAttribute('aria-expanded') === 'true';
       if (!list || expanded === wasExpanded || list.hidden === expanded) {
         problems.push(`#${c.id} did not toggle its fit list and accessibility state together`);
       }
-      el.click(); // restore the starting state before the next route
+      now.click(); // restore the starting state before the next route
     }
     if (c.expect.hash && location.hash !== c.expect.hash) {
       problems.push(`#${c.id} went to ${location.hash}, expected ${c.expect.hash}`);

@@ -1,6 +1,6 @@
 // Egg-only manual walk rewards. Default mode drives this tree in a browser.
 // --simulate runs the real reward function with an in-memory transaction adapter.
-// --main also loads main's source read-only. Neither mode claims browser proof.
+// --main also loads frozen main 72026f4b source read-only. Neither mode claims browser proof.
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +16,8 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const simulation = process.argv.includes('--simulate');
 const main = process.argv.includes('--main');
 if (main && !simulation) throw new Error('--main requires --simulate; browser red must serve a separate main tree');
-const source = file => main ? execFileSync('git', ['show', `main:${file}`], { cwd: ROOT, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }) : readFileSync(path.join(ROOT, file), 'utf8');
+const baseline = '72026f4bcfaf361204800b50a1dcf1f4af54e21e';
+const source = file => main ? execFileSync('git', ['show', `${baseline}:${file}`], { cwd: ROOT, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }) : readFileSync(path.join(ROOT, file), 'utf8');
 const app = source('js/app.js');
 const extract = (s, name) => {
   const start = s.indexOf(`function ${name}(`);
@@ -181,12 +182,13 @@ if (simulation) {
   const copy = paragraph ? vm.runInNewContext('`' + paragraph + '`', { EGG_STEP_THRESHOLD: game.EGG_STEP_THRESHOLD }) : '';
   ok('TOLD-SOURCE (DOM BLOCKED)', copy.includes(`An egg needs ${game.EGG_STEP_THRESHOLD.toLocaleString('en-US')} steps in a day.`), { copy, threshold: game.EGG_STEP_THRESHOLD });
 } else {
-  const { boot, serveTree } = await import('./godmode.js');
+  const { boot, serveTree, sleep } = await import('./godmode.js');
   const requested = process.argv[2] || process.env.URL;
-  const srv = requested ? null : await serveTree(ROOT);
-  const base = requested || srv.url;
-  let browser;
+  let browser, srv;
+  let control = 'browser fixture boot';
   try {
+    srv = requested ? null : await serveTree(ROOT);
+    const base = requested || srv.url;
     console.log(`URL UNDER TEST: ${base}`);
     const session = await boot(base); browser = session.browser;
     const { page } = session;
@@ -201,16 +203,23 @@ if (simulation) {
       finally { d.useDbName('tally-demo'); }
     }, { driver: measure.toString(), race: extract(app, 'weekStepsNow') });
     grade(r);
+    control = '#chTabs [data-tab="crates"]';
     await page.evaluate(() => { location.hash = '#/bonehead'; });
+    await sleep(2000);
     await page.waitForSelector('#chTabs [data-tab="crates"]');
-    await page.click('#chTabs [data-tab="crates"]');
+    // In-page activation reaches the real handler inside the nested scroller.
+    await page.evaluate(selector => document.querySelector(selector).click(), control);
+    control = '.bp-eggs (egg panel after crates control)';
     await page.waitForSelector('.bp-eggs');
     const told = await page.$eval('.bp-eggs', el => {
       const p = el.querySelector('.egg-threshold');
-      return { text: p?.textContent || '', visible: !!p && p.getBoundingClientRect().height > 0 && getComputedStyle(p).visibility !== 'hidden' };
+      const text = p?.textContent || '';
+      const number = text.match(/^An egg needs ([\d,]+) steps in a day\.$/);
+      return { text, number: number ? Number(number[1].replaceAll(',', '')) : null, visible: !!p && p.getBoundingClientRect().height > 0 && getComputedStyle(p).visibility !== 'hidden' };
     });
     const threshold = await page.evaluate(async () => (await import('./js/game.js')).EGG_STEP_THRESHOLD);
-    ok('TOLD', told.visible && told.text === `An egg needs ${threshold.toLocaleString('en-US')} steps in a day.`, { ...told, threshold });
+    ok('TOLD', told.visible && told.number === threshold && told.text === `An egg needs ${threshold.toLocaleString('en-US')} steps in a day.`, { ...told, threshold });
+    control = '#/today manual walk fixture';
     await page.evaluate(async () => {
       const { db, kvGet, kvSet } = await import('./js/db.js');
       await kvSet('settings', { ...(await kvGet('settings', {})), hkConnected: false, hkNative: false });
@@ -220,8 +229,9 @@ if (simulation) {
     });
     await page.reload({ waitUntil: 'domcontentloaded' });
     for (const slot of [1, 2]) {
-      await page.waitForSelector(`[data-walkmin="30"][data-walkslot="${slot}"]`);
-      await page.click(`[data-walkmin="30"][data-walkslot="${slot}"]`);
+      control = `[data-walkmin="30"][data-walkslot="${slot}"]`;
+      await page.waitForSelector(control);
+      await page.evaluate(selector => document.querySelector(selector).click(), control);
       await page.waitForFunction(async count => {
         const w = await import('./js/wellness.js'); return (await w.manualWalksToday()).length === count;
       }, {}, slot);
@@ -229,10 +239,22 @@ if (simulation) {
     await page.waitForFunction(() => document.querySelectorAll('[data-walkmin]').length === 0);
     ok('UI-WALKS', await page.evaluate(async () => (await (await import('./js/wellness.js')).manualWalksToday()).length === 2), 'Two real controls logged; capped controls removed');
     // Existing UI audit is operated too; failures remain findings, never ignored.
-    const ui = readFileSync(path.join(ROOT, 'tests/ui-audit.js'), 'utf8');
+    control = 'uiAudit route controls';
+    /* tests/ui-audit.js is an ES MODULE, and page.evaluate() runs a classic
+       script, so evaluating its text verbatim throws "Unexpected token
+       'export'" and took this whole row out. Strip the export keyword so the
+       declarations land as globals, which is what the next evaluate expects.
+       Same class as running `node --check` on a .js file that uses export: the
+       parser is in the wrong mode, and the error looks like a broken file
+       rather than a harness fault. */
+    const ui = readFileSync(path.join(ROOT, 'tests/ui-audit.js'), 'utf8')
+      .replace(/^export\s+(?=(async\s+)?(function|const|let|var|class)\b)/gm, '')
+      .replace(/^export\s*\{[^}]*\};?\s*$/gm, '');
     await page.evaluate(ui);
     const uiResult = await page.evaluate(async () => { if (typeof uiAudit !== 'function') throw new Error('uiAudit unavailable'); return await uiAudit(); });
     ok('UI-AUDIT', uiResult.pass && uiResult.checked.controls > 0, uiResult);
+  } catch (error) {
+    ok('FIXTURE', false, { control, error: error.message });
   } finally { if (browser) await browser.close(); srv?.close(); }
 }
 console.log(`EGG AUDIT: ${failures} failed`);

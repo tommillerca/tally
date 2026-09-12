@@ -287,6 +287,9 @@ const ACTIONS = [
      capped 2/day and 60min in the write path, atomic daily slot and ledger key mwalk-<date>-<n>, and
      by construction it never writes h.steps, so the step race and step quests
      cannot see it (the race pays real prizes). */
+  // Manual egg credit is a NEW reward path. The census still counts its atomic
+  // payout site; egg-progress-audit adds replay, clock, cap and shared-receipt
+  // assertions without relaxing the existing XP/Vigor or race-isolation guards.
   { id: 'js/wellness.js:logManualWalk', sites: 1, undriven: 'egg-progress-audit.mjs drives atomic daily slots, concurrent duplicate requests, clock refusal, egg credit and daily egg receipts' },
   /* HALF FALSIFIED, 2026-09-04 census, and left exempt on purpose with the truth
      written down rather than the comfortable sentence. The per-routine claim is
