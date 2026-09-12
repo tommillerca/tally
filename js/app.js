@@ -11095,7 +11095,7 @@ async function renderShop(el) {
   // the same way the reveal cards do rather than showing a stamp in a big box
   hydratePackArt(el, '.t3-art[data-art]');
   $('#shopForage', el)?.addEventListener('click', openKitchen);
-  $('#shopSalvage', el)?.addEventListener('click', () => openCharacter('crates'));
+  $('#shopSalvage', el)?.addEventListener('click', openSalvageBench);
   /* THE BUY. One tap never spends (armToConfirm, the app-wide rule), the second
      tap goes through buyRackItem, and the SAME wiring is used on the rack pills
      and on the try-on sheet's pills so there is one buy path, not two. */
@@ -16703,6 +16703,193 @@ const gwartHeroHtml = rk => {
   <div class="rk-clock"><b>${esc(RACK_THEME)} &middot; RACK ${rackNo} OF 4</b><span>New rack in ${rackDaysLeft}d</span></div>`;
 };
 
+async function renderSalvageBench(content, wrap) {
+  const [invAll, gearLoNow, dust, counts] = await Promise.all([inventory(), gearLoadout(), boneDust(), petCounts()]);
+  const pCountTotal = Object.values(counts).reduce((a, n) => a + n, 0);
+  content.insertAdjacentHTML('beforeend', `      <section class="bp-salvage"><div class="t3-sect"><b>Salvage Bench · nothing wasted</b><i></i></div>
+      <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">${ICONS.dust(13)}</span> ${dust.toLocaleString()}</b></div>
+      <p class="note">Every piece pays Bone Dust. Use dust for looks in the Dressing Room and the weekly Rack. Melting consumes the gear and its stats. Its look is yours forever.</p>
+      ${/* THE BENCH STOPS PROMISING A LIST THAT IS NOT THERE. On a new account the
+           gear list below is EMPTY, and this paragraph said "melt gear straight
+           from the list below" over nothing, leaving "Open the Stable" as the
+           only control a player could resolve. A screen that names something the
+           player cannot see reads as broken rather than empty.
+           So the copy branches on whether there IS anything to melt, and the
+           empty state says what will fill the bench and when instead of pointing
+           at a list. Guarded by the EMPTY row in tests/melt-ui-audit.mjs. */''}
+      ${(invAll.filter(r => r.kind === 'gear' && GEAR_BY_ID[r.gearId]).length)
+        ? `<p class="note" style="margin:0 2px 8px">Melt gear you don't wear straight from the list below. Manage, breed, and destroy pets in the <b>Stable</b>. Bad drops and dupes still pay off.</p>`
+        : `<p class="note" style="margin:0 2px 8px">Nothing to melt yet. Gear you don't want ends up here: crates, the Boneyard and the Pit all drop it.</p>`}
+      ${pCountTotal ? `<button class="btn small" id="openStableFromBp">Open the Stable (${pCountTotal} ${pCountTotal === 1 ? 'pet' : 'pets'})</button>` : ''}
+      ${(() => {
+        const rows = invAll.filter(r => r.kind === 'gear' && GEAR_BY_ID[r.gearId]).map(r => GEAR_BY_ID[r.gearId])
+          .sort((a, b) => RAR_ORDER.indexOf(a.rarity) - RAR_ORDER.indexOf(b.rarity));
+        if (!rows.length) return '';
+        const totalDust = rows.reduce((a, g) => a + gearDustValue(g), 0);
+        // Tick as many as you like, melt them in ONE confirm. Melting used to be
+        // two taps per piece, and the Wardrobe cannot melt cosmetic-only pieces at
+        // all because tapping one opens the equip sheet. Clearing a backlog of
+        // twenty spare drops was the worst chore in the game.
+        const spare = rows.filter(g => gearLoNow[g.slot] !== g.id);
+        const hasStats = g => !!(g.stats && Object.keys(g.stats).length);
+        // "junk" is the low-rarity tail, NOT stat-less gear: every catalog piece
+        // carries stats, so a stat-less sweep would have selected nothing.
+        const JUNK_RARITIES = new Set(['common', 'uncommon']);
+        const junk = spare.filter(g => JUNK_RARITIES.has(g.rarity));
+        /* OPEN WHEN THERE IS SOMETHING TO MELT. This was a collapsed <details>
+           three levels deep (Character > Backpack > Salvage Bench), so the whole
+           feature was invisible unless you went looking, which is the "melting is
+           too hidden" complaint. It opens itself when you actually have spares and
+           stays shut when you do not, so it is never an empty invitation. The
+           spare count and total also sit OUTSIDE the fold now: the number was
+           previously only legible in the summary of a closed panel. */
+        const spareDust = spare.reduce((a, g) => a + gearDustValue(g), 0);
+        return (spare.length
+          ? `<div class="melt-lede"><b>${spare.length} spare piece${spare.length === 1 ? '' : 's'}</b> you are not wearing, worth <b><span class="dust-ico">${ICONS.dust(13)}</span> ${spareDust.toLocaleString()}</b> in Bone Dust.</div>`
+          : '<p class="note" style="margin:2px 2px">Nothing spare to melt: every piece you own is on you.</p>')
+          + `<details class="melt-fold" style="margin-top:12px"${spare.length ? ' open' : ''}><summary>Melt gear · ${rows.length} piece${rows.length === 1 ? '' : 's'} in the bench</summary>
+          <button class="btn danger melt-go" id="meltGo" hidden></button>
+          <div class="melt-tools">
+            <button class="link" id="meltAll">Select all ${spare.length} unworn</button>
+            ${/* "junk" implied a category gate that does not exist: every piece in
+                  the game is meltable and pays real dust. Name the rarities the
+                  sweep actually selects, derived so it stays honest if a new tier
+                  ever ships rather than hardcoding today's roster. */''}
+            ${junk.length && junk.length !== spare.length ? `<button class="link" id="meltJunk">Only the ${junk.length} ${esc([...new Set(junk.map(g => RARITIES[g.rarity].label))].join(' + '))}</button>` : ''}
+            <button class="link" id="meltNone">Clear</button>
+          </div>` + rows.map(g => {
+          const worn = gearLoNow[g.slot] === g.id;
+          // WORN gear is listed but never bulk-selectable: losing the piece you are
+          // wearing to a stray tap is not a mistake worth allowing.
+          return `<label class="crate-row melt-row${worn ? ' worn' : ''}">
+            <input type="checkbox" class="melt-pick" data-meltsel="${g.id}" data-dust="${gearDustValue(g)}" data-junk="${JUNK_RARITIES.has(g.rarity) ? '1' : '0'}"${worn ? ' disabled' : ''}>
+            <span class="crate-ico"><img src="${bhThumb(bhAsset(BH_BY_ID[g.artId]))}" alt="" style="width:27px;height:27px;object-fit:contain"></span>
+            <div style="flex:1"><b>${esc(g.name)}</b><small>${RARITIES[g.rarity].label} · ${esc(GEAR_SLOT_LABELS[g.slot] || g.slot)}${worn ? ' · <b>worn, tap to melt on its own</b>' : ''}</small><small>${
+              /* "no stats · looks only" read as a REASON TO KEEP something. It is
+                 a fact about the piece, not advice, so it states what melting
+                 leaves you: the look, which is kept forever either way. */
+              hasStats(g) ? `<span class="melt-stat">${esc(gearLabel(g))}${g.talent ? ` ${ICONS.boltIco(11)} ${esc(g.talentName)}` : ''}</span>` : '<span class="melt-nostat">looks only · no stats to lose</span>'
+            }</small></div>
+            ${worn ? `<button class="btn small danger" data-meltbench="${g.id}">+${gearDustValue(g)} dust</button>`
+                   /* THE CHEAP PIECES LOOKED UNMELTABLE. An unworn row rendered its
+                      value as muted grey text while the WORN row (the one you should
+                      not casually melt) carried the only button, so the pieces you
+                      most want gone presented as static labels. The row is a <label>
+                      wrapping the checkbox, so it has always been tappable; a button
+                      here would swallow that tap. Style it as the active chip it is
+                      instead of restyling the mechanism. */
+                   : `<span class="melt-val on">+${gearDustValue(g)}</span>`}
+          </label>`;
+        }).join('') + `</details>`;
+      })()}</section>`);
+    content = content.lastElementChild;
+    /* Scroll only when the USER opens the fold. The fold renders with `open`
+       whenever spares exist, and a <details> born open fires 'toggle' on
+       parse, so a toggle-driven scroll yanked every Backpack render (fresh
+       open, and the re-render after a crate) down to the bench. The summary
+       click is the user's own act, so the scroll hangs there instead; the
+       open state is read after the click's default action has toggled it. */
+    $('.melt-fold > summary', content)?.addEventListener('click', e => {
+      const fold = e.currentTarget.parentElement;
+      setTimeout(() => { if (fold.open) fold.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 0);
+    });
+    $('#openStableFromBp', content)?.addEventListener('click', () => openStable());
+    // ---- bulk melt: tick pieces, one confirm ----
+    const meltPicks = () => $$('.melt-pick', content).filter(c => c.checked && !c.disabled);
+    const syncMeltBar = () => {
+      const go = $('#meltGo', content);
+      if (!go) return;
+      const picks = meltPicks();
+      const dust = picks.reduce((a, c) => a + (parseInt(c.dataset.dust, 10) || 0), 0);
+      go.hidden = !picks.length;
+      go.dataset.armed = '0';
+      go.innerHTML = `Melt ${picks.length} piece${picks.length === 1 ? '' : 's'} · <span class="dust-ico">${ICONS.dust(13)}</span> +${dust.toLocaleString()}`;
+    };
+    $$('.melt-pick', content).forEach(c => c.addEventListener('change', syncMeltBar));
+    $('#meltAll', content)?.addEventListener('click', e => {
+      e.preventDefault();
+      $$('.melt-pick', content).forEach(c => { if (!c.disabled) c.checked = true; });
+      syncMeltBar();
+    });
+    $('#meltJunk', content)?.addEventListener('click', e => {
+      e.preventDefault();
+      // the sweep Tom asked for: clear the good stuff, tick only the cosmetics
+      $$('.melt-pick', content).forEach(c => { c.checked = !c.disabled && c.dataset.junk === '1'; });
+      syncMeltBar();
+    });
+    $('#meltNone', content)?.addEventListener('click', e => {
+      e.preventDefault();
+      $$('.melt-pick', content).forEach(c => { c.checked = false; });
+      syncMeltBar();
+    });
+    $('#meltGo', content)?.addEventListener('click', async () => {
+      const go = $('#meltGo', content);
+      const picks = meltPicks();
+      if (!picks.length) return;
+      // arm-then-confirm, because this destroys several pieces at once and there
+      // is no undo. The count is in the label both times so you can see the size
+      // of what you are about to do.
+      if (go.dataset.armed !== '1') {
+        go.dataset.armed = '1';
+        const label = go.innerHTML;
+        go.textContent = `Tap again to melt ${picks.length}`;
+        setTimeout(() => { if (go.isConnected && go.dataset.armed === '1') { go.dataset.armed = '0'; go.innerHTML = label; } }, 3000);
+        return;
+      }
+      go.disabled = true;
+      let dust = 0, n = 0;
+      for (const c of picks) {
+        const res = await disenchantGear(c.dataset.meltsel);
+        if (res.ok) { dust += res.dust; n++; c.closest('.melt-row')?.remove(); }
+      }
+      go.disabled = false;
+      popSound(S.sounds);
+      toast(n ? `${n} piece${n === 1 ? '' : 's'} melted into ${dust.toLocaleString()} Bone Dust.` : 'Nothing melted.', 2800);
+      renderCharacter(wrap, 'wardrobe', { instant: true });   // one re-render at the end, not per piece
+    });
+
+    $$('[data-meltbench]', content).forEach(btn => btn.addEventListener('click', async () => {
+      // arm-then-confirm, same contract as the Wardrobe melt
+      if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; const t = btn.textContent; btn.textContent = 'Tap to confirm'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = t; } }, 2600); return; }
+      const res = await disenchantGear(btn.dataset.meltbench);
+      if (!res.ok) { toast('Could not melt that piece.'); return; }
+      popSound(S.sounds);
+      toast(`${res.name} melted into ${res.dust} Bone Dust.`, 2200);
+      // melt in place (no full re-render) so the list doesn't jump to the top -
+      // you can melt a whole stack of spare gear in one pass.
+      btn.closest('.crate-row')?.remove();
+      const fold = content.querySelector('.melt-fold');
+      /* KEEP THE SUMMARY HONEST AFTER AN IN-PLACE MELT. This counted the surviving
+         BUTTONS, which exist only on WORN rows, so after melting the piece you were
+         wearing the header read "0 spare pieces worth 0" over a bench still holding
+         thirteen. Count the rows.
+         The .melt-lede line outside the fold is deliberately NOT touched here: this
+         handler is reachable only from a worn row, and melting a worn piece cannot
+         change the SPARE count or its total. I wrote a refresh for it first, then
+         could not make a guard fail against its absence, which is the tell that the
+         code was unreachable rather than the test being weak. */
+      if (fold && !content.querySelector('.melt-row')) { fold.remove(); }
+      else if (fold) {
+        const bench = $$('.melt-row', content).length;
+        const sum = fold.querySelector('summary');
+        if (sum) sum.innerHTML = `Melt gear · ${bench} piece${bench === 1 ? '' : 's'} in the bench`;
+      }
+      const nd = await boneDust();
+      const pill = $('.ward-dust', wrap);
+      if (pill) pill.innerHTML = `${ICONS.dust(16)} ${nd.toLocaleString()}`;
+      await restageWardrobe($('#chContent', wrap), S.wardrobeSlot || 'H');
+      content.querySelectorAll('.wallet-line b').forEach(b => { if (b.querySelector('.dust-ico')) b.innerHTML = `<span class="dust-ico">${ICONS.dust(13)}</span> ${nd.toLocaleString()}`; });
+    }));
+}
+
+let pendingSalvageBench = false;
+function openSalvageBench() {
+  S.wardrobeReturnSlot = null;
+  S.wardrobeReturnTop = null;
+  pendingSalvageBench = true;
+  return openCharacter('wardrobe');
+}
+
 async function renderCharacter(wrap, tab, opts = {}) {
   const body = $('#chBody', wrap);
   if (!body) return;
@@ -17498,7 +17685,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
         GEAR_SLOTS.includes(slot) ? '<p class="note">Statted gear boosts your Pit fighter. Same look can roll different stats; pieces marked with a bolt grant a talent. Rarer rolls hit harder. Melting a piece keeps its look forever.</p>' : ''
       }${
         lockedCount ? `<p class="note">More ${slotMeta.label.toLowerCase()} pieces are out there. Keep hunting.</p>` : ''
-      }</div></details>` : ''}`;
+      }</div></details>` : ''}
+      `;
+    await renderSalvageBench(content, wrap);
     $$('[data-look-source]', content).forEach(btn => btn.addEventListener('click', () => openCharacter(btn.dataset.lookSource)));
     // --- saved fits: existing equip, rename and confirmed delete semantics ---
     $('[data-fit-switcher]', content)?.addEventListener('click', e => {
@@ -18184,13 +18373,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
        progress bar with no explanation. Re-anchoring to now costs the player
        nothing they had and unsticks it. */
     await repairEggAnchors();
-    const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook, dust, pCounts, gearLoNow, bpPotions] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState(), boneDust(), petCounts(), gearLoadout(), potionsInv()]);
+    const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook, bpPotions] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState(), potionsInv()]);
     // an egg that is not moving because STEPS are not arriving says so instead of
     // showing a bar that never fills
     const eggStale = !!(await hkStaleInfo());
     const eggs = invAll.filter(r => r.kind === 'egg').sort((a, b) => a.ts - b.ts);
     const ownedPets = invAll.filter(r => r.kind === 'cos' && BH_BY_ID[r.itemId] && BH_BY_ID[r.itemId].slot === 'C').map(r => BH_BY_ID[r.itemId]);
-    const pCountTotal = Object.values(pCounts).reduce((a, n) => a + n, 0);
     content.innerHTML = `
       <button class="lab-banner" type="button" data-lab-open>
         <span class="lab-slime" aria-hidden="true"></span>
@@ -18292,92 +18480,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ${(foodActive || []).length ? (foodActive.map(b => `<div class="crate-row"><span class="crate-ico">${RECIPE_BY_ID[b.recipe] ? recipeIconHtml(RECIPE_BY_ID[b.recipe], 26) : (b.icon || '🍲')}</span><div style="flex:1"><b>${esc(b.name || 'Dish')} active</b><small>${b.kind === 'combat' ? `${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left` : `${Math.max(0, Math.ceil((b.untilMs - Date.now()) / 3600e3))}h left`}</small></div></div>`).join('')) : '<p class="note" style="margin:2px 2px 6px">No dish active. Cook one in the Kitchen for a Pit or coin buff.</p>'}
       ${(() => { const busy = cook.slots.filter(s => !s.empty); if (!busy.length) return ''; const rc = cook.readyCount, cc = busy.length - rc; const label = rc && cc ? `${rc} ready · ${cc} cooking` : rc ? `${rc} dish${rc === 1 ? '' : 'es'} ready!` : `${cc} cooking...`; return `<div class="crate-row"><span class="crate-ico">${rc ? '✅' : '🍳'}</span><div style="flex:1"><b>${label}</b><small>${busy.map(s => esc(s.recipe.name)).join(', ')}</small></div></div>`; })()}
       <div class="ingredient-grid" style="margin-top:6px">${INGREDIENT_IDS.map(id => `<div class="ing-cell"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${ingInv[id] || 0}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}</div>
-      <section class="bp-salvage"><div class="t3-sect"><b>Salvage Bench · nothing wasted</b><i></i></div>
-      <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">${ICONS.dust(13)}</span> ${dust.toLocaleString()}</b></div>
-      <p class="note">Every piece pays Bone Dust. Use dust for looks in the Dressing Room and the weekly Rack. Melting consumes the gear and its stats. Its look is yours forever.</p>
-      ${/* THE BENCH STOPS PROMISING A LIST THAT IS NOT THERE. On a new account the
-           gear list below is EMPTY, and this paragraph said "melt gear straight
-           from the list below" over nothing, leaving "Open the Stable" as the
-           only control a player could resolve. A screen that names something the
-           player cannot see reads as broken rather than empty.
-           So the copy branches on whether there IS anything to melt, and the
-           empty state says what will fill the bench and when instead of pointing
-           at a list. Guarded by the EMPTY row in tests/melt-ui-audit.mjs. */''}
-      ${(invAll.filter(r => r.kind === 'gear' && GEAR_BY_ID[r.gearId]).length)
-        ? `<p class="note" style="margin:0 2px 8px">Melt gear you don't wear straight from the list below. Manage, breed, and destroy pets in the <b>Stable</b>. Bad drops and dupes still pay off.</p>`
-        : `<p class="note" style="margin:0 2px 8px">Nothing to melt yet. Gear you don't want ends up here: crates, the Boneyard and the Pit all drop it.</p>`}
-      ${pCountTotal ? `<button class="btn small" id="openStableFromBp">Open the Stable (${pCountTotal} ${pCountTotal === 1 ? 'pet' : 'pets'})</button>` : ''}
-      ${(() => {
-        const rows = invAll.filter(r => r.kind === 'gear' && GEAR_BY_ID[r.gearId]).map(r => GEAR_BY_ID[r.gearId])
-          .sort((a, b) => RAR_ORDER.indexOf(a.rarity) - RAR_ORDER.indexOf(b.rarity));
-        if (!rows.length) return '';
-        const totalDust = rows.reduce((a, g) => a + gearDustValue(g), 0);
-        // Tick as many as you like, melt them in ONE confirm. Melting used to be
-        // two taps per piece, and the Wardrobe cannot melt cosmetic-only pieces at
-        // all because tapping one opens the equip sheet. Clearing a backlog of
-        // twenty spare drops was the worst chore in the game.
-        const spare = rows.filter(g => gearLoNow[g.slot] !== g.id);
-        const hasStats = g => !!(g.stats && Object.keys(g.stats).length);
-        // "junk" is the low-rarity tail, NOT stat-less gear: every catalog piece
-        // carries stats, so a stat-less sweep would have selected nothing.
-        const JUNK_RARITIES = new Set(['common', 'uncommon']);
-        const junk = spare.filter(g => JUNK_RARITIES.has(g.rarity));
-        /* OPEN WHEN THERE IS SOMETHING TO MELT. This was a collapsed <details>
-           three levels deep (Character > Backpack > Salvage Bench), so the whole
-           feature was invisible unless you went looking, which is the "melting is
-           too hidden" complaint. It opens itself when you actually have spares and
-           stays shut when you do not, so it is never an empty invitation. The
-           spare count and total also sit OUTSIDE the fold now: the number was
-           previously only legible in the summary of a closed panel. */
-        const spareDust = spare.reduce((a, g) => a + gearDustValue(g), 0);
-        return (spare.length
-          ? `<div class="melt-lede"><b>${spare.length} spare piece${spare.length === 1 ? '' : 's'}</b> you are not wearing, worth <b><span class="dust-ico">${ICONS.dust(13)}</span> ${spareDust.toLocaleString()}</b> in Bone Dust.</div>`
-          : '<p class="note" style="margin:2px 2px">Nothing spare to melt: every piece you own is on you.</p>')
-          + `<details class="melt-fold" style="margin-top:12px"${spare.length ? ' open' : ''}><summary>Melt gear · ${rows.length} piece${rows.length === 1 ? '' : 's'} in the bench</summary>
-          <button class="btn danger melt-go" id="meltGo" hidden></button>
-          <div class="melt-tools">
-            <button class="link" id="meltAll">Select all ${spare.length} unworn</button>
-            ${/* "junk" implied a category gate that does not exist: every piece in
-                  the game is meltable and pays real dust. Name the rarities the
-                  sweep actually selects, derived so it stays honest if a new tier
-                  ever ships rather than hardcoding today's roster. */''}
-            ${junk.length && junk.length !== spare.length ? `<button class="link" id="meltJunk">Only the ${junk.length} ${esc([...new Set(junk.map(g => RARITIES[g.rarity].label))].join(' + '))}</button>` : ''}
-            <button class="link" id="meltNone">Clear</button>
-          </div>` + rows.map(g => {
-          const worn = gearLoNow[g.slot] === g.id;
-          // WORN gear is listed but never bulk-selectable: losing the piece you are
-          // wearing to a stray tap is not a mistake worth allowing.
-          return `<label class="crate-row melt-row${worn ? ' worn' : ''}">
-            <input type="checkbox" class="melt-pick" data-meltsel="${g.id}" data-dust="${gearDustValue(g)}" data-junk="${JUNK_RARITIES.has(g.rarity) ? '1' : '0'}"${worn ? ' disabled' : ''}>
-            <span class="crate-ico"><img src="${bhThumb(bhAsset(BH_BY_ID[g.artId]))}" alt="" style="width:27px;height:27px;object-fit:contain"></span>
-            <div style="flex:1"><b>${esc(g.name)}</b><small>${RARITIES[g.rarity].label} · ${esc(GEAR_SLOT_LABELS[g.slot] || g.slot)}${worn ? ' · <b>worn, tap to melt on its own</b>' : ''}</small><small>${
-              /* "no stats · looks only" read as a REASON TO KEEP something. It is
-                 a fact about the piece, not advice, so it states what melting
-                 leaves you: the look, which is kept forever either way. */
-              hasStats(g) ? `<span class="melt-stat">${esc(gearLabel(g))}${g.talent ? ` ${ICONS.boltIco(11)} ${esc(g.talentName)}` : ''}</span>` : '<span class="melt-nostat">looks only · no stats to lose</span>'
-            }</small></div>
-            ${worn ? `<button class="btn small danger" data-meltbench="${g.id}">+${gearDustValue(g)} dust</button>`
-                   /* THE CHEAP PIECES LOOKED UNMELTABLE. An unworn row rendered its
-                      value as muted grey text while the WORN row (the one you should
-                      not casually melt) carried the only button, so the pieces you
-                      most want gone presented as static labels. The row is a <label>
-                      wrapping the checkbox, so it has always been tappable; a button
-                      here would swallow that tap. Style it as the active chip it is
-                      instead of restyling the mechanism. */
-                   : `<span class="melt-val on">+${gearDustValue(g)}</span>`}
-          </label>`;
-        }).join('') + `</details>`;
-      })()}</section>`;
-    /* Scroll only when the USER opens the fold. The fold renders with `open`
-       whenever spares exist, and a <details> born open fires 'toggle' on
-       parse, so a toggle-driven scroll yanked every Backpack render (fresh
-       open, and the re-render after a crate) down to the bench. The summary
-       click is the user's own act, so the scroll hangs there instead; the
-       open state is read after the click's default action has toggled it. */
-    $('.melt-fold > summary', content)?.addEventListener('click', e => {
-      const fold = e.currentTarget.parentElement;
-      setTimeout(() => { if (fold.open) fold.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 0);
-    });
+`;
     $$('.loot-pending', content).forEach(scope => {
       wireLootChoice(scope, gid => claimDenLoot(scope.dataset.lootkey, gid), picked => {
         toast(`${picked.name} claimed. Equip it in your Wardrobe.`, 3200);
@@ -18443,90 +18546,6 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (await consumeConsumable('vigor')) { const e = await addVigor(VIGOR_DRAUGHT_AMOUNT); popSound(S.sounds); toast(`Vigor Draught drunk: +${VIGOR_DRAUGHT_AMOUNT} Vigor. You have ${e.ready} Pit ${e.ready === 1 ? 'fight' : 'fights'} ready.`, 3000); }
       renderCharacter(wrap, 'crates');
     });
-    $('#openStableFromBp', content)?.addEventListener('click', () => openStable());
-    // ---- bulk melt: tick pieces, one confirm ----
-    const meltPicks = () => $$('.melt-pick', content).filter(c => c.checked && !c.disabled);
-    const syncMeltBar = () => {
-      const go = $('#meltGo', content);
-      if (!go) return;
-      const picks = meltPicks();
-      const dust = picks.reduce((a, c) => a + (parseInt(c.dataset.dust, 10) || 0), 0);
-      go.hidden = !picks.length;
-      go.dataset.armed = '0';
-      go.innerHTML = `Melt ${picks.length} piece${picks.length === 1 ? '' : 's'} · <span class="dust-ico">${ICONS.dust(13)}</span> +${dust.toLocaleString()}`;
-    };
-    $$('.melt-pick', content).forEach(c => c.addEventListener('change', syncMeltBar));
-    $('#meltAll', content)?.addEventListener('click', e => {
-      e.preventDefault();
-      $$('.melt-pick', content).forEach(c => { if (!c.disabled) c.checked = true; });
-      syncMeltBar();
-    });
-    $('#meltJunk', content)?.addEventListener('click', e => {
-      e.preventDefault();
-      // the sweep Tom asked for: clear the good stuff, tick only the cosmetics
-      $$('.melt-pick', content).forEach(c => { c.checked = !c.disabled && c.dataset.junk === '1'; });
-      syncMeltBar();
-    });
-    $('#meltNone', content)?.addEventListener('click', e => {
-      e.preventDefault();
-      $$('.melt-pick', content).forEach(c => { c.checked = false; });
-      syncMeltBar();
-    });
-    $('#meltGo', content)?.addEventListener('click', async () => {
-      const go = $('#meltGo', content);
-      const picks = meltPicks();
-      if (!picks.length) return;
-      // arm-then-confirm, because this destroys several pieces at once and there
-      // is no undo. The count is in the label both times so you can see the size
-      // of what you are about to do.
-      if (go.dataset.armed !== '1') {
-        go.dataset.armed = '1';
-        const label = go.innerHTML;
-        go.textContent = `Tap again to melt ${picks.length}`;
-        setTimeout(() => { if (go.isConnected && go.dataset.armed === '1') { go.dataset.armed = '0'; go.innerHTML = label; } }, 3000);
-        return;
-      }
-      go.disabled = true;
-      let dust = 0, n = 0;
-      for (const c of picks) {
-        const res = await disenchantGear(c.dataset.meltsel);
-        if (res.ok) { dust += res.dust; n++; c.closest('.melt-row')?.remove(); }
-      }
-      go.disabled = false;
-      popSound(S.sounds);
-      toast(n ? `${n} piece${n === 1 ? '' : 's'} melted into ${dust.toLocaleString()} Bone Dust.` : 'Nothing melted.', 2800);
-      renderCharacter(wrap, 'crates');   // one re-render at the end, not per piece
-    });
-
-    $$('[data-meltbench]', content).forEach(btn => btn.addEventListener('click', async () => {
-      // arm-then-confirm, same contract as the Wardrobe melt
-      if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; const t = btn.textContent; btn.textContent = 'Tap to confirm'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = t; } }, 2600); return; }
-      const res = await disenchantGear(btn.dataset.meltbench);
-      if (!res.ok) { toast('Could not melt that piece.'); return; }
-      popSound(S.sounds);
-      toast(`${res.name} melted into ${res.dust} Bone Dust.`, 2200);
-      // melt in place (no full re-render) so the list doesn't jump to the top -
-      // you can melt a whole stack of spare gear in one pass.
-      btn.closest('.crate-row')?.remove();
-      const fold = content.querySelector('.melt-fold');
-      /* KEEP THE SUMMARY HONEST AFTER AN IN-PLACE MELT. This counted the surviving
-         BUTTONS, which exist only on WORN rows, so after melting the piece you were
-         wearing the header read "0 spare pieces worth 0" over a bench still holding
-         thirteen. Count the rows.
-         The .melt-lede line outside the fold is deliberately NOT touched here: this
-         handler is reachable only from a worn row, and melting a worn piece cannot
-         change the SPARE count or its total. I wrote a refresh for it first, then
-         could not make a guard fail against its absence, which is the tell that the
-         code was unreachable rather than the test being weak. */
-      if (fold && !content.querySelector('.melt-row')) { fold.remove(); }
-      else if (fold) {
-        const bench = $$('.melt-row', content).length;
-        const sum = fold.querySelector('summary');
-        if (sum) sum.innerHTML = `Melt gear · ${bench} piece${bench === 1 ? '' : 's'} in the bench`;
-      }
-      const nd = await boneDust();
-      content.querySelectorAll('.wallet-line b').forEach(b => { if (b.querySelector('.dust-ico')) b.innerHTML = `<span class="dust-ico">${ICONS.dust(13)}</span> ${nd.toLocaleString()}`; });
-    }));
     /* The Backpack's own dust grid moved to the Shop screen in v410 and its
        handler has bound nothing since: no dust cell is rendered into this
        scope. It went with the shop it belonged to. */
@@ -18579,6 +18598,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ${badgesGridHtml(earned)}
       <div style="height:10px"></div>`;
     bindBadgeTaps(content);
+  }
+  content.dataset.characterTab = tab;
+  if (tab === 'wardrobe' && pendingSalvageBench) {
+    pendingSalvageBench = false;
+    requestAnimationFrame(() => $('.bp-salvage', content)?.scrollIntoView({ block: 'start', behavior: 'instant' }));
   }
   // restore scroll for in-page re-renders (equip/salvage) so the view doesn't jump.
   // Twice: once now, once after layout, because images finishing decode can change
