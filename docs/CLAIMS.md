@@ -1,5 +1,10 @@
 # What each patch note claims, and what backs it
 
+## v588 (2026-09-12)
+
+Changelog item: Deleting a logged food asks you to confirm its name, then tells you which food was deleted.
+1. PROOF: `node tests/log-delete-confirm-audit.mjs` rows CONTROL, ASKS, CANCEL, DELETES and QUICK. Written but unrun: this lane cannot bind a socket. No browser pass claimed. | REACH: full portion edit and quick-add edit delete buttons, shared named confirmation, cancellation retaining the row, and named deletion toast. No undo.
+
 ## v587 (2026-09-12)
 
 Changelog item: The options that open under a piece now fit on screen instead of running off the bottom.

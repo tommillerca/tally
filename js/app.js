@@ -9624,12 +9624,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
     setTimeout(refresh, 80);
   });
 
-  if (editing) $('#delBtn', wrap).addEventListener('click', async () => {
-    await db.del('log', entry.id);
-    toast('Deleted');
-    closeAllSheetsViaHistory();
-    setTimeout(refresh, 80);
-  });
+  if (editing) $('#delBtn', wrap).addEventListener('click', () => confirmLogDelete(entry));
   if (food.source === 'custom') $('#editFoodBtn', wrap)?.addEventListener('click', () => openFoodForm({ existing: food, meal: curMeal }));
 
   // restore generic favorite state async
@@ -9679,6 +9674,21 @@ function closeAllSheetsViaHistory() {
     closeAllSheets();
     history.go(-n);
   }
+}
+
+function confirmLogDelete(entry) {
+  const review = openSheet(`
+    <div class="sheet-head"><h2>Delete "${esc(entry.name)}"?</h2></div>
+    <div class="sheet-body"><p class="note">This logged food will be gone.</p></div>
+    <div class="t1-foot"><button class="btn ghost sheet-close">Cancel</button><button class="btn danger-ish" data-log-delete-confirm>Delete entry</button></div>`, { cls: 't1', name: 'Delete entry' });
+  $('[data-log-delete-confirm]', review).addEventListener('click', async ev => {
+    if (ev.currentTarget.disabled) return;
+    ev.currentTarget.disabled = true;
+    await db.del('log', entry.id);
+    toast(`Deleted "${entry.name}"`);
+    closeAllSheetsViaHistory();
+    setTimeout(refresh, 80);
+  });
 }
 
 async function openEntryEdit(entryId) {
@@ -9769,12 +9779,7 @@ function openQuickAdd(getMeal, entry = null) {
     closeAllSheetsViaHistory();
     setTimeout(refresh, 80);
   });
-  if (entry) $('#qaDel', wrap).addEventListener('click', async () => {
-    await db.del('log', entry.id);
-    toast('Deleted');
-    closeAllSheetsViaHistory();
-    setTimeout(refresh, 80);
-  });
+  if (entry) $('#qaDel', wrap).addEventListener('click', () => confirmLogDelete(entry));
 }
 
 /* ================= barcode scanner ================= */
