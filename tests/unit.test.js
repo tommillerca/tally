@@ -5061,7 +5061,7 @@ test('Survey v2 S3 (e): a failed post keeps the exact body pending and a retry d
    that every reopen reads it: renderFoods no longer calls mealForHour, mealDefault
    is the only caller, and both chip handlers write the memory on a tap.
    Prove-red on the pre-fix tip: the first assert (mealPrecedence absent). */
-test('R24-L10 mealPrecedence is draft > remembered meal > clock, and every reopen reads it', () => {
+test('R24-L10 mealPrecedence is draft > meal remembered within two hours > clock, and every reopen reads it', () => {
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
   const ttl = app.match(/const ADD_DRAFT_TTL = [^\n]+\n/);
   const usable = app.match(/function addDraftUsable\([\s\S]*?\n\}\n/);
@@ -5072,14 +5072,19 @@ test('R24-L10 mealPrecedence is draft > remembered meal > clock, and every reope
   const now = 1_700_000_000_000, date = '2026-09-04', hour = 8;   // 08:00 is breakfast (0) by the clock
   assert.equal(mealForHour(hour), 0, 'precondition: the clock says breakfast');
   // 1. a usable draft wins over the memory and the clock
-  assert.equal(mealPrecedence({ draft: { meal: 2, q: 'ban', ts: now - 1000 }, last: { date, meal: 1 }, date, hour, now }), 2);
-  // 2. no draft: the meal remembered today wins over the clock
-  assert.equal(mealPrecedence({ draft: null, last: { date, meal: 1 }, date, hour, now }), 1, 'the remembered meal lost to the clock');
+  assert.equal(mealPrecedence({ draft: { meal: 2, q: 'ban', ts: now - 1000 }, last: { date, meal: 1, at: now - 1000 }, date, hour, now }), 2);
+  // 2. no draft: the meal remembered within two hours wins over the clock
+  assert.equal(mealPrecedence({ draft: null, last: { date, meal: 1, at: now - 1000 }, date, hour, now }), 1, 'the remembered meal lost to the clock');
   // 3. a chip-tap-only draft (nothing typed or picked) is not usable: the memory carries the tap
-  assert.equal(mealPrecedence({ draft: { meal: 2, q: '', ts: now - 1000 }, last: { date, meal: 3 }, date, hour, now }), 3);
+  assert.equal(mealPrecedence({ draft: { meal: 2, q: '', ts: now - 1000 }, last: { date, meal: 3, at: now - 1000 }, date, hour, now }), 3);
   // 4. a stale draft and yesterday's memory both fall through to the clock
-  assert.equal(mealPrecedence({ draft: { meal: 2, q: 'ban', ts: now - 25 * 3600e3 }, last: { date: '2026-09-03', meal: 1 }, date, hour, now }), 0);
+  assert.equal(mealPrecedence({ draft: { meal: 2, q: 'ban', ts: now - 25 * 3600e3 }, last: { date: '2026-09-03', meal: 1, at: now - 1000 }, date, hour, now }), 0);
   assert.equal(mealPrecedence({ draft: null, last: null, date, hour, now }), 0);
+  // F16: expired and legacy memories yield to the clock, including the exact boundary.
+  assert.equal(mealPrecedence({ draft: null, last: { date, meal: 1, at: now - 3 * 3600e3 }, date, hour, now }), 0, 'a meal older than two hours must lose to the clock');
+  assert.equal(mealPrecedence({ draft: null, last: { date, meal: 1, at: now - 2 * 3600e3 }, date, hour, now }), 0, 'memory expires at exactly two hours');
+  assert.equal(mealPrecedence({ draft: null, last: { date, meal: 1, at: now - 2 * 3600e3 + 1 }, date, hour, now }), 1);
+  assert.equal(mealPrecedence({ draft: null, last: { date, meal: 1 }, date, hour, now }), 0, 'legacy memory without at expires');
   // the one place: mealDefault feeds mealPrecedence, and nothing else asks the clock
   const md = app.match(/async function mealDefault\(\) \{([\s\S]*?)\n\}\n/);
   assert.ok(md && /mealPrecedence\(/.test(md[1]), 'mealDefault no longer routes through mealPrecedence');

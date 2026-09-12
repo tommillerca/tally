@@ -196,6 +196,25 @@ ok('MYFOODS_NEW a chip tap, then My foods, then Create a food opens the portion 
   `tapped ${target} (${hourDefault.labels[target]}), portion chip on ${newFoodOn.on}` +
   (newFoodOn.on === 0 && target !== 0 ? ': openFoodForm({}) defaulted to Breakfast, the tap was never read' : ''));
 
+// F16: real taps and commits above write fresh at values. Age that same row
+// after closing sheets, and remove any usable draft so this isolates memory.
+await closeSheets();
+const expired = await page.evaluate(async () => {
+  const { kvGet, kvSet } = await import('./js/db.js');
+  const { mealForHour } = await import('./js/nutrition.js');
+  const now = Date.now();
+  const clock = new Date(now);
+  const expected = mealForHour(clock.getHours() + clock.getMinutes() / 60);
+  const last = await kvGet('lastMealToday', null);
+  await kvSet('addDraft', null);
+  await kvSet('lastMealToday', { ...last, meal: (expected + 1) % 4, at: now - 3 * 3600e3 });
+  return { expected, recorded: Number.isFinite(last?.at) && now - last.at < 2 * 3600e3 };
+});
+const afterExpiry = await openAdd();
+ok('EXPIRED a three-hour-old meal yields to the clock on reopen',
+  expired.recorded && afterExpiry.count >= 3 && afterExpiry.on === expired.expected,
+  `fresh timestamp recorded ${expired.recorded}, clock ${expired.expected}, reopened on ${afterExpiry.on}`);
+
 await browser.close();
 console.log(fails.length
   ? `\n${fails.length} FAILED: ${fails.join(', ')}`
