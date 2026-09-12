@@ -727,6 +727,7 @@ const HELPERS = new Set([
   'reap-orphans.mjs',  // gate housekeeping invoked with --kill, not a product guard
 ]);
 PURE.push('toast-seat.test.mjs');
+PURE.push('feedback-register-lint.mjs');
 const onDisk = (await readdir(here))
   .filter(f => /\.(mjs|js)$/.test(f) && !HELPERS.has(f))
   .sort();
