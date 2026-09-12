@@ -354,10 +354,14 @@ else {
   });
   console.log('panel:', JSON.stringify(panel));
   check('the transmog panel is offered on a slot holding a plain cosmetic', panel.hasPanel && panel.cells >= 2, JSON.stringify(panel));
-  check('with what you are wearing preselected', panel.ownPreselected && /as equipped/i.test(panel.tag), JSON.stringify(panel));
+  /* v550 ("a clearer Dressing Room") retitled the own-look tag "Reset" and the safety
+     note "Your equipped piece keeps its stats." Both rows had drifted onto the old
+     copy and nobody saw it because the rarity row crashed first. Re-anchored on
+     the assertion, not the product (lessons_audit_drift_false_red). */
+  check('with what you are wearing preselected', panel.ownPreselected && /as equipped|reset/i.test(panel.tag), JSON.stringify(panel));
   check('and it says switching is free rather than quoting a price', /free/i.test(panel.lead), panel.lead);
   check('and it still promises the piece itself is safe, which is the other half a player needs before tapping',
-    /nothing is destroyed/i.test(panel.note), panel.note);
+    /nothing is destroyed|keeps its stats/i.test(panel.note), panel.note);
 
   /* THE END OF THE CHAIN, and it runs LAST on purpose: applying a transmog moves
      what is preselected, so doing this before the panel checks above made them
