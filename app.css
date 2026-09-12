@@ -12473,4 +12473,71 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
     --fs-room-title: 1.125rem;
     line-height: 1.2;
   }
+/* NAME-FIT policy: identities wrap, with no line cap or font reduction.
+   A second line handles ordinary long names; arbitrary imported names may need
+   more. Trade compact rows and the first-screen peek for the complete identity.
+   Keep this append-only: Wardrobe 1F freezes the inherited CSS prefix. */
+.hub-title.ward-identity > .hub-name,
+.screen--today .hero-meta .hero-name,
+#crewName, .crew-greeting,
+.pname-iso, .cfan-plate b, .fl-main b, #fpTitle,
+.pod-name, .lb-who b, .race-lane .nm b,
+.spp-plate b, .spire-flag, .hlw-say,
+.sheet-rename .note, #nbPreview, #onbName,
+.fight-title h2, .fight-hud .fname, .fight-venue, .vs-name, .vs-venue,
+.gift-recipient, .sp-siege, .race-gap, #mapCount, #toast,
+.gift-sealed .tx b, .cheer-tx b, .pack-coins, .dlv-rows .t3-tx b,
+#flog, .fight-over .note, #spireAct,
+#raceResultCard .race-h b, .race-champ span,
+#lbYouAre span, #raceCard .gbn-txt small {
+  min-width: 0; max-width: 100%;
+  white-space: normal; overflow-wrap: anywhere;
+  overflow: visible; text-overflow: clip;
+  -webkit-line-clamp: unset;
+}
+.hub-title.ward-identity, .hero-lvrow { align-items: baseline; }
+.hub-title.ward-identity > .hub-name,
+.screen--today .hero-meta .hero-name { flex: 1; }
+.crew-greeting, .pname-iso { display: block; }
+.cfan-sel-nm, .fl-main, .lb-pod, .race-lane .bd,
+.fight-title, .fight-hud .hud-side { min-width: 0; }
+.race-lane .nm b { flex: 1 1 50%; }
+.fight-hud .fname { flex-wrap: wrap; gap: 4px; }
+.spire-flag { width: 180px; max-width: 60vw; text-transform: uppercase; }
+#raceResultCard .race-h b { text-transform: uppercase; }
+
+/* The caption participates in layout, so extra lines extend the scene below
+   the art instead of disappearing above a fixed 96px bottom band. */
+.screen--today #bhStage {
+  height: auto;
+  padding-top: calc(var(--scene-h) + var(--bleed, 0px) - 96px);
+}
+.screen--today #bhStage > .hero-meta {
+  position: relative; height: auto; min-height: 96px;
+}
+
+/* A variable-height nameplate must not cover the pet or escape a fixed card.
+   Grid stacks the existing fanned cards while reserving the tallest card's
+   height. Their existing transforms still position each card in the fan. */
+#cfanWrap { height: auto; min-height: 348px; }
+#cfanDeck { position: relative; display: grid; padding: 10px 0 68px; }
+#cfanDeck .cfan-card { position: relative; grid-area: 1 / 1; top: 0; height: auto; align-self: start; }
+#cfanDeck .cfan-stage { height: 270px; }
+#cfanDeck .cfan-plate { position: relative; }
+
+.vs-inner { min-width: 0; max-width: 100%; }
+.vs-name { text-transform: uppercase; }
+.vs-card { overflow: auto; }
+
+/* Inline identity fragments need a measurable, wrapping box too. */
+.crew-greeting b, .race-champ b, .sheet-rename .note b {
+  display: inline-block; max-width: 100%; overflow-wrap: anywhere;
+}
+
+/* A fixed Cheer back button must yield a line before it squeezes the sender
+   below one glyph at large root text sizes. Keep the name's wrapping policy. */
+.cheer-row { flex-wrap: wrap; }
+.cheer-row .cheer-tx { flex: 1 1 8rem; }
+.cheer-row .btn.cheer-back {
+  max-width: 100%; white-space: normal; overflow-wrap: anywhere;
 }
