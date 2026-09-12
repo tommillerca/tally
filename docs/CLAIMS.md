@@ -1,5 +1,15 @@
 # What each patch note claims, and what backs it
 
+## v587 (2026-09-12)
+
+Changelog item: The options that open under a piece now fit on screen instead of running off the bottom.
+1. PROOF: `node tests/wardrobe-rail-fit-audit.mjs` rows CONTROL, NEAR and FITS, green in `docs/v587/guard-red.txt` and proven red there with the fix removed (rail 578..856.5 in an 852px viewport). Measured at 393x852 on a save seeded with 14 cosmetic families and 20 gear pieces. Tapping a statted piece at y493 opened its rail at y578, correctly adjacent, but 303px tall so it ran to y880 on an 852px screen: the controls for the piece you just tapped were off the bottom, which is why Tom read it as nothing happening ("this menu pops down below the fold and not near the gear youre trying to click it feels like a glitch"). The rail is now 157px, ending at y734, fully inside the viewport. | REACH: the Wardrobe variant rail at 393x852. Taller rails on slots with far more owned variants are not bounded by this change; only the per-card height is.
+
+Changelog item: Cosmetic cards in that row are drawn at the right size again.
+2. PROOF: `node tests/wardrobe-rail-fit-audit.mjs` rows UNIFORM and ART, proven red with the fix removed (8 canvases at 200px inside 104px cards, every card 266.5px). The cosmetic cards carried `<canvas class="ward-art" width="200" height="200">` as a DIRECT child of the card button, while the only rule sizing that canvas is `.pw-item.famr .famr-art canvas.ward-art`, which requires a `.famr-art` WRAPPER. The selector never matched, so the canvas fell back to its intrinsic 200x200 attribute size inside a 104px card. Measured: those cards rendered 267px tall against 110px for the gear cards beside them in the same rail, which is what Tom saw as "youve fully miscaled the items". Sized to 78px to match the `.famr-art` box the wrapped path uses, so both render the same. All cards in the rail now measure a uniform 145px. | REACH: the variant rail's cosmetic cards.
+
+Deviations: this is PRE-EXISTING, not a regression from the recent Wardrobe work, and was checked rather than assumed. The same fixture against `app.css` at d29682d1 (pre-v579) produced the identical 92x291 card and 303px rail, so the defect predates every change in this week's Wardrobe sequence. Recorded because the surrounding work was mine and the obvious assumption would have been that this was too.
+
 ## v586 (2026-09-12)
 
 Changelog item: Picking a slot shows that slot, instead of listing every other slot underneath it.
