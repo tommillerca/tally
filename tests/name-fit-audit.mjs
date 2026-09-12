@@ -139,18 +139,29 @@ async function measure(page, selector, name) {
     return elements.filter(visible).map(e => {
       e.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
       const r = e.getBoundingClientRect(), s = getComputedStyle(e);
-      let clipped = false, hidden = false;
+      const describe = node => node.tagName.toLowerCase()
+        + (node.id ? `#${node.id}` : '')
+        + [...node.classList].map(c => `.${c}`).join('');
+      const clipReasons = [];
+      let hidden = false;
       for (let a = e.parentElement; a; a = a.parentElement) {
         const ar = a.getBoundingClientRect(), cs = getComputedStyle(a);
         hidden ||= Number(cs.opacity) === 0 || cs.visibility === 'hidden';
-        if (['hidden', 'clip'].includes(cs.overflowX)) clipped ||= r.left < ar.left - 1 || r.right > ar.right + 1;
-        if (['hidden', 'clip'].includes(cs.overflowY)) clipped ||= r.top < ar.top - 1 || r.bottom > ar.bottom + 1;
+        if (['hidden', 'clip'].includes(cs.overflowX) && (r.left < ar.left - 1 || r.right > ar.right + 1))
+          clipReasons.push({ element: describe(a), axis: 'x', overflow: cs.overflowX,
+            elementStart: r.left, elementEnd: r.right, clipStart: ar.left, clipEnd: ar.right });
+        if (['hidden', 'clip'].includes(cs.overflowY) && (r.top < ar.top - 1 || r.bottom > ar.bottom + 1))
+          clipReasons.push({ element: describe(a), axis: 'y', overflow: cs.overflowY,
+            elementStart: r.top, elementEnd: r.bottom, clipStart: ar.top, clipEnd: ar.bottom });
       }
-      return { element: `${e.tagName.toLowerCase()}#${e.id}.${e.className}`, rect: { x: r.x, y: r.y, width: r.width, height: r.height },
+      if (r.left < -1 || r.right > innerWidth + 1)
+        clipReasons.push({ element: 'viewport', axis: 'x', elementStart: r.left,
+          elementEnd: r.right, clipStart: 0, clipEnd: innerWidth });
+      return { element: describe(e), rect: { x: r.x, y: r.y, width: r.width, height: r.height },
         scrollWidth: e.scrollWidth, clientWidth: e.clientWidth, scrollHeight: e.scrollHeight, clientHeight: e.clientHeight,
         fontSize: parseFloat(s.fontSize), minimum: parseFloat(getComputedStyle(document.documentElement).fontSize) * .5625,
         intact: e.textContent.includes(name), rendered: r.width > 0 && r.height > 0 && !hidden && Number(s.opacity) !== 0,
-        clipped: clipped || r.left < -1 || r.right > innerWidth + 1 };
+        clipped: clipReasons.length > 0, clipReasons };
     });
   }, { selector, name });
 }
@@ -200,8 +211,15 @@ try {
           for (const row of rows) {
             checked++;
             console.log(`PASS CONTROL ${context} ${JSON.stringify(row)}`);
-            for (const [guard, pass] of [['FITS', row.clientWidth > 0 && row.scrollWidth - row.clientWidth <= 1 && row.scrollHeight - row.clientHeight <= 1 && !row.clipped], ['LEGIBLE', row.fontSize >= row.minimum], ['INTACT', row.intact]]) {
-              console.log(`${pass ? 'PASS' : 'FAIL'} ${guard} ${context} scrollWidth=${row.scrollWidth} clientWidth=${row.clientWidth} font=${row.fontSize} minimum=${row.minimum}`);
+            const fitConditions = {
+              positiveClientWidth: row.clientWidth > 0,
+              horizontalOverflowWithinTolerance: row.scrollWidth - row.clientWidth <= 1,
+              verticalOverflowWithinTolerance: row.scrollHeight - row.clientHeight <= 1,
+              noClipping: !row.clipped,
+            };
+            const failedFitConditions = Object.keys(fitConditions).filter(key => !fitConditions[key]);
+            for (const [guard, pass] of [['FITS', failedFitConditions.length === 0], ['LEGIBLE', row.fontSize >= row.minimum], ['INTACT', row.intact]]) {
+              console.log(`${pass ? 'PASS' : 'FAIL'} ${guard} ${context} selector=${JSON.stringify(selector)} element=${JSON.stringify(row.element)} scrollWidth=${row.scrollWidth} clientWidth=${row.clientWidth} scrollHeight=${row.scrollHeight} clientHeight=${row.clientHeight} clipped=${row.clipped} clipReasons=${JSON.stringify(row.clipReasons)} fitConditions=${JSON.stringify(fitConditions)} failedFitConditions=${JSON.stringify(failedFitConditions)} font=${row.fontSize} minimum=${row.minimum}`);
               if (!pass) failed++;
             }
           }
