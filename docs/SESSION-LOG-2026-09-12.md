@@ -100,3 +100,10 @@ Held out of v588: pet growth (D2), and l-ackpriv (recovery save must see a real 
 - v591 verified live: version.json, sw.js, APP_BUILD and changelog all v591; the four new precache entries are in the served sw.js.
 - Gate on the v591 train: 277 pass, 45 fail. Against main's 48, five audits are newly green (precache, remote-den, pet-hold, pit-exit-motion, shop-door); the two train-only reds were the new seed audit's missing CONTROL row (added) and boneyard-scroll (flaky alone on main too).
 - Day total: four releases (v588 to v591), one Worker deploy, three bug hunts plus the gate-reds triage, 22 Codex lanes. Every decision Tom made today is live. Nothing is waiting on him.
+
+## 16:50 round two: making the gate honest
+
+- Gate log fix merged (PR #526): a crashed suite's entry now keeps the thrown error and stack. The old filter matched the "AUDIT END ... FAILED" footer as the failing row, which is how 23 of the 48 main reds came out "unresolved".
+- first-run-honesty (PR #527): red on every gate run on main, not a product bug. Gwart's disclosure is typed into a clipped reveal span, so innerText never carried it; the audit now reads the talk box's aria-label (the sentence a screen reader gets).
+- Lane l-walletfix: purchase-firewall, freeze-refund, garden-retire, merchant-retire and backup-roundtrip fund their test wallets through the revisioned writers and all five grade for real now (51, 22, 25, 31, 47 rows green). Three more things fell out once they could run: purchase-firewall's prose stripper could not nest template literals (replaced by a scanner), its rerollRack markers predated v527, and a refused restore surfaced a raw storage error with no "your old data is unchanged" sentence (one wording change in js/db.js importAll, product). boneyard-icon treats an undrawn buried-crate spawn as unproven, like the egg and mini already did.
+- All of that is the v592 train, gating now. Expected: seven more of main's 48 reds green.
