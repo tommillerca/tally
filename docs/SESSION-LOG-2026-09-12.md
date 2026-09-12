@@ -60,3 +60,11 @@ Held out of v588: pet growth (D2), and l-ackpriv (recovery save must see a real 
 - Tom's D1 ("option 3") and D4 ("do them all") logged. Lanes running: l-mealchip, l-eco5, l-eco6, l-eco2. Economy #1, #3, #4 queued behind them.
 - v589 train assembled from five lanes (first run, leaderboard phrases, pet growth, recovery acknowledgement + privacy link, podium settlement). Gate running next, diffed against main's 48 known reds.
 - The podium fix is Worker code: it does nothing live until Tom runs server/deploy.sh. Noted in docs/SERVER-DEPLOY-PENDING.md.
+
+## 15:10 v589 gated, economy and server fixes in build
+
+- v589 gate: every train-only red so far was an audit whose extracted-source context did not know the two new functions (petGrowth, relativeAgo), one audit pinned to the old "Last online: UTC" copy (re-anchored with Tom's quote), and two new audits missing a positive CONTROL row. All fixed on the train and re-run green alone.
+- Economy lanes landed and proven (green on tree, red on main): level rewards (l-eco2, 16 rows red on main), friend battle and spar (l-eco5, 22), wellness completions (l-eco6, 14), Health milestones (l-eco3, 53). Gifts and spire coins were blocked by the server contract (day-keyed dedupe, no takeover id) and are re-running with Worker changes allowed, since Tom deploys server fixes anyway.
+- Server lanes running: gift/cheer stable key (also closes server #10), spire takeover receipts, replay identity (#2), flagged friends (#5), local race weeks (F21).
+- The meal chip (F16, option 3) is built and proven: a meal older than two hours loses to the clock, red on main.
+- v590 will carry all of the above once v589 is live. Every Worker change waits on Tom running server/deploy.sh; docs/SERVER-DEPLOY-PENDING.md lists them.
