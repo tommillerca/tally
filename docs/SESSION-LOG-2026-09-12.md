@@ -53,3 +53,10 @@ Held out of v588: pet growth (D2), and l-ackpriv (recovery save must see a real 
 - Train-only reds: six. Five were audits pinned to the Backpack's old markup or to the delete flow, re-anchored. The sixth, boneyard-scroll, times out on main too when run alone (flaky), so it is not v588's.
 - v588 ships now: five lanes, gate diff clean against main.
 - Tom answered D2 (grow pets everywhere except the Stable, including the Paddock, which needs the paddock.js lock lifted), D3 (swap the first-run buttons, new-player focused), D5 (podium settlement first, then the rest), D6 (race weeks local, plus a new ask: strip the UTC chatter from the leaderboard, relative time only). D1 and D4 need a plainer explanation; sent again.
+
+## 13:40 v588 live, v589 assembled
+
+- v588 verified live at 12:50: version.json, sw.js, APP_BUILD and the changelog all say v588; the bench and the delete confirm are in the served app.js.
+- Tom's D1 ("option 3") and D4 ("do them all") logged. Lanes running: l-mealchip, l-eco5, l-eco6, l-eco2. Economy #1, #3, #4 queued behind them.
+- v589 train assembled from five lanes (first run, leaderboard phrases, pet growth, recovery acknowledgement + privacy link, podium settlement). Gate running next, diffed against main's 48 known reds.
+- The podium fix is Worker code: it does nothing live until Tom runs server/deploy.sh. Noted in docs/SERVER-DEPLOY-PENDING.md.

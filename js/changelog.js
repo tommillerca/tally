@@ -9,8 +9,13 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
-  { n: 589, date: '2026-09-12', title: 'New here? Start your Bonehead', items: [
+  { n: 589, date: '2026-09-12', title: 'New players first, pets that grow, a leaderboard that talks like a person', items: [
     'First run puts starting your Bonehead first, with account and backup restore still available.',
+    'The leaderboard shows online now, hours ago or days ago instead of exact timestamps.',
+    'Breeding makes pets a little bigger in the Pit, Today, Crew and Paddock, up to 24%. Their size in the Stable stays the same.',
+    'Recovery code saving now waits for the server to confirm your recovery ID.',
+    'The Privacy link opens the policy instead of reopening the app.',
+    'Race prizes for second and third place can no longer go missing when the week rolls over.',
   ] },
   { n: 588, date: '2026-09-12', title: 'The Salvage Bench moves to the Wardrobe, and names get room', items: [
     'Find the Salvage Bench below your slots in the Wardrobe. The Shop shortcut takes you straight there.',

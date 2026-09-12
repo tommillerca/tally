@@ -2,10 +2,25 @@
 
 ## v589 (2026-09-12)
 
-Changelog item: First run puts starting your Bonehead first, with account and backup restore still available.
-1. PROOF: device-loss-audit.mjs rows UNKNOWN-PRIMARY, UNKNOWN-RESTORE-STAYS and KNOWN-UNCHANGED execute the production gate with Node DOM doubles. UNKNOWN-PRIMARY failed on unchanged main cb2aca568cf53661d5f9bd584831f618feda3cd7 because saveNew was not primary; all 17 rows pass after the change. | REACH: unknown first-run button order, styling, copy and restore handler; known status and either saved-progress witness retain primary recovery and Retry. No browser layout proof is claimed.
+Assembled from five Codex lanes by the commander. Pure audits run on each lane tree and proven red on a throwaway worktree of main; the one browser audit run by the commander on the lane tree and against live.
 
-Deviation: neither restore-latch-audit.mjs nor first-run-honesty-audit.mjs extracts this gate with Node DOM doubles. The existing extraction is in device-loss-audit.mjs, so that audit was extended and its old heading assertion updated. The unit suite exposed the same old heading assertion in storage-boot-audit.mjs; it was updated to the required copy.
+Changelog item: First run puts starting your Bonehead first, with account and backup restore still available.
+1. PROOF: device-loss-audit.mjs rows UNKNOWN-PRIMARY, UNKNOWN-RESTORE-STAYS and KNOWN-UNCHANGED over the extracted save-recovery gate; 3 rows red on main cb2aca56, 17 of 17 green on the train. storage-boot-audit.mjs re-anchored on the new heading. | REACH: the unknown/no-save branch only ("NEW HERE?", I am new primary, Restore the ghost). The known-missing-save branch is unchanged: Restore first, Retry cloud recovery second. Tom: "swap them it should be new player focused".
+
+Changelog item: The leaderboard shows online now, hours ago or days ago instead of exact timestamps.
+2. PROOF: leaderboard-seen-audit.mjs rows PHRASES (boundaries), NO-UTC (the rendered leaderboard row for a fixture player carries no UTC, no date, no clock time) and CONTROL; PHRASES and NO-UTC red on main (production.relativeAgo is not a function; the row carried "Last online: 2026-09-12 14:30 UTC", which arrived in v571). Unit rows for relativeAgo. Declared PURE. | REACH: every leaderboard row's last-seen line via leaderboardLastOnline. onlineLabel's on/fresh gates, which the step race reads, are unchanged. Tom: "it should just say logged on 2 hours ago or 2 days ago etc".
+
+Changelog item: Breeding makes pets a little bigger in the Pit, Today, Crew and Paddock, up to 24%. Their size in the Stable stays the same.
+3. PROOF: pet-growth-audit.mjs row TODAY: two instances of one species at lineage 0 and 3, each equipped in turn, the Today hero companion measured; lineage 3 is 12% wider within 1px with the aspect ratio unchanged within 1%. Green on the lane tree; against live v588 the same assertion fails (equal widths). Unit rows petGrowth(0) = 1, petGrowth(3) = 1.12, petGrowth(9) = 1.24. Declared in the gate. | REACH: petSpriteHtml and petPortraitHtml scale the requested px by petGrowth(lineage), rounded; callers pass the instance lineage on Today's hero companion, the Pit stage (which grows its box by the same factor), the Crew fan card and friend profile, and the Paddock scene rendered in app.js. The Stable and js/paddock.js are untouched, by Tom's call ("the pets dont need to grow how they are viewed in the stable just elsewhere"). Render-time uniform scale only; no asset changed.
+
+Changelog item: Recovery code saving now waits for the server to confirm your recovery ID.
+4. PROOF: recovery-status-audit.mjs gains 10 save cases (HTML body, empty JSON, ok:false, missing or mismatched ID, null, real success, existing-ID rewrap, 409); 7 refusal rows red on main cb2aca56, all green on the train. settings-safety-audit.mjs still 33 rows green with its success stub carrying the real acknowledgement body. | REACH: setRecoveryPhrase parses the acknowledgement and stamps recoverySetAt / recoveryId only on ok:true with a matching recoveryId; anything else returns a retryable refusal and the v588 retry handling shows it. Node only; no live server claim.
+
+Changelog item: The Privacy link opens the policy instead of reopening the app.
+5. PROOF: sw-standalone-doc-audit.mjs runs the production fetch listener with a ready cache and offline transport: privacy.html navigation with and without a query fails on main cb2aca56 (served index.html), five rows green on the train. Declared PURE. | REACH: a navigation whose path ends in a precached standalone document is served by its own cache key; app routes keep index.html. sw.js changed, so this release needs its version bump (done, v589).
+
+Changelog item: Race prizes for second and third place can no longer go missing when the week rolls over.
+6. PROOF: podium-settlement-audit.mjs rows ALL-OR-NOTHING (fail the second grant insert: nothing written, week not settled, retry pays exactly three prizes and every finish notice), ONCE and CONTROL over the in-process Worker and SQLite double; 3 rows red on main, 5 of 5 green on the train. | REACH: Worker code only (server/src/index.js, one D1 batch for the whole settlement), NOT deployed; live behaviour changes when Tom runs server/deploy.sh. Recorded in docs/SERVER-DEPLOY-PENDING.md. Existing partially settled weeks are not repaired by this change.
 
 ## v588 (2026-09-12)
 
