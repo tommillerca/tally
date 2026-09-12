@@ -8503,6 +8503,11 @@ test('Crew empty state applies before enrichment and survives stale paints', asy
   assert.equal(node('#cfanEmpty').hidden, true);
 });
 
+test('Settings import retention and retry safety audit', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'settings-safety-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /0 failed/);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
