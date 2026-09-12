@@ -277,6 +277,7 @@ const PURE = [
   'wardrobe-noise-audit.mjs',
   'sync-clientpath-audit.mjs', // Real boot/snapshot/signing over mem-idb; failed profile retries, no sockets.
   'sync-authpath-audit.mjs', // Real signed client to in-process Worker and SQLite; mature profiles and rejection controls, no sockets.
+  'replay-identity-audit.mjs', // PURE: in-process Worker and in-memory SQLite, no sockets.
   'sync-path-audit.mjs', // Behavioural profile sync, real snapshot/modules and boot/resume callbacks over mem-idb; no sockets.
   'wardrobe-playtest-audit.mjs', 'lab-room2-audit.mjs', 'stable-stale-disclosure-audit.mjs', 'breed-last-colour-audit.mjs', 'stable-loss-disclosure-audit.mjs', 'lab-health-recovery-audit.mjs',
   'lab-integration-audit.mjs', 'lab-ui-audit.mjs', 'laboratory-audit.mjs', 'lab-foundation-audit.mjs', 'pet-stress-guard.mjs', 'crew-pet-node-guard.mjs',
