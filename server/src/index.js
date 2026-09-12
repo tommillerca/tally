@@ -3256,14 +3256,13 @@ export default {
           const last = await settledBoard(prev);
           if (last.length) {
             const w = last[0];
-            champion = { name: w.name || w.handle, steps: w.steps, week: prev };
-            // Pay the whole podium. Every grant carries the SAME settledKey so the
-            // `already` check above still sees the week as settled after one row,
-            // and OR IGNORE keeps a re-run from paying anyone twice; the key is
-            // unique per (player, key), so three players can each hold one.
+            // Commit every prize and finish notice together. The shared key
+            // marks settlement only after the entire D1 batch commits; the
+            // per-player unique key still guards against duplicate payouts.
+            const settlement = [];
             for (let i = 0; i < Math.min(STEP_RACE_PODIUM.length, last.length); i++) {
               const p = last[i], prize = STEP_RACE_PODIUM[i];
-              await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+              settlement.push(env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
                 .bind(p.id, settledKey, 'social', JSON.stringify({
                   coins: prize.coins,
                   ...(prize.crate ? { crate: prize.crate } : {}),
@@ -3276,7 +3275,7 @@ export default {
                   place: i + 1,
                   steps: p.steps,
                   note: `${prize.place} in the step race with ${p.steps.toLocaleString()} steps!`,
-                }), Date.now()).run();
+                }), Date.now()));
             }
             /* CREW-6: the close was silent for everyone outside the podium --
                "6th and below get nothing anywhere". The podium grants above
@@ -3289,11 +3288,13 @@ export default {
                player, so a re-run of this same settlement pays nothing twice. */
             for (let i = STEP_RACE_PODIUM.length; i < last.length; i++) {
               const p = last[i];
-              await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+              settlement.push(env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
                 .bind(p.id, `raceplace-${prev}`, 'crew', JSON.stringify({
                   note: `You finished ${ordinal(i + 1)} of ${last.length} in the step race with ${p.steps.toLocaleString()} steps.`,
-                }), Date.now()).run();
+                }), Date.now()));
             }
+            await env.DB.batch(settlement);
+            champion = { name: w.name || w.handle, steps: w.steps, week: prev };
           }
           // If nobody raced last week there is nothing to settle and nothing to
           // record: a marker row would be pulled down as a grant and show up in

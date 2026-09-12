@@ -1,5 +1,12 @@
 # What each patch note claims, and what backs it
 
+## v589 (2026-09-12)
+
+Changelog item: Race prizes for second and third place can no longer go missing when the week rolls over
+1. PROOF: podium-settlement-audit.mjs (PURE), ALL-OR-NOTHING, ONCE and CONTROL. ALL-OR-NOTHING is RED on main cb2aca568cf53661d5f9bd584831f618feda3cd7: a second-insert failure leaves one grant and a settled week; a seventh-insert failure leaves six grants and a settled week. After the fix, all five audit cases pass. node tests/unit.test.js: 392 passed, 0 failed. | REACH: Worker code only, not deployed; live behaviour changes when Tom runs server/deploy.sh
+
+Fixture clarification: the existing podium pays five places, with finish notices from sixth. The three-racer fixture proves exactly three prizes; the seven-racer fixtures preserve all five prizes and verify every finish notice, including rollback on the second notice. No amounts, ranks or keys changed. Existing partially settled weeks are not repaired by this change.
+
 ## v588 (2026-09-12)
 
 Assembled from five Codex lanes by the commander. Every browser audit below was run by the commander on the lane tree and again on the merged train; the lanes cannot bind a socket.

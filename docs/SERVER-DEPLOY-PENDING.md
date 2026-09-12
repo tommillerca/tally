@@ -221,3 +221,14 @@ leaderboard extract. Both halves.
 The pet roster and its wardrobe ride the PLAINTEXT `players.profile` column, never
 the end-to-end encrypted `backups` blob. That is deliberate: a friend cannot
 decrypt the vault either, so the vault is not a channel to another player at all.
+
+
+## v589 (2026-09-12): atomic race settlement pending
+
+Worker code only, not deployed; live behaviour changes when Tom runs server/deploy.sh.
+The /steps/week settlement now batches all podium grants and finish notices in
+one transaction. A failed insert rolls everything back so the next request retries.
+The existing five-place payouts, ranks, week keys and per-player uniqueness stay
+unchanged. No migration or secret change is required by this patch. No deployment,
+production D1 access or migration execution was performed. Existing partial
+settlements are not repaired. Local proof: podium-settlement-audit.mjs (PURE).
