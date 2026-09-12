@@ -9,6 +9,10 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 584, date: '2026-09-12', title: 'Walks you log by hand count toward eggs', items: [
+    'A walk you add yourself now counts toward your next egg, even without Apple Health.',
+    'The Stable says how many steps an egg needs.',
+  ] },
   { n: 583, date: '2026-09-12', title: 'The Laboratory celebrates every result', items: [
     'A Laboratory experiment plays its reveal even when the outcome was certain.',
   ] },

@@ -38,7 +38,6 @@ verbatim; never paraphrase into the table.
 | F4 | Settings | `docs/PLAYTEST-SETTINGS.md` item 1: importing an older backup silently removes newer earnings (125 coins + 1 crate -> 100 coins, 0 crates, message "Backup restored") | **OPEN, HIGH HARM.** Breaks the no-permanent-loss lock | `docs/PLAYTEST-SETTINGS.md` |
 | F5 | Melt | "no sound on melt it's also a fucking nightmare that needs to be redesigned basically unuseable with the interface" | **REVIEW DELIVERED, NEEDS TOM'S PICK.** Every advertised Salvage Bench route opens the Backpack instead; the bench is below the Kitchen. Sound hooks all exist | `docs/melt-review.md` |
 | F6 | Names | Names still clipped at `#newcomersList .t3-tx b` (3758px of text in a 143px box) and `#lbBody .lb-who b` (86 in 77), plus 144 rows at 200%/53px text | **OPEN.** v579 fixed only `.hub-name` and `.hero-name` | `tests/name-fit-audit.mjs` (declared `skip`) |
-| F12 | Pets | from `docs/BUGS-v580.md` #2: "Without Apple Health you can never own a second pet" — manual walks never write a `steps` field and eggs hatch on steps; the 14,000 threshold is shown to the player zero times | **OPEN, HIGH HARM** | `docs/BUGS-v580.md`, origin R7-U4/R7-A3 |
 | F15 | Toasts | from `docs/BUGS-v580.md` #5: "The toast queue drops confirmations" — the cap discards the oldest routine toast, and startup queues 18-24s of them, so a Wardrobe confirmation can be thrown away before it is heard | **OPEN** | `docs/BUGS-v580.md`, origin R5-B1/B2, R9-F18 |
 | F16 | Logging | from `docs/BUGS-v580.md`: meal chip guesses from the last entry; run 5 measured 60 of 80 meals needing a corrective tap | **OPEN — DECISION**, keep or change | `docs/BUGS-v580.md`, R5-L1 |
 | F17 | Logging | from `docs/BUGS-v580.md`: deleting a logged food has no confirm, no name in the message, no undo | **OPEN — DECISION** | `docs/BUGS-v580.md`, R5-B6 |
@@ -65,6 +64,7 @@ verbatim; never paraphrase into the table.
 | Settings | The restore-point sentence matches the code (bug 3) | v582 | `settings-safety-audit` row SENTENCE, red on v581 |
 | Settings | "Replace save" retryable after a refused import (bug 4) | v582 | same audit, rows RETRY and ONCE, red on v581 in three refusal modes |
 | Laboratory | The reveal plays for a certain outcome too (bug 1) | v583 | `tests/lab-reveal-audit.mjs`, 16496 changed pixels here against no animation running on v582 |
+| Pets | Manual walks count toward eggs, and the threshold is shown (bug 2) | v584 | `tests/egg-progress-audit.mjs`, PROGRESS 0->8000 here against 0->0 on v583; also closes a replay hole |
 | Wardrobe | Offhand art (shovel/toothbrush/flag off the figure) | earlier | Tom: "finally the shovel is fixed. mark it done" |
 
 
