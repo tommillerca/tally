@@ -82,3 +82,9 @@ Held out of v588: pet growth (D2), and l-ackpriv (recovery save must see a real 
 - One correction over a lane: the gift lane treated only three specific error bodies as a refusal, so a bare 403 left the coins pending; any 4xx from the Worker is now a definitive refusal and refunds. The crew playtest control caught it.
 - Waiting on Tom: the one Worker deploy (spire receipt migration first, then server/deploy.sh). Until then podium settlement, gift and cheer keys, spire receipts, replay identity, flagged friends and local race weeks are code on main only.
 - Still running: a Codex triage of main's 48 gate reds, landing as docs/GATE-REDS-2026-09-12.md.
+
+## 14:45 the 48 main gate reds, triaged
+
+- `docs/GATE-REDS-2026-09-12.md` (Codex, commander-read): 22 FIXTURE, 2 PRODUCT, 3 AUDIT DRIFT, 3 ENVIRONMENT, 4 HOLLOW, 23 UNRESOLVED (the gate log only kept a network summary line for those; next gate run should keep the FAIL and stack per suite).
+- The fixture mechanism: `tests/godmode.js` seeds coins with a raw kv write while the demo boot already funded 340 coins through the currency writer, so the next revisioned write refuses "currency history does not match". One helper fix is the biggest single green. Lane dispatched.
+- The product finding: `sw.js` PRECACHE lacks `js/hero-ground.js`, `js/laboratory.js` and two pixel icons, so one failed fetch offline blanks the app. Lane dispatched; ships as v591.
