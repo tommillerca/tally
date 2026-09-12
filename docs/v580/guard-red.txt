@@ -1,0 +1,89 @@
+Settings tidy advisory evidence
+Plan SHA256 verified: 7e7b411c70cbf20021535a6b6198990851227125f7fd3c8a92f4557b15686888
+Baseline HEAD: 439a4b14. Actual APP_BUILD, sw.js and version.json are v579,
+not v580. Stamps preserved. docs/v580 is the plan's evidence folder only.
+
+DEVIATIONS / UNPROVEN REQUIREMENTS
+Baseline rendering attempted before edits: blocked by listen EPERM.
+Expected card set hard-coded from baseline source, marked provisional in the
+new audit header. No rendered count, order or control pass is claimed.
+CARDS preserves the baseline set. Requiring it to fail against live with that
+same complete set conflicts with its contract. Proposed deviation: require
+ORDER/CONTROLS/NO-COLUMN red on old live, and remove a card in a test fixture
+to prove CARDS red. Neither proof was possible here.
+The patch retains a short build line in credits although its prose claims to
+remove the duplicate build line. Applied the actual patch footer; review this
+discrepancy independently.
+a11y before and after exit 1 at server startup, before measured rows. The empty
+FAIL-line diff proves no equivalence of accessibility results. The claimed
+four existing reds remain unverified.
+
+IMPLEMENTATION
+New settings-shape-audit.mjs is separate because settings-rows owns 100%/200%
+type and action-column alignment. Registered as DECLARED full. New guard owns
+mobile shape, folds and card loss. Retained data-action classes, offline sync
+line, and removal of Laboratory restore. CSS appended only.
+No commit, push or publication attempted. No original checkout edited.
+
+EXPECTED SOURCE ORDER (NOT A RENDER)
+THE CREW > DAILY TARGETS > PREFERENCES > NOTIFICATIONS > APPLE HEALTH >
+YOUR DATA > REDEEM A CODE > ABOUT. Eight cards in source.
+
+RESULTS
+settings-safety: 21 passed, 0 failed (exit 0)
+sync-observability: 80/80 checks passed (exit 0)
+Syntax checks and git diff --check passed.
+CSS inherited prefix byte-identical. Version files byte-identical.
+Native ASC-SUBMISSION.md absent in this checkout, not created or edited.
+FAIL-line diff: 0 lines before, 0 after; both runs blocked.
+
+$ node tests/settings-shape-audit.mjs https://tommillerca.github.io/tally/
+Exit 1: infrastructure BLOCKED, not measured red
+AUDIT START settings-shape-audit.mjs: completion pending; planned rows undeclared
+/bin/sh: /bin/ps: Operation not permitted
+[godmode] puppeteer 24.43.1 via repo node_modules: /Users/tommiller/Documents/Hyperframes Editor/tally/node_modules/puppeteer/lib/cjs/puppeteer/puppeteer.js
+BLOCKED settings-shape: Error: Failed to launch the browser process:  Code: null
+
+stderr:
+
+
+TROUBLESHOOTING: https://pptr.dev/troubleshooting
+
+    at ChildProcess.onClose (/Users/tommiller/Documents/Hyperframes Editor/tally/node_modules/@puppeteer/browsers/lib/cjs/launch.js:350:24)
+    at ChildProcess.emit (node:events:531:35)
+    at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+settings-shape: 1 failures
+AUDIT END settings-shape-audit.mjs: FAILED; NORMAL EXIT (row coverage undeclared); rows=0/undeclared; failed=0; unproven=0; exit=1
+
+$ node tests/settings-shape-audit.mjs
+Exit 1: infrastructure BLOCKED, not measured red
+AUDIT START settings-shape-audit.mjs: completion pending; planned rows undeclared
+BLOCKED settings-shape: Error: listen EPERM: operation not permitted 127.0.0.1
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+settings-shape: 1 failures
+AUDIT END settings-shape-audit.mjs: FAILED; NORMAL EXIT (row coverage undeclared); rows=0/undeclared; failed=0; unproven=0; exit=1
+
+$ node tests/unit.test.js
+391 passed, 0 failed
+Exit 0
+Full output: unit.txt
+
+FILES CHANGED
+app.css
+js/app.js
+tests/a11y-audit.mjs
+tests/release-gate.mjs
+tests/settings-shape-audit.mjs (new)
+docs/v580/guard-red.txt (new)
+docs/v580/unit.txt (new)
+docs/v580/settings-safety.txt (new)
+docs/v580/sync-observability.txt (new)
+docs/v580/settings-before.txt (new)
+docs/v580/shape-live.txt (new)
+docs/v580/shape-local.txt (new)
+docs/v580/a11y-before.txt (new)
+docs/v580/a11y-after.txt (new)
+docs/v580/a11y-fail.diff (new, empty because both runs blocked)

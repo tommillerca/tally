@@ -1,0 +1,8 @@
+AUDIT START settings-shape-audit.mjs: completion pending; planned rows undeclared
+BLOCKED settings-shape: Error: listen EPERM: operation not permitted 127.0.0.1
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+settings-shape: 1 failures
+AUDIT END settings-shape-audit.mjs: FAILED; NORMAL EXIT (row coverage undeclared); rows=0/undeclared; failed=0; unproven=0; exit=1

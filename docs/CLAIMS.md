@@ -1,5 +1,15 @@
 # What each patch note claims, and what backs it
 
+## v581 (2026-09-11)
+
+Changelog item: Settings reads in a sensible order, and every button shows its whole label.
+1. PROOF: `node tests/settings-shape-audit.mjs` at 393x852 and 320x568. CARDS asserts all eight cards survive the reorder by title (THE CREW, DAILY TARGETS, PREFERENCES, NOTIFICATIONS, APPLE HEALTH, YOUR DATA, REDEEM A CODE, ABOUT), which is the row that guards the real risk in this merge: the patch MOVES whole card blocks, so a silently deleted card was the failure mode. ORDER asserts the sequence. CONTROLS hit-tests all 39 row controls at their centre with `elementFromPoint` at both sizes. NO-COLUMN asserts none of the 46 buttons renders its label as a vertical column of letters, `scrollWidth - clientWidth <= 1`, which was the headline defect: Import, Review, Guide, Join, Read, Claim, Copy and Open each rendered as a stack of single glyphs at 393. Proven red against live v580, 8 rows. | REACH: Settings at 393x852 and 320x568. Other viewports unmeasured. The toast clears every interactive control at 375 and 430 (`toast-reach-audit`) but was observed sitting over section headings and body copy at 393, which is not graded here.
+
+Changelog item: Diagnostics, the device report and the USDA key tuck away until you want them.
+2. PROOF: `node tests/settings-shape-audit.mjs` row FOLDS: each `<details class="settings-fold">` opens and the control inside is measurable once open. `tests/a11y-audit.mjs` was changed to open a fold before measuring the control inside it, the same move it already makes for the quest list; without it the three fold controls measure 0x0 and are reported as missing. | REACH: the three folds in PREFERENCES and ABOUT.
+
+Deviations: the work originated in a separate session as a patch against v568 (`0001-v569-Settings-tidied-played-hard.patch`, review pack `REVIEW-PACK-settings-tidy-2026-09-11.md`) and was rebased onto v580 here rather than pushed from that branch, which was twelve releases behind. Three of its changes were deliberately dropped per its own section 5 and Tom's earlier rulings: its hide-when-offline Profile sync (v579's "Not connected" line is kept, and `sync-observability-audit` keys on it), its Laboratory restore row (v579 deleted that control), and its version stamps. Card order was put to Tom from a render before shipping; he approved it.
+
 ## v580 (2026-09-11)
 
 Changelog item: Chests and items in the Backpack are centred on their cards.

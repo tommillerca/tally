@@ -35,10 +35,16 @@ verbatim; never paraphrase into the table.
 |---|---|---|---|---|
 
 
-| F3 | Settings | "settings work was done with a diff claude here it is he has git access if you want him to push idk what the move is" | **IN FLIGHT.** Answered: a second session produced a full Settings tidy (patch + review pack, base v568, never pushed). Being rebased onto v580 in lane `l-settings-tidy`, resolutions per the pack's section 5. Card order is a taste call and goes to Tom from a render | `inbox/settings-review-pack.md` |
 | F4 | Settings | `docs/PLAYTEST-SETTINGS.md` item 1: importing an older backup silently removes newer earnings (125 coins + 1 crate -> 100 coins, 0 crates, message "Backup restored") | **OPEN, HIGH HARM.** Breaks the no-permanent-loss lock | `docs/PLAYTEST-SETTINGS.md` |
 | F5 | Melt | "no sound on melt it's also a fucking nightmare that needs to be redesigned basically unuseable with the interface" | **REVIEW DELIVERED, NEEDS TOM'S PICK.** Every advertised Salvage Bench route opens the Backpack instead; the bench is below the Kitchen. Sound hooks all exist | `docs/melt-review.md` |
 | F6 | Names | Names still clipped at `#newcomersList .t3-tx b` (3758px of text in a 143px box) and `#lbBody .lb-who b` (86 in 77), plus 144 rows at 200%/53px text | **OPEN.** v579 fixed only `.hub-name` and `.hero-name` | `tests/name-fit-audit.mjs` (declared `skip`) |
+| F11 | Laboratory | from `docs/BUGS-v580.md` #1: "The Laboratory only celebrates when the outcome was uncertain" — `receipt.distribution.length > 1` gates the reveal, so a certain experiment gets no animation | **OPEN** | `docs/BUGS-v580.md`, origin R7-L6 |
+| F12 | Pets | from `docs/BUGS-v580.md` #2: "Without Apple Health you can never own a second pet" — manual walks never write a `steps` field and eggs hatch on steps; the 14,000 threshold is shown to the player zero times | **OPEN, HIGH HARM** | `docs/BUGS-v580.md`, origin R7-U4/R7-A3 |
+| F13 | Settings | from `docs/BUGS-v580.md` #3: "The restore-point sentence is false" — copy promises points stay until Erase, v537 evicts all but the last two | **OPEN**, open since v537 | `docs/BUGS-v580.md`, origin R4-7 |
+| F14 | Settings | from `docs/BUGS-v580.md` #4: "'Replace save' is dead after a refused import" — `finished = true` is set whether commit resolves or throws | **OPEN** | `docs/BUGS-v580.md`, origin R4-8 |
+| F15 | Toasts | from `docs/BUGS-v580.md` #5: "The toast queue drops confirmations" — the cap discards the oldest routine toast, and startup queues 18-24s of them, so a Wardrobe confirmation can be thrown away before it is heard | **OPEN** | `docs/BUGS-v580.md`, origin R5-B1/B2, R9-F18 |
+| F16 | Logging | from `docs/BUGS-v580.md`: meal chip guesses from the last entry; run 5 measured 60 of 80 meals needing a corrective tap | **OPEN — DECISION**, keep or change | `docs/BUGS-v580.md`, R5-L1 |
+| F17 | Logging | from `docs/BUGS-v580.md`: deleting a logged food has no confirm, no name in the message, no undo | **OPEN — DECISION** | `docs/BUGS-v580.md`, R5-B6 |
 | F7 | Pets | "Are we still having pets grow with breeding or something like that physically? My lvl 1 fish seems small but if that's intentional all good" | **OPEN — QUESTION, unanswered.** Answer before building anything | — |
 | F8 | Phone | derived, not a Tom quote: playtest slate run 13 item 3, "which ones buzz" when you melt, take it all off, buy something | **OPEN — DECISION**, needs a real phone | `PLAYTESTSLATEship20260910` |
 | F9 | Onboarding | The restore-button trap: a non-gamer burned 14 taps in a restore sheet after taking the primary-styled "Restore an account" | **OPEN** | run 9 |
@@ -58,6 +64,7 @@ verbatim; never paraphrase into the table.
 | Settings | Import/Restore buttons no longer break a word in half | v579 | `tests/settings-rows-audit.mjs` |
 | Backpack | Chests and items centred on their cards ("In back **centre** chests") | v580 | `tests/backpack-wardrobe-f1-f2-audit.mjs` row CENTRED, red on v579 |
 | Wardrobe | Take off and The Studio swapped | v580 | same audit, row ORDER |
+| Settings | Whole-word buttons, sensible card order, folded diagnostics ("settings still has tons of problems in the design") | v581 | `tests/settings-shape-audit.mjs`, 8 rows red on v580; card order approved by Tom from a render |
 | Wardrobe | Offhand art (shovel/toothbrush/flag off the figure) | earlier | Tom: "finally the shovel is fixed. mark it done" |
 
 
