@@ -21953,22 +21953,36 @@ async function openLaboratory() {
     } catch { toast('The Laboratory could not be read. Reopen the room to check your pets and experiments.'); if (wrap.isConnected) await draw(); }
   }
   async function reveal(receipt) {
-    const sheet = openSheet(`<div class="sheet-head"><h2>Experiment saved</h2><button class="sheet-close">Back to Laboratory</button></div><div class="sheet-body lab-room">${labRevealHtml(receipt)}<p id="labImageStatus" role="status"></p><button class="btn ghost" id="labImageRetry" hidden>Retry image</button>${receipt.distribution.length > 1 ? '<button class="link" id="labSkip">Skip reveal</button>' : ''}<button class="btn" id="labViewPet" ${receipt.resultPresent === false ? 'disabled' : ''}>View pet</button></div>`, { cls: 'full pet-a11y', name: 'LaboratoryResult', onClose: () => { laboratoryEngine()?.acknowledge(receipt.opId).catch(() => {}); if (wrap.isConnected) draw(); } });
+    // A saved pet deserves a reveal even when its outcome was certain.
+    const petProduced = !!receipt.result?.iid && receipt.resultPresent !== false;
+    const sheet = openSheet(`<div class="sheet-head"><h2>Experiment saved</h2><button class="sheet-close">Back to Laboratory</button></div><div class="sheet-body lab-room">${labRevealHtml(receipt)}<p id="labImageStatus" role="status"></p><button class="btn ghost" id="labImageRetry" hidden>Retry image</button>${petProduced ? '<button class="link" id="labSkip" hidden>Skip reveal</button>' : ''}<button class="btn" id="labViewPet" ${receipt.resultPresent === false ? 'disabled' : ''}>View pet</button></div>`, { cls: 'full pet-a11y', name: 'LaboratoryResult', onClose: () => { laboratoryEngine()?.acknowledge(receipt.opId).catch(() => {}); if (wrap.isConnected) draw(); } });
     $('#labViewPet', sheet).addEventListener('click', () => openStable({ focusIid: receipt.result.iid }));
     const result = $('.lab-reveal', sheet);
+    const skip = $('#labSkip', sheet);
+    // There is something to skip only while the decoded reveal is running.
+    const finishReveal = () => {
+      result.classList.remove('lab-play');
+      if (skip) skip.hidden = true;
+    };
+    result.addEventListener('animationend', event => {
+      if (event.animationName === 'lab-result-arrive') finishReveal();
+    });
     const decode = async () => {
       try {
         await Promise.all([...$$('img', result)].map(img => img.decode()));
         $('#labImageStatus', sheet).textContent = '';
         $('#labImageRetry', sheet).hidden = true;
-        if (receipt.distribution.length > 1 && !reducedMotion) result.classList.add('lab-play');
+        if (petProduced && !reducedMotion) {
+          result.classList.add('lab-play');
+          if (skip) skip.hidden = false;
+        }
       } catch {
         $('#labImageStatus', sheet).textContent = 'Your pet is saved. Its image could not load. Retry the image or view the pet.';
         $('#labImageRetry', sheet).hidden = false;
       }
     };
     $('#labImageRetry', sheet).addEventListener('click', decode);
-    $('#labSkip', sheet)?.addEventListener('click', () => result.classList.remove('lab-play'));
+    skip?.addEventListener('click', finishReveal);
     await decode();
   }
   function incubators() {
@@ -24821,7 +24835,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v582'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v583'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

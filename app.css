@@ -12601,3 +12601,9 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
   list-style-position: outside;
   padding-inline: 1em;
 }
+
+/* Laboratory: certain and uncertain pets share the existing arrival. */
+.lab-reveal.lab-play [data-lab-result-art] { animation: lab-result-arrive .24s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .lab-reveal.lab-play [data-lab-result-art] { animation: none; animation-iteration-count: 1; }
+}
