@@ -759,6 +759,7 @@ requireLabFindingCoverage(onDisk, PURE);
  * 1, in the gate itself. The complement cannot be computed AND have teeth. One line
  * per file is the price, and it puts each omission on the record as a decision. */
 const DECLARED = {
+  'backpack-wardrobe-f1-f2-audit.mjs': ['full', "Backpack content centring and Wardrobe rail order, nonempty pixel controls at both mobile sizes."],
   'settings-rows-audit.mjs': ['full', 'Settings 375x812 at 100%/200%: ROWS, COLUMN, signed-out PLUMBING and nonempty YOUR DATA CONTROL. Before/after measurements and RED proof BLOCKED by sandbox listen EPERM; no measured pass claimed. See docs/v577/guard-red.txt.'],
   'wardrobe-slot-scroll-audit.mjs': ['full', "Paperdoll section geometry, second-tap return and reduced motion."],
   'wardrobe-stack-audit.mjs': ['full', "Owned family tile counts and variant reachability in both wardrobe pickers."],

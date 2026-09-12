@@ -480,10 +480,13 @@ export async function checkStudio() {
   assert.throws(() => railEntry(entry.replace('fit-chip studio', 'studio-link')), /AssertionError/, 'CONTROL leaving the rail vocabulary must fail');
   assert.throws(() => railEntry(''), /AssertionError/, 'CONTROL missing entry must fail');
   assert.equal((app.match(/id="wardrobeStudio"/g) || []).length, 1);
-  /* IT LIVES IN THE RAIL, not back in the header. Anchored on the two controls
-     it must line up with, so moving it out of that row goes red. */
-  const rail = app.slice(app.indexOf('data-fit-save="1"'), app.indexOf('data-fit-reset="1"'));
-  assert.ok(rail.includes('id="wardrobeStudio"'), 'the entry must sit between the save and strip chips in the fit rail');
+  /* F2: Studio follows the strip chip within the same toolbar. */
+  const rail = app.slice(app.indexOf('    const fitRail ='), app.indexOf('<div class="ward-fit-list"'));
+  const saveAt = rail.indexOf('data-fit-save="1"');
+  const stripAt = rail.indexOf('data-fit-reset="1"');
+  const studioAt = rail.indexOf('id="wardrobeStudio"');
+  assert.ok(saveAt >= 0 && stripAt > saveAt && studioAt > stripAt,
+    'the fit rail must order Save fit, Take off, The Studio');
   assert.doesNotMatch(app, /wardrobe-studio-entry/, 'the old header line must be gone, not left orphaned');
   assert.doesNotMatch(source('index.html'), /#\/studio|wardrobeStudio/);
   const handler = app.split('\n').find(line => line.includes("$('#wardrobeStudio', content)?.addEventListener"));
