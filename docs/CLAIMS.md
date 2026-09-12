@@ -1,5 +1,14 @@
 # What each patch note claims, and what backs it
 
+## v583 (2026-09-12)
+
+Changelog item: A Laboratory experiment plays its reveal even when the outcome was certain.
+1. PROOF: `node tests/lab-reveal-audit.mjs`, 50 rows green. `receipt.distribution.length > 1` gated both the reveal and the Skip link, so the player who did everything right saw the least. Graded by DECODED PIXELS on the real control, per the animation contract: CERTAIN reports 16496 changed pixels and UNCERTAIN 13544 on this build, against 0 changed with no animation running on live v582. Proven red there with the audit's own diagnosis line, "CERTAIN RED: sampler and fixture passed; the tested build has an incomplete animation fix", recorded in `docs/v582/guard-red.txt`. | REACH: the Laboratory reveal at 393x852, certain and uncertain recipes, default and reduced motion, and the early-skip path. Other viewports unmeasured.
+
+Deviations: the bug report described the certain case alone as inert. Measured, live v582 fails BOTH the certain and the uncertain case (the run stops on UNCERTAIN with a valid sampler and fixture), so the reveal was not playing for either and the fix is broader than reported. Recorded rather than restated from the report.
+
+The audit took five rounds and each one moved a real obstacle, worth recording because the first three results were all misleading in the same direction. Round 1 crashed before grading anything (`rows=0`), which is hollow rather than red. Round 2 reached the controls and reported `changedPixels=0`, which looked like the bug until the KNOWN-GOOD uncertain case reported 0 as well. Round 3 added a SAMPLER positive control that injects a known-moving element and samples it through the same code path (9972 changed pixels), which proved the sampler could see motion and made every other zero meaningful; it also added a FIXTURE row that refuses to grade a region it cannot see. Round 4 printed the rects, showing the sample at y 566..737 against an animated box at y 408..563: adjacent, not overlapping, because the rect was captured before the reveal moved the element. Round 5 re-reads the element per frame. Without SAMPLER, a threshold tweak would have turned this green while proving nothing.
+
 ## v582 (2026-09-12)
 
 Changelog item: The import screen now says what really happens to your restore points.

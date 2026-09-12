@@ -1,0 +1,40 @@
+Round 5 lab reveal guard advisory
+Plan SHA256: 3bfd08c9c907082f117bf786c92b661700a7405ed0a246a3282cf8e82ec4066d
+Build HEAD: e0382ed81dbadb949e086ae73bbb7ffb3262cff3
+Requested baseline: 72026f4bcfaf361204800b50a1dcf1f4af54e21e (object verified locally)
+
+Sampling choice: per-frame getBoundingClientRect immediately before capture.
+Each crop follows the measured box centre. Fixed dimensions use offsetWidth
+and offsetHeight plus 12 pixels, so decoded pixel arrays remain comparable.
+Each frame records its own region, animated rect, viewport and scrollers.
+SAMPLER thresholds and FIXTURE containment and visibility assertions are unchanged.
+
+Build command: node tests/lab-reveal-audit.mjs
+Exit: 1
+AUDIT START lab-reveal-audit.mjs: completion pending; planned rows undeclared
+FAIL FIXTURE SETUP: listen EPERM: operation not permitted 127.0.0.1
+rows=1, 1 failures
+RETAINED FAIL FIXTURE SETUP: listen EPERM: operation not permitted 127.0.0.1
+AUDIT END lab-reveal-audit.mjs: FAILED; NORMAL EXIT (row coverage undeclared); rows=1/undeclared; failed=1; unproven=0; exit=1
+
+CERTAIN build: UNPROVEN. No frame comparison was captured.
+CERTAIN baseline: UNPROVEN. Baseline browser run was not attempted because
+this environment denies the local listener required by the shared harness.
+UNCERTAIN both: UNPROVEN. No green sampler or fixture was obtained.
+REDUCED both cases: UNPROVEN. No final-state browser evidence was obtained.
+SKIP position: yes. Even a single possible outcome has a 240ms visual arrival
+to skip. The existing assertions require Skip only while animation runs and
+require the real button to end it. Reduced motion must have neither running
+animation nor Skip. These assertions remain intact, but were not exercised.
+
+Deviation: requested build/main frame comparisons cannot be delivered in this
+sandbox. Proposed follow-up is to run the unchanged strict guard against both
+revisions in an environment permitting a local HTTP listener and browser.
+No thresholds were relaxed and no visual verdict is claimed.
+No original checkout was edited. No commit, push or publication was attempted.
+
+Agreed proof command: node tests/unit.test.js
+Exit: 0
+Proof summary output: 392 passed, 0 failed
+Full proof output: /tmp/b1e-unit.txt (local advisory artifact)
+Additional checks: node --check tests/lab-reveal-audit.mjs and git diff --check passed.

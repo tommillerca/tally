@@ -122,8 +122,23 @@ await check('reveal settles in 240ms at full opacity without rarity effects', ()
   rejectsMutation(css, css.replace('from { transform: scale(.96); }', 'from { transform: scale(.65); opacity: .15; }'), grade);
   const reveal = source.slice(source.indexOf('  async function reveal(receipt)'), source.indexOf('  function incubators()'));
   assert.match(reveal, /await Promise.all\([^;]+img.decode\(\)/);
-  assert.match(reveal, /receipt.distribution.length > 1 && !reducedMotion/);
-  assert.match(reveal, /id="labSkip">Skip reveal/);
+  /* REBASELINED IN v583, and it was asserting the BUG. This pinned
+     `receipt.distribution.length > 1 && !reducedMotion`, which is exactly the
+     gate Tom reported as a defect (docs/BUGS-v580.md #1): an experiment with
+     one possible outcome, the certain one, got no reveal, so the player who did
+     everything right saw the least. A guard that pins a defective condition
+     keeps the defect alive, and this one would have gone red on the fix.
+     The gate is now `petProduced && !reducedMotion`: the reveal plays whenever a
+     pet was produced. Reduced motion is still honoured, which is the half of
+     the old condition worth keeping.
+     Graded by pixels in tests/lab-reveal-audit.mjs; this row only holds the
+     source shape. */
+  assert.match(reveal, /petProduced && !reducedMotion/);
+  /* Skip now ships HIDDEN and is unhidden only while the reveal is running, so
+     the attribute sits between the id and the label. v583: "Skip reveal" is
+     offered only when there is something to skip, which is the second half of
+     bug 1; it used to share the reveal's own gate. */
+  assert.match(reveal, /id="labSkip"[^>]*>Skip reveal/);
   assert.match(reveal, /classList.remove\('lab-play'\)/);
   assert.match(reveal, /Its image could not load. Retry the image or view the pet/);
 });

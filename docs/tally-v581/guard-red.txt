@@ -1,0 +1,60 @@
+Round 4 advisory evidence: browser verdict blocked
+Plan SHA256: bc7d8e1036b35a58669d4f3e3c82fbb6d0a4c129d0ba6d33a25e8250c5edc00d
+Checkout starting HEAD: 34962372ae1c518f503f6339aeef3ac974fa4798
+Requested baseline: 72026f4b (commit available locally).
+
+Audit viewport: explicitly 393x852, deviceScaleFactor 1.
+The shared harness previously defaulted to 430x932. No larger viewport or
+partial sample fallback is used. Whether the full box fits remains unproven.
+Before computing the fixed sample region, sample() calls the animated element's
+scrollIntoView({block:'center',behavior:'instant'}) inside page.evaluate and
+waits for requestAnimationFrame. The existing full-box containment, viewport
+visibility, decoded pixels, positive control, motion and timing thresholds stay
+intact. REGION diagnostics now include ancestor scroller scrollTop,
+clientHeight and rect. A failed containment assertion includes the animated
+rect, sample rect and scroller values in its FIXTURE failure output.
+A successful FIXTURE row explicitly records all three valid captures.
+UNCERTAIN failure with a working sampler and fixture stops further cases.
+
+SKIP position and assertion retained:
+A certain experiment still has its decoded 240ms arrival animation to skip.
+One possible outcome removes uncertainty, not that visual arrival. SKIP asserts
+button visibility matches running animation at every sample, starts visible
+while animation runs, and ends hidden. Reduced motion has neither. SKIPPED
+cases invoke the real button and assert it ends the reveal.
+
+Fresh browser command: node tests/lab-reveal-audit.mjs
+Exit: 1
+AUDIT START lab-reveal-audit.mjs: completion pending; planned rows undeclared
+FAIL FIXTURE SETUP: listen EPERM: operation not permitted 127.0.0.1
+rows=1, 1 failures
+RETAINED FAIL FIXTURE SETUP: listen EPERM: operation not permitted 127.0.0.1
+AUDIT END lab-reveal-audit.mjs: FAILED; NORMAL EXIT (row coverage undeclared); rows=1/undeclared; failed=1; unproven=0; exit=1
+
+Required frame comparisons:
+This build CERTAIN 30ms vs 140ms: unavailable; browser setup blocked.
+Baseline 72026f4b CERTAIN 30ms vs 140ms: unavailable; not run because the same
+required local server bind is denied. No original checkout was edited.
+UNCERTAIN and REDUCED on both builds: unproven.
+SAMPLER and FIXTURE on this build: unproven, no frames captured.
+There is no evidence here to decide whether CERTAIN remains red with valid
+sampling. No production fix or threshold adjustment was made to force a verdict.
+
+Denied actions: local HTTP server bind (listen EPERM on 127.0.0.1), process
+listing via ps (operation not permitted). Escalation is unavailable.
+No commit, push or publish performed. No prohibited source files changed.
+Deviation: the requested main/build browser verdict and both actual frame
+comparisons cannot be delivered in this sandbox. Proposed follow-up is to run
+this audit in a browser-capable environment against this checkout and an
+isolated copy of 72026f4b, retaining its PNGs and JSON. No design deviation or
+sample-size reduction is proposed. Scroll correction remains browser-unvalidated.
+
+Agreed proof: node tests/unit.test.js
+Exit: 0
+PLACEMENT {"bubblePosition":"right","markPosition":"right","positions":[{"id":"caption","x":609,"y":318,"width":406,"height":209,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":74,"y":288,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0},{"id":"friend-code","x":83,"y":1485,"width":236.6165771484375,"height":43}],"actualOverlap":[{"id":"caption","ink":62084,"overlapPixels":0,"overlapPercent":0},{"id":"brand","ink":16122,"overlapPixels":0,"overlapPercent":0}]}
+
+392 passed, 0 failed
+Full local proof output: /tmp/b1d-unit.txt
+Syntax: node --check tests/lab-reveal-audit.mjs, exit 0.
+Whitespace: git diff --check, exit 0.
+Changed files: tests/lab-reveal-audit.mjs, docs/tally-v581/guard-red.txt.
