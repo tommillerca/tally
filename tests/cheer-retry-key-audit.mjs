@@ -75,7 +75,7 @@ await test('MIDNIGHT', async f => {
   const body = { to: 'p2', cheer: 3, ck: 'midnight' };
   const original = await f.request('/cheer', body); assert.equal(original.status, 200);
   now += 2000;
-  assert.deepEqual(await f.request('/cheer', body), original);
+  assert.deepEqual(await f.request('/cheer', body), { ...original, duplicate: true }); // the API contract (test/api.test.mjs): a retry gets the original acknowledgement AND is named as the duplicate
   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM grants WHERE type='cheer'").get().n, 1);
   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM grants WHERE type='cheer' AND ts >= ?").get(Date.parse('2026-09-13T00:00:00Z')).n, 0);
   for (let i = 0; i < 10; i++) assert.equal((await f.request('/cheer', { ...body, ck: `new${i}` })).status, 200);
@@ -85,7 +85,7 @@ await test('GIFT ORIGINAL ACK AND REMOVED FRIEND', async f => {
   const body = { to: 'p2', mode: 'spend', coins: 50, ck: 'gift' };
   const original = await f.request('/gift', body); assert.equal(original.status, 200);
   now += 2000; f.sql.exec('DELETE FROM friendships');
-  assert.deepEqual(await f.request('/gift', { ...body, coins: 100 }), original);
+  assert.deepEqual(await f.request('/gift', { ...body, coins: 100 }), { ...original, duplicate: true }); // the API contract (test/api.test.mjs): a retry gets the original acknowledgement AND is named as the duplicate
   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM grants WHERE type='gift'").get().n, 1);
 });
 await test('CONTROL', async f => {
@@ -100,14 +100,14 @@ await test('GIFT CAP AND SEVEN DAYS', async f => {
   for (let i = 0; i < 4; i++) assert.equal((await f.request('/gift', { ...body, ck: `gift${i}` })).status, 200);
   assert.equal((await f.request('/gift', { ...body, ck: 'cap' })).status, 429);
   now += 7 * 86400000;
-  assert.deepEqual(await f.request('/gift', body), original);
+  assert.deepEqual(await f.request('/gift', body), { ...original, duplicate: true }); // the API contract (test/api.test.mjs): a retry gets the original acknowledgement AND is named as the duplicate
 });
 await test('FREE GIFT RETRY AND CAP', async f => {
   const body = { to: 'p2', mode: 'free', ck: 'free' };
   const original = await f.request('/gift', body); assert.equal(original.status, 200);
   assert.equal((await f.request('/gift', { ...body, ck: 'other' })).status, 409);
   now += 2000;
-  assert.deepEqual(await f.request('/gift', body), original);
+  assert.deepEqual(await f.request('/gift', body), { ...original, duplicate: true }); // the API contract (test/api.test.mjs): a retry gets the original acknowledgement AND is named as the duplicate
   assert.equal((await f.request('/gift', { ...body, ck: 'tomorrow' })).status, 200);
   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM grants WHERE type='gift'").get().n, 2);
 });
