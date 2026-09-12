@@ -12473,6 +12473,8 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
     --fs-room-title: 1.125rem;
     line-height: 1.2;
   }
+}
+
 /* NAME-FIT policy: identities wrap, with no line cap or font reduction.
    A second line handles ordinary long names; arbitrary imported names may need
    more. Trade compact rows and the first-screen peek for the complete identity.

@@ -235,7 +235,13 @@ const EMITTERS = {
   'js/app.js:paddockSceneHtml':     ['scene', 'the Paddock stage: the field, the herd standing in it, its keeper and the visiting player.'],
   'js/app.js:openHollow':           ['scene', 'the Hollow stage. Its coin price chip is an icon SITE, listed below.'],
   'js/app.js:openGardenSheet':      ['scene', 'the garden plot art. Its coin price chips are icon SITES, listed below.'],
-  'js/app.js:openKitchen':          ['scene', 'the kitchen art. Its coin chips are icon SITES, listed below.'],
+  /* openKitchen's own scene emission MOVED to roomHeaderHtml in v579, when the
+     Laboratory and Kitchen got their room headers; the function still exists
+     and still hosts icon SITES (its cauldron, ingredient and recipe art, listed
+     below), it just no longer emits the header picture itself. Un-declared here
+     rather than left to rot, which is what the "deleted without being
+     un-declared" row is for. */
+  'js/app.js:roomHeaderHtml':       ['scene', 'the Laboratory and Kitchen room headers: four pixel illustrations each, per the v579 approved composition.'],
   'js/app.js:openWhatsNew':         ['scene', 'the release note art.'],
   'js/app.js:openFriendProfile':    ['scene', "a friend's figure."],
   'js/app.js:restageDoll':          ['scene', 'the wardrobe figure. Was restageWardrobe until QA r23 F1 (2026-09-03) split the drawing half out so previews share it; restageWardrobe now only moves the fit ring.'],

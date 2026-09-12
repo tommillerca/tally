@@ -262,6 +262,13 @@ const SEAM_ONLY_KNOWN = [
      audit still runs the shipped queue, the shipped unhide and the shipped
      toastin, and what it grades is the GEOMETRY, which is the same wherever the
      message came from. */
+  /* toast-reach-audit drives window.__toast for the same reason its sibling
+     does: no screen in this app has a control that reliably produces a message,
+     and the one Today fires on its own is a once-a-week export nudge. The seam
+     is `(msg, ms) => toast(msg, ms)` onto the module-scoped queue, so the
+     shipped queue, unhide and toastin all run, and what the audit grades is
+     GEOMETRY, which is the same wherever the message came from. */
+  'toast-reach-audit.mjs',
   'toast-today-audit.mjs',
   'race-you.mjs',
   'speech-audit.mjs',
