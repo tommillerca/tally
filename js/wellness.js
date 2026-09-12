@@ -2,9 +2,9 @@
 // ONLY ever add a reward, never punish (wellbeing contract). Each completion
 // writes an idempotent ledger event (type 'wellness') dated today, so quests can
 // read it and the XP is one-time per day. State for the day lives in kv 'wellness'.
-import { kvGet, kvSet, db } from './db.js';
-import { award, awardCapped } from './game.js';
-import { addVigor } from './energy.js';
+import { kvGet, kvSet, db, payAtomic } from './db.js';
+import { award, awardCapped, finishAward } from './game.js';
+import { refreshPitEnergy, VIGOR_CAP } from './energy.js';
 import { dateKey } from './nutrition.js';
 
 export const WATER_GOAL = 8; // cups
@@ -15,44 +15,61 @@ export async function getWellness(date = dateKey()) {
   if (w.sleepHours === undefined) w.sleepHours = null; // legacy bool rows: no hours on record
   return w;
 }
-async function save(w) { await kvSet('wellness', w); }
+// The live completion transition and its entire local payout share one commit.
+// The ledger remains authority for repeats, including legacy paid rows.
+async function completeWellness(date, decide) {
+  const result = await payAtomic({
+    snapshot: { keys: ['wellness'], stores: ['health', 'xp'] },
+    decide(state, rows) {
+      const w = state.wellness?.date === date ? state.wellness
+        : { date, water: 0, bed: false, sleep: false, sleepHours: null };
+      if (w.sleepHours === undefined) w.sleepHours = null;
+      const h = rows.health.find(r => r.date === date) || { date };
+      const plan = decide(w, h);
+      const paid = plan.key && !rows.xp.some(r => r.key === plan.key);
+      const xp = paid ? plan.xp : 0;
+      return {
+        result: { ...plan.result, xp },
+        kv: { wellness: () => w },
+        puts: [...(plan.health ? [{ store: 'health', val: h }] : []),
+          ...(paid ? [{ store: 'xp', val: { key: plan.key, type: 'wellness', xp,
+            label: plan.label, date, ts: Date.now() } }] : [])],
+      };
+    },
+  });
+  if (result.xp > 0) await finishAward(result.xp);
+  return result;
+}
 
-// +1 cup of water; award once when you reach the goal. Returns { w, xp, reachedGoal }
-// so the UI can surface the reward (the XP used to land silently).
 export async function addWater(n = 1, date = dateKey()) {
-  const w = await getWellness(date);
-  const wasGoal = w.water >= WATER_GOAL;
-  w.water = Math.max(0, Math.min(WATER_GOAL, w.water + n));
-  await save(w);
-  let xp = 0;
-  if (!wasGoal && w.water >= WATER_GOAL) xp = await award(`water-${date}`, 'wellness', 8, 'Drank enough water', date);
-  return { w, xp, reachedGoal: w.water >= WATER_GOAL };
+  return completeWellness(date, w => {
+    const wasGoal = w.water >= WATER_GOAL;
+    w.water = Math.max(0, Math.min(WATER_GOAL, w.water + n));
+    return { key: !wasGoal && w.water >= WATER_GOAL ? `water-${date}` : null,
+      xp: 8, label: 'Drank enough water', result: { w, reachedGoal: w.water >= WATER_GOAL } };
+  });
 }
 
-// One-tap self-report; awards once per day. Returns { w, xp } (xp 0 if already done).
 export async function markBed(date = dateKey()) {
-  const w = await getWellness(date); let xp = 0;
-  if (!w.bed) { w.bed = true; await save(w); xp = await award(`bed-${date}`, 'wellness', 5, 'Made your bed', date); }
-  return { w, xp };
+  return completeWellness(date, w => {
+    const first = !w.bed;
+    w.bed = true;
+    return { key: first ? `bed-${date}` : null, xp: 5, label: 'Made your bed', result: { w } };
+  });
 }
-// Log hours slept. Re-tapping updates the hours (and the trend) but only awards
-// XP once/day. Wellbeing contract: we reward LOGGING sleep, never scale the
-// reward down for a short night. Persists hours to the per-date health row so
-// Trends can chart sleep over time.
+
+// Editing hours updates the trend, but logging sleep only pays once per day.
 export async function markSleep(hours, date = dateKey()) {
   hours = Math.max(1, Math.min(14, Number(hours) || 0));
-  const w = await getWellness(date); const first = w.sleepHours == null;
-  w.sleepHours = hours; w.sleep = true; await save(w);
-  const h = (await db.get('health', date)) || { date };
-  // Manual entry: hours only, no stages. Flag it so the auto watch-read won't
-  // overwrite a night the player deliberately logged by hand.
-  h.sleepHours = hours; h.sleepMin = Math.round(hours * 60);
-  h.sleepManual = true; h.sleepAuto = false; h.sleepStaged = false;
-  h.sleepDeepMin = null; h.sleepRemMin = null; h.sleepCoreMin = null; h.sleepAwakeMin = null;
-  await db.put('health', h);
-  let xp = 0;
-  if (first) xp = await award(`sleep-${date}`, 'wellness', 10, `Slept ${hours}h`, date);
-  return { w, xp, hours, first };
+  return completeWellness(date, (w, h) => {
+    const first = w.sleepHours == null;
+    w.sleepHours = hours; w.sleep = true;
+    h.sleepHours = hours; h.sleepMin = Math.round(hours * 60);
+    h.sleepManual = true; h.sleepAuto = false; h.sleepStaged = false;
+    h.sleepDeepMin = null; h.sleepRemMin = null; h.sleepCoreMin = null; h.sleepAwakeMin = null;
+    return { key: first ? `sleep-${date}` : null, xp: 10, label: `Slept ${hours}h`,
+      health: true, result: { w, hours, first } };
+  });
 }
 
 /* MANUAL WALKS: "Add a walk" for players with no HealthKit / no watch.
@@ -68,9 +85,9 @@ export async function markSleep(hours, date = dateKey()) {
  * all ignore because each of them reads only `r.steps`.
  *
  * What it DOES pay, through the same local ledgers everything else uses:
- *   XP     award() row of type 'wellness', so it also counts toward the
+ *   XP     ledger row of type 'wellness', so it also counts toward the
  *          wellness quests (wellnessDays / w-wellness) like water/bed/sleep
- *   Vigor  addVigor(1), banked exactly like a Vigor Draught
+ *   Vigor  +1 in the same commit, banked exactly like a Vigor Draught
  */
 export const MANUAL_WALK_MAX_MIN = 60;
 /* Two a day, enforced HERE in the write path rather than in the UI: a manual
@@ -86,21 +103,34 @@ export async function manualWalksToday(date = dateKey()) {
 }
 
 // Log one walk of up to MANUAL_WALK_MAX_MIN minutes. Returns
-// { ok, xp, energy, count } or { ok: false, reason: 'capped' }.
+// { ok, xp, vigor, count } or { ok: false, reason: 'capped' }.
 export async function logManualWalk(minutes, date = dateKey()) {
   const min = Math.max(1, Math.min(MANUAL_WALK_MAX_MIN, Math.round(Number(minutes) || 0)));
-  const h = (await db.get('health', date)) || { date };
-  const walks = Array.isArray(h.manualWalks) ? h.manualWalks : [];
-  if (walks.length >= MANUAL_WALKS_PER_DAY) return { ok: false, reason: 'capped' };
-  walks.push({ min, at: Date.now(), source: 'manual' });
-  h.manualWalks = walks; // never h.steps: see the block comment above
-  await db.put('health', h);
-  const xp = await award(`mwalk-${date}-${walks.length}`, 'wellness', MANUAL_WALK_XP, `Walked ${min} min`, date);
-  // Vigor rides the award's idempotency: two overlapping taps race the cap
-  // read above, but they mint the same ledger key, so only the one whose
-  // award() actually paid banks the Vigor (one extra Pit fight per walk).
-  if (xp > 0) await addVigor(1);
-  return { ok: true, xp, vigor: xp > 0 ? 1 : 0, count: walks.length };
+  // Refresh verified-step energy before accepting a walk, as addVigor did.
+  if ((await kvGet('pitEnergy', {}))?.date !== dateKey()) await refreshPitEnergy();
+  const result = await payAtomic({
+    snapshot: { keys: ['pitEnergy'], stores: ['health', 'xp'] },
+    decide(state, rows) {
+      const h = rows.health.find(r => r.date === date) || { date };
+      const walks = Array.isArray(h.manualWalks) ? h.manualWalks : [];
+      if (walks.length >= MANUAL_WALKS_PER_DAY) return { result: { ok: false, reason: 'capped' } };
+      // A free daily ordinal becomes a completed walk. Never write verified steps.
+      walks.push({ min, at: Date.now(), source: 'manual' });
+      h.manualWalks = walks;
+      const key = `mwalk-${date}-${walks.length}`;
+      const paid = !rows.xp.some(r => r.key === key);
+      return {
+        result: { ok: true, xp: paid ? MANUAL_WALK_XP : 0, vigor: paid ? 1 : 0, count: walks.length },
+        kv: paid ? { pitEnergy: cur => ({ ...(cur || {}),
+          vigor: Math.max(0, Math.min(VIGOR_CAP, ((cur || {}).vigor || 0) + 1)) }) } : {},
+        puts: [{ store: 'health', val: h }, ...(paid ? [{ store: 'xp', val: {
+          key, type: 'wellness', xp: MANUAL_WALK_XP, label: `Walked ${min} min`, date, ts: Date.now(),
+        } }] : [])],
+      };
+    },
+  });
+  if (result.xp > 0) await finishAward(result.xp);
+  return result;
 }
 
 /* USER ROUTINES.

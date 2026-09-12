@@ -1,5 +1,10 @@
 # What each patch note claims, and what backs it
 
+## v589 (2026-09-12)
+
+Changelog item: Water, bed, sleep and walks now save with their XP, and walks keep their Vigor if saving is interrupted.
+1. PROOF: wellness-atomic-audit.mjs (PURE), 37 passed, 0 failed. Agreed proof `node tests/unit.test.js`: 392 passed, 0 failed, exit 0. routine-race-audit.mjs: ROUTINE RACE VERIFIED. The extracted reward-sop-audit.mjs static coverage check still exits 1 on both main and this patch with identical unrelated diagnostic IDs; the wellness payout registry is updated. CRASH aborts the transaction at completion, sleep health, XP and walk Vigor writes, then reopens the database and requires unchanged completion state and no payout. RETRY pays exactly once; ONCE pays nothing for the repeated completed action (walk uses the second daily ordinal because a first and second walk are intentionally distinct paid actions). CONTROL preserves 8/5/10/10 XP, one walk Vigor, the two-walk and 12-Vigor caps, concurrent habit updates and verified steps. The identical audit on a temporary archive of main cb2aca568cf53661d5f9bd584831f618feda3cd7 exited 1: 23 passed, 14 failed, including six CRASH reds at water/XP, bed/XP, sleep/health, sleep/XP, walk/XP and walk/Vigor. | REACH: production addWater, markBed, markSleep and logManualWalk through the existing app controls. Sleep hours and health metadata commit together. Manual walks never add verified race steps. Existing XP level-up handling is preserved through finishAward after commit; the separate level-reward finding is outside this patch. Node proof only, no browser or pixel claim. No amount, cap, threshold, reward key, player control copy or version stamp changed.
+
 ## v588 (2026-09-12)
 
 Assembled from five Codex lanes by the commander. Every browser audit below was run by the commander on the lane tree and again on the merged train; the lanes cannot bind a socket.

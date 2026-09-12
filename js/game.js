@@ -410,6 +410,12 @@ export async function awardOnce(key, type, xp, label, date, extra = null, pay = 
     ? { v: base + (claimed ? (xp || 0) : 0), epoch: e0 + 1 }
     : null;
   if (!claimed) return { claimed: false, xp: 0 };
+  await finishAward(xp, type);
+  return { claimed: true, xp };
+}
+
+// Run the existing level-up effects after an external atomic XP commit.
+export async function finishAward(xp, type = 'wellness') {
   // any XP source can cross a level: steps, quests, pit wins, the road
   if (type !== 'levelup' && !quietLevelups) {
     const after = await totalXp();
@@ -422,7 +428,6 @@ export async function awardOnce(key, type, xp, label, date, extra = null, pay = 
       }
     }
   }
-  return { claimed: true, xp };
 }
 
 // v136: battling a friend's AI bonehead. Pays ONCE per friend per day (win pays

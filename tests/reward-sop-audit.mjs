@@ -278,9 +278,7 @@ const ACTIONS = [
   { id: 'js/game.js:onHealthSync', sites: 15, undriven: 'fifteen ledger-keyed milestone payout sites; the daily egg and its receipt now commit together. tests/health-intake-audit.mjs owns the payload end; egg-progress-audit.mjs drives the shared manual/Health egg receipt' },
   { id: 'js/game.js:onWeighIn', sites: 1, undriven: 'one award keyed weigh-<date>; the primitive is driven above' },
   { id: 'js/game.js:awardDayCloseIfDue', sites: 4, undriven: "runs at boot for YESTERDAY only, all four sites ledger-keyed on that date; not a control a player can press twice. Was 6 until 2026-09-05: the off-budget branch stopped granting its Common Crate (crate-frequency audit lever 2), leaving its award() call as the only payout, then 5 to 4 later the same day (offline crash seam OFF-2b): the on-budget branch's separate award()+grantCrate() calls (2 sites) became one awardOnce(...,{puts:[crateRow]}) call (1 site), the crate riding inside the claim's own transaction instead of a second untransacted write" },
-  { id: 'js/wellness.js:addWater', sites: 1, undriven: 'ledger key water-<date>, and the goal edge is guarded by wasGoal so topping up cannot re-award' },
-  { id: 'js/wellness.js:markBed', sites: 1, undriven: 'ledger key bed-<date>' },
-  { id: 'js/wellness.js:markSleep', sites: 1, undriven: 'ledger key sleep-<date>' },
+  { id: 'js/wellness.js:completeWellness', sites: 1, transition: 'water reaches its goal, bed becomes made, or sleep hours are first logged', authority: 'live wellness state and XP ledger in one payAtomic transaction', undriven: 'wellness-atomic-audit.mjs runs production services over mem-idb with abort, retry, repeat and concurrent habit controls; no browser claim' },
   /* REGISTERED BY THE REVIEWER, deliberately: the agent that built the manual
      walk (feat/manual-walk, 2026-08-30) correctly refused to register its own
      payout, which is the entire point of this registry. Pays 10 XP + 1 Vigor plus egg credit,
@@ -290,7 +288,7 @@ const ACTIONS = [
   // Manual egg credit is a NEW reward path. The census still counts its atomic
   // payout site; egg-progress-audit adds replay, clock, cap and shared-receipt
   // assertions without relaxing the existing XP/Vigor or race-isolation guards.
-  { id: 'js/wellness.js:logManualWalk', sites: 1, undriven: 'egg-progress-audit.mjs drives atomic daily slots, concurrent duplicate requests, clock refusal, egg credit and daily egg receipts' },
+  { id: 'js/wellness.js:logManualWalk', sites: 1, transition: 'a free daily walk ordinal becomes completed', authority: 'health list and XP key read in the same transaction as XP and Vigor', undriven: 'wellness-atomic-audit.mjs covers every write boundary, retry at the second-walk ceiling, concurrent cap contention and verified-step isolation in Node' },
   /* HALF FALSIFIED, 2026-09-04 census, and left exempt on purpose with the truth
      written down rather than the comfortable sentence. The per-routine claim is
      the ledger key and it is atomic. The DAILY CEILING is not: routinesDone() is
