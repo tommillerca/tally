@@ -330,7 +330,7 @@ PURE.unshift('no-debug-markers-lint.mjs');
    so each call gets a genuine turn), the exact shape that paid 20 XP against
    a documented 15 XP ceiling (measured 2026-09-06): the cap was read via a
    ledger scan, then decided several awaits later, off that stale count. */
-PURE.push('routine-race-audit.mjs');
+PURE.push('routine-race-audit.mjs', 'wellness-atomic-audit.mjs');
 PURE.unshift('version-align-lint.mjs');
 /* dayone-topup-audit is PURE for the same reason spawn-claim-atomic-audit is:
    mem-idb under the real js/db.js, js/game.js and js/loot.js, no browser, ~2s.
