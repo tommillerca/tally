@@ -663,23 +663,54 @@ export async function friendAdd(token) { return friendship('/friends/add', { tok
 export async function acceptFriend(id) { try { return (await signedFetch('POST', '/friends/accept', { id })).ok; } catch { return false; } }
 export async function removeFriend(id) { try { return (await signedFetch('POST', '/friends/remove', { id })).ok; } catch { return false; } }
 
-/* Send a gift to a friend. mode 'free' = the once-a-day server-rolled gift;
-   mode 'spend' = your own coins (the CALLER deducts locally first). The gift is
-   delivered as a grant the friend reveals on their next open. Returns
-   { ok, status, reward?, duplicate?, code? }.
-   `ck` IS THE TAP, NOT THE REQUEST, exactly as it is for a cheer, and here it
-   is coins rather than confetti: the caller has already spent locally, and it
-   refunds itself on anything but ok. A spend gift that was DELIVERED and lost
-   its answer therefore refunds the sender while the friend keeps the coins, and
-   a retry that also succeeds charges twice for one gift. One key per amount
-   chip, reused by every retry of it, and the server answers a retry ok. */
+/* Transport only. Paid callers use the durable intent helpers below so an
+   ambiguous reply keeps the debit pending until delivery or refusal. */
 export async function sendGift(toId, mode, coins, ck = null) {
   try {
     const r = await signedFetch('POST', '/gift', { to: toId, mode, coins, ck: ck || newSendKey() });
     const d = await r.json().catch(() => ({}));
-    return { ok: r.ok, status: r.status, ...d };
+    return { ...d, ok: r.ok && d.ok === true, status: r.status };
   } catch { return { ok: false }; }
 }
+// A debit and its durable outbox row commit together. Terminal claims make
+// refunds safe across reloads and overlapping sheets or sync attempts.
+export async function beginGiftIntent(to, amount, ck = newSendKey()) {
+  if (!to || !Number.isInteger(amount) || amount < 1 || amount > 1000) throw new Error('Invalid gift');
+  const intent = { to, amount, ck };
+  try {
+    await db.claimAndPay('kv', { k: `gift-intent:${ck}`, v: intent }, { kv: {
+      coins: cur => { if ((cur || 0) < amount) throw new Error('gift-funds'); return cur - amount; },
+      coinsRev: cur => (Number(cur) || 0) + Math.max(1, Math.abs(amount)),
+      giftPending: cur => ({ ...cur, [ck]: intent }),
+    } });
+  } catch (e) { if (e.message === 'gift-funds') return null; throw e; }
+  return await kvGet(`gift-intent:${ck}`, intent);
+}
+export async function resolveGiftIntent(intent) {
+  const stored = await kvGet(`gift-intent:${intent.ck}`, null);
+  if (!stored) throw new Error('Missing gift intent');
+  const { to, amount, ck } = stored;
+  const done = await kvGet(`gift-terminal:${ck}`, null);
+  if (done) return done;
+  const r = await sendGift(to, 'spend', amount, ck);
+  // Auth, timeout, server and malformed replies remain retryable. Only these
+  // application refusals establish that this operation did not deliver.
+  const refused = !r.ok && ((r.status === 403 && r.error === 'not friends')
+    || (r.status === 400 && r.error === 'bad recipient')
+    || (r.status === 429 && r.code === 'limit'));
+  if (!r.ok && !refused) return { ...r, pending: true };
+  await db.claimAndPay('kv', { k: `gift-terminal:${ck}`, v: r }, { kv: {
+    ...(refused ? { coins: cur => (cur || 0) + amount, coinsRev: cur => (Number(cur) || 0) + Math.max(1, Math.abs(amount)) } : {}),
+ coinsRev: cur => (Number(cur) || 0) + Math.max(1, Math.abs(amount)),
+    giftPending: cur => { const next = { ...cur }; delete next[ck]; return next; },
+  } });
+  return await kvGet(`gift-terminal:${ck}`, r);
+}
+export async function resumeGiftIntents() {
+  const pending = await kvGet('giftPending', {});
+  return Promise.all(Object.values(pending || {}).map(resolveGiftIntent));
+}
+
 /* Send a preset cheer (index into the client-side CHEERS list; no free text).
    `ck` IS THE TAP, NOT THE REQUEST. A cheer send that loses its answer (the
    12s deadline above fires, or the socket goes quiet) re-arms the chips and the
@@ -1001,6 +1032,7 @@ export async function leaderboard() {
    would hide it. Rides out on the Settings diagnostics line, which is a note for
    us and not a message for the player. 2026-09-02. */
 export async function syncProfile(snapshot, appV = '', attempt = null) {
+  await resumeGiftIntents();
   const own = !attempt;
   attempt ||= syncAttempt('syncProfile');
   try {

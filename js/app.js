@@ -14006,6 +14006,7 @@ function giftRewardLabel(reward) {
 
 // Send-a-gift sheet: one free server-rolled gift/day, plus spend-your-own coins.
 async function openGiftSheet(f) {
+  await social.resumeGiftIntents();
   const bal = await coins();
   const day = dateKey();
   const freeMap = (await kvGet('giftFreeSent', {})) || {};
@@ -14061,37 +14062,31 @@ async function openGiftSheet(f) {
      different cooloff windows, and that drift is what the helper was written to
      stop. The label stays short: the sheet header already names who this is
      going to, and a long label reflows the chip row on a small phone. */
-  /* ONE KEY PER AMOUNT, REUSED BY ITS RETRIES, and this one is about coins
-     rather than confetti. The refund below runs on any answer that is not ok,
-     including a send that was DELIVERED and lost its reply on the 12s deadline:
-     the friend keeps the coins, the sender gets them back, and coins are minted
-     out of nothing. Tapping the same chip again then charged twice for one
-     gift. The server collapses two sends carrying the same key into one grant
-     and answers the second ok, so the retry keeps its deduction and the friend
-     is credited exactly once. Dropped on success, so a deliberate second gift
-     of the same amount is a real one. */
-  const giftKeys = new Map();
   $$('.gift-amt', wrap).forEach(b => armToConfirm(b, `Send ${b.dataset.amt}?`, async () => {
     if (b.disabled) return;
     const amt = +b.dataset.amt;
     b.disabled = true;
     // Check and debit together: two confirmed chips can otherwise both spend
     // the same pre-send balance. Refund a refused send below as before.
-    if (await spendCoins(amt) === null) {
+    const pending = Object.values(await kvGet('giftPending', {})).find(x => x.to === f.playerId && x.amount === amt);
+    const intent = pending || await social.beginGiftIntent(f.playerId, amt);
+    if (!intent) {
       b.disabled = false;
       toast("You don't have that many coins.");
       return;
     }
-    if (!giftKeys.has(amt)) giftKeys.set(amt, social.newSendKey());
-    const r = await social.sendGift(f.playerId, 'spend', amt, giftKeys.get(amt));
+    const r = await social.resolveGiftIntent(intent);
     if (r.ok) {
-      giftKeys.delete(amt);
       coinSound(S.sounds);
       toast(`You sent ${f.alias || f.name} ${amt} coins!`, 3400);
       const nb = await coins(); const bl = $('#giftBal', wrap); if (bl) bl.textContent = `you have ${nb}`;
       $$('.gift-amt', wrap).forEach(x => { x.disabled = (+x.dataset.amt) > nb; });
     } else {
-      await coinsAdd(amt); // refund
+      if (r.pending) {
+        b.disabled = false;
+        toast('Gift pending. We will retry when you reopen this sheet or sync.');
+        return;
+      }
       b.disabled = false;
       /* SOC-5, r34 SOCIAL lane, 2026-09-05: driven live (round 34 SOCIAL run 6),
          B sent A a gift after A deleted their account: 403 'not friends',
