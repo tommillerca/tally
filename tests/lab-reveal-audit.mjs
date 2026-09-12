@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {mkdirSync, writeFileSync} from 'node:fs';
+import {auditOutputPath} from './lib/audit-output.mjs';
 import {fileURLToPath} from 'node:url';
 let createCanvas, loadImage;
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -18,7 +19,13 @@ function check(name, condition, detail) {
   console.log(`${condition ? 'PASS' : 'FAIL'} ${name}: ${detail}`);
   if (!condition) failures++;
 }
+/* reach() records every control it invokes, so REACH can assert a NUMBER
+   instead of the literal true it used to pass. A check whose condition is `true`
+   cannot fail, which is the one thing this programme treats as worse than a
+   missing check. */
+const reached = [];
 async function reach(page, selector, value) {
+  reached.push(selector);
   try {
     await page.waitForFunction(selector => {
       const control = document.querySelector(selector);
@@ -49,7 +56,9 @@ function changedPixels(a,b) {
   }
   return changed;
 }
+let fixtureChecks = [];
 async function sample(page, name, selector, clock) {
+  fixtureChecks = [];
   // Capture the visible viewport, then crop decoded pixels. Puppeteer's clip
   // uses page coordinates, while DOM rects use viewport coordinates. Avoid
   // that ambiguity and any offscreen capture that paints only the background.
@@ -98,6 +107,7 @@ async function sample(page, name, selector, clock) {
       inner.x+inner.width<=outer.x+outer.width&&inner.y+inner.height<=outer.y+outer.height;
     const contained=contains(region,state.rect), visible=contains(state.viewport,region);
     console.log(`REGION ${name}-${target}: sample=${JSON.stringify(region)}, animated=${JSON.stringify(state.rect)}, viewport=${JSON.stringify(state.viewport)}, scrollers=${JSON.stringify(state.scrollers)}, contains=${contained}, visible=${visible}`);
+    fixtureChecks.push(contained&&visible);
     assert.ok(contained&&visible,`sample must contain the animated box and be fully visible: animated=${JSON.stringify(state.rect)}, sample=${JSON.stringify(region)}, scrollers=${JSON.stringify(state.scrollers)}`);
     const buffer=await page.screenshot({type:'png',captureBeyondViewport:false});
     const capturedMs=await page.evaluate(clock=>performance.now()-window[clock],clock);
@@ -106,8 +116,8 @@ async function sample(page, name, selector, clock) {
     const canvas=createCanvas(region.width,region.height), ctx=canvas.getContext('2d');
     ctx.drawImage(img,(region.x-v.x)*sx,(region.y-v.y)*sy,region.width*sx,region.height*sy,0,0,region.width,region.height);
     const crop=canvas.toBuffer('image/png');
-    writeFileSync(`${output}/${name}-${target}.png`,crop);
-    writeFileSync(`${output}/${name}-${target}-viewport.png`,buffer);
+    writeFileSync(auditOutputPath(`${output}/${name}-${target}.png`),crop);
+    writeFileSync(auditOutputPath(`${output}/${name}-${target}-viewport.png`),buffer);
     const frame={...state,capturedMs,bytes:buffer.length,hash:hash(buffer),cropBytes:crop.length,cropHash:hash(crop),
       pixels:ctx.getImageData(0,0,region.width,region.height).data};
     console.log(`FRAME ${name}-${target}: bytes=${frame.bytes}, hash=${frame.hash}, cropBytes=${frame.cropBytes}, cropHash=${frame.cropHash}`);
@@ -115,7 +125,7 @@ async function sample(page, name, selector, clock) {
   }
   const changed=changedPixels(frames[0].pixels,frames[1].pixels);
   const detail=`changedPixels=${changed}, samplesMs=${frames.map(f=>f.ms.toFixed(1)).join(',')}, capturedMs=${frames.map(f=>f.capturedMs.toFixed(1)).join(',')}`;
-  writeFileSync(`${output}/${name}.json`,JSON.stringify({sampling:"per-frame current rect with fixed untransformed size plus 12px margin",changedPixels:changed,frames:frames.map(({pixels,...state})=>state)},null,2)+'\n');
+  writeFileSync(auditOutputPath(`${output}/${name}.json`),JSON.stringify({sampling:"per-frame current rect with fixed untransformed size plus 12px margin",changedPixels:changed,frames:frames.map(({pixels,...state})=>state)},null,2)+'\n');
   return {frames,changed,detail};
 }
 async function samplerControl(page,name) {
@@ -141,7 +151,7 @@ async function samplerControl(page,name) {
 }
 
 try {
-  mkdirSync(output, {recursive:true});
+  mkdirSync(auditOutputPath(output), {recursive:true});
   ({createCanvas, loadImage} = await import('@napi-rs/canvas'));
   const {boot, seed, sleep, serveTree, dismissOverlays} = await import('./godmode.js');
   server = process.argv[2] || process.env.URL ? null : await serveTree(root);
@@ -150,6 +160,7 @@ try {
   cases: for (const mode of ['normal','reduce','skip']) for (const certain of [true,false]) {
     const reduce = mode === 'reduce', skipEarly = mode === 'skip';
     const name = `${certain ? 'CERTAIN' : 'UNCERTAIN'}${reduce ? '-REDUCED' : skipEarly ? '-SKIPPED' : ''}`;
+    const reachedBefore = reached.length;
     let browser;
     try {
       const session = await boot(base,{deviceScaleFactor:1,defaultViewport:{width:393,height:852,isMobile:true,hasTouch:true}});
@@ -196,17 +207,17 @@ try {
         observer.observe(document.querySelector('#sheets'),{childList:true,subtree:true});
       },skipEarly);
       await reach(page,'#pdGo');
-      check(`REACH ${name}`,true,'all fixture controls invoked through real handlers');
+      check(`REACH ${name}`,reachedBefore<reached.length,`${reached.length-reachedBefore} fixture controls invoked through real handlers: ${reached.slice(reachedBefore).join(', ')}`);
       await page.waitForFunction(()=>!!document.querySelector('.lab-reveal'),{polling:'raf'});
       const {frames,changed,detail}=await sample(page,name,'[data-lab-result-art]','labSeen');
-      check(`FIXTURE ${name}`,true,'all three samples contain the whole animated box and are fully visible');
+      check(`FIXTURE ${name}`,fixtureChecks.length===3&&fixtureChecks.every(Boolean),`${fixtureChecks.filter(Boolean).length}/${fixtureChecks.length} samples contain the whole animated box and are fully visible`);
       const control=await page.evaluate(async()=>{
         const D=await import('./js/db.js');
         const receipts=await D.kvGet('labExperiments');
         const r=Object.values(receipts||{}).at(-1);
         return {r,present:(await D.kvGet('petInst')).some(p=>p.iid===r?.result?.iid),outcomes:Number(document.querySelector('.lab-reveal').dataset.outcomes)};
       });
-      writeFileSync(`${output}/${name}-control.json`,JSON.stringify(control,null,2)+'\n');
+      writeFileSync(auditOutputPath(`${output}/${name}-control.json`),JSON.stringify(control,null,2)+'\n');
       check(`CONTROL ${name}`,!!control.r?.result?.iid&&control.present&&control.r.distribution?.length===(certain?1:2)&&control.outcomes===(certain?1:2),`distribution=${control.r?.distribution?.length}, pet=${control.r?.result?.iid}, present=${control.present}`);
       check(`DECODE ${name}`,frames.every(f=>f.decoded),'every sampled frame has decoded art');
       if(!samplerOK) console.log(`VOID ${name}: sampler failed; pixel-dependent rows cannot pass`);
