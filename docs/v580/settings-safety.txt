@@ -1,0 +1,22 @@
+PASS EXPORT native does not promise an unverified cloud save
+PASS EXPORT failed storage read reports failure without recording success
+PASS CONTROL web Export contains every store and records a completed attempt
+PASS SETTINGS recovery copy does not contradict a surviving vault
+PASS SETTINGS missing phrase does not declare the account permanently lost
+PASS SETTINGS cloud-off explanation is conditional
+PASS ERASE aborted transaction retains earnings and offers retry
+PASS DELETE uncertain server result does not claim nothing was deleted
+PASS DELETE local abort retries cleanup without deleting the account again
+PASS CONTROL unconfirmed danger actions preserve the save
+PASS CONTROL file import refuses malformed JSON and damaged stores without losing earnings
+PASS FILE real losses are disclosed before any write; cancel preserves every store
+PASS FILE verified snapshot exists before replacement transaction opens
+PASS FILE persisted restore-point UI returns every store to the pre-import state
+PASS FILE aborted replacement leaves exactly the old state and a valid restore point
+PASS FILE snapshot quota failure blocks replacement before its transaction
+PASS FILE progress earned during review refuses a stale confirmation
+PASS FILE unreadable snapshot verification blocks the import transaction
+PASS FILE payout queued after snapshot persists is checked under the import lock
+PASS FILE undo quota failure preserves the imported state and original point
+PASS FILE repeated imports retain older points; ERASE removes points only after success
+settings-safety: 21 passed, 0 failed

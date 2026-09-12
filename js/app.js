@@ -15058,6 +15058,9 @@ async function renderSettings(el) {
       <div class="lab"><b>${label}</b><span>${sub}</span></div>
       <div class="seg" style="width:110px"><button data-noti="${key}" data-on="1" class="${np[key] ? 'on' : ''}"${notifPerm === 'denied' ? ' disabled' : ''}>On</button><button data-noti="${key}" data-on="0" class="${np[key] ? '' : 'on'}"${notifPerm === 'denied' ? ' disabled' : ''}>Off</button></div>
     </div>`;
+  /* Settings order (2026-09-11 tidy): who you are, then what you tune, then what
+     your phone does for you, then the rare and destructive stuff, then the
+     credits. Everything a player touches once a month or less lives in a fold. */
   el.innerHTML = `
   <h1 class="page-h1">Settings</h1>
 
@@ -15083,66 +15086,20 @@ async function renderSettings(el) {
       <div class="lab"><b>Cloud backup</b><span>${backupLabel}</span></div>
       <div class="seg" style="width:130px"><button id="cbOn" class="${backupOn ? 'on' : ''}">On</button><button id="cbOff" class="${backupOn ? '' : 'on'}">Off</button></div>
     </div>
-    <p class="note" style="margin:8px 0 0">When cloud backup is on, your whole save backs up automatically, end-to-end <b>encrypted</b> so only your phone can read it (the server can't). ${restoreLine} Share your friend code so friends can add you.</p>`
+    <p class="note" style="margin:8px 0 0">When cloud backup is on, your whole save is backed up end-to-end <b>encrypted</b>: only your phone can read it. ${restoreLine}</p>`
     : `
-    <p class="note" style="margin:0 0 10px">Go online to back up your progress (end-to-end encrypted, only your phone can read it) and join the Crew: friend codes, and soon trading and PvP.</p>
+    <p class="note" style="margin:0 0 10px">Back up your progress (end-to-end encrypted, only your phone can read it) and join the Crew with a friend code.</p>
     <button class="btn" id="goOnlineBtn">Go Online</button>
     <button class="btn small ghost" id="restoreAcctBtn" style="margin-top:8px">I already have an account</button>`}
+    ${/* Kept as its own `${me ? ...}` block, in this position: tests/settings-safety-audit.mjs
+         cuts the source from this row to vaultRowHtml and renders it alone. */''}
     ${me ? `<div class="settings-row" style="margin-top:10px">
-      <div class="lab"><b>Recovery code</b><span>${recoverySet ? (myRid ? `Set. Restore anywhere with <b>${esc(myRid)}</b> and your phrase.` : 'Set. Add a recovery ID so you do not need your friend code to restore.') : 'NOT SET. Set a recovery code to restore on another device.'}</span></div>
+      <div class="lab"><b>Recovery code</b><span>${recoverySet ? (myRid ? `Set. Restore anywhere with <b>${esc(myRid)}</b> and your phrase.` : 'Set. Add a recovery ID so you do not need your friend code to restore.') : 'Not set. Without one this account cannot be restored on another device.'}</span></div>
       <button class="btn small ${recoverySet ? 'ghost' : ''}" id="recoveryBtn">${recoverySet ? 'Change' : 'Set it'}</button>
     </div>` : ''}
     ${vaultRowHtml(vault)}
     ${profileSyncRow}
   </div>` : ''}
-
-  <div class="card">
-    <div class="card-title">YOUR DATA</div>
-    <div class="settings-row settings-data-action"><div class="lab"><b>Export backup</b><span>${exportAgo == null ? 'Never backed up yet' : exportAgo === 0 ? 'Last backup: today' : `Last backup: ${exportAgo} day${exportAgo === 1 ? '' : 's'} ago`}</span></div><button class="btn small ghost" id="exportBtn">Export</button></div>
-    <div class="settings-row settings-data-action"><div class="lab"><b>Import backup</b><span>Review what will be replaced. A restore point is required before importing.</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
-    <div class="settings-row settings-data-action"><div class="lab"><b>Restore points</b><span>Return to a save kept before a file import, on this device. Erase all data also removes these.</span></div><button class="btn small ghost" id="filePointsBtn">Restore</button></div>
-    <input type="file" id="importFile" accept="application/json,.json" hidden>
-    <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights, gear</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
-    ${me ? `<div class="settings-row"><div class="lab"><b>Delete account &amp; cloud data</b><span>Removes your cloud account, friends + backup</span></div><button class="btn small danger" id="delAcctBtn">Delete</button></div>` : ''}
-  </div>
-
-  ${notifPlat !== 'none' ? `
-  <div class="card">
-    <div class="card-title">NOTIFICATIONS</div>
-    <div class="settings-row">
-      <div class="lab"><b>Notifications</b><span>${np.enabled ? (notifPerm === 'denied' ? 'Blocked in system settings' : 'On') : 'Off: nothing gets pushed to you'}</span></div>
-      <div class="seg" style="width:110px"><button data-noti="enabled" data-on="1" class="${np.enabled ? 'on' : ''}">On</button><button data-noti="enabled" data-on="0" class="${np.enabled ? '' : 'on'}">Off</button></div>
-    </div>
-    <!-- R37-4: one line of consent copy ahead of the OS prompt. Only shown
-         before a decision exists (not once granted or denied), so it never
-         contradicts what actually happened. -->
-    ${notifPerm !== 'granted' && notifPerm !== 'denied' ? '<p class="note" style="margin:8px 2px 0">Turning this on asks your device for permission to send notifications.</p>' : ''}
-    ${np.enabled ? `
-    ${notifRow('friends', 'Crew activity', 'Friend requests, gifts and cheers')}
-    ${notifRow('reminder', 'Daily log reminder', 'A nudge in the evening to log your food')}
-    ${notifRow('streak', 'Streak saver', 'Warns you before a streak would break')}
-    ${notifRow('siege', 'Dark Spires siege', 'A push when your spire is besieged, and again 12h before it ends')}
-    <div class="notif-presets">
-      <button class="btn small ghost" id="notifAll">Everything (power user)</button>
-      <button class="btn small ghost" id="notifEss">Just essentials</button>
-    </div>
-    <button class="btn small ghost" id="notifTest" style="margin-top:8px">Send a test notification</button>
-    ${notifPlat === 'web' ? '<p class="note" style="margin:8px 2px 0">In a browser, only immediate pushes work (Crew activity, siege alerts). The daily log reminder and streak saver need the installed app.</p>' : ''}
-    ${notifPerm === 'denied' ? '<p class="note" style="margin:8px 2px 0">Notifications are blocked. Enable Boneheadz Gym in your device Settings, then flip this back on.</p>' : ''}` : ''}
-  </div>` : ''}
-
-  <div class="card">
-    <div class="card-title">REDEEM A CODE</div>
-    <p class="note" style="margin:0 0 10px">Got a code from a friend? Redeem it for a pet.</p>
-    <div style="display:flex;gap:8px">
-      <!-- min-width:0, for the same reason every equal-track grid in app.css now
-           says minmax(0, 1fr): a flex item's automatic minimum is its min-content
-           width, and an <input> carries a default size of about 170px, so this row
-           was 2px wider than a 320 phone and the Redeem button ended at x=322. -->
-      <input id="redeemInput" type="text" placeholder="Enter code" autocapitalize="characters" autocomplete="off" style="flex:1;min-width:0;text-transform:uppercase">
-      <button class="btn small" id="redeemBtn">Redeem</button>
-    </div>
-  </div>
 
   <div class="card">
     <div class="card-title">DAILY TARGETS <button class="link" id="recalc">Recalculate</button></div>
@@ -15162,50 +15119,109 @@ async function renderSettings(el) {
   <div class="card">
     <div class="card-title">PREFERENCES</div>
     <div class="settings-row">
-      <div class="lab"><b>Weight units</b><span>For logging and trends</span></div>
+      <div class="lab"><b>Weight units</b><span>For weigh-ins and trends</span></div>
       <div class="seg" style="width:130px"><button id="uLb" class="${units === 'lb' ? 'on' : ''}">lb</button><button id="uKg" class="${units === 'kg' ? 'on' : ''}">kg</button></div>
     </div>
     <div class="settings-row">
-      <div class="lab"><b>Sounds</b><span>Little pops and level-up chimes</span></div>
+      <div class="lab"><b>Sounds</b><span>Pops and level-up chimes</span></div>
       <div class="seg" style="width:130px"><button id="sndOn" class="${S.sounds ? 'on' : ''}">On</button><button id="sndOff" class="${S.sounds ? '' : 'on'}">Off</button></div>
     </div>
     <div class="settings-row">
-      <div class="lab"><b>Haptics</b><span>A little thump on collects, hits and level-ups</span></div>
+      <div class="lab"><b>Haptics</b><span>A thump on collects, hits and level-ups</span></div>
       <div class="seg" style="width:130px"><button id="hapOn" class="${S.haptics ? 'on' : ''}">On</button><button id="hapOff" class="${S.haptics ? '' : 'on'}">Off</button></div>
     </div>
     <div class="settings-row">
-      <div class="lab"><b>Gear glow</b><span>The coloured halo on epic weapons and slimed pieces. Turn it off for a clean look; stats are unaffected.</span></div>
+      <div class="lab"><b>Gear glow</b><span>The coloured halo on epic and slimed gear. Looks only: stats are unaffected.</span></div>
       <div class="seg" style="width:130px"><button id="glowOn" class="${S.glow ? 'on' : ''}">On</button><button id="glowOff" class="${S.glow ? '' : 'on'}">Off</button></div>
     </div>
-    <div class="settings-row">
-      <div class="lab"><b>USDA API key</b><span>Optional: raises online search limit to 1,000/hr. <a href="https://fdc.nal.usda.gov/api-key-signup.html" target="_blank" rel="noopener">Get a free key</a></span></div>
-    </div>
-    <input class="input" id="fdcKey" placeholder="DEMO_KEY (default)" value="${esc(S.settings.fdcKey || '')}" style="margin-top:2px">
-    <button class="btn small ghost" id="saveKey" style="margin-top:10px">Save key</button>
+    <details class="settings-fold"${S.settings.fdcKey ? ' open' : ''}>
+      <summary><b>USDA API key</b><span>Optional. Raises online food search to 1,000 lookups an hour.</span></summary>
+      <div class="settings-fold-body">
+        <input class="input" id="fdcKey" placeholder="DEMO_KEY (default)" value="${esc(S.settings.fdcKey || '')}">
+        <div class="settings-fold-actions"><button class="btn small ghost" id="saveKey">Save key</button><a class="link" href="https://fdc.nal.usda.gov/api-key-signup.html" target="_blank" rel="noopener">Get a free key</a></div>
+      </div>
+    </details>
   </div>
+
+  ${notifPlat !== 'none' ? `
+  <div class="card">
+    <div class="card-title">NOTIFICATIONS</div>
+    <div class="settings-row">
+      <div class="lab"><b>Notifications</b><span>${np.enabled ? (notifPerm === 'denied' ? 'Blocked in system settings' : 'On') : 'Off: nothing gets pushed to you'}</span></div>
+      <div class="seg" style="width:110px"><button data-noti="enabled" data-on="1" class="${np.enabled ? 'on' : ''}">On</button><button data-noti="enabled" data-on="0" class="${np.enabled ? '' : 'on'}">Off</button></div>
+    </div>
+    <!-- R37-4: one line of consent copy ahead of the OS prompt. Only shown
+         before a decision exists (not once granted or denied), and only while
+         the switch is OFF: under an On switch it read as a contradiction. -->
+    ${!np.enabled && notifPerm !== 'granted' && notifPerm !== 'denied' ? '<p class="note settings-note">Turning this on asks your device for permission to send notifications.</p>' : ''}
+    ${np.enabled ? `
+    ${notifRow('friends', 'Crew activity', 'Friend requests, gifts and cheers')}
+    ${notifRow('reminder', 'Daily log reminder', 'An evening nudge to log your food')}
+    ${notifRow('streak', 'Streak saver', 'Warns you before a streak would break')}
+    ${notifRow('siege', 'Dark Spires siege', 'When your spire is besieged, and 12h before it ends')}
+    <div class="settings-row stack">
+      <div class="lab"><b>Presets</b><span>Everything, or the essentials without siege alerts</span></div>
+      <div class="notif-presets"><button class="btn small ghost" id="notifAll">Everything</button><button class="btn small ghost" id="notifEss">Essentials</button></div>
+    </div>
+    <div class="settings-row">
+      <div class="lab"><b>Test notification</b><span>Check that one reaches this device</span></div>
+      <button class="btn small ghost" id="notifTest">Send</button>
+    </div>
+    ${notifPlat === 'web' ? '<p class="note settings-note">In a browser only immediate pushes work (Crew activity, siege alerts). The daily reminder and streak saver need the installed app.</p>' : ''}
+    ${notifPerm === 'denied' ? '<p class="note settings-note">Notifications are blocked. Enable Boneheadz Gym in your device Settings, then flip this back on.</p>' : ''}` : ''}
+  </div>` : ''}
 
   <div class="card">
     <div class="card-title">APPLE HEALTH</div>
     ${isNative() ? `
     <div class="settings-row">
-      <div class="lab"><b>Steps, active energy, weight</b><span>${S.settings.hkConnected ? 'Connected · syncs automatically every time you open' : 'Connect once, then it syncs automatically'}</span></div>
+      <div class="lab"><b>Steps, active energy, weight</b><span>${S.settings.hkConnected ? 'Connected · syncs every time you open' : 'Connect once, then it syncs automatically'}</span></div>
       <button class="btn small ${S.settings.hkConnected ? 'ghost' : ''}" id="hkGuide">${S.settings.hkConnected ? 'Reconnect' : 'Connect'}</button>
     </div>
-    ${S.settings.hkConnected ? '<button class="btn small ghost" id="hkSyncNow" style="margin-top:8px">Sync now</button>' : ''}
     ${S.settings.hkConnected ? `
-    <div class="sect-h" style="margin-top:16px">Sleep read</div>
-    <div id="hkSleepDiagBox">${sleepDiagHtml(sleepDiag)}</div>` : ''}` : `
     <div class="settings-row">
-      <div class="lab"><b>Steps, active energy, weight</b><span>${S.settings.hkConnected ? 'Connected via your Sync Boneheadz shortcut' : 'Bridge from your Apple Watch via a one-time Shortcut'}</span></div>
+      <div class="lab"><b>Sync now</b><span>Pull the latest readings from Health</span></div>
+      <button class="btn small ghost" id="hkSyncNow">Sync</button>
+    </div>
+    <details class="settings-fold">
+      <summary><b>Sleep read</b><span>What the last sync found</span></summary>
+      <div class="settings-fold-body" id="hkSleepDiagBox">${sleepDiagHtml(sleepDiag)}</div>
+    </details>` : ''}` : `
+    <div class="settings-row">
+      <div class="lab"><b>Steps, active energy, weight</b><span>${S.settings.hkConnected ? 'Connected via your Sync Boneheadz shortcut' : 'Bridge from your Apple Watch with a one-time Shortcut'}</span></div>
       <button class="btn small ghost" id="hkGuide">${S.settings.hkConnected ? 'Guide' : 'Connect'}</button>
     </div>
-    <button class="btn small ghost" id="hkSyncNow" style="margin-top:8px">Sync from clipboard now</button>`}
+    <div class="settings-row">
+      <div class="lab"><b>Sync from clipboard</b><span>Run the shortcut, then paste its result here</span></div>
+      <button class="btn small ghost" id="hkSyncNow">Sync</button>
+    </div>`}
   </div>
 
+  <div class="card">
+    <div class="card-title">YOUR DATA</div>
+    <div class="settings-row settings-data-action"><div class="lab"><b>Export backup</b><span>${exportAgo == null ? 'Never exported yet' : exportAgo === 0 ? 'Last export: today' : `Last export: ${exportAgo} day${exportAgo === 1 ? '' : 's'} ago`}</span></div><button class="btn small ghost" id="exportBtn">Export</button></div>
+    <div class="settings-row settings-data-action"><div class="lab"><b>Import backup</b><span>Replaces this save with a file. A restore point is kept first.</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
+    <div class="settings-row settings-data-action"><div class="lab"><b>Restore points</b><span>Saves kept on this device before each file import</span></div><button class="btn small ghost" id="filePointsBtn">Review</button></div>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
+    <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Wipes everything on this phone</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
+    ${me ? `<div class="settings-row"><div class="lab"><b>Delete account</b><span>Cloud account, friends and backup, plus this phone</span></div><button class="btn small danger" id="delAcctBtn">Delete</button></div>` : ''}
+  </div>
+
+  <div class="card">
+    <div class="card-title">REDEEM A CODE</div>
+    <div class="redeem-row">
+      <!-- min-width:0, for the same reason every equal-track grid in app.css now
+           says minmax(0, 1fr): a flex item's automatic minimum is its min-content
+           width, and an <input> carries a default size of about 170px, so this row
+           was 2px wider than a 320 phone and the Redeem button ended at x=322. -->
+      <input id="redeemInput" type="text" placeholder="Code from a friend" autocapitalize="characters" autocomplete="off" style="flex:1;min-width:0;text-transform:uppercase">
+      <button class="btn small" id="redeemBtn">Redeem</button>
+    </div>
+  </div>
 
   <div class="card">
     <div class="card-title">ABOUT</div>
-    <div class="settings-row"><div class="lab"><b>Join the community</b><span>Bone Boiz on Discord: where feedback lands and future features get decided</span></div><a class="btn small" id="communityBtn" href="${DISCORD_URL}" target="_blank" rel="noopener" style="text-decoration:none">Join</a></div>
+    <div class="settings-row"><div class="lab"><b>Join the community</b><span>Bone Boiz on Discord, where feedback lands and features get decided</span></div><a class="btn small" id="communityBtn" href="${DISCORD_URL}" target="_blank" rel="noopener" style="text-decoration:none">Join</a></div>
     <div class="settings-row"><div class="lab"><b>Send feedback</b><span>Tell the developer what you think</span></div><button class="btn small ghost" id="feedbackBtn">Write</button></div>
     <!-- PERMANENT AND UNGATED (R43-1, App Store 5.1.1(i)). privacy.html shipped and
          answered 200 for months, and the only two links to it were inside the survey
@@ -15215,19 +15231,25 @@ async function renderSettings(el) {
          account, and privacy.html is in sw.js's PRECACHE and in build-www.sh's copy
          list so the relative href resolves offline AND inside the native shell,
          which is the build App Review actually opens. -->
-    <div class="settings-row"><div class="lab"><b>Privacy policy</b><span>What stays on this phone, what gets sent, and what nobody else can read</span></div><a class="btn small ghost" id="privacyBtn" href="privacy.html" target="_blank" rel="noopener" style="text-decoration:none">Read</a></div>
+    <div class="settings-row"><div class="lab"><b>Privacy policy</b><span>What stays on this phone and what gets sent</span></div><a class="btn small ghost" id="privacyBtn" href="privacy.html" target="_blank" rel="noopener" style="text-decoration:none">Read</a></div>
     ${surveyDone ? '' : `<div class="settings-row"><div class="lab"><b>Day One survey 💜</b><span>Share your thoughts, keep the exclusive Day One Lizard</span></div><button class="btn small" id="surveyBtn" style="background:#b96cf0;color:#1a0f26">Claim</button></div>`}
-    <div class="settings-row"><div class="lab"><b>What's New</b><span>See what changed in recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</button></div>
-    <div class="settings-row"><div class="lab"><b>App version</b><span id="buildLine">Build ${APP_BUILD}${shellV} · ${STORE_BUILD ? 'Updates are available through the App Store' : 'tap if the app looks out of date'}</span></div><button class="btn small ghost" id="updateBtn">${STORE_BUILD ? 'How to update' : 'Get latest'}</button></div>
-    ${STORE_BUILD ? '' : `<div class="settings-row"><div class="lab"><b>Diagnostics</b><span id="diagLine">${esc(diag)}</span></div><button class="btn small ghost" id="copyDiag">Copy</button></div>`}
-    ${STORE_BUILD ? '' : `<div class="settings-row"><div class="lab"><b>Device report</b><span>Measurements and observations from this device</span></div><button class="btn small ghost" id="openDeviceReport">Open</button></div>`}
+    <div class="settings-row"><div class="lab"><b>What's New</b><span>Recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen > 9 ? '9+' : clUnseen}</i>` : ''}</button></div>
+    <div class="settings-row"><div class="lab"><b>App version</b><span id="buildLine">Build ${APP_BUILD}${shellV} · ${STORE_BUILD ? 'updates come through the App Store' : 'tap if the app looks out of date'}</span></div><button class="btn small ghost" id="updateBtn">${STORE_BUILD ? 'How to update' : 'Get latest'}</button></div>
+    ${/* Folded: two rows of developer readouts sat beside the player's own rows.
+         The inner STORE_BUILD gate is redundant under the outer one and stays on
+         purpose: tests/store-copy-lint.mjs pins that exact literal. */''}
+    ${STORE_BUILD ? '' : `<details class="settings-fold">
+      <summary><b>Bug report tools</b><span>Diagnostics and the device report</span></summary>
+      ${STORE_BUILD ? '' : `<div class="settings-row"><div class="lab"><b>Diagnostics</b><span id="diagLine">${esc(diag)}</span></div><button class="btn small ghost" id="copyDiag">Copy</button></div>`}
+      <div class="settings-row"><div class="lab"><b>Device report</b><span>Measurements and observations from this device</span></div><button class="btn small ghost" id="openDeviceReport">Open</button></div>
+    </details>`}
   </div>
 
-  <p class="note" style="text-align:center;margin-top:18px">
-    Boneheadz Gym · build ${APP_BUILD} · your data is yours: cloud backups are end-to-end encrypted, readable only on your device<br>
-    Food lookups: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> · <a href="https://fdc.nal.usda.gov" target="_blank" rel="noopener">USDA FoodData Central</a><br>
-    Icons: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (CC-BY 3.0), including the Paddock heart by Skoll<br>
-    Dialogue type: <a href="https://yukipixels.itch.io/boldpixels" target="_blank" rel="noopener">BoldPixels by YukiPixels</a>, used unmodified under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>
+  <p class="note settings-foot">
+    Boneheadz Gym · build ${APP_BUILD}<br>
+    Food data: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> · <a href="https://fdc.nal.usda.gov" target="_blank" rel="noopener">USDA FoodData Central</a><br>
+    Icons: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (CC-BY 3.0), Paddock heart by Skoll<br>
+    Dialogue type: <a href="https://yukipixels.itch.io/boldpixels" target="_blank" rel="noopener">BoldPixels by YukiPixels</a>, unmodified, <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>
   </p>`;
 
   $('#saveTargets').addEventListener('click', async () => {

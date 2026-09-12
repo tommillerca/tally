@@ -188,6 +188,9 @@ const TARGETS = [
      the eight ids, so the next button added to Settings is graded too. */
   { surface: 'settings', sel: '.btn.small', why: 'every secondary Settings action: export, import, erase, redeem, save targets, notification test, copy diagnostics, what is new', all: true },
   { surface: 'settings', sel: '#recalc', why: 'the Recalculate link in the DAILY TARGETS card title' },
+  /* Settings tidy, 2026-09-11: the folds are tap targets in their own right. A
+     summary with no reachable centre hides everything behind it. */
+  { surface: 'settings', sel: 'details.settings-fold > summary', why: 'the Settings folds: USDA API key, bug report tools', all: true },
   { surface: 'build', sel: '.t3-pm',         why: 'stat +/-', all: true },
   { surface: 'build', sel: '#gearBtn',      why: 'the floating Settings gear (route() hides it on Today/Settings/Boneyard)' },
   { surface: 'shop',  sel: '#gwGear',       why: "the Emporium's own Settings gear" },
@@ -431,6 +434,14 @@ async function tapTargets(page, w, h) {
     for (const t of list) {
       if (t.inject) await inject(page, t.inject);
       const got = await page.evaluate((sel, all) => {
+        /* SETTINGS FOLDS OPEN FIRST (2026-09-11). The USDA key and the bug report
+           tools live in closed <details.settings-fold>. Chrome keeps offsetParent
+           non-null inside a shut details, so the finder below still lists #saveKey,
+           #copyDiag and #openDeviceReport, and the hit test then lands on whatever
+           is painted over the collapsed content. Opening the fold is what a player
+           does; the controls measured are the app's own. Same move as the quest
+           list's q-collapse above. */
+        document.querySelectorAll('details.settings-fold:not([open])').forEach(d => { d.open = true; });
         const els = [...document.querySelectorAll(sel)].filter(e => e.offsetParent !== null || getComputedStyle(e).position === 'fixed');
         const pick = all ? els : els.slice(0, 1);
         /* SCROLLED TO, then hit-tested. elementFromPoint answers about the
