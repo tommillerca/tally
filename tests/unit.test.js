@@ -45,7 +45,7 @@ import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, gearDustValue, gearSt
   RACK_RARITY_PRICE, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_REROLL_LADDER,
   rollCosmetic, crateEligible, wardrobeLookCounts,
   eggRow, grantEgg, hatchEgg, addPetInstance, petInstances, pickRandomPet } from '../js/loot.js';
-import { MORPHS, MORPH_WEIGHT, isMorph, rollMorph, ownedPairs, PET_ASSIGN, MORPH_ART, morphAsset, ownedCellCount } from '../js/pets.js';
+import { petGrowth, MORPHS, MORPH_WEIGHT, isMorph, rollMorph, ownedPairs, PET_ASSIGN, MORPH_ART, morphAsset, ownedCellCount } from '../js/pets.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset, bhFamilies, PET_SLOTS } from '../data/boneheadz.js';
 import {
   rollSeeds, harvestYield, SEED_ODDS, PLOTS_FREE, PLOTS_MAX, PLOT_PRICES, plotPrice,
@@ -88,6 +88,10 @@ test('leaderboard seen PURE audit', () => assert.equal(runSeenAudit(), 0));
 
 // Register every Device report PURE guard with the agreed Node proof runner.
 for (const [name, guard] of DEVICE_REPORT_PURE) test(`Device report PURE: ${name}`, () => guard(deviceReport));
+
+test('petGrowth lineage 0', () => assert.equal(petGrowth(0), 1));
+test('petGrowth lineage 3', () => assert.equal(petGrowth(3), 1.12));
+test('petGrowth caps lineage 9', () => assert.equal(petGrowth(9), 1.24));
 
 test('cloud opt-out stops garment profile uploads and discloses stale Crew entries', () => {
   const output = execFile_.execFileSync(process.execPath,

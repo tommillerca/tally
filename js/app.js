@@ -74,7 +74,7 @@ import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, petColourName, petInstanceName, salvageInstance, quotePetDestruction, petLastColourLoss, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear, bestInstance } from './loot.js';
-import { buildBattlePet, legalPicks, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, petStatBonusText, petBreedGainText, PET_STAT_MULT_CAP, PET_LINEAGE_STEP, SHINY_STAT_MULT, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs, ownedCellCount } from './pets.js';
+import { buildBattlePet, legalPicks, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, petStatBonusText, petBreedGainText, PET_STAT_MULT_CAP, PET_LINEAGE_STEP, petGrowth, SHINY_STAT_MULT, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs, ownedCellCount } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
@@ -681,7 +681,7 @@ function petFrom(snapshotPet, ownSpecies = null) {
        undefined, because undefined means "ask S.petWear", which is the viewer's
        own and would dress a rival's Bumbleseal in your purse. Same rule for
        morph (Kennel Phase A): whitelisted with isMorph, unknown/missing -> base. */
-    return { id: snapshotPet.id, shiny: !!snapshotPet.shiny, level: snapshotPet.level || 1, wear: snapshotPet.wear || null, morph: snapPetMorph(snapshotPet) };
+    return { id: snapshotPet.id, lineage: snapshotPet.lineage, shiny: !!snapshotPet.shiny, level: snapshotPet.level || 1, wear: snapshotPet.wear || null, morph: snapPetMorph(snapshotPet) };
   }
   if (ownSpecies && BH_BY_ID[ownSpecies]) return { id: ownSpecies, shiny: undefined, level: null, morph: undefined };
   return null;
@@ -692,7 +692,7 @@ function petFrom(snapshotPet, ownSpecies = null) {
  * is the wrong size" cannot be re-invented per screen. */
 function petAsideHtml(pet, px, { thumb } = {}) {
   if (!pet || !pet.id || !BH_BY_ID[pet.id]) return '';
-  return petSpriteHtml(pet.id, px, !petHovers(pet.id), { mass: true, shiny: pet.shiny, wear: pet.wear, thumb, morph: pet.morph });
+  return petSpriteHtml(pet.id, px, !petHovers(pet.id), { mass: true, shiny: pet.shiny, wear: pet.wear, thumb, morph: pet.morph, lineage: pet.lineage });
 }
 /* THE THIRD PATH. On the splash, the level-up card, the map marker and the
  * leaderboard the pet stays INSIDE the avatar stack, so it cannot go through
@@ -800,7 +800,7 @@ function petFightPx(petId, px) {
    is that UI, so tests/pet-wardrobe-audit.mjs taps the real tiles instead, which
    is what tally/CLAUDE.md rule 5 asks for anyway: operate the control, do not
    call the function behind it. */
-function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, thumb, morph } = {}) {
+function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, thumb, morph, lineage } = {}) {
   // CX (Day One Lizard) has no shiny static variant; its amethyst art IS the
   // special look, so always render its animated self even if the instance is shiny.
   // Every path scales by the species' visual mass, so a colourway is never a
@@ -819,7 +819,7 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
      canvas, so the static branch below draws the kit on it with no per-variant
      art, and CX (Day One, amethyst) is that same canvas again. */
   const wearsFootball = petWearsFootball(petId, wear);
-  const S2 = mass ? Math.round(px * petScale(petId)) : px;
+  const S2 = Math.round((mass ? px * petScale(petId) : px) * petGrowth(lineage));
   const isShiny = shiny !== undefined ? !!shiny : S.shinyPets.has(petId);
   /* SHINIES ANIMATE TOO. Tom, 2026-08-08: "make all animations apply for shinies
      of the same variety too."
@@ -863,11 +863,11 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
 // PORTRAIT: always content-cropped + vertically CENTERED in its box (no animation,
 // no floor-seating), so a pet reads the same in a roster tile regardless of whether
 // it's an animated/hovering/grounded species. Shiny uses its recolour, same crop.
-function petPortraitHtml(petId, px, shiny = false, { mass = false, wear, thumb, morph } = {}) {
+function petPortraitHtml(petId, px, shiny = false, { mass = false, wear, thumb, morph, lineage } = {}) {
   if (petId === 'CX') shiny = false; // Day One Lizard: amethyst CX.png is the portrait (no shiny static)
   // Kennel palettes: shiny forces base (rule 0.1/1.2) -- no morph lookup at all.
   const src = shiny ? `assets/bh/C/shiny/${petId}.png` : (morphAsset(petId, morph) || bhAsset(BH_BY_ID[petId]));
-  const inner = croppedPetImg(petId, mass ? Math.round(px * petScale(petId)) : px, false, src, wear, thumb);
+  const inner = croppedPetImg(petId, Math.round((mass ? px * petScale(petId) : px) * petGrowth(lineage)), false, src, wear, thumb);
   return shiny ? `<div class="pet-shiny-wrap">${inner}<span class="shiny-spark">${sparkIco(12)}</span></div>` : inner;
 }
 async function refreshShinyPets() { S.shinyPets = new Set(await shinyPetIds()); }
@@ -4633,7 +4633,8 @@ async function renderToday(el) {
   const sub = dObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: y === new Date().getFullYear() ? undefined : 'numeric' })
     + (aheadOfClock ? ' · dated ahead of this clock' : '');
 
-  const heroPet = petFrom(null, eq.C);   // yours, so S.shinyPets answers (the figure contract)
+  const heroPet = petFrom(null, eq.C);
+  if (heroPet) heroPet.lineage = (await equippedPetInstance())?.lineage;   // yours, so S.shinyPets answers (the figure contract)
   /* HOW BIG SHE STANDS, AS A SHARE OF THE BONEHEAD. PET_HERO_REL is a ratio, so
      the markup still needs a pixel box (croppedPetImg lays its layers out as
      percentages of one) and app.css rescales that box against --fig. The px
@@ -4644,7 +4645,7 @@ async function renderToday(el) {
   const heroPetRel = heroPet ? (PET_HERO_REL[heroPet.id] || PET_HERO_HOUSE) : 0;
   const heroPetBig = heroPetRel > PET_HERO_HOUSE;
   const heroPetPx = Math.round(heroPetRel * PET_HERO_REF);
-  const heroPetBoxRel = heroPet ? Math.round(heroPetPx * petScale(heroPet.id)) / PET_HERO_REF : 0;
+  const heroPetBoxRel = heroPet ? Math.round(heroPetPx * petScale(heroPet.id) * petGrowth(heroPet.lineage)) / PET_HERO_REF : 0;
   /* THE ONE PET SURFACE WHERE THE SHEET'S STRICT RULE IS A PIXEL SHORT, named
      here rather than tuned into bhTierFor for the whole app.
      Measured 430x932 DPR 2: a solo-canvas pet's whole square lands in a 192.4px
@@ -7344,6 +7345,7 @@ async function openSpireInfoSheet(info, onAct = null) {
   const keeperPet = held
     ? petFrom(null, keeperFit && keeperFit.C)                       // yours: S.shinyPets knows
     : petFrom(rival && rival.defender && rival.defender.pet);       // theirs: the snapshot knows
+  if (held && keeperPet) keeperPet.lineage = (await equippedPetInstance())?.lineage;
   const days = heldSince ? Math.floor((spireNow() - heldSince) / 86400000) : 0;
   const wt = wardenTier(days);
   // The plate is a NAMEPLATE, so a tower you hold flies YOUR name, not "You hold it".
@@ -12465,7 +12467,7 @@ function crewCardArtHtml(f) {
   // Same friends-only wardrobe as openFriendProfile. Older snapshots stay bare.
   const yard = p.yard && Array.isArray(p.yard.pets) ? p.yard : null;
   const yardWear = (yard && yard.wear) || null;
-  const pet = p.pet && p.pet.id ? `<div class="cfan-pet">${petPortraitHtml(p.pet.id, 58, !!p.pet.shiny, { mass: true, wear: yardWear, thumb: true, morph: snapPetMorph(p.pet) })}</div>` : '';
+  const pet = p.pet && p.pet.id ? `<div class="cfan-pet">${petPortraitHtml(p.pet.id, 58, !!p.pet.shiny, { mass: true, wear: yardWear, thumb: true, morph: snapPetMorph(p.pet), lineage: p.pet.lineage })}</div>` : '';
   return (eq.BG && BH_BY_ID[eq.BG] ? `<img class="cfan-bg" src="${bhThumb(bhAsset(BH_BY_ID[eq.BG]))}" alt="">` : '')
     + avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'], thumb: 384, foreign: true }) + pet;
 }
@@ -13904,7 +13906,7 @@ function openFriendProfile(f, onChange, opts = {}) {
       <div class="fp-hero${eq.BG && BH_BY_ID[eq.BG] ? ' framed' : ''}">
         ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fp-hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
         <div class="bh-stage lg">${avatarLayersHtml(eq, { foreign: true, noYard: true, skip: ['BG', 'C'] })}</div>
-        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true, shiny: !!p.pet.shiny, wear: yardWear, thumb: true, morph: snapPetMorph(p.pet) })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
+        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true, shiny: !!p.pet.shiny, wear: yardWear, thumb: true, morph: snapPetMorph(p.pet), lineage: p.pet.lineage })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
         <div class="fp-lvlbadge">Lv ${p.level ?? '?'}</div>
       </div>
       <div class="fp-title"><div class="fp-class">${p.title ? `${esc(p.title)} · ` : ''}${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal" hidden></div></div>
@@ -20232,7 +20234,7 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
   const petHtml = r => {
     const p = places[r.iid];
     if (!p) return '';
-    const art = petSpriteHtml(r.sp, p.w, p.kind === 'walk' || p.kind === 'flop', { shiny: r.shiny, wear: r.wear || null, thumb: true, morph: r.morph });   // 2026-09-06: the paddock scene carries the Kennel morph like it carries shiny (own instance record, or the friend's wire)
+    const art = petSpriteHtml(r.sp, p.w, p.kind === 'walk' || p.kind === 'flop', { shiny: r.shiny, wear: r.wear || null, thumb: true, morph: r.morph, lineage: r.lineage });   // 2026-09-06: the paddock scene carries the Kennel morph like it carries shiny (own instance record, or the friend's wire)
     const pos = p.kind === 'walk'
       ? `left:${p.x0}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px;--pdk-range:${Math.max(0, (p.x1 - p.x0) - p.w)}px;--pdk-dur:${9 + ([...r.iid].reduce((a, c) => a + c.charCodeAt(0), 0) % 5)}s`
       : p.kind === 'fly'
@@ -26060,7 +26062,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <div class="bh-stage fstage" id="youStage">${avatarLayersHtml(player.outfit, { noYard: true, skip: ['BG', 'C'] })}</div>
         ${petBody ? `
         <div class="pet-fighter" id="petG">
-          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''}${petArtId && petFacesLeft(petArtId) ? ' faces-away' : ''} lin-${Math.min((petBody.kit && petBody.kit.lineage) || 0, 6)}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, petFightPx(petArtId, 76), !petHovers(petArtId), { thumb: true, morph: petArtMorph }) : ''}</div>
+          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''}${petArtId && petFacesLeft(petArtId) ? ' faces-away' : ''} lin-${Math.min((petBody.kit && petBody.kit.lineage) || 0, 6)}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage" style="--pet-growth:${petGrowth(petBody.kit?.lineage)}">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, petFightPx(petArtId, 76), !petHovers(petArtId), { thumb: true, morph: petArtMorph, lineage: petBody.kit?.lineage }) : ''}</div>
         </div>` : ''}
       </div>
       <div id="floats"></div>
