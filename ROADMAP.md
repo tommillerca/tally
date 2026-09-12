@@ -40,8 +40,6 @@ verbatim; never paraphrase into the table.
 | F6 | Names | Names still clipped at `#newcomersList .t3-tx b` (3758px of text in a 143px box) and `#lbBody .lb-who b` (86 in 77), plus 144 rows at 200%/53px text | **OPEN.** v579 fixed only `.hub-name` and `.hero-name` | `tests/name-fit-audit.mjs` (declared `skip`) |
 | F11 | Laboratory | from `docs/BUGS-v580.md` #1: "The Laboratory only celebrates when the outcome was uncertain" — `receipt.distribution.length > 1` gates the reveal, so a certain experiment gets no animation | **OPEN** | `docs/BUGS-v580.md`, origin R7-L6 |
 | F12 | Pets | from `docs/BUGS-v580.md` #2: "Without Apple Health you can never own a second pet" — manual walks never write a `steps` field and eggs hatch on steps; the 14,000 threshold is shown to the player zero times | **OPEN, HIGH HARM** | `docs/BUGS-v580.md`, origin R7-U4/R7-A3 |
-| F13 | Settings | from `docs/BUGS-v580.md` #3: "The restore-point sentence is false" — copy promises points stay until Erase, v537 evicts all but the last two | **OPEN**, open since v537 | `docs/BUGS-v580.md`, origin R4-7 |
-| F14 | Settings | from `docs/BUGS-v580.md` #4: "'Replace save' is dead after a refused import" — `finished = true` is set whether commit resolves or throws | **OPEN** | `docs/BUGS-v580.md`, origin R4-8 |
 | F15 | Toasts | from `docs/BUGS-v580.md` #5: "The toast queue drops confirmations" — the cap discards the oldest routine toast, and startup queues 18-24s of them, so a Wardrobe confirmation can be thrown away before it is heard | **OPEN** | `docs/BUGS-v580.md`, origin R5-B1/B2, R9-F18 |
 | F16 | Logging | from `docs/BUGS-v580.md`: meal chip guesses from the last entry; run 5 measured 60 of 80 meals needing a corrective tap | **OPEN — DECISION**, keep or change | `docs/BUGS-v580.md`, R5-L1 |
 | F17 | Logging | from `docs/BUGS-v580.md`: deleting a logged food has no confirm, no name in the message, no undo | **OPEN — DECISION** | `docs/BUGS-v580.md`, R5-B6 |
@@ -65,6 +63,8 @@ verbatim; never paraphrase into the table.
 | Backpack | Chests and items centred on their cards ("In back **centre** chests") | v580 | `tests/backpack-wardrobe-f1-f2-audit.mjs` row CENTRED, red on v579 |
 | Wardrobe | Take off and The Studio swapped | v580 | same audit, row ORDER |
 | Settings | Whole-word buttons, sensible card order, folded diagnostics ("settings still has tons of problems in the design") | v581 | `tests/settings-shape-audit.mjs`, 8 rows red on v580; card order approved by Tom from a render |
+| Settings | The restore-point sentence matches the code (bug 3) | v582 | `settings-safety-audit` row SENTENCE, red on v581 |
+| Settings | "Replace save" retryable after a refused import (bug 4) | v582 | same audit, rows RETRY and ONCE, red on v581 in three refusal modes |
 | Wardrobe | Offhand art (shovel/toothbrush/flag off the figure) | earlier | Tom: "finally the shovel is fixed. mark it done" |
 
 

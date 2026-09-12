@@ -1,5 +1,15 @@
 # What each patch note claims, and what backs it
 
+## v582 (2026-09-12)
+
+Changelog item: The import screen now says what really happens to your restore points.
+1. PROOF: `node tests/settings-safety-audit.mjs` row SENTENCE, which asserts the NUMBER in the copy against the number the eviction code actually uses, so the two cannot drift apart again. The shipped sentence promised "Points stay on this device until Erase all data or Delete account removes them" while v537 evicts everything but the last two, on Tom's ruling; it now reads "The last two restore points are kept on this device; older ones are removed when a new one is saved." Proven red on main at 26621a9f in `docs/v581/guard-red.txt` ("retention sentence missing"), with the CONTROL row green in both directions. | REACH: the import review sheet's copy and the eviction count. Open since v537, origin R4-7.
+
+Changelog item: If an import is refused, you can free up space and try again without starting over.
+2. PROOF: `node tests/settings-safety-audit.mjs` rows RETRY and ONCE, across three refusal modes (a thrown commit, a quota refusal and an aborted transaction). `finished = true` was set whether `commit()` resolved or threw, so a player who freed space and typed REPLACE again met a dead button while the copy said "try again". Proven red on main for all three modes ("refused sheet must remain live", true !== false). ONCE counts the commits, and an `applied` flag makes a retry skip an import that already succeeded, so a partially applied commit cannot double-apply. The retry is gated behind a `retryOnFailure` flag rather than made global: pet destruction deliberately locks when its status is unresolved and keeps that behaviour. | REACH: the import review sheet's commit path under refusal, driven through production `js/db.js` over `tests/mem-idb.mjs`. Origin R4-8.
+
+Deviations: `docs/PLAYTEST-SETTINGS.md` item 1 records a HIGH HARM defect in this same flow, importing an older backup silently removing newer earnings (125 coins and 1 crate become 100 and 0, with the message "Backup restored"). It is F4 in ROADMAP.md and was deliberately excluded from this work order, because its fix is a durable pre-import snapshot and needs its own. Nothing here makes that harder to add.
+
 ## v581 (2026-09-11)
 
 Changelog item: Settings reads in a sensible order, and every button shows its whole label.
