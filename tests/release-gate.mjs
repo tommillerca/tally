@@ -696,8 +696,17 @@ function unprovenLines(out) {
    there are not, which is where the stack will be. */
 function failLines(out) {
   const lines = out.split('\n');
-  const hits = lines.filter(l => /^FAIL|FAILED/.test(l));
-  const show = hits.length ? hits.slice(0, 12) : ['(no assertions failed: the suite itself died)', ...lines.filter(Boolean).slice(-8)];
+  // The godmode footer 'AUDIT END x: FAILED' matched this filter and was the
+  // only 'hit' for a crashed suite, which is how the stack went missing.
+  const hits = lines.filter(l => /^FAIL|FAILED/.test(l) && !/^AUDIT END|^RETAINED|^MACHINE/.test(l));
+  /* 2026-09-12: the tail alone was the godmode DEPENDENCY footer and the AUDIT
+     END line, so a crashed suite's log said nothing about WHY (23 of main's 48
+     reds were "unresolved" in the triage for exactly this reason). Keep the
+     first thrown error and the six lines after it (the stack), then the tail. */
+  const thrown = lines.findIndex(l => /INTERRUPTED|Error:|Error \[|TimeoutError|AssertionError|ReferenceError|TypeError/.test(l));
+  const crash = thrown >= 0 ? lines.slice(thrown, thrown + 7) : [];
+  const show = hits.length ? hits.slice(0, 12)
+    : ['(no assertions failed: the suite itself died)', ...crash, ...(crash.length ? ['        ...'] : []), ...lines.filter(Boolean).slice(-8)];
   return show.map(l => '        ' + l).join('\n');
 }
 
