@@ -16,6 +16,9 @@ export const CHANGES = [
     'A confirmed tower claim keeps its full reward even when the save fails afterwards.',
     'Your Bonehead stands on his shadow instead of hovering above it, whatever he is wearing.',
     'Your Bonehead and your pet sit a little further left, with the space between them unchanged.',
+    'Your name is no longer cut off on the Bonehead and Today screens.',
+    'The Laboratory and the Kitchen have their own room headers.',
+    'Messages keep clear of the controls on every screen, not just the three that were patched one at a time.',
   ] },
   { n: 578, date: '2026-09-11', title: 'Your Bonehead stands on the ground', items: [
     'Your Bonehead has a proper shadow at his feet again instead of floating.',
