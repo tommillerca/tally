@@ -74,3 +74,11 @@ Held out of v588: pet growth (D2), and l-ackpriv (recovery save must see a real 
 - v589 verified live: version.json, sw.js, APP_BUILD and changelog all v589; relativeAgo and petGrowth in the served app.js, the standalone-document branch in the served sw.js.
 - v590 assembled from ten lanes: meal chip option 3, all six economy claim-then-pay fixes, replay identity, flagged friends, local race weeks. Unit suite on the merged train: 400 passed. Gate next, diffed against main's 48.
 - One deploy bundle for Tom is written up in docs/SERVER-DEPLOY-PENDING.md: apply the spire receipt migration, then server/deploy.sh. Until then the Worker fixes (podium, gift and cheer keys, spire receipts, replay, flagged friends, local weeks) are code on main only.
+
+## 14:25 v590 live
+
+- v590 verified live: version.json, sw.js, APP_BUILD and changelog all v590; gift intents in the served social.js, payAtomic in the served wellness.js.
+- Gate on the v590 train: 266 pass, 55 fail; the same 48 reds as pristine main plus seven train-only ones, every one answered before merge (six audits given the new functions or re-anchored, one spawn-day fixture that is red on main alone today too).
+- One correction over a lane: the gift lane treated only three specific error bodies as a refusal, so a bare 403 left the coins pending; any 4xx from the Worker is now a definitive refusal and refunds. The crew playtest control caught it.
+- Waiting on Tom: the one Worker deploy (spire receipt migration first, then server/deploy.sh). Until then podium settlement, gift and cheer keys, spire receipts, replay identity, flagged friends and local race weeks are code on main only.
+- Still running: a Codex triage of main's 48 gate reds, landing as docs/GATE-REDS-2026-09-12.md.
