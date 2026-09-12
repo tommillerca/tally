@@ -8974,11 +8974,10 @@ function mealBlock(name, i, entries, yEntries, budget = 0, sourceDate = null) {
 
 /* ================= meal defaults ================= */
 
-// Last-used meal tracker: when logging multiple items within the same day,
-// default to the meal the player used previously, not the hour-of-day. This
-// prevents the "logged lunch at 12pm, then logged lunch again at 5:10pm" case
-// where mealForHour() would flip to dinner and force a re-selection.
-// Reads lastMealToday kv; on day boundary, falls back to mealForHour().
+// Last-used meal tracker: remember the last meal for two hours on the same day.
+// F16 (Tom, 2026-09-12): after two hours the clock picks again. Lunch logged
+// at noon now becomes Dinner at 5:10pm, as chosen in option 3.
+// Legacy lastMealToday rows without a timestamp count as expired.
 // P0 ORIGIN: playtest found players flipped away from their meal by the clock.
 /* THE MEAL YOU PICKED IS REMEMBERED (QA round 24 L10). Measured: open the sheet
    on Snacks, tap Dinner, close, reopen: Snacks. curMeal was closure state in
@@ -8987,25 +8986,26 @@ function mealBlock(name, i, entries, yEntries, budget = 0, sourceDate = null) {
    picked the meal BY THE CLOCK: a fifth commit path around the memory the other
    four share (tests/meal-memory-audit.mjs, row MYFOODS). ONE precedence, in ONE
    place, read by every reopen (the fab, restoreAddDraft, renderFoods):
-     a usable draft's meal  >  the meal remembered today  >  the clock.
+     a usable draft's meal  >  the meal remembered within two hours today  >  the clock.
    The draft wins because it is the flow that was live at the reload; the
    memory is lastMealToday, now written on every chip tap as well as on commit.
    mealPrecedence is pure so tests/unit.test.js can run it; mealDefault only
    fetches its two rows. */
 function mealPrecedence({ draft, last, date, hour, now = Date.now() }) {
   if (addDraftUsable(draft, now) && Number.isInteger(draft.meal)) return draft.meal;
-  if (last !== null && typeof last === 'object' && last.date === date) return last.meal;
+  if (last !== null && typeof last === 'object' && last.date === date && now - last.at < 2 * 3600e3) return last.meal;
   return mealForHour(hour);
 }
 async function mealDefault() {
   const [draft, last] = await Promise.all([kvGet('addDraft', null), kvGet('lastMealToday', null)]);
   const now = new Date();
-  return mealPrecedence({ draft, last, date: S.date, hour: now.getHours() + now.getMinutes() / 60 });
+  return mealPrecedence({ draft, last, date: S.date, hour: now.getHours() + now.getMinutes() / 60, now: now.getTime() });
 }
 
 // Record the meal a player just used, so the next log defaults to it.
 async function recordMealUsed(meal) {
-  await kvSet('lastMealToday', { date: S.date, meal });
+  const now = Date.now();
+  await kvSet('lastMealToday', { date: S.date, meal, at: now });
 }
 
 /* ================= add flow ================= */

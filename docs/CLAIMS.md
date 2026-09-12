@@ -1,5 +1,12 @@
 # What each patch note claims, and what backs it
 
+## v589 (2026-09-12)
+
+Changelog item: The meal chip follows your last meal for two hours, then the time of day
+1. PROOF: unit.test.js covers draft priority, fresh same-day memory, three-hour expiry, the exact two-hour boundary, legacy rows without at, and different-day memory. The three-hour assertion is red against main cb2aca568cf53661d5f9bd584831f618feda3cd7 (actual 1, expected 0). The agreed command, node tests/unit.test.js, reports 392 passed, 0 failed. meal-memory-audit.mjs retains real tap and commit paths that now write fresh timestamps and adds EXPIRED, aging the saved timestamp by three hours before reopening. Browser execution is blocked by sandbox listen EPERM on 127.0.0.1, so those browser rows are unverified here. | REACH: all existing mealDefault callers and chip-tap and commit memory writes. Usable drafts still win; same-day remembered meals expire after two hours; legacy rows without at expire. No version stamps changed.
+
+Implementation note: mealPrecedence has no existing module export; its existing source-extraction test interface is preserved. Browser fixtures use production timestamp writes rather than overwriting them with seeded timestamps, preserving coverage of recordMealUsed.
+
 ## v588 (2026-09-12)
 
 Assembled from five Codex lanes by the commander. Every browser audit below was run by the commander on the lane tree and again on the merged train; the lanes cannot bind a socket.
