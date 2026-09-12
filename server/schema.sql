@@ -399,6 +399,7 @@ CREATE TABLE IF NOT EXISTS spires (
   tended_at INTEGER NOT NULL,
   level INTEGER NOT NULL DEFAULT 1,   -- +1 per takeover, +1 per repelled siege
   siege_until INTEGER,                -- ms epoch the 48h defense window closes; NULL = no siege
+  takeover_id TEXT,                  -- NULL for legacy transitions, treated as paid
   siege_name TEXT,                    -- the NPC laying siege (owner and rivals see the same one)
   updated_at INTEGER NOT NULL
 );

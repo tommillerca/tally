@@ -67,7 +67,7 @@ import { talkBoxHtml, runTalkBox } from './talkbox.js';
 import { BED_BOX, hlwBedArt, hlwChipHtml, hlwPriceSignHtml, hlwGhostBedHtml } from './hollow-beds.js';
 import { hollowBackdropHtml } from './hollow-scene.js';
 import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor,
-  setSpireLevel, boonBonusFor, spireNow, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
+  setSpireLevel, boonBonusFor, spireNow, syncSieges, paySpireTakeover, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
   SPIRE_RADIUS_M, SPIRE_CAP, SPIRE_SHIELD_MS, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
   BOON_PER_SPIRE, BOON_SPIRE_CAP, TRIBUTE_PER_DAY, TRIBUTE_DUST_PER_DAY } from './spires.js';
 import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
@@ -27100,6 +27100,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (fight.over.winner === 'p' && add && el('addStage')) el('addStage').classList.add('ko'); // both enemies drop
     markDowned();   // and anything already at zero stays down
     renderActions();
+    let takeoverPaid = 0;
     let coins = 0, xp = 0, extras = [], extraCards = [], bossLoot = null;
     // item rewards render as pack cards (extras keeps coin-modifier notes only)
     const crateCard = kind => ({ iconHtml: crateIcon(kind, 120), name: CRATES[kind].label, rarity: kind === 'daily' ? 'uncommon' : 'rare', kind: 'CRATE', stats: kind === 'egg' ? 'Incubates · walk to hatch it' : 'Open it in your Backpack' });
@@ -27274,7 +27275,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
            tests/unit.test.js (one of which pins THIS branch by name) and
            tests/reward-sop-audit.mjs. `tests/repeat-audit.mjs`, named here
            since v389, has never existed in this repo. */
-        const already = !!(remote && remote.ok === true && remote.already === true);
+        takeoverPaid = remote?.ok === true ? await paySpireTakeover(remote.takeover_id) : 0;
+        const already = !!(remote && remote.ok === true && remote.already === true) && !takeoverPaid;
         const r = (refused || already) ? { ok: false, reason: already ? 'already' : remote.reason } : await claimSpire(foeCfg.spire).catch(() => ({ ok: false, reason: 'storage' }));
         if (pending) {
           coins = 0;
@@ -27297,7 +27299,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           if (!r.ok) toast('Tower claimed. Local ownership is waiting for sync.', 4000);
           const owned = await social.fetchMySpires().catch(() => null);
           if (owned !== null) await syncSieges(owned).catch(() => {});
-          coins = 80;
+          coins = takeoverPaid;
           // the server owns the level; mirror what it just told us
           if (remote && remote.ok && remote.level) await setSpireLevel(foeCfg.spire.id, remote.level).catch(() => {});
           const lvl = (remote && remote.level) || r.level || 1;
@@ -27396,7 +27398,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         coins += bonus;
         extras.push(`Feast +${bonus} coins`);
       }
-      if (coins) await coinsAdd(coins);
+      if (coins > takeoverPaid) await coinsAdd(coins - takeoverPaid);
       }
       window.__refreshWalletPill?.();   // the hub behind this sheet shows the balance this just changed
       const badges = await evaluateBadges();
