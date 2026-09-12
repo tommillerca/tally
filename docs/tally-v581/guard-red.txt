@@ -1,0 +1,17 @@
+BLOCKED: no red pixel proof obtained.
+Baseline: main and HEAD both 26621a9f29dd60e8fdbccb4dfa8b59422029cd1b.
+Plan SHA256: 0a485232cfa00446b8ae5fcb666372c407868b8aa19a3496823c956dfc3407fe
+Command before production edits:
+HEADLESS_MODE=shell node tests/lab-reveal-audit.mjs
+Exit: 1
+Server startup denied: listen EPERM: operation not permitted 127.0.0.1
+No browser launched, no experiments ran, no frames compared.
+CERTAIN red and fixed-tree green remain unproven in this sandbox.
+
+Proposed timing deviation: existing animation lasts 240ms. Preserve it and
+compare decoded pixels at +30ms and +140ms, then capture final state at +400ms.
+A requirement for ongoing reveal motion at +400ms would require extending the
+animation. That duration change has not been made.
+Skip definition: a pet exists and its decoded 240ms reveal is running.
+Both certain and uncertain reveals are skippable; reduced motion has no skip.
+The audit suppresses sheet-body entrance animation to isolate reveal pixels.
