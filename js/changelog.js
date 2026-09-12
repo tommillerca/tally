@@ -9,6 +9,19 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 590, date: '2026-09-12', title: 'Nothing you earned goes missing mid-save', items: [
+    'The meal chip follows your last meal for two hours, then the time of day.',
+    'Level rewards now save together, so an interrupted save cannot mark a level paid while leaving its coins, crates, dust or egg missing.',
+    'Friend battles and paid spars keep your earned coins if the app closes during the payout.',
+    'Water, bed, sleep and walks now save with their XP, and walks keep their Vigor if saving is interrupted.',
+    'Health sync rewards now arrive together, so an interrupted sync can retry without losing your coins, egg, crate or workout rewards.',
+    'Coin gifts survive interrupted sends and retry without spending twice.',
+    'Retrying a gift or cheer after midnight keeps the original delivery.',
+    'Interrupted tower claims recover their 80 takeover coins on the next ownership sync.',
+    'Signed writes reject replayed requests even when the signature uses a different encoding.',
+    'Flagged test accounts stay out of Crew lists and cannot exchange gifts, cheers or friendship accepts.',
+    'The step race resets Friday at midnight, your time, including when the clocks change.',
+  ] },
   { n: 589, date: '2026-09-12', title: 'New players first, pets that grow, a leaderboard that talks like a person', items: [
     'First run puts starting your Bonehead first, with account and backup restore still available.',
     'The leaderboard shows online now, hours ago or days ago instead of exact timestamps.',

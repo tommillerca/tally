@@ -1,5 +1,42 @@
 # What each patch note claims, and what backs it
 
+## v590 (2026-09-12)
+
+Assembled from ten Codex lanes by the commander. Every pure audit was run on its lane tree and proven red on a throwaway worktree of main; the unit suite on the merged train is 400 passed. Worker changes ship as code only: nothing changes live until Tom runs server/deploy.sh (docs/SERVER-DEPLOY-PENDING.md, one bundle).
+
+Changelog item: The meal chip follows your last meal for two hours, then the time of day.
+1. PROOF: unit.test.js rows on mealPrecedence (draft wins; last meal within two hours wins; older than two hours loses to the clock, red on main; a same-day row with no timestamp loses; a different day loses); meal-memory-audit.mjs keeps its reopen rows with a fresh timestamp and adds a three-hour row. | REACH: the Add sheet's pre-selected meal chip. Tom: "d1 ya i guess option 3 is best".
+
+Changelog item: Level rewards now save together, so an interrupted save cannot mark a level paid while leaving its coins, crates, dust or egg missing.
+2. PROOF: level-rewards-atomic-audit.mjs, 30 rows green on the train, 16 red on main (CRASH coins, RETRY, CRASH coinsRev and the rest): grantLevelRewards commits the levelpaid marker, coins, the Golden Crate, milestone crates, dust and egg in one db.claimAndPay. Declared PURE. | REACH: every level crossing including the level-25 milestone. Amounts unchanged. Historical partial payments are not repaired.
+
+Changelog item: Friend battles and paid spars keep your earned coins if the app closes during the payout.
+3. PROOF: take-and-pay-audit.mjs gains CRASH, RETRY, ONCE and CONTROL rows for friend-win, friend-loss, spar-win and spar-loss; 22 red lines on main, all clean on the train. claimSpar and claimFriendBattle pay inside the claim transaction and return the committed receipt for display. | REACH: the Pit's friend battle and spar payouts. The daily spar cap and the once-per-friend rule are unchanged.
+
+Changelog item: Water, bed, sleep and walks now save with their XP, and walks keep their Vigor if saving is interrupted.
+4. PROOF: wellness-atomic-audit.mjs, 37 rows green on the train, 14 red on main (CRASH and RETRY for water, bed, sleep and walks). Each completion and its XP commit through one payAtomic; Vigor rides the same write. Declared PURE. | REACH: the four wellness completions. Manual walks stay out of verified race steps (Tom's F18 ruling).
+
+Changelog item: Health sync rewards now arrive together, so an interrupted sync can retry without losing your coins, egg, crate or workout rewards.
+5. PROOF: health-milestone-atomic-audit.mjs, 58 rows green on the train, 53 red on main: every milestone's XP row, coins, egg, daily crate and discipline reward commit through awardOnce's atomic pay payload; an identical payload synced twice after a reload pays each milestone once. Declared PURE. | REACH: onHealthSync milestones. Keys, amounts and caps unchanged.
+
+Changelog item: Coin gifts survive interrupted sends and retry without spending twice.
+6. PROOF: gift-intent-audit.mjs rows CRASH, LOST-REPLY, REFUND, ONCE, CONTROL, 5 green on the train and 5 red on main: the debit and the gift intent commit together, an ambiguous reply keeps the intent pending and re-sends the same key, and only a definitive refusal refunds. currency-revision-lint green after both pay maps gained their coinsRev. Declared PURE. | REACH: the Crew gift sheet and its resume after reload. The client half works against today's Worker; the midnight case needs the server half below.
+
+Changelog item: Retrying a gift or cheer after midnight keeps the original delivery.
+7. PROOF: cheer-retry-key-audit.mjs over the in-process Worker: a cheer accepted at 23:59:59 UTC, reply dropped, same key retried after midnight gives one grant, one cap slot and the original acknowledgement; a new key sends normally; 3 rows red on main. Declared PURE. | REACH: Worker code only (dedupe on sender, recipient and the client's stable key, independent of the UTC day; the original acknowledgement is returned before the friendship check). Not deployed.
+
+Changelog item: Interrupted tower claims recover their 80 takeover coins on the next ownership sync.
+8. PROOF: spire-takeover-atomic-audit.mjs rows CRASH (server accepted, killed before payout, reopened and synced twice: one 80-coin payment, ownership held), ONCE, LEGACY, CONTROL; 4 green on the train, CRASH red on main (0 coins instead of 80). Declared PURE. | REACH: the Worker records a takeover receipt (spire id plus claim timestamp) and returns it on claim and on the ownership sync; the client pays an unpaid receipt once. Needs server/migrations/2026-09-12-spire-takeover-receipt.sql before the Worker deploy. Legacy takeovers with no receipt count as paid. Recovery pays the base 80 without fight bonuses.
+
+Changelog item: Signed writes reject replayed requests even when the signature uses a different encoding.
+9. PROOF: replay-identity-audit.mjs, 10 rows green on the train; both Base64 alias rows (no padding, inserted whitespace) return 200 on main and 401 on the train. sync-authpath-audit.mjs still 18 green. Declared PURE. | REACH: Worker only; the replay identity is the verified request fields plus the player, not the signature text. Client signing unchanged. Not deployed.
+
+Changelog item: Flagged test accounts stay out of Crew lists and cannot exchange gifts, cheers or friendship accepts.
+10. PROOF: flagged-friend-audit.mjs, 11 rows green on the train, 9 red on main: after flagging one participant, every friends bucket omits them and gifts, cheers and accepts involving them are refused; unflagged controls still work. Declared PURE. | REACH: Worker only, the same COALESCE(is_test, 0) = 0 predicate the board already uses. Not deployed.
+
+Changelog item: The step race resets Friday at midnight, your time, including when the clocks change.
+11. PROOF: unit.test.js rows for local calendar week keys across the autumn DST transition in America/Vancouver and a positive-offset zone (red on main); race-week-local-audit.mjs over the in-process Worker: a key one day either side of a UTC period start is accepted and settled under that key, two days off is refused, the exact UTC key still works; 5 green on the train. Declared PURE. | REACH: the client computes race weeks by stepping local calendar days (never elapsed milliseconds) and sends its UTC offset; the race card says when the week resets. The Worker half is not deployed; until it is, the Worker keeps accepting the previous and next UTC key as it did before. Tom: "D6 make it local". Race weeks stay Friday to Friday.
+
 ## v589 (2026-09-12)
 
 Assembled from five Codex lanes by the commander. Pure audits run on each lane tree and proven red on a throwaway worktree of main; the one browser audit run by the commander on the lane tree and against live.
