@@ -175,7 +175,9 @@ const CASES = [
     fragment: 'WHERE (f.a = ? OR f.b = ?) AND ',
     mustIndex: 'idx_friendships_b',
     mustNotScan: 'SCAN f',
-    params: ['pb', 'pb', 101],
+    /* Two dormantSince binds come first: the a_spires and b_spires COUNT
+       subqueries bind a timestamp each before the (f.a = ? OR f.b = ?) pair. */
+    params: [0, 0, 'pb', 'pb', 101],
     get sql() { return friendsSql[0]; },
   },
   {

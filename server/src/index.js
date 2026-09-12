@@ -2684,8 +2684,12 @@ export default {
           '(SELECT COUNT(*) FROM spires sp WHERE sp.owner = pa.id AND sp.tended_at > ?) a_spires, ' +
           'pb.handle b_handle, pb.name b_name, pb.friend_code b_code, pb.profile b_profile, pb.app_v b_v, pb.last_seen b_seen, ' +
           '(SELECT COUNT(*) FROM spires sp WHERE sp.owner = pb.id AND sp.tended_at > ?) b_spires ' +
-          'FROM friendships f JOIN players pa ON pa.id = f.a JOIN players pb ON pb.id = f.b ' +
-          'WHERE (f.a = ? OR f.b = ?) AND COALESCE(pa.is_test, 0) = 0 AND COALESCE(pb.is_test, 0) = 0 AND ' + where + ' ORDER BY f.ts DESC LIMIT ?');
+          /* The is_test suppression lives in the JOIN conditions, not the WHERE:
+             an extra AND term beside the (f.a = ? OR f.b = ?) pair talks SQLite
+             out of the multi-index OR and the route walks every friendship row
+             three times per call. schema-plan.test.mjs guards the seek. */
+          'FROM friendships f JOIN players pa ON pa.id = f.a AND COALESCE(pa.is_test, 0) = 0 JOIN players pb ON pb.id = f.b AND COALESCE(pb.is_test, 0) = 0 ' +
+          'WHERE (f.a = ? OR f.b = ?) AND ' + where + ' ORDER BY f.ts DESC LIMIT ?');
         const dormantSince = Date.now() - SPIRE_DORMANT_MS;
         /* LIMIT is the page PLUS ONE: the extra row is how truncation is known
            without a second COUNT query. It is dropped before the payload. */
@@ -3425,7 +3429,7 @@ export default {
           return p.ack || { ok: true, reward: { coins: p.coins }, mode: p.mode };
         };
         const prior = await originalAck();
-        if (prior) return json(prior);
+        if (prior) return json({ ...prior, duplicate: true }); // a retry is answered with the original acknowledgement AND named as the duplicate it is (test/api.test.mjs contract)
         const [a, b] = pairKey(auth.playerId, to);
         const fr = await env.DB.prepare('SELECT status FROM friendships WHERE a = ? AND b = ? AND EXISTS (SELECT 1 FROM players WHERE id = friendships.a AND COALESCE(is_test, 0) = 0) AND EXISTS (SELECT 1 FROM players WHERE id = friendships.b AND COALESCE(is_test, 0) = 0)').bind(a, b).first();
         if (!fr || fr.status !== 'accepted') return json({ error: 'not friends' }, 403);
@@ -3444,7 +3448,7 @@ export default {
           });
           if (!landed) {
             const prior = await originalAck();
-            if (prior) return json(prior);
+            if (prior) return json({ ...prior, duplicate: true }); // a retry is answered with the original acknowledgement AND named as the duplicate it is (test/api.test.mjs contract)
             return json({ error: 'already sent today', code: 'daily-done' }, 409);
           }
           return json(ack);
@@ -3491,7 +3495,7 @@ export default {
           return { ok: true };
         };
         const prior = await originalAck();
-        if (prior) return json(prior);
+        if (prior) return json({ ...prior, duplicate: true }); // a retry is answered with the original acknowledgement AND named as the duplicate it is (test/api.test.mjs contract)
         const [a, b] = pairKey(auth.playerId, to);
         const fr = await env.DB.prepare('SELECT status FROM friendships WHERE a = ? AND b = ? AND EXISTS (SELECT 1 FROM players WHERE id = friendships.a AND COALESCE(is_test, 0) = 0) AND EXISTS (SELECT 1 FROM players WHERE id = friendships.b AND COALESCE(is_test, 0) = 0)').bind(a, b).first();
         if (!fr || fr.status !== 'accepted') return json({ error: 'not friends' }, 403);
