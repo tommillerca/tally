@@ -38,6 +38,7 @@ const ctx = vm.createContext({ ...art, ...football, ...pets, ...loot, ...syncHea
   isOnline: async () => online,
   S: { settings: {}, petWear: {}, shinyPets: new Set(['C4']) },
   kvGet, kvSet, gameInitSettled: async () => {},
+  resumeGiftIntents: async () => [], // v590: syncProfile resumes pending gift intents first; none in this fixture
   buildFighter: async () => ({ stats: {}, talents: [], gearLo: {}, petMeta }),
   totalXp: async () => 0, levelFor: () => ({ level: 1, name: 'Bonehead' }),
   ownedGearIds: async () => new Set(), earnedBadgeIds: async () => new Set(),
@@ -87,7 +88,7 @@ vm.runInContext([
 // Execute the real profile template, stopping before its DOM wiring.
 vm.runInContext(['onlineLabel', 'snapshotDetail'].map(name => app.match(new RegExp(`^function ${name}\\([^]*?^}`, 'm'))[0]).join('\n'), ctx);
 vm.runInContext(cut(app, 'function openFriendProfile(', '\nfunction '), ctx);
-ctx.social = { isOnline: ctx.isOnline, syncProfile: ctx.syncProfile, pushProfileUpdate: ctx.pushProfileUpdate };
+ctx.social = { isOnline: ctx.isOnline, syncProfile: ctx.syncProfile, pushProfileUpdate: ctx.pushProfileUpdate, resumeGiftIntents: async () => [] /* v590: renderFriends resumes pending gift intents; none here */ };
 vm.runInContext('let petRailTeam = null; let ownedCos = new Set();', ctx);
 vm.runInContext(cut(app, "    $$('[data-petwear]', body)", '    /* ONE LISTENER ON THE ROW'), ctx);
 const realAvatar = ctx.avatarLayersHtml;
