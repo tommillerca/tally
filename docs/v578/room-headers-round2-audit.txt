@@ -1,0 +1,17 @@
+PASS NO-REVERT: recoverInterruptedPitFight
+PASS NO-REVERT: leaderboardLastOnline
+PASS NO-REVERT: fanPaintRevision
+UNPRV CONTROL kitchen  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV HEADER kitchen  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV ART kitchen  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV SCALE kitchen  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV CONTROL lab  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV HEADER lab  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV ART lab  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV SCALE lab  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+room headers: 0 failures
+AUDIT START room-headers-audit.mjs: completion pending; planned rows undeclared
+AUDIT PLAN room-headers-audit.mjs: 11 rows
+AUDIT END room-headers-audit.mjs: UNPROVEN; COMPLETE; rows=11/11; failed=0; unproven=8; exit=97
+
+Exit: 97

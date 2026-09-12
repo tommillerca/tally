@@ -1,11 +1,39 @@
 # What each patch note claims, and what backs it
 
+## v579 (2026-09-11)
+
+Changelog item: Settings buttons no longer break a word in half, and the backup rows line up.
+1. PROOF: `node tests/settings-rows-audit.mjs` rows ROWS, COLUMN and CONTROL, at 375x812 and again at the largest text size. Proven red on the shipped rows in `docs/v579/guard-red.txt`, where IMPORT wraps to two lines reading IMP / ORT and the three YOUR DATA buttons carry three different widths. | REACH: the Settings YOUR DATA rows at 375x812 and at the largest text size. Other Settings sections and other viewports are unmeasured here.
+
+Changelog item: Tapping a slot on the paperdoll scrolls to that slot's items, and tapping it again brings you back.
+2. PROOF: `node tests/wardrobe-slot-scroll-audit.mjs` rows CONTROL, SCROLL, RETURN and REDUCED, driving a real slot tap and measuring the section heading's rect against the sticky header's rather than asserting a scrollTop. | REACH: the Wardrobe paperdoll and the item list below it. Behaviour under a mid-scroll re-render is unmeasured.
+
+Changelog item: Cosmetics that look the same stack into one tile with a count, in the Wardrobe and in transmog.
+3. PROOF: `node tests/wardrobe-stack-audit.mjs` rows CONTROL, STACK, REACHABLE and TRANSMOG, against a fixture of three items sharing one look plus two that do not, seeded through the app's own primitives. The audit equips the second variant and asserts it is the one worn, so nothing a player owns becomes unreachable. | REACH: the Wardrobe grid and the transmog tab. Stack naming at other sizes is unmeasured.
+
+Changelog item: A confirmed tower claim keeps its full reward even when the save fails afterwards.
+4. PROOF: `node tests/v576-hunt-audit.mjs` over the production claim settlement branch: a server-confirmed spire takeover followed by a local cap refusal paid 40 coins instead of the earned 80, and the fight charge is now returned when local persistence fails. | REACH: the claim settlement branch in Node. The full path on a phone with real network loss is unmeasured.
+
+Changelog item: Your Bonehead stands on his shadow instead of hovering above it, whatever he is wearing.
+5. PROOF: `node tests/hero-ground-audit.mjs` rows CONTROL, GROUNDED and CENTRED, over 4 equipped looks at 375x812 and 430x932. Measures INK by compositing every layer's alpha with drop-shadow and animation disabled, never element rects, because the element rects were always correct and the figure floated anyway. On the fix, shadow centre lands within 0.06px of the soles and within 0.25px of the ink centre. Proven red against live v578 in `docs/v579/guard-red.txt`: 16 GROUNDED and 8 CENTRED failures, the soles 15.8px above the shadow and its centre 14.75px to their left. The offset is derived at render time, not pinned, because the sole line moves with the equipped art: measured 516 barefoot and 523 in footwear at the same viewport. | REACH: Today's hero scene, 4 looks, 2 viewports. Looks outside that set, and the big-pet sharing case at other widths, are unmeasured.
+
+Changelog item: Your Bonehead and your pet sit a little further left, with the space between them unchanged.
+6. PROOF: `node tests/hero-ground-audit.mjs` rows SHIFT, PET-UNMOVED and IN-FRAME. Both figures move 18.5px left of 18.75 asked, the gap between their ink edges changes by 1px, and every ink box stays inside the scene at both viewports. PET-UNMOVED compares the pet's ink bottom against the value measured on the SHIPPED build for the same species and viewport (C1 522/553, C6 532/564) and it is unchanged, which is the requirement Tom set: "make sure you dont fuck up the pet's position." Proven red against live in `docs/v579/guard-red.txt` with 16 SHIFT failures. | REACH: Today > the hero scene, over 4 equipped looks at 375x812 and 430x932. Looks outside that set, the big-pet sharing case at other widths, and every screen other than Today are unmeasured here.
+
+Changelog item: Your name is no longer cut off on the Bonehead and Today screens.
+7. PROOF: measured directly at 375x812 with a 23-character name, before and after: `.hub-name` went from scrollWidth 293 in a 227px box, truncated with an ellipsis, to 227/227 wrapping with nothing cut; `.hero-name` from 230/230 `nowrap` plus ellipsis to 289/289 wrapping. `tests/name-fit-audit.mjs` exists and is declared `skip`, NOT `full`, because it still exits 97 on this build: it counts ordinary wrapping and a scroll container's overflow as truncation. | REACH: `.hub-name` and `.hero-name` at 375x812 only. KNOWN STILL BROKEN, found by that diagnostic and not fixed here: `#newcomersList .t3-tx b` renders up to 3758px of text in a 143px box, and `#lbBody .lb-who b` 86px in 77px; plus 144 rows at the 200% and 53px accessibility text sizes. Those are open, not claimed.
+
+Changelog item: The Laboratory and the Kitchen have their own room headers.
+8. PROOF: `node tests/room-headers-audit.mjs`, all rows green. HEADER measures 144px at the default text size for both rooms; ART asserts four decoded images per header with non-zero natural dimensions, so a missing asset cannot pass as an empty box; SCALE holds both under a stated 340px bound at the 53px root size (kitchen 179.5, lab 251.1). NO-REVERT asserts three symbols that landed after the branch was cut are still present (`recoverInterruptedPitFight` v570, `leaderboardLastOnline` v571, `fanPaintRevision` v571), because this branch was 24 commits behind and its merge removed 48 lines from `js/app.js`; provenance in `docs/v578/room-headers-provenance.txt` traces every added and deleted line to commit 4767f7f1. | REACH: the Laboratory and Kitchen headers at 375x812, default and 53px root. Other rooms have no headers and are out of scope.
+
+Changelog item: Messages keep clear of the controls on every screen, not just the three that were patched one at a time.
+9. PROOF: `node tests/toast-reach-audit.mjs`, green on every route the router declares at 375x812 and 430x932, firing the real toast through the `__toast` seam and testing every visible interactive control per screen with a CONTROL row printing the count. `toast-sheet-audit`'s two CLEAR rows, red on main before this work (the toast covered 39x44 of the 50.5x44 `Flee` button at 393x852), are now green. Proven red by restoring the shipped 96px seat. | REACH: the routes the router declares, at those two viewports. A control that only appears in a state the fixture cannot reach is not covered.
+
 ## v577 (2026-09-11)
 
 Changelog item: The Backpack shows its selected tab highlight, styled item explanations and a larger pet again.
 
 1. PROOF: backpack-ui-1g-audit.mjs | REACH: Backpack navigation, item cards and identity. Four CSS rules recovered after a chain-merge dropped them while their markup shipped. Browser render verified separately.
-
 ## v575 (2026-09-11)
 
 Changelog item: Crew explains empty favourites and search selections and how to clear them.

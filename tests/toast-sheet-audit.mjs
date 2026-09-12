@@ -1,3 +1,8 @@
+/* Round 2: SEAT formerly required a literal 96px bottom offset. That is
+ * incorrect for measured seating. It now checks the fresh Crew toast reports
+ * a geometrically clear seat after leaving the sheet/map. CLEAR and VISIBLE remain intact.
+ * Historical reproduction notes below describe the earlier fixed-seat bug.
+ */
 /* A TOAST NEVER COVERS A CONTROL THE PLAYER IS BEING ASKED TO USE.
  *
  * THE BUG (R41-20). The welcome-kit toast fires 1.2s after onboarding ends
@@ -45,9 +50,7 @@
  *            (the seat is at the top now, so the escape hatch is the thing the
  *            fix could most plausibly break).
  * and once, globally
- *   SEAT     with no sheet open the toast still sits at its shipped 96px seat.
- *            Graded on Crew, not Today: Today carries its own v578 override.
- *            An override that leaks moves EVERY toast in the app.
+ *   SEAT     after closing the sheet, a fresh Crew toast clears its controls.
  *
  * PROVEN RED, 2026-09-07, one mutation per throwaway copy:
  *   CLEAR   delete the `body:has(#sheets .sheet)` rule from app.css
@@ -146,11 +149,7 @@ for (const [W, H] of SIZES) {
   await sleep(7200);   // the 6000ms toast has to expire or the next row reads its tail
 }
 
-/* ---- SEAT: with no sheet up, nothing moved ----
-   Crew, not Today. Today grew its OWN toast override in v578 (the pill was
-   landing on the five door tiles; see toast-today-audit), so a 96px seat on
-   Today is no longer the shipped truth and this row would grade the wrong
-   screen. Crew has neither override and is the plain case. */
+/* SEAT: navigation after sheet close must measure the new controls. */
 await setWidth(page, 393, 852);
 await page.evaluate(() => { location.hash = '#/friends'; });
 await sleep(2400);
@@ -159,12 +158,10 @@ const home = await page.evaluate(async () => {
   await new Promise(r => setTimeout(r, 700));
   const t = document.querySelector('#toast');
   const b = t.getBoundingClientRect();
-  return { seat: +(innerHeight - b.bottom).toFixed(1), sheets: document.querySelectorAll('#sheets .sheet').length };
+  return { clear: [...document.querySelectorAll('#screen button, #screen a[href], #screen input, #screen select, #screen summary, #screen [role="button"]')].every(el => { const r = el.getBoundingClientRect(), b = t.getBoundingClientRect(); const hit = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2); if (!hit || !el.contains(hit)) return true; const area = Math.max(0, Math.min(b.right, r.right) - Math.max(b.left, r.left)) * Math.max(0, Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top)); return !area || (r.height > 160 && area / (r.width * r.height) < .25); }), seat: +(innerHeight - b.bottom).toFixed(1), sheets: document.querySelectorAll('#sheets .sheet').length };
 });
-/* 96px is the shipped seat (app.css .toast). --sab is 0 in this emulation, so
-   the offset reads back as the literal. 2px of tolerance for rounding. */
-ok('SEAT the toast keeps its shipped 96px seat when no sheet is open',
-  home.sheets === 0 && Math.abs(home.seat - 96) <= 2,
+ok('SEAT a fresh clear seat is measured when no sheet is open',
+  home.sheets === 0 && home.clear,
   `seat ${home.seat}px from the viewport bottom, ${home.sheets} sheets open`);
 
 await browser.close();

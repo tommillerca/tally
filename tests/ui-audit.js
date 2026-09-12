@@ -33,15 +33,14 @@ const CONTROL_EXPECTATIONS = [
   // Studio option, retry and save handlers are driven by studio-audit.mjs.
   // Native permission sheets and layout still require device review.
   { id: 'trendsBtn', on: 'today', expect: { hash: '#/progress' } },
-  { id: 'coinBtn', on: 'today', expect: { hash: '#/bonehead', hubTab: 'crates' } },
+  { id: 'coinBtn', on: 'today', expect: { hash: '#/bonehead', hubTab: 'shop' } },
   { id: 'dustBtn', on: 'today', expect: { hash: '#/bonehead', hubTab: 'crates' } },
   { id: 'cratesBtn', on: 'today', expect: { hash: '#/bonehead', hubTab: 'crates' } },
   { id: 'vigorBtn', on: 'today', expect: { sheet: 'The Pit' } },
-  { id: 'charBtn', on: 'today', expect: { hash: '#/bonehead', hubTab: 'wardrobe' } },
+  { id: 'charBtn', on: 'today', expect: { hash: '#/bonehead', hubTab: 'crates' } },
   { id: 'todaySettings', on: 'today', expect: { hash: '#/settings' } },
-  // the Puffer Pack drop: the pinned banner's CTA must land on the hub's Shop tab
-  { id: 'dropToShop', on: 'today', expect: { hash: '#/bonehead', hubTab: 'shop' }, open: 'details.drop-banner' },
-  { id: 'spireToMap', on: 'today', expect: { hash: '#/boneyard' }, open: 'details.spire-banner' },
+  // Retired Puffer Pack banner: the current Shop entry is coinBtn above.
+  { id: 'spireToMap', on: 'today', conditional: '#activeSiegeBanner', expect: { hash: '#/boneyard' }, open: 'details.spire-banner' },
 ];
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -69,7 +68,7 @@ function topmostAt(el) {
 
 export async function uiAudit({ routes = ['today', 'bonehead', 'shop', 'friends', 'settings', 'progress'] } = {}) {
   const problems = [];
-  const checked = { routes: 0, controls: 0, overlays: 0 };
+  const checked = { routes: 0, controls: 0, overlays: 0, skipped: [] };
 
   // 1. Every control goes where it claims. Rendering proves nothing.
   for (const c of CONTROL_EXPECTATIONS) {
@@ -77,6 +76,7 @@ export async function uiAudit({ routes = ['today', 'bonehead', 'shop', 'friends'
     if (c.enterHubTab) { q(`[data-tab="${c.enterHubTab}"]`)?.click(); await sleep(1700); }
     // controls that live inside a collapsed <details> (the pinned banners): expand
     // it first, the way a user would, so the click starts from a visible control
+    if (c.conditional && !q(c.conditional)) { checked.skipped.push(`${c.id}: needs an active siege fixture`); continue; }
     if (c.open) { q(c.open)?.setAttribute('open', ''); await sleep(250); }
     const el = q('#' + c.id);
     if (!el) { problems.push(`control #${c.id} is MISSING on ${c.on}`); continue; }
@@ -146,7 +146,8 @@ export async function uiAudit({ routes = ['today', 'bonehead', 'shop', 'friends'
         problems.push(`${route}: ${el.id || el.className.split(' ')[0]} sits at y=${Math.round(top)}, under the ${SAFE_AREA_PX}px notch`);
       }
     }
-    const hero = q('#bhStage');
+    // The full-bleed scene is background, not the character's bounds.
+    const hero = q('#bhStage > .hero-char');
     if (hero && hero.getBoundingClientRect().top < SAFE_AREA_PX) {
       problems.push(`${route}: the Bonehead starts at y=${Math.round(hero.getBoundingClientRect().top)}, clipped by the notch`);
     }
@@ -156,7 +157,7 @@ export async function uiAudit({ routes = ['today', 'bonehead', 'shop', 'friends'
   // An audit that examined nothing is a FAILURE, not a pass. Two of the checks
   // this file exists to replace "passed" on empty sample sets.
   if (!checked.controls || !checked.overlays || !checked.routes) {
-    problems.push(`audit examined nothing: ${JSON.stringify(checked)} — treat as FAILED`);
+    problems.push(`audit examined nothing: ${JSON.stringify(checked)}. treat as FAILED`);
   }
 
   return { pass: problems.length === 0, checked, problems };

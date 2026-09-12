@@ -12377,6 +12377,13 @@ button.t3-price::before {
 #chContent .bp-item-details summary { min-height: 44px; padding: 12px 0; font-size: var(--fs-1); cursor: pointer; }
 .bh-hero.mini.bp-identity .bh-stage.lg { width: 120px; height: 120px; }
 
+/* Wardrobe slot navigation: leave room for a heading and honour reduced motion. */
+[data-slot-heading], #chContent .paperdoll { scroll-margin-top: 12px; }
+.ward-other-slots section { margin-top: 24px; }
+@media (prefers-reduced-motion: reduce) {
+  #chBody *, #chBody *::before, #chBody *::after { animation: none !important; transition: none !important; }
+}
+
 /* v578: the contact shadow reads, instead of washing out. Tom, 2026-09-11:
    "he is still clearly not down on the ground with his own shadow."
    .hero-cast.c-bh's GEOMETRY is the measured 2026-08 sole line and is untouched
@@ -12418,3 +12425,121 @@ button.t3-price::before {
    SEAT, not by reading the file.
    Guard: tests/toast-today-audit.mjs. */
 body:has(.screen--today):not(:has(#sheets .sheet)) .toast { top: calc(var(--sat) + 175px); bottom: auto; }
+
+/* Settings backup actions share one column; enlarged text wraps the row. */
+.settings-data-action { flex-wrap: wrap; }
+.settings-data-action > .lab { flex: 1 1 10rem; min-width: 0; }
+.settings-data-action > .btn { flex: 0 0 7rem; width: 7rem; white-space: nowrap; }
+/* Wardrobe slot navigation: leave room for a heading and honour reduced motion. */
+[data-slot-heading], #chContent .paperdoll { scroll-margin-top: 12px; }
+.ward-other-slots section { margin-top: 24px; }
+@media (prefers-reduced-motion: reduce) {
+  #chBody *, #chBody *::before, #chBody *::after { animation: none !important; transition: none !important; }
+}
+/* 2026-09-11 grounding correction. Supersedes the historical 2026-08-08
+   105px/45% claim and v578 geometry claim above (prefix is hash-frozen).
+   Screen 1E raised the character and pet 16px but left the cast behind.
+   Equipped art padding varies; hero-ground.js now derives the cast centre
+   from the rendered alpha, including the shared shift and sharing offset.
+   Keep --bh-shift on each figure, never inherited from the scene. */
+#bhStage > .hero-char { --bh-shift: var(--hero-left-shift, 0px); transform: translateX(var(--bh-shift)); }
+#bhStage.sharing > .hero-char { --bh-shift: calc(var(--hero-left-shift, 0px) - var(--fig) * 0.0662); }
+#bhStage > .hero-companion { --bh-shift: var(--hero-left-shift, 0px); transform: translateX(var(--bh-shift)); }
+/* Measured toast seat supersedes the historical map, sheet and Today offsets.
+   Specificity intentionally exceeds those rules; inherited CSS is frozen. */
+body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(var(--sat) + 175px)); bottom: auto; z-index: 320; pointer-events: none; }
+/* Selected Laboratory/Kitchen headers. Art does not intercept room controls. */
+.bh-room-header { position: relative; isolation: isolate; flex: none; min-height: 144px; padding-top: 12px; margin-bottom: 12px; overflow: hidden; border-radius: 16px; background: linear-gradient(180deg, #202715, #0d0c12); --header-accent: #a5e847; --fs-room-title: 2.25rem; }
+.bh-room-header.bh-room-kitchen { background: linear-gradient(180deg, #302319, #0d0c12); --header-accent: #ffc961; }
+.bh-room-header .bh-room-title { position: relative; z-index: 2; margin: 0; padding: 0 8px; font: 400 var(--fs-room-title)/1 var(--display); letter-spacing: .015em; color: #f2e9d7; text-align: center; overflow-wrap: anywhere; }
+.bh-room-cast { position: relative; height: 96px; max-width: 375px; margin: auto; transform: scale(.875); transform-origin: center bottom; pointer-events: none; }
+.bh-room-art { position: absolute; display: block; width: var(--art-size); height: var(--art-size); object-fit: contain; image-rendering: pixelated; pointer-events: none; z-index: 1; }
+.bh-room-inward { transform: scaleX(-1); }
+.bh-room-stage { position: absolute; left: 18px; right: 18px; bottom: 15px; height: 1px; background: color-mix(in srgb, var(--header-accent) 22%, transparent); pointer-events: none; }
+.lab-sheet .bh-room-header { margin-bottom: 0; }
+.lab-sheet #labBody { padding-bottom: 0; }
+
+/* Room headers: keep the approved default composition. When the available
+   inline width falls below 10 root ems, use a compact 1.125rem title with
+   breathing room for wrapped glyphs. At root 53px: 59.625px type, 71.55px
+   line boxes, above the 1rem body size. All four illustrations stay intact.
+   The audit budget is 340px at 375x812, leaving over 58% for room content.
+   No height cap: longer future copy grows instead of being truncated. */
+.bh-room-header {
+  container-type: inline-size;
+}
+@container (width < 10em) {
+  .bh-room-header .bh-room-title {
+    --fs-room-title: 1.125rem;
+    line-height: 1.2;
+  }
+}
+
+/* NAME-FIT policy: identities wrap, with no line cap or font reduction.
+   A second line handles ordinary long names; arbitrary imported names may need
+   more. Trade compact rows and the first-screen peek for the complete identity.
+   Keep this append-only: Wardrobe 1F freezes the inherited CSS prefix. */
+.hub-title.ward-identity > .hub-name,
+.screen--today .hero-meta .hero-name,
+#crewName, .crew-greeting,
+.pname-iso, .cfan-plate b, .fl-main b, #fpTitle,
+.pod-name, .lb-who b, .race-lane .nm b,
+.spp-plate b, .spire-flag, .hlw-say,
+.sheet-rename .note, #nbPreview, #onbName,
+.fight-title h2, .fight-hud .fname, .fight-venue, .vs-name, .vs-venue,
+.gift-recipient, .sp-siege, .race-gap, #mapCount, #toast,
+.gift-sealed .tx b, .cheer-tx b, .pack-coins, .dlv-rows .t3-tx b,
+#flog, .fight-over .note, #spireAct,
+#raceResultCard .race-h b, .race-champ span,
+#lbYouAre span, #raceCard .gbn-txt small {
+  min-width: 0; max-width: 100%;
+  white-space: normal; overflow-wrap: anywhere;
+  overflow: visible; text-overflow: clip;
+  -webkit-line-clamp: unset;
+}
+.hub-title.ward-identity, .hero-lvrow { align-items: baseline; }
+.hub-title.ward-identity > .hub-name,
+.screen--today .hero-meta .hero-name { flex: 1; }
+.crew-greeting, .pname-iso { display: block; }
+.cfan-sel-nm, .fl-main, .lb-pod, .race-lane .bd,
+.fight-title, .fight-hud .hud-side { min-width: 0; }
+.race-lane .nm b { flex: 1 1 50%; }
+.fight-hud .fname { flex-wrap: wrap; gap: 4px; }
+.spire-flag { width: 180px; max-width: 60vw; text-transform: uppercase; }
+#raceResultCard .race-h b { text-transform: uppercase; }
+
+/* The caption participates in layout, so extra lines extend the scene below
+   the art instead of disappearing above a fixed 96px bottom band. */
+.screen--today #bhStage {
+  height: auto;
+  padding-top: calc(var(--scene-h) + var(--bleed, 0px) - 96px);
+}
+.screen--today #bhStage > .hero-meta {
+  position: relative; height: auto; min-height: 96px;
+}
+
+/* A variable-height nameplate must not cover the pet or escape a fixed card.
+   Grid stacks the existing fanned cards while reserving the tallest card's
+   height. Their existing transforms still position each card in the fan. */
+#cfanWrap { height: auto; min-height: 348px; }
+#cfanDeck { position: relative; display: grid; padding: 10px 0 68px; }
+#cfanDeck .cfan-card { position: relative; grid-area: 1 / 1; top: 0; height: auto; align-self: start; }
+#cfanDeck .cfan-stage { height: 270px; }
+#cfanDeck .cfan-plate { position: relative; }
+
+.vs-inner { min-width: 0; max-width: 100%; }
+.vs-name { text-transform: uppercase; }
+.vs-card { overflow: auto; }
+
+/* Inline identity fragments need a measurable, wrapping box too. */
+.crew-greeting b, .race-champ b, .sheet-rename .note b {
+  display: inline-block; max-width: 100%; overflow-wrap: anywhere;
+}
+
+/* A fixed Cheer back button must yield a line before it squeezes the sender
+   below one glyph at large root text sizes. Keep the name's wrapping policy. */
+.cheer-row { flex-wrap: wrap; }
+.cheer-row .cheer-tx { flex: 1 1 8rem; }
+.cheer-row .btn.cheer-back {
+  max-width: 100%; white-space: normal; overflow-wrap: anywhere;
+}

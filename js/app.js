@@ -1,3 +1,4 @@
+import { groundHero } from './hero-ground.js';
 import { classifyPlugin, knownGap, readback, startDeviceSession, openDeviceReport } from './device-report.js';
 import { mountStudio } from './studio-screen.js';
 import { STUDIO_DEFAULTS, studioCrewAppearance } from './studio.js';
@@ -2412,7 +2413,7 @@ async function hydrateRaceResult(el) {
       <span class="gbn-ico rr-ico">${badgePixHtml('badge-trophy', 21)}</span>
       <span class="gbn-txt">
         <i>THE STEP RACE · SETTLED</i>
-        <span class="race-h"><b>${esc(w.name).toUpperCase()} TOOK IT</b><span class="pill">PAID</span></span>
+        <span class="race-h"><b>${esc(w.name)} TOOK IT</b><span class="pill">PAID</span></span>
         <small><b>${w.steps.toLocaleString()}</b> steps. Prizes are paid.</small>
       </span>
       <span class="gbn-chev">›</span>
@@ -3787,6 +3788,53 @@ function bgRefresh() {
 
 /* ================= shared ui ================= */
 
+/* Measure once per queued message, before the browser paints it. Keep the
+   normal bottom seat when clear; otherwise try the gaps between visible rows.
+   Tall stages count only when at least a quarter of their area is covered.
+   Ordinary controls (<=160px high) always count. See toast-reach-audit. */
+function seatToast(t) {
+  t.style.setProperty('--toast-seat', '0px');
+  const box = t.getBoundingClientRect();
+  const height = t.offsetHeight; // animation translation must not affect seating
+  // Resolve env()/calc() through a real length, not parseFloat of a custom
+  // property (which would discard native safe-area insets).
+  t.dataset.seatClear = 'false';
+  t.style.setProperty('--toast-seat', 'calc(var(--sat) + 12px)');
+  const top = parseFloat(getComputedStyle(t).top);
+  t.style.setProperty('--toast-seat', 'calc(100vh - var(--sab) - 12px)');
+  const bottom = parseFloat(getComputedStyle(t).top);
+  const controls = [...document.querySelectorAll('button, a[href], input, select, textarea, summary, [role="button"], [tabindex], .map-act')]
+    .filter(el => !t.contains(el) && !el.closest('[hidden], [inert]'))
+    .map(el => {
+      const style = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      if (style.visibility === 'hidden' || style.display === 'none' || +style.opacity === 0 || !r.width || !r.height) return null;
+      // Clip scroll content to its visible ancestors before considering it.
+      let left = Math.max(0, r.left), right = Math.min(innerWidth, r.right);
+      let y = Math.max(0, r.top), end = Math.min(innerHeight, r.bottom);
+      for (let parent = el.parentElement; parent; parent = parent.parentElement) {
+        const ps = getComputedStyle(parent), pr = parent.getBoundingClientRect();
+        if (/(auto|scroll|hidden|clip)/.test(ps.overflowY)) { y = Math.max(y, pr.top); end = Math.min(end, pr.bottom); }
+        if (/(auto|scroll|hidden|clip)/.test(ps.overflowX)) { left = Math.max(left, pr.left); right = Math.min(right, pr.right); }
+      }
+      if (end <= y || right <= left) return null;
+      const hit = document.elementFromPoint((left + right) / 2, (y + end) / 2);
+      if (!hit || !(el.contains(hit) || hit.contains(el))) return null;
+      return { left, right, top: y, bottom: end, height: r.height, area: r.width * r.height };
+    }).filter(Boolean);
+  const clear = y => controls.every(r => {
+    const w = Math.max(0, Math.min(box.right, r.right) - Math.max(box.left, r.left));
+    const h = Math.max(0, Math.min(y + height, r.bottom) - Math.max(y, r.top));
+    return !w || !h || (r.height > 160 && w * h / r.area < .25);
+  });
+  const preferred = bottom - 84 - height; // safe-area + shipped 96px bottom
+  const candidates = [preferred, top, ...controls.flatMap(r => [r.bottom + 12, r.top - height - 12]).sort((a, b) => a - b)];
+  const seat = candidates.find(y => y >= top && y + height <= bottom && clear(y));
+  // An overfull surface has no geometrically valid seat. Keep feedback visible
+  // and expose the failure for diagnostics rather than silently claiming clear.
+  t.dataset.seatClear = String(seat !== undefined);
+  t.style.setProperty('--toast-seat', `${seat ?? Math.max(top, Math.min(preferred, bottom - height))}px`);
+}
 let toastTimer = 0;
 /* One write-failure message per this window. See the sink in boot(). */
 const WRITE_FAIL_QUIET_MS = 8000;
@@ -3837,6 +3885,7 @@ function nextToast() {
   t.dataset.severity = job.error ? 'error' : 'status';
   t.textContent = job.msg;
   t.hidden = false;
+  seatToast(t);
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
     if (generation !== toastGeneration) return;
@@ -5141,6 +5190,7 @@ async function renderToday(el) {
      is where the unopened crates are, which is what people come back for. */
   /* the colour the wallpaper runs up off the top in: see paintHeroEdge */
   paintHeroEdge(eq.BG);
+  groundHero(document.getElementById('bhStage'));
   $('#bhStage').addEventListener('click', e => {
     if (e.target.closest('button')) return;
     openCharacter('crates');
@@ -8509,58 +8559,25 @@ function showHarvest(res) {
   $$('.sheet-close', wrap).forEach(b => b.addEventListener('click', () => history.back()));
 }
 
+// Selected dark A header, 144px at default text size. Decorative art only.
+function roomHeaderHtml(room) {
+  const lab = room === 'lab';
+  const cast = lab
+    ? [['chamber', '96px;left:4px;bottom:14px'], ['slime', '88px;left:76px;bottom:7px'], ['lab', '90px;right:8px;bottom:15px'], ['slime-puddle', '80px;right:72px;bottom:10px']]
+    : [['cute_monster_chef', '80px;left:0;bottom:5px'], ['ghost_chef_cute', '96px;left:48px;bottom:10px'], ['ghost_chef_fat', '96px;right:54px;bottom:8px'], ['donut_that_s_alive', '88px;right:0;bottom:4px']];
+  return `<div class="bh-room-header ${lab ? 'bh-room-lab' : 'bh-room-kitchen'}">
+    <h3 class="bh-room-title">THE ${lab ? 'LABORATORY' : 'KITCHEN'}</h3>
+    <div class="bh-room-cast" aria-hidden="true">${cast.map(([name, style]) => `<img class="bh-room-art${name === 'ghost_chef_fat' ? ' bh-room-inward' : ''}" src="assets/room-headers/${name}.png" alt="" width="48" height="48" style="--art-size:${style}">`).join('')}</div>
+    <div class="bh-room-stage" aria-hidden="true"></div>
+  </div>`;
+}
+
 async function openKitchen() {
   _cookBanked = 0;   // the Pantry is on screen from here: the announcement is delivered (O15)
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Kitchen</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
-      <!-- the scene sits BESIDE the render target: render() replaces
-           #kitchenBody on every tick and would otherwise wipe it, and
-           restart every animation each time the pot state changed. -->
-      <div class="marquee">
-    <svg class="garland" width="100%" height="26" viewBox="0 0 375 26" preserveAspectRatio="none">
-      <path d="M-4 2 Q 60 22 130 12 Q 200 2 260 14 Q 320 24 380 6" fill="none" stroke="#2A2D28" stroke-width="2.5"/>
-      <g fill="#F0EDD6" stroke="#2A2D28" stroke-width="1.4">
-        <rect x="52" y="12" width="5" height="12" rx="2.5" transform="rotate(8 54 18)"/>
-        <rect x="126" y="10" width="5" height="12" rx="2.5" transform="rotate(-6 128 16)"/>
-        <rect x="196" y="6" width="5" height="12" rx="2.5" transform="rotate(5 198 12)"/>
-        <rect x="268" y="12" width="5" height="12" rx="2.5" transform="rotate(-9 270 18)"/>
-      </g>
-    </svg>
-    <h2>THE HAUNTED KITCHEN</h2>
-    <p>SOMETHING IS ALWAYS SIMMERING.</p>
-    <div class="scene">
-      <svg width="190" height="108" viewBox="0 0 190 108">
-        <!-- steam wisps -->
-        <path class="wisp" style="--wo:.28" d="M78 44 C 72 32, 84 28, 80 16" fill="none" stroke="#F0EDD6" stroke-width="3.4" stroke-linecap="round"/>
-        <path class="wisp w2" style="--wo:.38" d="M98 40 C 104 28, 92 24, 98 10" fill="none" stroke="#F0EDD6" stroke-width="3.4" stroke-linecap="round"/>
-        <path class="wisp w3" style="--wo:.24" d="M116 46 C 112 36, 122 32, 118 22" fill="none" stroke="#F0EDD6" stroke-width="3" stroke-linecap="round"/>
-        <!-- fire glow + logs -->
-        <ellipse cx="95" cy="102" rx="52" ry="9" fill="#0a0e0a"/>
-        <path d="M70 99 l16 -8 M86 99 l-16 -8 M104 99 l16 -8 M120 99 l-16 -8" stroke="#5a4632" stroke-width="4.5" stroke-linecap="round"/>
-        <g class="flame"><path d="M88 96 c-2 -7 3 -9 4 -14 c4 5 8 6 7 12 c-1 4 -3 6 -5 6 c-3 0 -5 -1 -6 -4z" fill="#E2AB36" stroke="#2A2D28" stroke-width="1.6"/>
-        <path d="M92 95 c-1 -3 1.5 -4 2 -7 c2 2.5 4 3 3.5 6 c-.4 2 -1.6 3 -2.7 3 c-1.4 0 -2.4 -.7 -2.8 -2z" fill="#FCF35E"/></g>
-        <!-- cauldron -->
-        <path d="M48 56 h94 c2 26 -14 44 -47 44 s-49 -18 -47 -44z" fill="#3a3f3a" stroke="#2A2D28" stroke-width="3"/>
-        <ellipse cx="95" cy="56" rx="47" ry="12" fill="#A2E0A6" stroke="#2A2D28" stroke-width="3"/>
-        <ellipse cx="80" cy="54" rx="6" ry="3.4" fill="#c9f0cb"/><circle class="bub b4" cx="88" cy="57" r="2.6" fill="#c9f0cb"/>
-        <circle cx="112" cy="58" r="3.4" fill="#c9f0cb"/>
-        <circle class="bub" cx="66" cy="50" r="3" fill="#A2E0A6" stroke="#2A2D28" stroke-width="1.6"/>
-        <circle class="bub b2" cx="124" cy="46" r="4" fill="#A2E0A6" stroke="#2A2D28" stroke-width="1.6"/>
-        <circle class="bub b3" cx="103" cy="42" r="2.6" fill="#A2E0A6" stroke="#2A2D28" stroke-width="1.4"/>
-        <!-- a bone stirring out of the pot -->
-        <g class="stir"><rect x="125" y="14" width="6" height="34" rx="3" fill="#F0EDD6" stroke="#2A2D28" stroke-width="1.8"/>
-        <circle cx="125" cy="14" r="4.4" fill="#F0EDD6" stroke="#2A2D28" stroke-width="1.8"/>
-        <circle cx="132" cy="12" r="4.4" fill="#F0EDD6" stroke="#2A2D28" stroke-width="1.8"/></g>
-      </svg>
-      <i class="spore" style="left:14%; bottom:64px; width:5px; height:5px; --dur:7s; --dx:6px; --so:.55"></i>
-      <i class="spore g" style="left:22%; bottom:34px; width:4px; height:4px; --dur:5.5s; --del:-2s; --dx:-5px; --so:.45"></i>
-      <i class="spore" style="left:79%; bottom:70px; width:6px; height:6px; --dur:6.5s; --del:-3.5s; --dx:-7px; --so:.55"></i>
-      <i class="spore g" style="left:86%; bottom:40px; width:4px; height:4px; --dur:5s; --del:-1.2s; --dx:5px; --so:.45"></i>
-      <i class="spore" style="left:70%; bottom:22px; width:3px; height:3px; --dur:4.5s; --del:-2.8s; --dx:4px; --so:.4"></i>
-      <i class="spore" style="left:30%; bottom:84px; width:3px; height:3px; --dur:6s; --del:-4.4s; --dx:-4px; --so:.4"></i>
-    </div>
-  </div>
+      ${roomHeaderHtml('kitchen')}
       <div id="kitchenBody"></div>
     </div>`, { cls: '', onClose: () => refresh() });
   const body = $('#kitchenBody', wrap);
@@ -12569,7 +12586,7 @@ async function renderFriends(el) {
 
   const dispName = me.name || me.handle;
   el.innerHTML = `
-    <h1 class="page-h1">The Crew<span class="sub">You're <b>${esc(dispName)}</b> · <button class="link" id="crewEditName">${me.name ? 'change name' : 'pick a name'}</button></span></h1>
+    <h1 class="page-h1">The Crew<span class="sub crew-greeting">You're <b>${esc(dispName)}</b> · <button class="link" id="crewEditName">${me.name ? 'change name' : 'pick a name'}</button></span></h1>
 
     <!-- Tom, 2026-09-09: greet with the fan, then notifications. Gifts stay
          immediately below the fan with their OPEN control and pending tab badge. -->
@@ -13977,7 +13994,7 @@ async function openGiftSheet(f) {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Send a gift</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
-      <p class="note" style="margin:0 0 14px">To <b>${esc(f.alias || f.name)}</b>. They open your gift in Crew the next time they use the app. Coins go to their balance; items go to their Backpack.</p>
+      <p class="note gift-recipient" style="margin:0 0 14px">To <b>${esc(f.alias || f.name)}</b>. They open your gift in Crew the next time they use the app. Coins go to their balance; items go to their Backpack.</p>
       <div class="gift-free ${alreadyFree ? 'done' : ''}" id="giftFreeCard">
         <div class="gift-free-l"><div class="gift-free-t">${ICONS.coin(16)} Free daily gift</div><div class="note">A surprise drop: coins, a crate, sometimes an egg. Once a day per friend, on the house.</div></div>
         <button class="btn small" id="giftFree"${alreadyFree ? ' disabled' : ''}>${alreadyFree ? `Sent ${ICONS.check(11)}` : 'Send'}</button>
@@ -14072,7 +14089,7 @@ function openCheerSheet(f) {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Send a cheer</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
-      <p class="note" style="margin:0 0 14px">To <b>${esc(f.alias || f.name)}</b>. A quick shout, no typing.</p>
+      <p class="note gift-recipient" style="margin:0 0 14px">To <b>${esc(f.alias || f.name)}</b>. A quick shout, no typing.</p>
       <div class="cheer-grid">${CHEERS.map((c, i) => `<button class="cheer-chip" data-cheer="${i}"><span class="cheer-emo">${c.emo}</span><span class="cheer-txt">${esc(c.txt)}</span></button>`).join('')}</div>
     </div>
   `, { cls: 'sheet-cheer' });
@@ -14883,7 +14900,17 @@ async function openWhatsNew() {
 }
 
 async function profileSyncRowHtml() {
-  return `<div class="settings-row" id="profileSyncStatus"><div class="lab"><b>Profile sync</b><span>${esc(await social.syncHealthLine())}</span></div></div>`;
+  /* SIGNED OUT, THE ROW SAYS ONE PLAIN THING. Tom, 2026-09-10, ruling on the
+     same copy on the Crew screen: "remove the 'missing sync info' shit from
+     people just show online or not that's too much inside baseball to show
+     players." He then hit the identical line here on 2026-09-11. A player who
+     has never gone online is told "No profile server reply recorded yet. No
+     sync attempt recorded yet.", which narrates two mechanisms they have never
+     used. Signed IN, the full diagnostic stays: that is what
+     sync-observability-audit exists to protect and it is the line Tom
+     screenshots when a sync misbehaves. "Not connected" carries the phrase the
+     audit's offline-gate row keys on, so the row is still graded, not exempted. */
+  return `<div class="settings-row" id="profileSyncStatus"><div class="lab"><b>Profile sync</b><span>${await social.socialMe() ? esc(await social.syncHealthLine()) : 'Not connected. Go online above to back up your progress.'}</span></div></div>`;
 }
 
 /* ONE LINE TOM CAN SCREENSHOT, and it has to be honest about what it cannot know.
@@ -15071,9 +15098,9 @@ async function renderSettings(el) {
 
   <div class="card">
     <div class="card-title">YOUR DATA</div>
-    <div class="settings-row"><div class="lab"><b>Export backup</b><span>${exportAgo == null ? 'Never backed up yet' : exportAgo === 0 ? 'Last backup: today' : `Last backup: ${exportAgo} day${exportAgo === 1 ? '' : 's'} ago`}</span></div><button class="btn small ghost" id="exportBtn">Export</button></div>
-    <div class="settings-row"><div class="lab"><b>Import backup</b><span>Review what will be replaced. A restore point is required before importing.</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
-    <div class="settings-row"><div class="lab"><b>Restore points</b><span>Return to a save kept before a file import, on this device. Erase all data also removes these.</span></div><button class="btn small ghost" id="filePointsBtn">Review</button></div>
+    <div class="settings-row settings-data-action"><div class="lab"><b>Export backup</b><span>${exportAgo == null ? 'Never backed up yet' : exportAgo === 0 ? 'Last backup: today' : `Last backup: ${exportAgo} day${exportAgo === 1 ? '' : 's'} ago`}</span></div><button class="btn small ghost" id="exportBtn">Export</button></div>
+    <div class="settings-row settings-data-action"><div class="lab"><b>Import backup</b><span>Review what will be replaced. A restore point is required before importing.</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
+    <div class="settings-row settings-data-action"><div class="lab"><b>Restore points</b><span>Return to a save kept before a file import, on this device. Erase all data also removes these.</span></div><button class="btn small ghost" id="filePointsBtn">Restore</button></div>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
     <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights, gear</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
     ${me ? `<div class="settings-row"><div class="lab"><b>Delete account &amp; cloud data</b><span>Removes your cloud account, friends + backup</span></div><button class="btn small danger" id="delAcctBtn">Delete</button></div>` : ''}
@@ -15533,7 +15560,7 @@ async function renderSettings(el) {
   /* Copy, not just screenshot: a screenshot means somebody retypes these values to
      search for them. Clipboard can be refused, so the fallback is selecting the text
      rather than a toast claiming a copy that did not happen. */
-  $('#openDeviceReport')?.addEventListener('click', () => { if (!STORE_BUILD) openDeviceReport({ openSheet, diagnosticsLine, esc, toast }); });
+  $('#openDeviceReport')?.addEventListener('click', async () => { if (!STORE_BUILD) openDeviceReport({ openSheet, diagnosticsLine, esc, toast, apiConfig: await social.apiConfiguration(), resetApiBase: social.resetApiBase }); });
   $('#copyDiag')?.addEventListener('click', async () => {
     const txt = $('#diagLine')?.textContent || '';
     try { await navigator.clipboard.writeText(txt); toast('Diagnostics copied.', 1800); }
@@ -17187,7 +17214,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <button class="btn ghost" data-slot-return>Back to slots</button>
       <button class="btn ghost" data-ward-mode>${S.wardrobeLookMode ? 'Choose pieces' : 'Dressing Room'}</button>
       <div data-ward-pieces${S.wardrobeLookMode ? ' hidden' : ''}>
-      <div class="sect-h" style="margin-top:10px">${esc(GEAR_SLOTS.includes(slot) ? GEAR_SLOT_LABELS[slot] : slotMeta.label)} · pick your piece</div>
+      <div class="sect-h" data-slot-heading="${slot}" style="margin-top:10px">${esc(GEAR_SLOTS.includes(slot) ? GEAR_SLOT_LABELS[slot] : slotMeta.label)} · pick your piece</div>
       <div class="ward-grid" data-wslot="${slot}">
         ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">${eq[slot] ? 'Take off' : 'None'}</button>`}
         ${fams.map(fam => {
@@ -17227,7 +17254,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
           <button class="ward-cell gear r-${g.rarity} ${slimedSet.has(g.id) ? 'slimed' : ''} ${gearLo[slot] === g.id ? 'equipped' : ''} ${S.wardrobePreview === g.id ? 'selected' : ''} ${locked ? 'locked' : ''}" data-gear-family="${esc(key)}" aria-expanded="${S.wardrobeGearFamily === key}" title="${esc(g.name)} · ${esc(g.rarity)}${slimedSet.has(g.id) ? ' (SLIMED)' : ''}">
             <canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}" data-pad="0.14" role="img" aria-label="${esc(g.name)}, ${esc(g.rarity)}"></canvas>
             ${rarityTagHtml(g.rarity)}
-            <span class="gear-stat">${variants.length} variants · ${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>
+            <span class="gear-stat">${variants.length + items.filter(i => bhFamilyKey(i) === key).length} variants · ${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>
             ${locked ? `<span class="gear-lock">Lv ${g.minLevel}</span>` : ''}
             ${newIds.has(g.id) ? NEW_DOT : ''}
           </button>`;
@@ -17265,6 +17292,22 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </div>
         </div>`;
       })()}
+      </div>
+      <div class="ward-other-slots"${S.wardrobeLookMode ? ' hidden' : ''}>
+      ${BH_SLOTS.filter(meta => meta.code !== slot && meta.code !== 'C').map(meta => {
+        const cosmetics = BH_ITEMS_WITH_UNRELEASED.filter(i => i.slot === meta.code && owned.has(i.id));
+        const pieces = GEAR_ITEMS.filter(g => g.slot === meta.code && gOwnedSet.has(g.id));
+        const families = bhFamilies([...cosmetics, ...pieces.map(g => BH_BY_ID[g.artId])]);
+        if (!families.size) return '';
+        return `<section><h3 class="sect-h" data-slot-heading="${meta.code}">${esc(meta.label)}</h3>
+          <div class="ward-grid">${[...families].map(([key, arts]) => {
+            const variants = pieces.filter(g => bhFamilyKey(BH_BY_ID[g.artId]) === key);
+            const looks = cosmetics.filter(i => bhFamilyKey(i) === key);
+            const count = variants.length + looks.length;
+            const art = arts.find(i => i.id === look[meta.code]) || arts[0];
+            return `<button class="ward-cell" data-slot-stack="${meta.code}" data-stack-family="${esc(key)}" data-stack-art="${esc(art.id)}" aria-label="${esc(art.name)}, ${count} variants">${famArtHtml(art)}${count > 1 ? `<span class="ward-fam-n">${count}</span>` : ''}</button>`;
+          }).join('')}</div></section>`;
+      }).join('')}
       </div>
       <div data-ward-looks${S.wardrobeLookMode ? '' : ' hidden'}>
       ${(() => {
@@ -17519,20 +17562,43 @@ async function renderCharacter(wrap, tab, opts = {}) {
        put per still-flagged row in THIS slot only, so a slot with nothing new
        writes nothing. Awaited so a reload straight after cannot race it. */
     if (newSlots.has(slot)) await clearNewInSlot(slot);
+    const scrollWardrobeTo = target => {
+      if (!target) return;
+      const bounds = scroller.getBoundingClientRect();
+      const headerBottom = [...document.querySelectorAll('header, .ch-tabs')].reduce((bottom, node) => {
+        const style = getComputedStyle(node), rect = node.getBoundingClientRect();
+        return ['sticky', 'fixed'].includes(style.position) && rect.top <= bounds.top + 1
+          ? Math.max(bottom, rect.bottom) : bottom;
+      }, bounds.top);
+      scroller.scrollTo({ top: scroller.scrollTop + target.getBoundingClientRect().top - headerBottom - 12,
+        behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+    };
+    const returnToDoll = () => {
+      S.wardrobeReturnSlot = null;
+      S.wardrobeReturnTop = null;
+      scrollWardrobeTo($('.paperdoll', content));
+    };
     const wirePd = b => b.addEventListener('click', async () => {
+      if (S.wardrobeReturnSlot === b.dataset.pd) { returnToDoll(); return; }
       S.wardrobeReturnTop ??= scroller.scrollTop;
+      S.wardrobeReturnSlot = b.dataset.pd;
       S.wardrobeLookMode = false; S.wardrobeGearFamily = null;
       S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null;
       await renderCharacter(wrap, 'wardrobe', { instant: true });
-      requestAnimationFrame(() => $('[data-slot-return]', wrap)?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' }));
+      requestAnimationFrame(() => scrollWardrobeTo($(`[data-slot-heading="${b.dataset.pd}"]`, wrap)));
     });
     $$('[data-pd]', content).forEach(wirePd);
-    $('[data-slot-return]', content)?.addEventListener('click', () => {
-      const top = S.wardrobeReturnTop;
-      S.wardrobeReturnTop = null;
-      if (top != null) scroller.scrollTo({ top, behavior: reducedMotion ? 'auto' : 'smooth' });
-      else $('.paperdoll', content)?.scrollIntoView({ block: 'start', behavior: reducedMotion ? 'auto' : 'smooth' });
-    });
+    $('[data-slot-return]', content)?.addEventListener('click', returnToDoll);
+    $$('[data-slot-stack]', content).forEach(b => b.addEventListener('click', async () => {
+      S.wardrobeSlot = b.dataset.slotStack;
+      S.wardrobeReturnSlot = b.dataset.slotStack;
+      S.wardrobeGearFamily = b.dataset.stackFamily;
+      S.wardrobePreview = null; S.lookPreview = null;
+      await renderCharacter(wrap, 'wardrobe', { instant: true });
+      const family = [...$$('[data-family]', wrap)].find(n => n.dataset.family === b.dataset.stackFamily);
+      if (family) family.click();
+      requestAnimationFrame(() => scrollWardrobeTo($(`[data-slot-heading="${b.dataset.slotStack}"]`, wrap)));
+    }));
     $('[data-ward-mode]', content)?.addEventListener('click', () => {
       S.wardrobeLookMode = !S.wardrobeLookMode;
       renderCharacter(wrap, 'wardrobe', { instant: true });
@@ -18323,7 +18389,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (r.ok) { popSound(S.sounds); toast('Battle Charm active: your next 5 Pit wins pay +25% coins'); }
       // refusing to stack is the point, so say why rather than failing silently
       else if (r.reason === 'active') toast(`A charm is already running: ${r.charges} Pit win${r.charges === 1 ? '' : 's'} left. Save this one.`, 3200);
-      renderCharacter(wrap, 'crates');
+      if (r.ok) renderCharacter(wrap, 'crates');
     });
     $('#useVigor', content)?.addEventListener('click', async () => {
       if (await consumeConsumable('vigor')) { const e = await addVigor(VIGOR_DRAUGHT_AMOUNT); popSound(S.sounds); toast(`Vigor Draught drunk: +${VIGOR_DRAUGHT_AMOUNT} Vigor. You have ${e.ready} Pit ${e.ready === 1 ? 'fight' : 'fights'} ready.`, 3000); }
@@ -21756,7 +21822,7 @@ async function openLaboratory() {
   const origin = document.activeElement;
   let selected = [null, null], species = '', choosingSpecies = false, snapshot, quote = null, generation = 0, observer, clockTimer;
   const resume = () => { if (!document.hidden && sheetStack.at(-1)?.wrap === wrap) draw(); };
-  const wrap = openSheet('<div class="sheet-head"><h2>The Laboratory</h2><button class="sheet-close">Back</button></div><div class="sheet-body lab-room" id="labBody"><p role="status">Opening The Laboratory...</p></div>', { cls: 'full pet-a11y lab-sheet', name: 'Laboratory', onClose: () => { generation++; clearInterval(clockTimer); observer?.disconnect(); document.removeEventListener('visibilitychange', resume); window.removeEventListener('focus', resume); origin?.isConnected && origin.focus(); if (currentTab() === 'today') refresh(); } });
+  const wrap = openSheet(`<div class="sheet-head"><h2>The Laboratory</h2><button class="sheet-close">Back</button></div><div class="sheet-body lab-room">${roomHeaderHtml('lab')}<div class="lab-room" id="labBody"><p role="status">Opening The Laboratory...</p></div></div>`, { cls: 'full pet-a11y lab-sheet', name: 'Laboratory', onClose: () => { generation++; clearInterval(clockTimer); observer?.disconnect(); document.removeEventListener('visibilitychange', resume); window.removeEventListener('focus', resume); origin?.isConnected && origin.focus(); if (currentTab() === 'today') refresh(); } });
   const body = $('#labBody', wrap);
   observer = new MutationObserver(resume);
   observer.observe($('#sheets'), { childList: true });
@@ -23887,8 +23953,8 @@ async function renderBoneyard(el) {
         rec.el.classList.toggle('dormant', dormant);
         rec.el.classList.toggle('inrange', s.dist <= SPIRE_RADIUS_M);
         $('.spire-flag', rec.el).textContent = besieged ? 'UNDER SIEGE'
-          : rival ? (rival.ownerName || 'RIVAL').toUpperCase()
-          : held ? (myName ? myName.toUpperCase() : 'YOURS')
+          : rival ? (rival.ownerName || 'RIVAL')
+          : held ? (myName || 'YOURS')
           : view.pending ? 'PENDING' : dormant ? 'DORMANT' : 'UNCLAIMED';
         // A tower's level is its history: every takeover and every repelled siege
         // adds one, and it pays more tribute. Worth reading from across the map.
@@ -24722,7 +24788,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v578'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v579'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
@@ -25661,7 +25727,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
             <div class="vs-impact"></div>
           </div>
           <div class="vs-vs">VS</div>
-          <div class="vs-name foe">${esc(foeCfg.name.toUpperCase())}</div>
+          <div class="vs-name foe">${esc(foeCfg.name)}</div>
           <div class="vs-venue">at ${esc(venue)}</div>
         </div>`;
       document.body.appendChild(vs);
@@ -27067,10 +27133,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
            tests/reward-sop-audit.mjs. `tests/repeat-audit.mjs`, named here
            since v389, has never existed in this repo. */
         const already = !!(remote && remote.ok === true && remote.already === true);
-        const r = (refused || already) ? { ok: false, reason: already ? 'already' : remote.reason } : await claimSpire(foeCfg.spire);
+        const r = (refused || already) ? { ok: false, reason: already ? 'already' : remote.reason } : await claimSpire(foeCfg.spire).catch(() => ({ ok: false, reason: 'storage' }));
         if (pending) {
           coins = 0;
-          toast('Claim pending. Reconnect to confirm ownership. No tribute or Boon until confirmed.', 4600);
+          if (!r.ok && foeCfg.charge) await refundPitFight(foeCfg.charge);
+          toast(r.ok ? 'Claim pending. Reconnect to confirm ownership. No tribute or Boon until confirmed.' : 'Claim could not be saved locally. Fight charge returned. Reconnect to check ownership before trying again.', 4600);
           dispatchEvent(new CustomEvent('bh-spire-claimed'));
         } else if (already) {
           coins = 25;   // it is already yours: pocket change, no re-farm
@@ -27082,12 +27149,15 @@ async function openFight(pitWrap, fighter, foeCfg) {
         } else if (refused) {
           coins = 40;
           toast(`You already hold ${SPIRE_CAP} spires. Let one go dormant to take another.`, 4200);
-        } else if (r.ok) {
-          const owned = await social.fetchMySpires();
-          if (owned !== null) await syncSieges(owned);
+        } else if (r.ok || remote?.ok === true) {
+          // Server ownership is durable even if the local mirror refuses its cap.
+          // Pay the earned takeover now; the normal siege poll repairs the mirror.
+          if (!r.ok) toast('Tower claimed. Local ownership is waiting for sync.', 4000);
+          const owned = await social.fetchMySpires().catch(() => null);
+          if (owned !== null) await syncSieges(owned).catch(() => {});
           coins = 80;
           // the server owns the level; mirror what it just told us
-          if (remote && remote.ok && remote.level) await setSpireLevel(foeCfg.spire.id, remote.level);
+          if (remote && remote.ok && remote.level) await setSpireLevel(foeCfg.spire.id, remote.level).catch(() => {});
           const lvl = (remote && remote.level) || r.level || 1;
           extraCards.push({ iconHtml: `<img src="assets/brand/tomb.png" style="width:110px;height:110px;object-fit:contain">`,
             name: foeCfg.spire.name, rarity: 'epic', kind: lvl > 1 ? `DARK SPIRE · LV ${lvl}` : 'DARK SPIRE',
@@ -27930,3 +28000,31 @@ async function seedDemo() {
 /* ================= go ================= */
 
 boot();
+
+/* Rare name surfaces use their production renderers in the geometry guard.
+   No seed or UI entry point is exposed in a player's browser. */
+if (typeof window !== 'undefined' && navigator.webdriver) {
+  window.__nameFitSurface = async (surface, pick) => {
+    if (!new URLSearchParams(location.search).has('demo')) throw new Error('Name audit requires demo storage');
+    if (surface === 'garden') {
+      await kvSet('hlwSeen', 0);
+      S.hlwSalt = HLW_SAY.first.findIndex(line => line.includes('{n}'));
+      return openHollow(() => {});
+    }
+    if (surface === 'builder') return openNameBuilder(null);
+    if (surface === 'gift') return openGiftSheet(window.__nameFitMember);
+    if (surface === 'cheer') return openCheerSheet(window.__nameFitMember);
+    if (surface === 'tower-action') return openSpireInfoSheet({
+      s: { id: 'name-fit-rival', name: 'Audit tower', dist: 0 },
+      view: { level: 1 }, held: false, lvl: 1, heldSince: Date.now(),
+      rival: { ownerName: window.__nameFitMember.name, level: 1 },
+    }, () => {});
+    if (surface === 'onboarding') {
+      const before = newPlayerConfirmed;
+      newPlayerConfirmed = true;
+      try { return renderOnboarding(1, { pick }); }
+      finally { newPlayerConfirmed = before; }
+    }
+    throw new Error(`Unknown name surface: ${surface}`);
+  };
+}

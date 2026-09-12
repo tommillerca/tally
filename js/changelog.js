@@ -9,6 +9,17 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 579, date: '2026-09-11', title: 'Settings rows, Wardrobe stacking, and a claim that pays', items: [
+    'Settings buttons no longer break a word in half, and the backup rows line up.',
+    'Tapping a slot on the paperdoll scrolls to that slot\'s items, and tapping it again brings you back.',
+    'Cosmetics that look the same stack into one tile with a count, in the Wardrobe and in transmog.',
+    'A confirmed tower claim keeps its full reward even when the save fails afterwards.',
+    'Your Bonehead stands on his shadow instead of hovering above it, whatever he is wearing.',
+    'Your Bonehead and your pet sit a little further left, with the space between them unchanged.',
+    'Your name is no longer cut off on the Bonehead and Today screens.',
+    'The Laboratory and the Kitchen have their own room headers.',
+    'Messages keep clear of the controls on every screen, not just the three that were patched one at a time.',
+  ] },
   { n: 578, date: '2026-09-11', title: 'Your Bonehead stands on the ground', items: [
     'Your Bonehead has a proper shadow at his feet again instead of floating.',
     'Messages on Today no longer sit on top of the five room doors.',
@@ -136,10 +147,6 @@ export const CHANGES = [
   ] },
 
   { n: 544, date: '2026-09-10', title: 'Held properly at last', items: [
-    'The off-hand brushes and spades are held properly now.',
-  ] },
-
-  { n: 544, date: '2026-09-09', title: 'Held properly at last', items: [
     'The off-hand brushes and spades are held properly now.',
   ] },
 

@@ -16,7 +16,13 @@ const app=readFileSync(process.env.LAB_APP_SOURCE || new URL('../../js/app.js',i
 const pure=app.split('// LAB UI PURE BEGIN:')[1].split('\n').slice(1).join('\n').split('// LAB UI PURE END')[0];
 const esc=x=>String(x).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
 const ui=vm.createContext({...P,...L,BH_BY_ID,KENNEL_SPECIES:['C1','C2','C3','C4','C5','C6'].map(id=>BH_BY_ID[id]),esc,
-  petPortraitHtml:()=>'<img data-portrait>',petSpriteHtml:()=>'<img data-sprite>',morphSwatch:()=> 'var(--text)'});
+  petPortraitHtml:()=>'<img data-portrait>',petSpriteHtml:()=>'<img data-sprite>',morphSwatch:()=> 'var(--text)',
+  /* v579 gave the Laboratory and Kitchen room headers, and openLab now calls
+     roomHeaderHtml. This harness evals a SLICE of openLab, so the function is
+     not in scope and the whole run died with a ReferenceError. Stubbed to a
+     marker rather than the real markup: this harness grades lab COPY and
+     behaviour, not header art, which tests/room-headers-audit.mjs owns. */
+  roomHeaderHtml:room=>`<div data-room-header="${room}"></div>`});
 vm.runInContext(pure,ui);
 const text=html=>html.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 const evidence=[];
@@ -151,7 +157,12 @@ const clockCtx=vm.createContext({document:{activeElement:null,hidden:false,addEv
   window:{addEventListener:()=>{},removeEventListener:()=>{}},sheetStack:[{wrap:room}],
   openSheet:(_,opts)=>{closeRoom=opts.onClose;return room;},$:()=>({}),MutationObserver:class{observe(){}disconnect(){}},
   setInterval:(fn)=>{timers.set(1,fn);return 1;},clearInterval:id=>timers.delete(id),dateKey:()=>clockDay,
-  Intl:{DateTimeFormat:()=>({resolvedOptions:()=>({timeZone:clockZone})})},currentTab:()=>'',countRead:()=>clockReads++});
+  Intl:{DateTimeFormat:()=>({resolvedOptions:()=>({timeZone:clockZone})})},currentTab:()=>'',countRead:()=>clockReads++,
+  /* v579: openLaboratory now calls roomHeaderHtml for the room header. This
+     context evals a SLICE of that function to grade its CLOCK behaviour, so the
+     header helper is out of scope and the whole run died on a ReferenceError.
+     Stubbed, not reproduced: header art belongs to tests/room-headers-audit.mjs. */
+  roomHeaderHtml:room=>`<div data-room-header="${room}"></div>`});
 await vm.runInContext(clockSource+'async function draw(){countRead();} await draw(); } openLaboratory();',clockCtx);
 const initialClockReads=clockReads;
 clockDay='2026-09-09';for(const tick of timers.values())tick();const midnightReads=clockReads;

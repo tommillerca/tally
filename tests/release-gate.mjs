@@ -410,6 +410,7 @@ PURE.push('r4-restore-audit.mjs'); // R4-7/R4-9: quota-bounded history, exact un
 PURE.push('reachable-density-audit.mjs'); // R4-21: guards the shared reachability METER with dense/sparse controls; shipped spacing is a deferred MODEL finding.
 PURE.push('backpack-lab-polish-audit.mjs'); // v573: talents exclude salvage; deliberate melting keeps payout.
 PURE.push('interrupted-fight-audit.mjs');
+PURE.push('v576-hunt-audit.mjs');
 PURE.push('native-shell-comment-audit.mjs'); // R4-21: remote iOS shell cannot claim a wrapped web build; mutation controls.
 const BROWSER = [
   'r8-shop-css-browser-audit.mjs', // Operator proof: screenshot-sampled price contrast, wallet emphasis and disabled ghosts.
@@ -702,6 +703,8 @@ function failLines(out) {
    HELPERS, which is a list of modules that assert nothing and are imported by
    the checks themselves. A new guard is covered whatever it is called. */
 const HELPERS = new Set([
+  /* a DIAGNOSTIC, not a guard yet: see its DECLARED entry for why it is kept. */
+  'name-fit-audit.mjs',
   'reachable-density-model.mjs', // density instrument; reports the deferred spacing finding without assertions
   'release-gate.mjs',  // this file
   'store-copy-scan.mjs', // shared reachability scanner for store-copy-lint and native submission preflight; no assertions of its own
@@ -723,6 +726,7 @@ const HELPERS = new Set([
   'ui-audit.js',       // console helper installed into a live page, not a node suite
   'reap-orphans.mjs',  // gate housekeeping invoked with --kill, not a product guard
 ]);
+PURE.push('toast-seat.test.mjs');
 const onDisk = (await readdir(here))
   .filter(f => /\.(mjs|js)$/.test(f) && !HELPERS.has(f))
   .sort();
@@ -754,6 +758,24 @@ requireLabFindingCoverage(onDisk, PURE);
  * 1, in the gate itself. The complement cannot be computed AND have teeth. One line
  * per file is the price, and it puts each omission on the record as a decision. */
 const DECLARED = {
+  'settings-rows-audit.mjs': ['full', 'Settings 375x812 at 100%/200%: ROWS, COLUMN, signed-out PLUMBING and nonempty YOUR DATA CONTROL. Before/after measurements and RED proof BLOCKED by sandbox listen EPERM; no measured pass claimed. See docs/v577/guard-red.txt.'],
+  'wardrobe-slot-scroll-audit.mjs': ['full', "Paperdoll section geometry, second-tap return and reduced motion."],
+  'wardrobe-stack-audit.mjs': ['full', "Owned family tile counts and variant reachability in both wardrobe pickers."],
+  'room-headers-audit.mjs': ['full', "Laboratory/Kitchen rendered controls, 144px headers, decoded original art, large-text layout and post-branch symbols"],
+  /* SKIP, DELIBERATELY, AND IT IS NOT RETIRED. This is a working DIAGNOSTIC
+     that is not yet a guard: on the build that contains its own fix it still
+     exits 97 with 146 FITS rows red, so it cannot gate anything. It is kept in
+     the tree and declared here rather than deleted, because across three rounds
+     it FOUND real defects that nothing else did, and they are still open:
+       #newcomersList .t3-tx b   text 3758px wide in a 143px box (Crew)
+       #lbBody .lb-who b         86px in 77px (leaderboard)
+     plus 144 rows at the 200% and 53px accessibility text sizes. What shipped
+     in v579 is the .hub-name and .hero-name fix, measured directly
+     (293/227 clipped -> 227/227 wrapping), and CLAIMS says exactly that and no
+     more. Promote to 'full' when the row stops counting ordinary wrapping and
+     an ancestor scroller's overflow as truncation, and the open sites above are
+     fixed. Tracked in the name-clip lane. */
+  'name-fit-audit.mjs': ['skip', 'a name-clipping DIAGNOSTIC, not yet a guard: still 146 FITS red and exit 97 on the build carrying its own fix, because the row counts ordinary wrapping and a scroll container\'s overflow as truncation. Kept because it found the open squeezes at #newcomersList .t3-tx b (3758px of text in a 143px box) and #lbBody .lb-who b (86 in 77), which nothing else caught. v579 ships and claims only the measured .hub-name/.hero-name fix.'],
   'crew-order-browser-audit.mjs': ['full', 'Operator CDP browser required: capture harness measures fan before notifications, rejects the old rendered order and captures reachable gift OPEN. No listener in sandbox.'],
   'hand-registration-audit.mjs': ['skip', 'a source DIAGNOSTIC, not a guard: it scores 640x640 master ink against B0-1 in SOURCE coordinates, which is not the shipping avatar renderer, so it cannot prove on-body alignment. v536 was derived from exactly this measure, passed it, and shipped art Tom reported as worse on the live build. Moved out of PURE during the v536 revert because the restored pre-v536 brushes fail its historical floor and a permanently red guard blocks every release. It still prints its census for reference. THE REAL GUARD IS OWED: it must grade RENDERED pixels from the avatar, and the off-hand misalignment stays OPEN until it exists.'],
   'reachable-density-model.mjs': ['skip', 'a balance MODEL, not a guard: the shipped route scores 0.568 spawns/fix against a floor of 1 (N=400). This is the finding rather than a failure; the spacing decision is deferred by the product owner, Tom. Reports the gap and synthetic controls, asserting nothing about the app. reachable-density-audit.mjs guards the shared meter in PURE.'],
@@ -1114,6 +1136,8 @@ const DECLARED = {
   'levelpaid-repro.mjs': ['skip', "not an audit: the on-demand reproducer for the 2026-08-28 levelpaid-2 ghost (#265). It deliberately aligns a reseed with boot's award tail and exits 1 where the machine is too fast to mint, so in the gate it would read as a red on healthy code. Run it by hand when the ghost is suspected."],
   'levelpaid-trace.mjs': ['skip', "not an audit: the IDBObjectStore-layer tracer that captures every xp-store write with an async stack (#265). Evidence tooling for a human investigation; it asserts nothing and a suite that cannot fail must not sit in a tier."],
   'onb-gwart-audit.mjs': ['full', "Gwart meets the new player: a PLAIN-url fresh boot (never ?demo, which seeds settings and skips onboarding entirely) lands on onboarding with his portrait drawn AT SIZE, his box off the headline, his line typed, and the funnel still completing to Today with the shell latch intact."],
+  'hero-ground-audit.mjs': ['full', "the Bonehead stands on his own shadow. Tom, 2026-09-11, on live v578: 'he is still clearly not down on the ground with his own shadow... draw an imaginary line and figure out if he would be on it.' v578 fixed the shadow's ALPHA (it had washed out) and moved nothing, so the two were still on different lines: measured at 375x812, soles 523.0 against a shadow centre of 538.8, and the shadow's centre-x 168.75 against the figure's ink centre 183.5, because `left: 45%` centres it on the SCENE while the figure's box is deliberately asymmetric and Cam's ink is off-centre inside its own canvas. Root cause found by the lane: screen 1E raised the character and pet 16px and left the cast behind. Grades INK, not element rects, by compositing every layer's alpha with drop-shadow and animation disabled; the rects were correct throughout the bug's life, which is why no geometry check ever caught it. The offset is derived at render time (js/hero-ground.js) rather than pinned, because the sole line moves with the equipped art: 516 barefoot and 523 in footwear at the same viewport, so any constant is wrong for some outfit. Rows CONTROL, GROUNDED, CENTRED, PET-UNMOVED, SHIFT, IN-FRAME over 4 looks x 2 viewports. PET-UNMOVED compares the pet against its value on the SHIPPED build (C1 522/553, C6 532/564) rather than against the character's plane: the default pet is a rain cloud drawn floating with Cam's own shadow under it, and an earlier version of that row asserting a shared plane went red on live and on the fix alike. Proven red against live v578: 16 GROUNDED, 16 SHIFT, 8 CENTRED, 0 PET-UNMOVED. ~90s."],
+  'toast-reach-audit.mjs': ['full', "the toast must not land on a control on ANY screen, which is what the three per-screen overrides before it were each patching one at a time (the Boneyard's action card 2026-08-28, a sheet's control row 2026-09-07, Today's five door tiles 2026-09-11). Enumerates the routes from the router rather than a hand list, fires the REAL toast through the __toast seam, and grades every visible interactive control on each at 375x812 and 430x932, with a CONTROL row printing the per-screen control count so CLEAR cannot pass on a screen that never rendered. Counts an overlap only for controls at or under 160px tall, or covering 25% or more of a larger control, so an ordinary row always counts while a pill over a full-bleed stage does not; without that, studioStage (592-707px tall) and the shop's 480x480 container made CLEAR unsatisfiable. Round 2 shipped a single 110px seat that this audit then graded 11 rows red across 6 screens, which is how the seat was corrected. A CONTROL red on Settings turned out to be the audit's own dismissOverlays sweep clicking #surveyBtn ('Claim the Day One Lizard'), not a routing takeover. Proven red by restoring the shipped 96px seat."],
   'toast-today-audit.mjs': ['full', "two defects Tom found in his own screenshots of live v575, both on Today, graded on one render. DOORS: the shipped `bottom: calc(var(--sab) + 96px)` put every toast exactly on the five room tiles (measured 2026-09-11 at 375x812: toast 672.0-716.3 over Trends/Backpack/Stable/Kitchen/The Pit at 653.0-719.0), so a message covered the whole point of the screen; fixed by anchoring the pill to the TOP on Today, because below the art every band is a control and the widest gap is 24px. SHADOW: the sole-line contact shadow washed out against a plate the fade and vignette had darkened since its alpha was measured, so the figure read as floating; graded by A/B-ing the ELEMENT (same page, hidden then shown, differenced at its centre) rather than against nearby ground, because .hero-char's own drop-shadow darkens that plate regardless and the first cut of this row passed at 33.7% on the broken build. Records a measured correction: raising the shadow above .hero-fade, the first diagnosis, makes it WEAKER (.55 29.0->24.5%, .78 45.0->41.6%), so the stacking is untouched and the alpha is the whole fix. Proven red 2026-09-11, one mutation each: Today override deleted (CLEAR, toast covers all 5 tiles), v578 alpha rule deleted (SHADOW 29.0% under the 36% bar). ~35s."],
   'toast-map-audit.mjs': ['full', "the toast must not land on the Boneyard's action card. The shipped `bottom: calc(var(--sab) + 96px)` put every toast exactly on #mapAct (measured 2026-08-28: toast 30.1,771.5 369.8x64.5 over card 14.0,787.8 402.0x64.0), so the 'Slow down' nag hid the 'Grab it'/'Slow down' card it was nagging about. Grades the REAL toast (a webdriver-only __toast seam onto the module-scoped queue) against the card driven into its real too-fast state by six geolocation fixes, plus SEAT, the regression the fix could most easily cause: the override leaking and moving every toast in the app. Boneyard rows go UNPROVEN (97) without a live map; SEAT grades regardless. Proven red one mutation per throwaway copy: rule deleted (CLEAR), rule unconditional (SEAT 157.9px), toast display:none (VISIBLE, with CLEAR deliberately still green, which is the vacuous pass VISIBLE blocks). ~45s."],
   'toast-sheet-audit.mjs': ['full', "a toast must not land on a sheet's controls. R41-20: the welcome-kit toast fires 1.2s after "

@@ -1,0 +1,106 @@
+=== l-settings ===
+Settings rows advisory evidence, current version v577 (no version bump).
+Plan SHA256: 232fc6bfaf2681ef8257e3673010d31c9631b57853057d41bd55b138f3aa7548
+
+STATUS: INCOMPLETE. No render measurements or successful RED proof claimed.
+The sandbox denies loopback listeners. No escalation is available.
+
+Throwaway copy: /tmp/l-settings-before/tree. Copied this checkout, restored
+app.css and js/app.js from pre-edit copies, and installed the new audit.
+ROWS, COLUMN, PLUMBING: attempted audit on that pre-fix tree.
+CONTROL: attempted audit after deleting the YOUR DATA card in the throwaway
+app.js only. Restored the throwaway app.js afterwards.
+All attempts stopped before browser rendering, so no row is proven RED.
+
+Scope conflict and proposed deviation:
+The plan permits styling only Export, Import and Restore, but COLUMN covers
+all action buttons in every Settings section, including Erase. The audit
+retains the broader requirement and the fix retains the narrow scope.
+Proposed follow-up: authorize aligning the remaining YOUR DATA action rows
+or explicitly narrow COLUMN to the three named rows. No such change made.
+
+One-line measurement uses rendered text range height, excluding button padding
+and hit-target height. A literal outer-button-height <= one font line would
+conflict with existing padded controls. No hit targets were reduced.
+
+The audit uses 200% root text, as existing fontscale-audit.mjs and
+pet-a11y-pixels-audit.mjs do. No finite maximum supported text size was found;
+200% is a repository test convention, not a verified OS maximum.
+
+Before/after geometry remains unmeasured. Registration explicitly records this
+blocker instead of inventing measured numbers. Restore points now says Restore
+as the plan requires, although the starting checkout said Review.
+
+PRE-FIX ATTEMPT
+AUDIT START settings-rows-audit.mjs: completion pending; planned rows undeclared
+BLOCKED settings-rows: Error: listen EPERM: operation not permitted 127.0.0.1
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+settings-rows: 1 failures
+AUDIT END settings-rows-audit.mjs: FAILED; NORMAL EXIT (row coverage undeclared); rows=0/undeclared; failed=0; unproven=0; exit=1
+
+CONTROL MUTATION ATTEMPT
+AUDIT START settings-rows-audit.mjs: completion pending; planned rows undeclared
+BLOCKED settings-rows: Error: listen EPERM: operation not permitted 127.0.0.1
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+settings-rows: 1 failures
+AUDIT END settings-rows-audit.mjs: FAILED; NORMAL EXIT (row coverage undeclared); rows=0/undeclared; failed=0; unproven=0; exit=1
+
+FINAL TREE ATTEMPT
+AUDIT START settings-rows-audit.mjs: completion pending; planned rows undeclared
+BLOCKED settings-rows: Error: listen EPERM: operation not permitted 127.0.0.1
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+settings-rows: 1 failures
+AUDIT END settings-rows-audit.mjs: FAILED; NORMAL EXIT (row coverage undeclared); rows=0/undeclared; failed=0; unproven=0; exit=1
+
+
+Additional denied action: read-only process inspection via ps was denied
+(operation not permitted). No commit, push, publication or escalation attempted.
+
+Agreed proof: node tests/unit.test.js
+391 passed, 0 failed
+Process completed successfully. Full console output: /tmp/l-settings-unit.txt
+
+Static checks: node --check js/app.js; node --check tests/settings-rows-audit.mjs;
+git diff --check all passed. app.css begins with the exact pre-edit bytes.
+
+=== l-wardrobe ===
+Wardrobe frozen work order, 2026-09-11
+Plan SHA256: 83536b07aad8e75707bab67462f9f40e327e690ead02e3800fc521b97415b522
+
+STATUS: NOT PROVEN RED. This is a blocker record, not mutation evidence.
+
+Both browser audits were invoked in the current checkout:
+  node tests/wardrobe-slot-scroll-audit.mjs
+  node tests/wardrobe-stack-audit.mjs
+Both exited 1 before browser startup:
+  Error: listen EPERM: operation not permitted 127.0.0.1
+  code: EPERM; errno: -1; syscall: listen; address: 127.0.0.1
+
+The environment forbids the audit harness's loopback listener. Approval policy
+is never. No escalation was requested, and no alternative checkout was edited.
+No throwaway mutation runs were performed: the baseline cannot reach a row.
+An infrastructure failure is not evidence that a guard detects a regression.
+
+Rows still requiring a green baseline and individual throwaway-copy red runs:
+  slot CONTROL: fewer than four slots or fewer than two item sections
+  slot SCROLL: disable section navigation or obscure the heading
+  slot RETURN: remove second-tap return
+  slot REDUCED: force smooth scrolling / retain running animations
+  stack CONTROL: refuse one fixture grant or remove its independent looks
+  stack STACK: remove family grouping, restoring five fixture tiles
+  stack REACHABLE: remove a rail variant or refuse the second variant equip
+  stack TRANSMOG STACK: remove look-grid grouping
+  stack TRANSMOG REACHABLE: remove a look variant or refuse its commit
+
+Required follow-up: run both unchanged audits in a browser-capable checkout,
+then perform each mutation in a disposable copy and append actual row failures
+and process exit codes. Do not substitute this record for the requested proof.

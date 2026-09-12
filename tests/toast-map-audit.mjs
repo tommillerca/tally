@@ -1,3 +1,8 @@
+/* Round 2: SEAT formerly required a literal 96px bottom offset. That is
+ * incorrect for measured seating. It now checks the fresh Crew toast reports
+ * a geometrically clear seat after leaving the sheet/map. CLEAR and VISIBLE remain intact.
+ * Historical reproduction notes below describe the earlier fixed-seat bug.
+ */
 /* THE TOAST DOES NOT LAND ON THE BONEYARD'S ACTION CARD.
  *
  * The defect, measured 2026-08-28 at 430x932: .toast sits at
@@ -26,9 +31,7 @@
  *            CLEAR asserts a zero (no intersection), and the cheapest way to a
  *            fake zero is a toast flung off screen or collapsed to nothing.
  *   CLEAR    the settled toast rect does not intersect the visible card rect.
- *   SEAT     on Crew, where no .map-act and no screen override exist, the toast
- *            still sits at its shipped 96px seat. This is the regression the fix could most
- *            easily cause: an override that leaks moves EVERY toast in the app.
+ *   SEAT     after leaving the map, a fresh Crew toast clears its controls.
  *
  * PROVEN RED, 2026-08-29, one mutation per throwaway cp -R copy:
  *   CLEAR  delete the `body:has(.map-act...)` rule from app.css
@@ -73,7 +76,7 @@ const toastAndMeasure = msg => page.evaluate(async m => {
   const card = document.querySelector('.map-act');
   const t = document.querySelector('#toast');
   return {
-    vh: innerHeight, vw: innerWidth,
+    clear: [...document.querySelectorAll('#screen button, #screen a[href], #screen input, #screen select, #screen summary, #screen [role="button"]')].every(el => { const r = el.getBoundingClientRect(), b = t.getBoundingClientRect(); const hit = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2); if (!hit || !el.contains(hit)) return true; const area = Math.max(0, Math.min(b.right, r.right) - Math.max(b.left, r.left)) * Math.max(0, Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top)); return !area || (r.height > 160 && area / (r.width * r.height) < .25); }), vh: innerHeight, vw: innerWidth,
     toast: rect(t),
     toastHidden: !t || t.hidden || getComputedStyle(t).display === 'none' || getComputedStyle(t).visibility === 'hidden',
     card: card && !card.hidden ? rect(card) : null,
@@ -116,19 +119,13 @@ if (mapUp) {
   unproven('CLEAR a live toast does not intersect the visible action card', 'the map never came up on this machine');
 }
 
-/* ---- SEAT: everywhere else the toast has not moved ----
-   Crew, not Today. Today grew its OWN toast override in v578 (the pill was
-   landing on the five door tiles; see toast-today-audit), so a Today seat of
-   96px is no longer the shipped truth and this row would have graded the
-   wrong screen. Crew has neither override and is the plain case. */
+/* SEAT: navigation after the map must measure the new controls. */
 await page.evaluate(() => { location.hash = '#/friends'; });
 await sleep(2200);
 const home = await toastAndMeasure('Logged.');
 const seat = home.toast ? +(home.vh - home.toast.y - home.toast.h).toFixed(1) : null;
-/* 96px is the shipped seat (app.css .toast). --sab is 0 in this emulation, so
-   the offset reads back as the literal. 2px of tolerance for rounding. */
-ok('SEAT the toast keeps its shipped 96px seat when no card is visible',
-  home.card === null && seat !== null && Math.abs(seat - 96) <= 2,
+ok('SEAT a fresh clear seat is measured when no card is visible',
+  home.card === null && seat !== null && home.clear,
   `seat ${seat}px from the viewport bottom on Crew, card ${home.card ? 'VISIBLE (should not exist here)' : 'absent'}`);
 
 await browser.close();

@@ -5491,7 +5491,13 @@ test('M5 toast retains the four-job backlog cap and each retained job gets its d
   const timers = [], seen = [];
   const el = { classList: { add() {}, remove() {}, toggle() {} }, dataset: {}, hidden: true, textContent: '' };
   const context = vm.createContext({
-    $: () => el, reducedMotion: true, toastTimer: 0, clearTimeout() {},
+    // Round 4 reaffirmation of the Round 3 diff: this protects the four-job backlog cap, retained-job
+    // order, dwell durations and final hide, not the historical 96px seat.
+    // Stubbing seatToast only supplies the new layout dependency to this VM;
+    // the exact seen sequence and hidden assertion below remain unchanged.
+    // Production geometry is exercised separately by toast-seat.test.mjs
+    // and the browser toast audits.
+    seatToast() {}, $: () => el, reducedMotion: true, toastTimer: 0, clearTimeout() {},
     setTimeout(fn, ms) { timers.push({ fn, ms }); return timers.length; },
   });
   vm.runInContext(app.slice(start, end), context);
@@ -5856,7 +5862,8 @@ test('R22-W13 the bar disarms on commit, every price tag carries the unit, a dol
   assert.equal((app.match(/\$\{lookTilesHtml\(arts\)\}/g) || []).length, 2, 'both look modes use the grouped renderer');
   // (c) slot taps arrive at the item chooser after rendering, with a saved return offset.
   const pd = app.slice(app.indexOf('const wirePd = b =>'), app.indexOf("$$('[data-pd]', content).forEach(wirePd)"));
-  assert.match(pd, /await renderCharacter\(wrap, 'wardrobe', \{ instant: true \}\);[\s\S]*\$\('\[data-slot-return\]', wrap\)\?\.scrollIntoView\(/, 'after a doll-slot tap the item chooser must scroll into view after render');
+  assert.match(pd, /await renderCharacter\(wrap, 'wardrobe', \{ instant: true \}\);[\s\S]*scrollWardrobeTo\([\s\S]*data-slot-heading/, 'after a doll-slot tap the section heading must scroll into view after render');
+  assert.match(pd, /S\.wardrobeReturnSlot === b\.dataset\.pd.*returnToDoll/, 'second tap returns to the paperdoll');
 });
 
 /* ---- QA round 22 W12: four tap targets under Apple's 44px floor ("Wear it"
