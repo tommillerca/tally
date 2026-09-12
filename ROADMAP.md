@@ -35,7 +35,6 @@ verbatim; never paraphrase into the table.
 |---|---|---|---|---|
 
 
-| F4 | Settings | `docs/PLAYTEST-SETTINGS.md` item 1: importing an older backup silently removes newer earnings (125 coins + 1 crate -> 100 coins, 0 crates, message "Backup restored") | **OPEN, HIGH HARM.** Breaks the no-permanent-loss lock | `docs/PLAYTEST-SETTINGS.md` |
 | F5 | Melt | "no sound on melt it's also a fucking nightmare that needs to be redesigned basically unuseable with the interface" | **REVIEW DELIVERED, NEEDS TOM'S PICK.** Every advertised Salvage Bench route opens the Backpack instead; the bench is below the Kitchen. Sound hooks all exist | `docs/melt-review.md` |
 | F6 | Names | Names still clipped at `#newcomersList .t3-tx b` (3758px of text in a 143px box) and `#lbBody .lb-who b` (86 in 77), plus 144 rows at 200%/53px text | **OPEN.** v579 fixed only `.hub-name` and `.hero-name` | `tests/name-fit-audit.mjs` (declared `skip`) |
 | F15 | Toasts | from `docs/BUGS-v580.md` #5: "The toast queue drops confirmations" | **PARKED, NOT REPRODUCED.** The cap is real in source (`js/app.js:3870` drops the oldest routine toast past 4), but four attempts on live v584 all rendered 5/5 equip confirmations: chatter injected before the equips, after them, a single equip behind a full queue, and a plain five-equip run. A fix exists in lane `b5-toastq` and its own rows pass (5/5 confirmations, priority, requeue, ceiling), but shipping a queueing change with no demonstrated symptom is risk without benefit. Needs a real reproduction, ideally from Tom on a phone, before it lands | `docs/BUGS-v580.md`, lane `b5-toastq` |
@@ -51,6 +50,7 @@ verbatim; never paraphrase into the table.
 
 | Area | Item | Shipped | Evidence |
 |---|---|---|---|
+| Settings | Importing an older backup silently removed newer earnings (F4, `docs/PLAYTEST-SETTINGS.md` item 1, measured on v526: 125 coins + 1 crate to 100 and 0, "Backup restored") | v528 | Re-run 2026-09-12 on v587: `node tests/settings-safety-audit.mjs --observe-replacement` gives before 125/1, after 125/1, review=true, messages=[]. Import now opens a typed REPLACE review listing every loss, `saveFileRestorePoint` runs before `importAll` and blocks replacement if storage fails, and the last two points are recoverable from Settings > Restore points (FILE rows, 26/26). Carried stale in the register since the v526 playtest |
 | Today | Bonehead grounded on his shadow, both figures 5% left | v579 | `tests/hero-ground-audit.mjs`, 40 rows red on v578 |
 | Today | Toast off the five door tiles, and off controls on every screen | v578, v579 | `tests/toast-today-audit.mjs`, `tests/toast-reach-audit.mjs` |
 | Rooms | Laboratory and Kitchen headers | v579 | `tests/room-headers-audit.mjs` |
