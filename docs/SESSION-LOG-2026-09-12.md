@@ -94,3 +94,9 @@ Held out of v588: pet growth (D2), and l-ackpriv (recovery save must see a real 
 - Migration applied, then server/deploy.sh. Its preflight caught two things first: the friends route had lost its index seek to the flagged-account predicates (moved into the JOIN conditions; the plan test's own bind order had drifted since v498), and a same-key gift or cheer retry no longer said duplicate:true (restored). Both landed as PRs #521 and #522 before the deploy.
 - Worker version 23e80a11 is 100% live; /health and /health/deep 200, race routes reachable. The script's deep-health curl raced the rollout and saw a 404 for a moment; re-checked clean.
 - Everything on the deploy card is now live. Remaining for Tom: nothing today. Next: v591 (precache gap, seed helper) is assembled and gating.
+
+## 15:45 v591 live
+
+- v591 verified live: version.json, sw.js, APP_BUILD and changelog all v591; the four new precache entries are in the served sw.js.
+- Gate on the v591 train: 277 pass, 45 fail. Against main's 48, five audits are newly green (precache, remote-den, pet-hold, pit-exit-motion, shop-door); the two train-only reds were the new seed audit's missing CONTROL row (added) and boneyard-scroll (flaky alone on main too).
+- Day total: four releases (v588 to v591), one Worker deploy, three bug hunts plus the gate-reds triage, 22 Codex lanes. Every decision Tom made today is live. Nothing is waiting on him.
