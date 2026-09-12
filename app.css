@@ -12728,3 +12728,25 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
 .pod-name { width: 100%; text-align: center; }
 #raceResultCard .race-h { flex-wrap: wrap; }
 #raceResultCard .race-h b { flex: 1 1 100%; }
+
+/* F6 round 2: a single word must also fit at 200% text. */
+#newcomersList .t3-tx b,
+.fight-venue { overflow-wrap: anywhere; }
+/* The HUD is absolutely positioned over the arena, so wrapping cannot move
+   the fight stage. Reserve equal two-line name rows to align both HP bars. */
+.fight-hud .fname {
+  font-size: var(--fs-tiny);
+  min-height: calc(2.3em + 6px); line-height: 1.15;
+}
+.fight-hud .foe .fname {
+  white-space: normal; overflow-wrap: anywhere;
+  overflow: visible; text-overflow: clip;
+}
+/* Restored race hydration also exposes the active lanes to the same guard. */
+#raceCard .race-lane .nm b {
+  min-width: 0; max-width: 100%; white-space: normal;
+  overflow-wrap: anywhere; overflow: visible; text-overflow: clip;
+}
+#raceCard .race-champ > span { min-width: 0; }
+#raceCard .gbn-txt small,
+#raceCard .race-gap { overflow-wrap: anywhere; }

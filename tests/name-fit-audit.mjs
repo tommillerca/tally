@@ -35,7 +35,8 @@ const phases = [
   ['intro', [['Pit introduction name', '.vs-name.foe'], ['Pit introduction venue', '.vs-venue']]],
   ['rename', [['rename notice', '.sheet-rename .sheet-body > p:nth-child(2) b']]],
   ['fight', [['Pit opponent heading', '.fight-title h2'], ['Pit opponent HUD', '.fight-hud .foe .fname'], ['Pit venue', '.fight-venue']]],
-  ['map', [['owned tower marker', '.map-spire.mine .spire-flag'], ['map race standing', '#mapCount']]],
+  // Owned marker excluded: this fixture never boots WebGL; owner name is guarded at .spp-plate b, not marker geometry.
+  // Map standing excluded: this fixture never boots WebGL; race name is guarded at #raceCard .gbn-txt small, not map geometry.
   ['builder', [['name-builder draft', '#nbPreview', draft]]],
   ['onboarding', [['onboarding draft', '#onbName', draft]]],
 ];
@@ -43,7 +44,6 @@ const phases = [
 // missing controls into passes. Every other site still gates on CONTROL.
 const outsideFixture = new Map([
   ['.fight-over .note', 'repeat-result state is not reached by the fixture'],
-  ['#raceCard .race-lane .nm b', 'active-race lanes are not reached by the fixture'],
   ['.vs-name.foe', 'transient Pit introduction is not reached by the fixture'],
   ['.vs-venue', 'same transient Pit introduction as .vs-name.foe'],
 ]);
@@ -70,6 +70,8 @@ async function fixture(page, name) {
     const db = await import('./js/db.js');
     await db.kvSet('social', { playerId: 'name-fit-self', name, handle: name, friendCode: 'BONE-FIT' });
     await db.kvSet('onbName', pick);
+    // A returning racer gets the named gap instead of the first-race welcome.
+    await db.kvSet('raceDebutWk', '2020-01-01');
     await db.kvSet('giftbox', [{ key: 'name-fit-gift', payload: { coins: 25, note: `${name} sent you a gift!` } }]);
     await db.db.put('xp', { key: 'name-fit-delivery', type: 'social', xp: 0, label: `${name} sent you a gift`, ts: Date.now() - 86400000 });
     await db.db.put('xp', { key: 'name-fit-cheer', type: 'cheer', xp: 0, label: `${name} cheered you`, from: name, cheer: 0, cheerFrom: 'name-fit-friend', ts: Date.now() });
@@ -83,7 +85,7 @@ async function fixture(page, name) {
     window.__testFriends = { friends: [member('name-fit-friend')], incoming: [member('incoming')], outgoing: [member('outgoing')], reached: true };
     window.__testLb = ['newcomer', 'name-fit-self', 'another'].map((id, i) => ({ ...member(id), outfit, level: 12, you: i === 1 }));
     const players = window.__testLb.map((p, i) => ({ ...p, rank: i + 1, place: i + 1, steps: 24000 - 1000 * i, seenAt: now }));
-    window.__testRace = { players, yourRank: 2, podium: players, champion: players[0] };
+    window.__testRace = { players, yourRank: 2, podium: players.map(p => ({ ...p, coins: 25 })), champion: players[0] };
     window.__raceResults = () => players;
   }, { name });
   await page.evaluate(async () => { await window.__raceResultForgetCache?.(); });
@@ -98,6 +100,11 @@ async function route(page, name) {
   await sleep(500);
 }
 async function prepare(page, phase, name) {
+  // Keep the fixture snapshot from waiting on an unrelated profile upload.
+  await page.evaluate(async () => {
+    const db = await import('./js/db.js');
+    await db.kvSet('racePushAt', Date.now());
+  });
   await route(page, ['today', 'bonehead', 'settings', 'friends'].includes(phase) ? phase : 'friends');
   if (phase === 'leaderboard') await page.evaluate(() => document.querySelector('#crewLeaderboard').click());
   if (phase === 'profile') {
@@ -123,18 +130,6 @@ async function prepare(page, phase, name) {
     });
     await page.waitForSelector('.fight-over .note', { timeout: 5000 });
   }
-  if (phase === 'map') {
-    await page.setGeolocation({ latitude: 49.2827, longitude: -123.1207, accuracy: 8 });
-    const target = await page.evaluate(async () => {
-      const sp = await import('./js/spires.js');
-      const s = sp.spiresNear(49.2827, -123.1207)[0];
-      if (!s) throw new Error('No tower fixture available');
-      await sp.syncSieges([{ ...s, level: 1, claimedAt: Date.now(), tendedAt: Date.now() }]);
-      return s;
-    });
-    await page.setGeolocation({ latitude: target.lat, longitude: target.lng, accuracy: 8 });
-    await route(page, 'boneyard');
-  }
   if (phase !== 'intro') await sleep(500);
   await page.evaluate(async () => {
     await document.fonts.ready;
@@ -145,9 +140,20 @@ async function prepare(page, phase, name) {
     for (const d of document.querySelectorAll('details:has(#friendsList)')) if (!d.open) d.querySelector('summary')?.click();
   });
   if (phase === 'friends') {
-    for (const selector of ['#cfanView .pname-iso', '#friendsList .fl-sect:first-child .pname-iso', '#friendsList .fl-sect:last-child .pname-iso']) {
-      await page.waitForSelector(selector, { visible: true, timeout: 10000 });
-    }
+    // Wait for asynchronous race and request hydration before opening folds.
+    // Re-open the native disclosure while polling if hydration replaced it.
+    await page.waitForFunction(name => {
+      for (const d of document.querySelectorAll('details:has(#friendsList), #raceCard')) {
+        if (!d.hidden && !d.open) d.querySelector('summary')?.click();
+      }
+      return ['#cfanView .pname-iso', '#friendsList .fl-sect:first-child .pname-iso',
+        '#friendsList .fl-sect:last-child .pname-iso', '#raceCard .race-champ b',
+        '#raceCard .gbn-txt small', '#raceCard .race-gap'].every(selector => {
+          const e = document.querySelector(selector);
+          return e?.textContent.includes(name) && e.getBoundingClientRect().width > 0
+            && e.getBoundingClientRect().height > 0 && getComputedStyle(e).visibility !== 'hidden';
+        });
+    }, { timeout: 10000 }, name);
   }
 }
 async function measure(page, selector, name) {
