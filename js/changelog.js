@@ -9,6 +9,10 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 585, date: '2026-09-12', title: 'Two things put back the way they were', items: [
+    'Hand-logged walks no longer count toward eggs. Eggs come from steps your phone counts.',
+    'Crew cards show their art again instead of a name plate covering it.',
+  ] },
   { n: 584, date: '2026-09-12', title: 'Walks you log by hand count toward eggs', items: [
     'A walk you add yourself now counts toward your next egg, even without Apple Health.',
     'The Stable says how many steps an egg needs.',

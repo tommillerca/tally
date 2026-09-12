@@ -5380,7 +5380,7 @@ async function renderToday(el) {
     const r = await logManualWalk(Number(b.dataset.walkmin), S.date, Number(b.dataset.walkslot));
     if (!r.ok) { toast(r.reason === 'capped' ? `${MANUAL_WALKS_PER_DAY} walks a day is the cap. See you tomorrow.` : r.reason === 'duplicate' ? 'That walk was already logged.' : 'Check your date and reconnect before logging a walk.', 2600); refresh(); return; }
     chimeSound(S.sounds); haptic.success();
-    toast(`Walk logged. +${r.xp} XP, +1 Vigor and ${r.eggCredit.toLocaleString()} egg progress.${r.egg ? ' New egg in your Backpack.' : ''}`, 2800);
+    toast(`Walk logged. +${r.xp} XP and +1 Vigor for the Pit.`, 2800);
     refresh();
   }));
   $$('[data-sleep]').forEach(b => b.addEventListener('click', async () => {
@@ -24835,7 +24835,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v584'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v585'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;

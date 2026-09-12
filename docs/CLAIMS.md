@@ -1,5 +1,15 @@
 # What each patch note claims, and what backs it
 
+## v585 (2026-09-12)
+
+Changelog item: Hand-logged walks no longer count toward eggs. Eggs come from steps your phone counts.
+1. PROOF: `js/wellness.js`, `js/game.js` and `js/loot.js` restored to their pre-v584 state; `node tests/unit.test.js` 392 passed, 0 failed. REVERT, on Tom's call the same day v584 shipped: "i never agreed to walks you log by hand adding to eggs people are going to scam that? that is a decision you need to ask me first." He is right on both counts. It is exploitable: 2 walks a day at up to 60 minutes and 250 steps a minute is 15,000 against a 14,000 egg threshold, so a person could mint roughly one egg a day without moving, and the replay and clock guards stop automated duplication but not somebody simply lying about a walk. And it was an economy decision that was his to make: the process rule is that a note is logged and waits for his approval before anything is built, and a proposed fix inside `docs/BUGS-v580.md` is not an approval. His ruling: "everyones phone can count steps these days if they dont wanna connect it or carry their phone on a walk tough luck." | REACH: manual walk logging and egg crediting. The "An egg needs 14,000 steps in a day" sentence stays, because it is true of verified steps and was never the disputed part.
+
+Changelog item: Crew cards show their art again instead of a name plate covering it.
+2. PROOF: `node tests/crew-fan-audit.mjs` row PLATE, back to 57.8px against its 62px limit, from 101px. Tom, 2026-09-12: "crew cards dont show a photo anymore you fucked that up too it's just a bar with a name." Caused by the v579 name-fit work, which generalised a fix for two reported surfaces into roughly thirty selectors plus a `display: block` on `.pname-iso`. Bisected line by line against that audit: the block took the plate 57.8 to 101, and `.crew-greeting, .pname-iso { display: block; }` alone accounted for 57.8 to 79.4, because `.pname-iso` also sits inside the card's name plate and stacking it there triples the name's height. The name-fit rule is now scoped to the two surfaces Tom actually reported, `.hub-name` on Bonehead and `.hero-name` on Today, both still verified uncut with a 23-character name. | REACH: the Crew fan deck and those two name surfaces. The remaining clipped sites that audit found, `#newcomersList .t3-tx b` (3758px of text in a 143px box) and `#lbBody .lb-who b` (86 in 77), stay OPEN in ROADMAP.md rather than being swept up by a broad rule again.
+
+Deviations: the lesson recorded rather than restated. A fix scoped to what was reported would not have reached the Crew deck. The v579 work was verified against the surfaces it changed and not against the screens its selectors could reach, which is what "every surface needs a photo" in CLAUDE.md exists to prevent.
+
 ## v584 (2026-09-12)
 
 Changelog item: A walk you add yourself now counts toward your next egg, even without Apple Health.
