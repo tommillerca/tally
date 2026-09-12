@@ -9,6 +9,9 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 590, date: '2026-09-12', title: 'Race weeks follow your calendar', items: [
+    'The step race resets Friday at midnight, your time, including when the clocks change.',
+  ] },
   { n: 588, date: '2026-09-12', title: 'The Salvage Bench moves to the Wardrobe, and names get room', items: [
     'Find the Salvage Bench below your slots in the Wardrobe. The Shop shortcut takes you straight there.',
     'Long names wrap on podiums, leaderboards, race results, gifts, featured nameplates, newcomers and Pit labels.',

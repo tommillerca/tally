@@ -1,5 +1,16 @@
 # The Worker is behind main, on purpose
 
+## F21 / v590: player-local race weeks (2026-09-12)
+
+Pending Tom's deployment. The client uses calendar Fridays and sends
+utcOffsetMinutes (minutes east of UTC) in its profile snapshot. The Worker
+accepts dates within one day of its current, previous or next UTC period
+start, keeps each supplied key unchanged, and settles using the existing
+per-key grants. Offset metadata stays in profile JSON. No column or migration
+is needed. Prize amounts and stamps are unchanged. No deployment or D1 writes
+were performed. PURE proof: unit.test.js and race-week-local-audit.mjs.
+
+
 Written 2026-08-23, after #77 merged.
 
 > ## CORRECTION, 2026-08-25 — READ THIS BEFORE THE TABLE BELOW

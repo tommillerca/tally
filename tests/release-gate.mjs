@@ -274,6 +274,7 @@ const PURE = [
   'whatsnew-boot-audit.mjs',
   'wardrobe-noise-audit.mjs',
   'sync-clientpath-audit.mjs', // Real boot/snapshot/signing over mem-idb; failed profile retries, no sockets.
+  'race-week-local-audit.mjs', // PURE: signed in-process Worker and memory SQLite.
   'sync-authpath-audit.mjs', // Real signed client to in-process Worker and SQLite; mature profiles and rejection controls, no sockets.
   'sync-path-audit.mjs', // Behavioural profile sync, real snapshot/modules and boot/resume callbacks over mem-idb; no sockets.
   'wardrobe-playtest-audit.mjs', 'lab-room2-audit.mjs', 'stable-stale-disclosure-audit.mjs', 'breed-last-colour-audit.mjs', 'stable-loss-disclosure-audit.mjs', 'lab-health-recovery-audit.mjs',

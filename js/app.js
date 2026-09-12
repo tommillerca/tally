@@ -2350,7 +2350,9 @@ const raceSeenKey = wk => 'race:' + wk;
 /* The week that has just finished, or null before the first one ever has. */
 function lastSettledWeek() {
   const wk = raceWeekKey(dateKey());
-  const prev = dateKey(new Date(Date.parse(wk + 'T00:00:00') - RACE_DAYS * 86400000));
+  const previous = new Date(wk + 'T00:00:00');
+  previous.setDate(previous.getDate() - RACE_DAYS);
+  const prev = dateKey(previous);
   return prev < RACE_EPOCH ? null : prev;
 }
 
@@ -13576,12 +13578,14 @@ async function renderFriends(el) {
         : 'Could not reach the Crew server. Your steps are still counting.';
       card.innerHTML = `<summary>
         <span class="gbn-ico race-ico">${badgePixHtml('badge-footprint', 24)}</span>
-        <span class="gbn-txt"><span class="race-h"><b>THE STEP RACE</b></span><small>${esc(line)}</small></span>
+        <span class="gbn-txt"><small>resets Friday at midnight, your time</small><span class="race-h"><b>THE STEP RACE</b></span><small>${esc(line)}</small></span>
         <span class="gbn-chev">›</span></summary>`;
       card.hidden = false;
       return;
     }
-    const endsMs = Date.parse(wk + 'T00:00:00') + RACE_DAYS * 86400000;
+    const ends = new Date(wk + 'T00:00:00');
+    ends.setDate(ends.getDate() + RACE_DAYS);
+    const endsMs = ends.getTime();
     const msLeft = Math.max(0, endsMs - Date.now());
     // CREW-6: split out as social.raceClockLabel so a fake clock proves the
     // "settles tonight" fix without a browser (see its own comment there).
@@ -13621,7 +13625,7 @@ async function renderFriends(el) {
         <span class="race-art">${avatarLayersHtml(myFit, { noYard: true, skip: ['BG', 'C'] })}</span>
         <span class="gbn-ico race-ico">${badgePixHtml('badge-footprint', 24)}</span>
         <span class="gbn-txt">
-          <span class="race-h"><b>THE STEP RACE</b><span class="race-clock">${clock.toUpperCase()}</span></span>
+          <small>resets Friday at midnight, your time</small><span class="race-h"><b>THE STEP RACE</b><span class="race-clock">${clock.toUpperCase()}</span></span>
           <small>${!rows.length ? 'No steps have reached this board yet.' : ownFresh ? 'Last shared standings: ' + ownStanding : 'Standings await recent updates.'}</small>
         </span>
         <span class="gbn-chev">›</span>
@@ -25071,16 +25075,12 @@ const RACE_DAYS = 7;
 const RACE_RULES = 2;
 
 function raceWeekKey(date = dateKey()) {
-  const ms = Date.parse(date + 'T00:00:00') - Date.parse(RACE_EPOCH + 'T00:00:00');
-  /* A DAY BEFORE THE EPOCH STILL COUNTS. Shipped 2026-08-07 with the epoch dated
-     2026-08-08, so raceWeekDates() covered the 8th to the 14th, TODAY was not in
-     it, and every player's weekSteps summed to zero: the board was empty half an
-     hour after launch and nobody could take the lead. The period key was right,
-     the day window was not. Clamping here means an epoch that is off by a day
-     (or a phone whose clock is behind) counts today instead of discarding it. */
-  if (!(ms >= 0)) return RACE_EPOCH;                     // before launch: everything is period one
-  const period = Math.floor(ms / (RACE_DAYS * 86400000));
-  return dateKey(new Date(Date.parse(RACE_EPOCH + 'T00:00:00') + period * RACE_DAYS * 86400000));
+  if (date < RACE_EPOCH) return RACE_EPOCH;
+  const day = new Date(date + 'T00:00:00');
+  if (!Number.isFinite(day.getTime())) return RACE_EPOCH;
+  // Friday to Friday in the player's calendar, including DST weeks.
+  day.setDate(day.getDate() - (day.getDay() + 2) % RACE_DAYS);
+  return dateKey(day);
 }
 // Test hook (webdriver only): the race period boundary is the one rule a player
 // cannot see, so it has to be measurable without waiting a week.
@@ -25095,7 +25095,7 @@ function ordinal(n) {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 function raceWeekDates(weekKey) {
-  const t0 = Date.parse(weekKey + 'T00:00:00');
+  const start = new Date(weekKey + 'T00:00:00');
   /* EXACTLY the seven days from this period's start. NOTHING before it.
      v296 tried to be safe about clock skew by also counting the two days BEFORE
      the epoch, and that quietly backdated the race: Tom opened it to 31,000 steps
@@ -25103,7 +25103,11 @@ function raceWeekDates(weekKey) {
      week is not a race. The epoch is today and raceWeekKey already clamps an
      earlier date into period one, so there is nothing left for the padding to
      protect against. */
-  return Array.from({ length: RACE_DAYS }, (_, i) => dateKey(new Date(t0 + i * 86400000)));
+  return Array.from({ length: RACE_DAYS }, (_, i) => {
+    const day = new Date(start);
+    day.setDate(day.getDate() + i);
+    return dateKey(day);
+  });
 }
 
 async function weekStepsNow(date = dateKey()) {
@@ -25177,6 +25181,7 @@ async function socialSnapshot() {
   };
   return {
     weekKey: wk.weekKey,
+    utcOffsetMinutes: -new Date().getTimezoneOffset(),
     weekSteps: wk.steps,
     raceV: RACE_RULES,   // which rules counted it; the server ranks only current ones
     plat: platformTag(), // which shell they are on, so support is a lookup not a guess

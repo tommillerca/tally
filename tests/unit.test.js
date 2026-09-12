@@ -77,6 +77,17 @@ function test(name, fn) { QUEUE.push([name, fn]); }
 // Register every Device report PURE guard with the agreed Node proof runner.
 for (const [name, guard] of DEVICE_REPORT_PURE) test(`Device report PURE: ${name}`, () => guard(deviceReport));
 
+for (const zone of ['America/Vancouver', 'Europe/Berlin']) {
+  test(`race week local DST: ${zone}`, () => {
+    execFile_.execFileSync(process.execPath, [join(here, 'race-week-local-audit.mjs'), '--client',
+      ...(zone === 'Europe/Berlin' ? ['--positive'] : [])], { encoding: 'utf8' });
+  });
+}
+test('race week local Worker acceptance and settlement', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'race-week-local-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /5 passed, 0 failed/);
+});
+
 test('cloud opt-out stops garment profile uploads and discloses stale Crew entries', () => {
   const output = execFile_.execFileSync(process.execPath,
     [join(here, 'cloud-off-audit.mjs')], { encoding: 'utf8' });

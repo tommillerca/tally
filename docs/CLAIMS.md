@@ -1,5 +1,10 @@
 # What each patch note claims, and what backs it
 
+## v590 (2026-09-12)
+
+Changelog item: The step race resets Friday at midnight, your time, including when the clocks change.
+1. PROOF: unit.test.js: 395 passed, 0 failed, exit 0. It runs the fixed-clock client calendar rows in America/Vancouver and Europe/Berlin across their autumn DST transitions, plus race-week-local-audit.mjs. The in-process Worker audit uses signed requests and memory SQLite: keys one day either side of the UTC start are stored unchanged and settled exactly once under their own key after profile rollover; two-day-off profile keys are refused; the exact UTC key is the control. The Vancouver DST row is RED against main cb2aca568cf53661d5f9bd584831f618feda3cd7: November 1 repeats and November 5 is missing from the October 30 week. | REACH: client week keys, seven-day totals, previous-week lookup, countdown, reset copy and snapshot UTC offset metadata; Worker key acceptance and existing per-key settlement. The Worker half is not deployed. No migration or version stamps.
+
 ## v588 (2026-09-12)
 
 Assembled from five Codex lanes by the commander. Every browser audit below was run by the commander on the lane tree and again on the merged train; the lanes cannot bind a socket.
