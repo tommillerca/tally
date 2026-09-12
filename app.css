@@ -12575,3 +12575,16 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
 .settings-fold > summary > span { font-size: var(--fs-2); color: var(--text-3); }
 .settings-fold-body { padding: 2px 2px 12px; }
 .settings-fold-actions { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
+/* F1: match the Backpack ingredient tiles' centred content convention.
+   Keep the existing full-width two-column grid and quantity at the corner. */
+#chContent .bp-card { text-align: center; }
+#chContent .bp-card-top { position: relative; justify-content: center; }
+#chContent .bp-card-top .bp-qty { position: absolute; right: 0; top: 0; }
+
+/* F1: the native inside disclosure marker shifts the summary text centre.
+   Keep the marker outside the text line, with symmetric space inside the tile. */
+#chContent .bp-crate-details summary,
+#chContent .bp-item-details summary {
+  list-style-position: outside;
+  padding-inline: 1em;
+}

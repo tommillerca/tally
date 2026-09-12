@@ -17197,10 +17197,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div class="fit-rail ward-toolbar">
         <button class="fit-chip ward-fit-switcher" id="wardFitSwitcher" data-fit-switcher type="button" aria-expanded="${!!S.wardFitsOpen}" aria-controls="wardFitList"><span>Saved fits</span></button>
         <button class="fit-chip add" data-fit-save="1"${fitList.length >= MAX_FITS ? ' aria-disabled="true"' : ''}>Save fit</button>
-        <button class="fit-chip studio" id="wardrobeStudio" type="button">${pixCur('camera', 24) || ICONS.camera(18)}The Studio</button>
         ${stripPlan.slots.length || stripPlan.mogs.length
           ? `<button class="fit-chip reset" data-fit-reset="1" title="Unequip everything, gear included. Nothing is lost: it all stays in your Backpack.">Take off</button>`
           : ''}
+        <button class="fit-chip studio" id="wardrobeStudio" type="button">${pixCur('camera', 24) || ICONS.camera(18)}The Studio</button>
         <div class="ward-fit-list" id="wardFitList"${S.wardFitsOpen ? '' : ' hidden'}>
           ${fitList.length ? fitList.map((f, i) => {
             const art = fitThumbArt(f), price = fitPrices[i];
@@ -24810,7 +24810,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v579'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v580'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
