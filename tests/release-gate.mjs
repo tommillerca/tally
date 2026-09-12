@@ -285,7 +285,7 @@ const PURE = [
   'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'rack-rotate-audit.mjs', 'pet-accessory-lint.mjs',
   'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs',
   'render-sink-lint.mjs', 'lapse-witness-audit.mjs', 'spawn-claim-atomic-audit.mjs', 'wardrobe-family-audit.mjs', 'football-kit-audit.mjs', 'restore-latch-audit.mjs',
-  'first-pet-audit.mjs', 'shop-economy-audit.mjs', 'recovery-status-audit.mjs', 'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs', 'take-and-pay-audit.mjs',
+  'first-pet-audit.mjs', 'shop-economy-audit.mjs', 'recovery-status-audit.mjs', 'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs', 'take-and-pay-audit.mjs', 'level-rewards-atomic-audit.mjs',
 ];
 PURE.push('lab-banner-audit.mjs'); // Original sprite metadata, CSS clocks and Backpack route; Node only.
 PURE.push('backpack-ui-1g-audit.mjs'); // 1G rendered inventory and independent egg progress controls.

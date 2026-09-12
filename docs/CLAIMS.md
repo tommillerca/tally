@@ -1,5 +1,10 @@
 # What each patch note claims, and what backs it
 
+## v589 (2026-09-12)
+
+Changelog item: Level rewards now save together, so an interrupted save cannot mark a level paid while leaving its coins, crates, dust or egg missing.
+1. PROOF: level-rewards-atomic-audit.mjs, PURE over the production game and database modules with the shared in-memory IndexedDB. CRASH aborts at the level-25 claim and each currency, revision and inventory write, requiring no payment marker and no payout. RETRY pays exactly once; ONCE covers repeated and concurrent claims. CONTROL preserves 145 coins, three Golden Crates, 150 dust, one 8,000-step egg and legacy claimed flags. On unchanged local main cb2aca568cf53661d5f9bd584831f618feda3cd7, the same audit reported 16 failures: eight CRASH rows retained the marker and eight RETRY rows could not restore the full reward. With the fix, all 30 checks pass. Agreed proof: node tests/unit.test.js reports 392 passed, 0 failed (exit 0). | REACH: grantLevelRewards for each crossed level, including level-25 milestones. Node transaction proof only; this does not add boot recovery for an XP award committed before level processing or repair historical partial payments.
+
 ## v588 (2026-09-12)
 
 Assembled from five Codex lanes by the commander. Every browser audit below was run by the commander on the lane tree and again on the merged train; the lanes cannot bind a socket.
