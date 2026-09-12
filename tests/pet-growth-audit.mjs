@@ -12,9 +12,9 @@ try {
     if (!navigator.webdriver || !new URL(location.href).searchParams.has('demo')) {
       throw new Error('Fixture requires webdriver and demo mode');
     }
-    const db = await import('/js/db.js');
+    const db = await import('./js/db.js');
     db.useDbName('tally-demo');
-    const loot = await import('/js/loot.js');
+    const loot = await import('./js/loot.js');
     const base = await loot.addPetInstance('C6');
     const grown = await loot.addPetInstance('C6');
     const rows = await loot.petInstances();
@@ -24,14 +24,14 @@ try {
   });
   const measure = async iid => {
     await page.evaluate(async id => {
-      const { setEquippedPet } = await import('/js/loot.js');
+      const { setEquippedPet } = await import('./js/loot.js');
       await setEquippedPet(id);
       location.hash = '#/today';
     }, iid);
     await page.reload({ waitUntil: 'networkidle0' });
     await page.waitForSelector('#heroPetBtn .petcrop');
     return page.evaluate(async id => {
-      const loot = await import('/js/loot.js');
+      const loot = await import('./js/loot.js');
       const pet = await loot.equippedPetInstance();
       if (pet?.iid !== id) throw new Error('Wrong equipped instance');
       const sprite = document.querySelector('#heroPetBtn .petcrop');
