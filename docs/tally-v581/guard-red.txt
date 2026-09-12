@@ -1,17 +1,78 @@
-BLOCKED: no red pixel proof obtained.
-Baseline: main and HEAD both 26621a9f29dd60e8fdbccb4dfa8b59422029cd1b.
-Plan SHA256: 0a485232cfa00446b8ae5fcb666372c407868b8aa19a3496823c956dfc3407fe
-Command before production edits:
-HEADLESS_MODE=shell node tests/lab-reveal-audit.mjs
-Exit: 1
-Server startup denied: listen EPERM: operation not permitted 127.0.0.1
-No browser launched, no experiments ran, no frames compared.
-CERTAIN red and fixed-tree green remain unproven in this sandbox.
+Round 3 advisory evidence, not a passing browser verdict
+Plan SHA256: 3214d38f97f47ec1c6d634af005dbeb8fabcabc2421dfcbb528c3ee56d187ade
+Checkout starting HEAD: 5edc77994bfc68ce3b16e3fdd24b4f6670382f2f
+Locally available main and origin/main: 26621a9f29dd60e8fdbccb4dfa8b59422029cd1b
+Remote freshness was not verified.
 
-Proposed timing deviation: existing animation lasts 240ms. Preserve it and
-compare decoded pixels at +30ms and +140ms, then capture final state at +400ms.
-A requirement for ongoing reveal motion at +400ms would require extending the
-animation. That duration change has not been made.
-Skip definition: a pet exists and its decoded 240ms reveal is running.
-Both certain and uncertain reveals are skippable; reduced motion has no skip.
-The audit suppresses sheet-body entrance animation to isolate reveal pixels.
+Measured retained round 2 artifacts from /tmp/lab-reveal-audit:
+These are prior-run artifacts, not captures made by this round.
+CERTAIN-30.png and CERTAIN-140.png: each 556x164, 679 bytes, 1 RGBA color.
+UNCERTAIN-30.png and UNCERTAIN-140.png: each 556x164, 679 bytes, 1 RGBA color.
+All four SHA256: 74105a1532643c5f3030efcbd4b6fd441c16c8abfc0a443d8b325898a2fc1c6e
+Both comparisons: changedPixels=0. The captures contain flat background.
+The retained CERTAIN JSON reports transforms .96452 and .99352 at the first
+and second sample. A changing CSS box and decoded source art did not prove
+visible painted art. Identical PNGs do not establish whether screenshots were
+cached or the wrong area was captured. That distinction remains unmeasured.
+
+Proposed capture correction:
+Capture the visible viewport without a screenshot clip, then crop its decoded
+pixels using the visual viewport coordinate mapping. Reject a sampling region
+that does not contain the animated box or that extends outside the viewport.
+Keep a fixed region including the final unscaled art box across all samples.
+Save full viewport and cropped frames, byte lengths, hashes, geometry, timing,
+computed transform, animation properties and decoded-image state.
+No production animation or existing pixel/timing threshold changed.
+
+Positive control:
+Every fixture page first injects a white 64px square translating across a black
+stage. It uses the same sample(), screenshot, decode, crop and comparison path
+as the reveal, including in reduced-motion contexts. SAMPLER requires >1000
+changed pixels and a running animation in both early samples. A frozen or blank
+capture fails it. Pixel verdicts cannot pass when SAMPLER fails. Browser proof
+of the positive control and a deliberately frozen negative control is blocked.
+
+What animates:
+app.css defines lab-result-arrive on [data-lab-result-art]: transform scale(.96)
+to scale(1), .24s ease-out. Main applies it to .lab-surprise.lab-play; this build
+also applies it to .lab-reveal.lab-play. Matching animation shorthands cascade;
+they do not themselves create two simultaneous transform animations. The audit
+records actual animation targets and keyframe properties for collision review.
+
+SKIP position:
+Yes, a certain experiment has something to skip: its decoded 240ms pet arrival
+animation, even though there is only one outcome. SKIP now requires the button
+and running-animation states to agree at every sample, and a running animation
+at the first sample. Reduced motion must have neither. The real Skip button
+must stop the animation. Production behavior is unchanged.
+
+Fresh browser command: node tests/lab-reveal-audit.mjs
+Exit: 1
+AUDIT START lab-reveal-audit.mjs: completion pending; planned rows undeclared
+FAIL FIXTURE SETUP: listen EPERM: operation not permitted 127.0.0.1
+rows=1, 1 failures
+RETAINED FAIL FIXTURE SETUP: listen EPERM: operation not permitted 127.0.0.1
+AUDIT END lab-reveal-audit.mjs: FAILED; NORMAL EXIT (row coverage undeclared); rows=1/undeclared; failed=1; unproven=0; exit=1
+
+Required verdict status:
+This build: SAMPLER, CERTAIN and UNCERTAIN unproven. No fresh frame comparison.
+Main: SAMPLER, CERTAIN and UNCERTAIN unproven. No fresh frame comparison.
+Cannot yet choose between a sampler-only defect and an incomplete production
+fix. Do not treat the retained uniform frames as a valid main red proof.
+An independent reviewer must run this revised audit against this checkout and
+an isolated copy of main, retaining both frame comparisons. Pass an explicit
+local URL as the audit's first argument when testing the isolated main copy.
+Never modify the original checkout. No threshold adjustment is proposed.
+
+Denied action: local HTTP server bind, blocked by sandbox EPERM. No escalation
+available. No commit, push, publish, original-checkout edit or restricted-file
+edit performed. Deviation: the measured sampler diagnosis and main/build pixel
+verdict cannot be completed here. Proposed capture correction is unvalidated.
+
+Agreed proof: node tests/unit.test.js
+Exit: 0
+391 passed, 0 failed
+Full local output: /tmp/b1c-unit.txt
+Syntax check: node --check tests/lab-reveal-audit.mjs, exit 0.
+Whitespace check: git diff --check, exit 0.
+Changed files: tests/lab-reveal-audit.mjs, docs/tally-v581/guard-red.txt.
