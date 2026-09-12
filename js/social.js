@@ -680,6 +680,7 @@ export async function beginGiftIntent(to, amount, ck = newSendKey()) {
   try {
     await db.claimAndPay('kv', { k: `gift-intent:${ck}`, v: intent }, { kv: {
       coins: cur => { if ((cur || 0) < amount) throw new Error('gift-funds'); return cur - amount; },
+      coinsRev: cur => (Number(cur) || 0) + Math.max(1, Math.abs(amount)),
       giftPending: cur => ({ ...cur, [ck]: intent }),
     } });
   } catch (e) { if (e.message === 'gift-funds') return null; throw e; }
@@ -700,6 +701,7 @@ export async function resolveGiftIntent(intent) {
   if (!r.ok && !refused) return { ...r, pending: true };
   await db.claimAndPay('kv', { k: `gift-terminal:${ck}`, v: r }, { kv: {
     ...(refused ? { coins: cur => (cur || 0) + amount } : {}),
+ coinsRev: cur => (Number(cur) || 0) + Math.max(1, Math.abs(amount)),
     giftPending: cur => { const next = { ...cur }; delete next[ck]; return next; },
   } });
   return await kvGet(`gift-terminal:${ck}`, r);
