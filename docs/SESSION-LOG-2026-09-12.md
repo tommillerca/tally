@@ -46,3 +46,10 @@ Held out of v588: pet growth (D2), and l-ackpriv (recovery save must see a real 
 - claim-evidence-lint resolves `tests/x.mjs` against `tests/`, so a PROOF must name the audit bare (`x.mjs`) or in a backticked command.
 - Codex hands back CLAIMS entries as tables or a single row for a multi-item changelog; r6 needs one `Changelog item:` line and one numbered `PROOF | REACH` row per item.
 - Two lanes appending to the end of `app.css` conflict on merge; resolve by keeping both blocks.
+
+## 12:35 Gate verdict and Tom's answers
+
+- The control gate on pristine main: 258 pass, 48 fail. Every one of those 48 is also red on the train, and none is red on main only. **Main has carried 48 browser-tier reds of its own**; the handoff's "one red on main" was the pure tier. Written up for the next handover, not fixed today.
+- Train-only reds: six. Five were audits pinned to the Backpack's old markup or to the delete flow, re-anchored. The sixth, boneyard-scroll, times out on main too when run alone (flaky), so it is not v588's.
+- v588 ships now: five lanes, gate diff clean against main.
+- Tom answered D2 (grow pets everywhere except the Stable, including the Paddock, which needs the paddock.js lock lifted), D3 (swap the first-run buttons, new-player focused), D5 (podium settlement first, then the rest), D6 (race weeks local, plus a new ask: strip the UTC chatter from the leaderboard, relative time only). D1 and D4 need a plainer explanation; sent again.
