@@ -4,6 +4,9 @@
  * receive the same check. F2 measures the rail by ascending x and inventories
  * Take off controls within the fit rail. The .ward-cell.none grid cell clears
  * an individual slot, so it is excluded by its role outside the rail, not name.
+ * Wardrobe readiness waits for .ward-toolbar > button, then non-zero rail
+ * and button rects with computed display, visibility, opacity and offsetParent.
+ * It does not wait for a passing button count or order.
  * No base: serve this checkout. An explicit URL grades that URL unmodified.
  */
 import { fileURLToPath } from 'node:url';
@@ -59,10 +62,24 @@ try {
     row(`CONTROL Backpack ${width}x${height}`, crates.length > 0 && items.length > 0, { crates: crates.length, items: items.length });
     row(`CENTRED ${width}x${height}`, centred(crates) && centred(items), { tolerance: 1, cards });
     await page.click('[data-tab="wardrobe"]');
-    await page.waitForSelector('.ward-toolbar', { visible: true });
+    await page.waitForSelector('.ward-toolbar > button');
+    await page.waitForFunction(() => {
+      const ready = el => {
+        const r = el.getBoundingClientRect(), style = getComputedStyle(el);
+        return r.width > 0 && r.height > 0 && style.display !== 'none' &&
+          style.visibility === 'visible' && Number(style.opacity) > 0 && el.offsetParent !== null;
+      };
+      const rail = document.querySelector('.ward-toolbar');
+      const buttons = [...document.querySelectorAll('.ward-toolbar > button')];
+      return rail && ready(rail) && buttons.length > 0 && buttons.every(ready);
+    }, { timeout: 10000, polling: 'raf' });
     await page.evaluate(() => document.fonts.ready);
     const ward = await page.evaluate(() => {
-      const visible = el => el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0;
+      const visible = el => {
+        const r = el.getBoundingClientRect(), style = getComputedStyle(el);
+        return r.width > 0 && r.height > 0 && style.display !== 'none' &&
+          style.visibility === 'visible' && Number(style.opacity) > 0 && el.offsetParent !== null;
+      };
       const describe = el => { const r = el.getBoundingClientRect(); return { text: el.textContent.trim(), x: r.x, y: r.y, width: r.width, visible: visible(el), class: el.className, slot: el.dataset.equip }; };
       return {
         rail: [...document.querySelectorAll('.ward-toolbar > button')].filter(visible).map(describe).sort((a, b) => a.x - b.x),
