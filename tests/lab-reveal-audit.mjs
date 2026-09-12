@@ -53,6 +53,10 @@ async function sample(page, name, selector, clock) {
   // Capture the visible viewport, then crop decoded pixels. Puppeteer's clip
   // uses page coordinates, while DOM rects use viewport coordinates. Avoid
   // that ambiguity and any offscreen capture that paints only the background.
+  await page.evaluate(async selector => {
+    document.querySelector(selector).scrollIntoView({block:'center',behavior:'instant'});
+    await new Promise(requestAnimationFrame);
+  },selector);
   const region = await page.evaluate(selector => {
     const el=document.querySelector(selector), r=el.getBoundingClientRect();
     // The reveal scales from .96 to 1 around its centre. Include its final box.
@@ -71,6 +75,17 @@ async function sample(page, name, selector, clock) {
       return {ms:performance.now()-window[clock],
         rect:{x:r.x,y:r.y,width:r.width,height:r.height},
         viewport:{x:v?.offsetLeft||0,y:v?.offsetTop||0,width:v?.width||innerWidth,height:v?.height||innerHeight},
+        scrollers:(()=>{
+          const result=[];
+          for(let parent=el.parentElement;parent;parent=parent.parentElement) {
+            if(/auto|scroll/.test(getComputedStyle(parent).overflowY)) {
+              const rect=parent.getBoundingClientRect();
+              result.push({element:parent.id||parent.className,scrollTop:parent.scrollTop,clientHeight:parent.clientHeight,
+                rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height}});
+            }
+          }
+          return result;
+        })(),
         decoded:imgs.length>0&&imgs.every(i=>i.complete&&i.naturalWidth>0),
         skip:!!document.querySelector('#labSkip:not([hidden])'),
         running:el.getAnimations({subtree:true}).filter(a=>a.playState==='running').length,
@@ -81,8 +96,8 @@ async function sample(page, name, selector, clock) {
     const contains=(outer,inner)=>inner.x>=outer.x&&inner.y>=outer.y&&
       inner.x+inner.width<=outer.x+outer.width&&inner.y+inner.height<=outer.y+outer.height;
     const contained=contains(region,state.rect), visible=contains(state.viewport,region);
-    console.log(`REGION ${name}-${target}: sample=${JSON.stringify(region)}, animated=${JSON.stringify(state.rect)}, viewport=${JSON.stringify(state.viewport)}, contains=${contained}, visible=${visible}`);
-    assert.ok(contained&&visible,'sample must contain the animated box and be fully visible');
+    console.log(`REGION ${name}-${target}: sample=${JSON.stringify(region)}, animated=${JSON.stringify(state.rect)}, viewport=${JSON.stringify(state.viewport)}, scrollers=${JSON.stringify(state.scrollers)}, contains=${contained}, visible=${visible}`);
+    assert.ok(contained&&visible,`sample must contain the animated box and be fully visible: animated=${JSON.stringify(state.rect)}, sample=${JSON.stringify(region)}, scrollers=${JSON.stringify(state.scrollers)}`);
     const buffer=await page.screenshot({type:'png',captureBeyondViewport:false});
     const capturedMs=await page.evaluate(clock=>performance.now()-window[clock],clock);
     const img=await loadImage(buffer), v=state.viewport;
@@ -130,12 +145,13 @@ try {
   const {boot, seed, sleep, serveTree, dismissOverlays} = await import('./godmode.js');
   server = process.argv[2] || process.env.URL ? null : await serveTree(root);
   const base = process.argv[2] || process.env.URL || server.url;
-  for (const mode of ['normal','reduce','skip']) for (const certain of [true,false]) {
+  console.log('AUDIT viewport=393x852; whole animated box required; no partial-region fallback');
+  cases: for (const mode of ['normal','reduce','skip']) for (const certain of [true,false]) {
     const reduce = mode === 'reduce', skipEarly = mode === 'skip';
     const name = `${certain ? 'CERTAIN' : 'UNCERTAIN'}${reduce ? '-REDUCED' : skipEarly ? '-SKIPPED' : ''}`;
     let browser;
     try {
-      const session = await boot(base,{deviceScaleFactor:1});
+      const session = await boot(base,{deviceScaleFactor:1,defaultViewport:{width:393,height:852,isMobile:true,hasTouch:true}});
       browser = session.browser;
       const page = session.page;
       await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:reduce?'reduce':'no-preference'}]);
@@ -182,6 +198,7 @@ try {
       check(`REACH ${name}`,true,'all fixture controls invoked through real handlers');
       await page.waitForFunction(()=>!!document.querySelector('.lab-reveal'),{polling:'raf'});
       const {frames,changed,detail}=await sample(page,name,'[data-lab-result-art]','labSeen');
+      check(`FIXTURE ${name}`,true,'all three samples contain the whole animated box and are fully visible');
       const control=await page.evaluate(async()=>{
         const D=await import('./js/db.js');
         const receipts=await D.kvGet('labExperiments');
@@ -196,10 +213,16 @@ try {
       if(skipEarly) {
         check(`SKIP CONTROL ${name}`,samplerOK&&await page.evaluate(()=>window.labSkipClicked)&&frames.every(f=>!f.running&&!f.skip),'real Skip reveal button ends the reveal');
       } else if(!reduce) {
-        check(name,samplerOK&&changed>0&&frames.slice(0,2).every(f=>f.running>0),detail);
+        const animated=changed>0&&frames.slice(0,2).every(f=>f.running>0);
+        check(name,samplerOK&&animated,detail);
+        if(certain&&samplerOK&&!animated) console.log('CERTAIN RED: sampler and fixture passed; the tested build has an incomplete animation fix');
         check(`SKIP ${name}`,frames[0].skip&&frames[0].running>0&&frames.every(f=>f.skip===(f.running>0))&&!frames[2].skip,'the 240ms arrival is something to skip even with one outcome; visible only while it runs');
       } else {
         check(`REDUCED ${name}`,samplerOK&&frames.every(f=>!f.running&&!f.skip)&&frames[2].transform==='none'&&changed===0,detail);
+      }
+      if(!certain&&!reduce&&!skipEarly&&samplerOK&&!(changed>0&&frames.slice(0,2).every(f=>f.running>0))) {
+        console.log('STOP UNCERTAIN: valid sampler and fixture but animation failed; investigate before continuing');
+        break cases;
       }
       check(`END ${name}`,frames[2].running===0&&['none','matrix(1, 0, 0, 1, 0, 0)'].includes(frames[2].transform),'final size, no reveal animation running');
     } catch (error) {

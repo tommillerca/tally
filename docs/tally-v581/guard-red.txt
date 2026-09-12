@@ -1,50 +1,27 @@
-Round 3 advisory evidence, not a passing browser verdict
-Plan SHA256: 3214d38f97f47ec1c6d634af005dbeb8fabcabc2421dfcbb528c3ee56d187ade
-Checkout starting HEAD: 5edc77994bfc68ce3b16e3fdd24b4f6670382f2f
-Locally available main and origin/main: 26621a9f29dd60e8fdbccb4dfa8b59422029cd1b
-Remote freshness was not verified.
+Round 4 advisory evidence: browser verdict blocked
+Plan SHA256: bc7d8e1036b35a58669d4f3e3c82fbb6d0a4c129d0ba6d33a25e8250c5edc00d
+Checkout starting HEAD: 34962372ae1c518f503f6339aeef3ac974fa4798
+Requested baseline: 72026f4b (commit available locally).
 
-Measured retained round 2 artifacts from /tmp/lab-reveal-audit:
-These are prior-run artifacts, not captures made by this round.
-CERTAIN-30.png and CERTAIN-140.png: each 556x164, 679 bytes, 1 RGBA color.
-UNCERTAIN-30.png and UNCERTAIN-140.png: each 556x164, 679 bytes, 1 RGBA color.
-All four SHA256: 74105a1532643c5f3030efcbd4b6fd441c16c8abfc0a443d8b325898a2fc1c6e
-Both comparisons: changedPixels=0. The captures contain flat background.
-The retained CERTAIN JSON reports transforms .96452 and .99352 at the first
-and second sample. A changing CSS box and decoded source art did not prove
-visible painted art. Identical PNGs do not establish whether screenshots were
-cached or the wrong area was captured. That distinction remains unmeasured.
+Audit viewport: explicitly 393x852, deviceScaleFactor 1.
+The shared harness previously defaulted to 430x932. No larger viewport or
+partial sample fallback is used. Whether the full box fits remains unproven.
+Before computing the fixed sample region, sample() calls the animated element's
+scrollIntoView({block:'center',behavior:'instant'}) inside page.evaluate and
+waits for requestAnimationFrame. The existing full-box containment, viewport
+visibility, decoded pixels, positive control, motion and timing thresholds stay
+intact. REGION diagnostics now include ancestor scroller scrollTop,
+clientHeight and rect. A failed containment assertion includes the animated
+rect, sample rect and scroller values in its FIXTURE failure output.
+A successful FIXTURE row explicitly records all three valid captures.
+UNCERTAIN failure with a working sampler and fixture stops further cases.
 
-Proposed capture correction:
-Capture the visible viewport without a screenshot clip, then crop its decoded
-pixels using the visual viewport coordinate mapping. Reject a sampling region
-that does not contain the animated box or that extends outside the viewport.
-Keep a fixed region including the final unscaled art box across all samples.
-Save full viewport and cropped frames, byte lengths, hashes, geometry, timing,
-computed transform, animation properties and decoded-image state.
-No production animation or existing pixel/timing threshold changed.
-
-Positive control:
-Every fixture page first injects a white 64px square translating across a black
-stage. It uses the same sample(), screenshot, decode, crop and comparison path
-as the reveal, including in reduced-motion contexts. SAMPLER requires >1000
-changed pixels and a running animation in both early samples. A frozen or blank
-capture fails it. Pixel verdicts cannot pass when SAMPLER fails. Browser proof
-of the positive control and a deliberately frozen negative control is blocked.
-
-What animates:
-app.css defines lab-result-arrive on [data-lab-result-art]: transform scale(.96)
-to scale(1), .24s ease-out. Main applies it to .lab-surprise.lab-play; this build
-also applies it to .lab-reveal.lab-play. Matching animation shorthands cascade;
-they do not themselves create two simultaneous transform animations. The audit
-records actual animation targets and keyframe properties for collision review.
-
-SKIP position:
-Yes, a certain experiment has something to skip: its decoded 240ms pet arrival
-animation, even though there is only one outcome. SKIP now requires the button
-and running-animation states to agree at every sample, and a running animation
-at the first sample. Reduced motion must have neither. The real Skip button
-must stop the animation. Production behavior is unchanged.
+SKIP position and assertion retained:
+A certain experiment still has its decoded 240ms arrival animation to skip.
+One possible outcome removes uncertainty, not that visual arrival. SKIP asserts
+button visibility matches running animation at every sample, starts visible
+while animation runs, and ends hidden. Reduced motion has neither. SKIPPED
+cases invoke the real button and assert it ends the reveal.
 
 Fresh browser command: node tests/lab-reveal-audit.mjs
 Exit: 1
@@ -54,25 +31,30 @@ rows=1, 1 failures
 RETAINED FAIL FIXTURE SETUP: listen EPERM: operation not permitted 127.0.0.1
 AUDIT END lab-reveal-audit.mjs: FAILED; NORMAL EXIT (row coverage undeclared); rows=1/undeclared; failed=1; unproven=0; exit=1
 
-Required verdict status:
-This build: SAMPLER, CERTAIN and UNCERTAIN unproven. No fresh frame comparison.
-Main: SAMPLER, CERTAIN and UNCERTAIN unproven. No fresh frame comparison.
-Cannot yet choose between a sampler-only defect and an incomplete production
-fix. Do not treat the retained uniform frames as a valid main red proof.
-An independent reviewer must run this revised audit against this checkout and
-an isolated copy of main, retaining both frame comparisons. Pass an explicit
-local URL as the audit's first argument when testing the isolated main copy.
-Never modify the original checkout. No threshold adjustment is proposed.
+Required frame comparisons:
+This build CERTAIN 30ms vs 140ms: unavailable; browser setup blocked.
+Baseline 72026f4b CERTAIN 30ms vs 140ms: unavailable; not run because the same
+required local server bind is denied. No original checkout was edited.
+UNCERTAIN and REDUCED on both builds: unproven.
+SAMPLER and FIXTURE on this build: unproven, no frames captured.
+There is no evidence here to decide whether CERTAIN remains red with valid
+sampling. No production fix or threshold adjustment was made to force a verdict.
 
-Denied action: local HTTP server bind, blocked by sandbox EPERM. No escalation
-available. No commit, push, publish, original-checkout edit or restricted-file
-edit performed. Deviation: the measured sampler diagnosis and main/build pixel
-verdict cannot be completed here. Proposed capture correction is unvalidated.
+Denied actions: local HTTP server bind (listen EPERM on 127.0.0.1), process
+listing via ps (operation not permitted). Escalation is unavailable.
+No commit, push or publish performed. No prohibited source files changed.
+Deviation: the requested main/build browser verdict and both actual frame
+comparisons cannot be delivered in this sandbox. Proposed follow-up is to run
+this audit in a browser-capable environment against this checkout and an
+isolated copy of 72026f4b, retaining its PNGs and JSON. No design deviation or
+sample-size reduction is proposed. Scroll correction remains browser-unvalidated.
 
 Agreed proof: node tests/unit.test.js
 Exit: 0
-391 passed, 0 failed
-Full local output: /tmp/b1c-unit.txt
-Syntax check: node --check tests/lab-reveal-audit.mjs, exit 0.
-Whitespace check: git diff --check, exit 0.
+PLACEMENT {"bubblePosition":"right","markPosition":"right","positions":[{"id":"caption","x":609,"y":318,"width":406,"height":209,"overlapPixels":0,"overlapPercent":0},{"id":"brand","x":74,"y":288,"width":372,"height":127,"overlapPixels":0,"overlapPercent":0},{"id":"friend-code","x":83,"y":1485,"width":236.6165771484375,"height":43}],"actualOverlap":[{"id":"caption","ink":62084,"overlapPixels":0,"overlapPercent":0},{"id":"brand","ink":16122,"overlapPixels":0,"overlapPercent":0}]}
+
+392 passed, 0 failed
+Full local proof output: /tmp/b1d-unit.txt
+Syntax: node --check tests/lab-reveal-audit.mjs, exit 0.
+Whitespace: git diff --check, exit 0.
 Changed files: tests/lab-reveal-audit.mjs, docs/tally-v581/guard-red.txt.
