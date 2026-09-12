@@ -263,20 +263,25 @@ check('SOP: a second melt of the same piece pays NOTHING',
    could be melted idk what the tiers are for rarity." disenchantGear has no rarity
    or stats gate today, so this pins that a future tier cannot ship unmeltable, and
    it enumerates the rarities from the catalogue rather than hardcoding today's. */
-const rar = await page.evaluate(async () => {
+const rar = await page.evaluate(async spent => {
   const loot = await import('./js/loot.js');
   const { GEAR_ITEMS } = await import('./js/gear.js');
   const tiers = [...new Set(GEAR_ITEMS.map(g => g.rarity))];
   const out = {};
+  // A melted id keeps its currency receipt for good, so a piece this run already
+  // melted (the SOP row's worn piece, or the fixture's) is refused as a repeat.
+  // Pick, per rarity, a piece nobody has melted or owns yet.
+  const owned = new Set(await loot.ownedGearIds());
   for (const t of tiers) {
-    const g = GEAR_ITEMS.find(x => x.rarity === t);
+    const g = GEAR_ITEMS.find(x => x.rarity === t && !owned.has(x.id) && !spent.includes(x.id));
+    if (!g) { out[t] = { ok: false, paid: 0, why: 'no unspent piece of this rarity' }; continue; }
     await loot.grantGear(g.id, 'test');
     const before = await loot.boneDust();
     const res = await loot.disenchantGear(g.id);
     out[t] = { ok: !!res.ok, paid: (await loot.boneDust()) - before };
   }
   return { tiers, out };
-});
+}, [melt.id].filter(Boolean));
 console.log('rarities:', JSON.stringify(rar));
 check('every rarity in the catalogue melts and pays', rar.tiers.length > 0
   && rar.tiers.every(t => rar.out[t].ok && rar.out[t].paid > 0), JSON.stringify(rar.out));
