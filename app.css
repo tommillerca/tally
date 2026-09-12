@@ -12750,3 +12750,12 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
 #raceCard .race-champ > span { min-width: 0; }
 #raceCard .gbn-txt small,
 #raceCard .race-gap { overflow-wrap: anywhere; }
+
+/* F6 round 3: incoming request controls get their own line on phones so
+   large text cannot consume the name column. Outgoing rows have no group. */
+@media (max-width: 480px) {
+  #friendsList .fl-row:has(> .fl-actions) { flex-wrap: wrap; }
+  #friendsList .fl-row > .fl-actions {
+    flex-basis: 100%; flex-wrap: wrap; justify-content: flex-end;
+  }
+}

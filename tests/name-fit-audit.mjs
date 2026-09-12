@@ -206,7 +206,7 @@ async function measure(page, selector, name) {
       return { element: describe(e), rect: { x: r.x, y: r.y, width: r.width, height: r.height },
         scrollWidth, clientWidth, scrollHeight, clientHeight,
         fontSize: parseFloat(s.fontSize), minimum: parseFloat(getComputedStyle(document.documentElement).fontSize) * .5625,
-        intact: e.textContent.includes(name), rendered: clientWidth > 0 && scrollWidth > 0 && r.width > 0 && r.height > 0 && !hidden && Number(s.opacity) !== 0,
+        intact: e.textContent.includes(name), rendered: r.width > 0 && r.height > 0 && !hidden && Number(s.opacity) !== 0,
         whiteSpace: s.whiteSpace, allowsWrapping: !['nowrap', 'pre'].includes(s.whiteSpace)
           && s.textWrapMode !== 'nowrap',
         clipped: clipReasons.length > 0, clipReasons };
