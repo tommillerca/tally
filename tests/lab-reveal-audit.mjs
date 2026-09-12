@@ -1,20 +1,43 @@
-// Real controls, cold browser contexts, decoded screenshot pixels.
+// In-page clicks invoke real controls and real handlers, including below the fold.
+// This is a real-control audit, not a seam-only audit.
+// Cold browser contexts and decoded screenshot pixels prove the reveal.
 // Skip means a decoded reveal is currently running (240ms for either recipe).
 import assert from 'node:assert/strict';
 import {mkdirSync, writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {createCanvas, loadImage} from '@napi-rs/canvas';
-import {boot, seed, sleep, serveTree, dismissOverlays} from './godmode.js';
+let createCanvas, loadImage;
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = process.env.LAB_REVEAL_OUTPUT || '/tmp/lab-reveal-audit';
-mkdirSync(output, {recursive:true});
+
 process.env.HEADLESS_MODE = 'shell';
-const server = process.argv[2] || process.env.URL ? null : await serveTree(root);
-const base = process.argv[2] || process.env.URL || server.url;
-let failures = 0;
+let server;
+let failures = 0, rows = 0;
 function check(name, condition, detail) {
+  rows++;
   console.log(`${condition ? 'PASS' : 'FAIL'} ${name}: ${detail}`);
   if (!condition) failures++;
+}
+async function reach(page, selector, value) {
+  try {
+    await page.waitForFunction(selector => {
+      const control = document.querySelector(selector);
+      return control && !control.disabled && !control.hidden && control.getClientRects().length;
+    }, {timeout:5000}, selector);
+    await page.evaluate(({selector,value}) => {
+      const control = document.querySelector(selector);
+      if (!control || control.disabled || control.hidden || !control.getClientRects().length)
+        throw new Error(`Control unavailable: ${selector}`);
+      control.scrollIntoView({block:'center',behavior:'instant'});
+      if (value === undefined) control.click();
+      else {
+        control.value = value;
+        control.dispatchEvent(new Event('input', {bubbles:true}));
+        control.dispatchEvent(new Event('change', {bubbles:true}));
+      }
+    }, {selector,value});
+  } catch (error) {
+    throw new Error(`Cannot reach ${selector}: ${error.message}`);
+  }
 }
 async function pixels(buffer) {
   const img = await loadImage(buffer), canvas = createCanvas(img.width,img.height);
@@ -22,11 +45,19 @@ async function pixels(buffer) {
   return ctx.getImageData(0,0,img.width,img.height).data;
 }
 try {
+  mkdirSync(output, {recursive:true});
+  ({createCanvas, loadImage} = await import('@napi-rs/canvas'));
+  const {boot, seed, sleep, serveTree, dismissOverlays} = await import('./godmode.js');
+  server = process.argv[2] || process.env.URL ? null : await serveTree(root);
+  const base = process.argv[2] || process.env.URL || server.url;
   for (const mode of ['normal','reduce','skip']) for (const certain of [true,false]) {
     const reduce = mode === 'reduce', skipEarly = mode === 'skip';
     const name = `${certain ? 'CERTAIN' : 'UNCERTAIN'}${reduce ? '-REDUCED' : skipEarly ? '-SKIPPED' : ''}`;
-    const {browser,page} = await boot(base,{deviceScaleFactor:1});
+    let browser;
     try {
+      const session = await boot(base,{deviceScaleFactor:1});
+      browser = session.browser;
+      const page = session.page;
       await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:reduce?'reduce':'no-preference'}]);
       await page.goto(`${base}/?demo=1&godmode=1`,{waitUntil:'networkidle0'});
       await seed(page,{level:12});
@@ -42,21 +73,16 @@ try {
       await page.addStyleTag({content:'#sheets .sheet-body { animation: none !important; opacity: 1 !important; }'});
       await dismissOverlays(page);
       await page.evaluate(()=>{location.hash='#/today';});
-      await page.waitForSelector('#charBtn');
-      await page.click('#charBtn');
-      await page.waitForSelector('[data-lab-open]');
-      await page.click('[data-lab-open]');
-      await page.waitForSelector('[data-lab-slot="0"]');
+      await reach(page,'#charBtn');
+      await reach(page,'[data-lab-open]');
       for (const slot of [0,1]) {
-        await page.click(`[data-lab-slot="${slot}"]`);
-        await page.waitForSelector(`[data-lab-pick="audit-${slot}"]`);
-        await page.click(`[data-lab-pick="audit-${slot}"]`);
+        await reach(page,`[data-lab-slot="${slot}"]`);
+        await reach(page,`[data-lab-pick="audit-${slot}"]`);
         await sleep(350);
       }
-      await page.waitForSelector('[data-lab-review]:not([disabled])');
-      await page.click('[data-lab-review]');
+      await reach(page,'[data-lab-review]');
       await page.waitForSelector('#pdGo');
-      if (await page.$('#pdIn')) await page.type('#pdIn','ANIMATE');
+      if (await page.$('#pdIn')) await reach(page,'#pdIn','ANIMATE');
       await page.evaluate(skipEarly=>{
         window.labSeen = null;
         window.labSkipClicked = false;
@@ -71,7 +97,8 @@ try {
         });
         observer.observe(document.querySelector('#sheets'),{childList:true,subtree:true});
       },skipEarly);
-      await page.click('#pdGo');
+      await reach(page,'#pdGo');
+      check(`REACH ${name}`,true,'all fixture controls invoked through real handlers');
       await page.waitForFunction(()=>!!document.querySelector('.lab-reveal'),{polling:'raf'});
       const art = await page.$('[data-lab-result-art]');
       const box = await art.boundingBox(); assert.ok(box);
@@ -95,10 +122,11 @@ try {
         const r=Object.values(receipts||{}).at(-1);
         return {r,present:(await D.kvGet('petInst')).some(p=>p.iid===r?.result?.iid),outcomes:Number(document.querySelector('.lab-reveal').dataset.outcomes)};
       });
-      check(`CONTROL ${name}`,!!control.r?.result?.iid&&control.present&&control.outcomes===(certain?1:2),`distribution=${control.r?.distribution?.length}, pet=${control.r?.result?.iid}, present=${control.present}`);
+      check(`CONTROL ${name}`,!!control.r?.result?.iid&&control.present&&control.r.distribution?.length===(certain?1:2)&&control.outcomes===(certain?1:2),`distribution=${control.r?.distribution?.length}, pet=${control.r?.result?.iid}, present=${control.present}`);
       check(`DECODE ${name}`,frames.every(f=>f.decoded),'every sampled frame has decoded art');
       let changed=0; for(let i=0;i<frames[0].pixels.length;i+=4) if(frames[0].pixels.slice(i,i+4).some((v,j)=>v!==frames[1].pixels[i+j])) changed++;
-      const detail=`changedPixels=${changed}, samplesMs=${frames.map(f=>f.ms.toFixed(1)).join(',')}`;
+      const detail=`changedPixels=${changed}, samplesMs=${frames.map(f=>f.ms.toFixed(1)).join(',')}, capturedMs=${frames.map(f=>f.capturedMs.toFixed(1)).join(',')}`;
+      writeFileSync(`${output}/${name}.json`,JSON.stringify({control,changedPixels:changed,frames:frames.map(({pixels,...state})=>state)},null,2)+'\n');
       check(`TIMING ${name}`,frames[0].ms<100&&frames[1].capturedMs<240&&frames[2].ms>=400,'two samples during the 240ms reveal and a +400ms final capture');
       if(skipEarly) {
         check(`SKIP CONTROL ${name}`,await page.evaluate(()=>window.labSkipClicked)&&frames.every(f=>!f.running&&!f.skip),'real Skip reveal button ends the reveal');
@@ -109,8 +137,12 @@ try {
         check(`REDUCED ${name}`,frames.every(f=>!f.running&&!f.skip)&&frames[2].transform==='none'&&changed===0,detail);
       }
       check(`END ${name}`,frames[2].running===0&&['none','matrix(1, 0, 0, 1, 0, 0)'].includes(frames[2].transform),'final size, no reveal animation running');
-    } finally { await browser.close(); }
+    } catch (error) {
+      check(`FIXTURE ${name}`,false,error.message);
+    } finally { await browser?.close(); }
   }
+} catch (error) {
+  check('FIXTURE SETUP',false,error.message);
 } finally { server?.close(); }
-console.log(`${failures} failures`);
+console.log(`rows=${rows}, ${failures} failures`);
 process.exitCode=failures?1:0;
