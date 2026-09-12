@@ -235,7 +235,7 @@ if (process.argv.includes('--known-issues')) {
   await test('CONTROL free gift and already-sent response preserve wallet', async () => {
     for (const status of [200, 409]) {
       const h = await giftSheet();
-      responder = () => reply(status, { reward: { coins: 25 } });
+      responder = () => reply(status, { ok: status === 200, reward: { coins: 25 } }); // v590: the client requires ok:true on a 200, which the Worker always sends
       await h.nodes['#giftFree'].events.click();
       assert.equal(await coins(), 0);
       assert.equal((await kvGet('giftFreeSent'))[f.playerId], '2026-09-08');

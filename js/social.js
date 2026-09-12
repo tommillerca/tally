@@ -695,9 +695,11 @@ export async function resolveGiftIntent(intent) {
   const r = await sendGift(to, 'spend', amount, ck);
   // Auth, timeout, server and malformed replies remain retryable. Only these
   // application refusals establish that this operation did not deliver.
-  const refused = !r.ok && ((r.status === 403 && r.error === 'not friends')
-    || (r.status === 400 && r.error === 'bad recipient')
-    || (r.status === 429 && r.code === 'limit'));
+  // Any 4xx is the Worker saying no to THIS request, which is a definitive
+  // refusal (the audit's confirmed refusal is a bare 403 with no body): refund.
+  // A network failure, a timeout, a 5xx or a malformed body says nothing about
+  // delivery, so those stay pending and the same key is re-sent later.
+  const refused = !r.ok && Number.isInteger(r.status) && r.status >= 400 && r.status < 500;
   if (!r.ok && !refused) return { ...r, pending: true };
   await db.claimAndPay('kv', { k: `gift-terminal:${ck}`, v: r }, { kv: {
     ...(refused ? { coins: cur => (cur || 0) + amount, coinsRev: cur => (Number(cur) || 0) + Math.max(1, Math.abs(amount)) } : {}),
