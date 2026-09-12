@@ -12543,3 +12543,9 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
 .cheer-row .btn.cheer-back {
   max-width: 100%; white-space: normal; overflow-wrap: anywhere;
 }
+
+/* F1: match the Backpack ingredient tiles' centred content convention.
+   Keep the existing full-width two-column grid and quantity at the corner. */
+#chContent .bp-card { text-align: center; }
+#chContent .bp-card-top { position: relative; justify-content: center; }
+#chContent .bp-card-top .bp-qty { position: absolute; right: 0; top: 0; }
