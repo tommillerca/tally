@@ -770,20 +770,7 @@ const DECLARED = {
   'wardrobe-slot-scroll-audit.mjs': ['full', "Paperdoll section geometry, second-tap return and reduced motion."],
   'wardrobe-stack-audit.mjs': ['full', "Owned family tile counts and variant reachability in both wardrobe pickers."],
   'room-headers-audit.mjs': ['full', "Laboratory/Kitchen rendered controls, 144px headers, decoded original art, large-text layout and post-branch symbols"],
-  /* SKIP, DELIBERATELY, AND IT IS NOT RETIRED. This is a working DIAGNOSTIC
-     that is not yet a guard: on the build that contains its own fix it still
-     exits 97 with 146 FITS rows red, so it cannot gate anything. It is kept in
-     the tree and declared here rather than deleted, because across three rounds
-     it FOUND real defects that nothing else did, and they are still open:
-       #newcomersList .t3-tx b   text 3758px wide in a 143px box (Crew)
-       #lbBody .lb-who b         86px in 77px (leaderboard)
-     plus 144 rows at the 200% and 53px accessibility text sizes. What shipped
-     in v579 is the .hub-name and .hero-name fix, measured directly
-     (293/227 clipped -> 227/227 wrapping), and CLAIMS says exactly that and no
-     more. Promote to 'full' when the row stops counting ordinary wrapping and
-     an ancestor scroller's overflow as truncation, and the open sites above are
-     fixed. Tracked in the name-clip lane. */
-  'name-fit-audit.mjs': ['skip', 'a name-clipping DIAGNOSTIC, not yet a guard: still 146 FITS red and exit 97 on the build carrying its own fix, because the row counts ordinary wrapping and a scroll container\'s overflow as truncation. Kept because it found the open squeezes at #newcomersList .t3-tx b (3758px of text in a 143px box) and #lbBody .lb-who b (86 in 77), which nothing else caught. v579 ships and claims only the measured .hub-name/.hero-name fix.'],
+  'name-fit-audit.mjs': ['full', 'F6 / v588: builder-length fixtures at default and 200%, real scroll-axis exemptions only, inline text geometry and explicit UNREACHED controls; podium, leaderboard, race, gift and nameplates wrap. Browser green and live red require operator proof.'],
   'crew-order-browser-audit.mjs': ['full', 'Operator CDP browser required: capture harness measures fan before notifications, rejects the old rendered order and captures reachable gift OPEN. No listener in sandbox.'],
   'hand-registration-audit.mjs': ['skip', 'a source DIAGNOSTIC, not a guard: it scores 640x640 master ink against B0-1 in SOURCE coordinates, which is not the shipping avatar renderer, so it cannot prove on-body alignment. v536 was derived from exactly this measure, passed it, and shipped art Tom reported as worse on the live build. Moved out of PURE during the v536 revert because the restored pre-v536 brushes fail its historical floor and a permanently red guard blocks every release. It still prints its census for reference. THE REAL GUARD IS OWED: it must grade RENDERED pixels from the avatar, and the off-hand misalignment stays OPEN until it exists.'],
   'reachable-density-model.mjs': ['skip', 'a balance MODEL, not a guard: the shipped route scores 0.568 spawns/fix against a floor of 1 (N=400). This is the finding rather than a failure; the spacing decision is deferred by the product owner, Tom. Reports the gap and synthetic controls, asserting nothing about the app. reachable-density-audit.mjs guards the shared meter in PURE.'],

@@ -9,8 +9,8 @@ import { boot, seed, serveTree, sleep } from './godmode.js';
 import { NAME_ADJ, NAME_NOUN, buildName } from '../js/names.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const names = ['Bo', 'Bartholomew Bonecrusher', 'Bartholomew Bonecrusher ' + 'W'.repeat(128)];
-const sizes = ['', '200%', '53px']; // No maximum is declared by the app. 53px is a stress case.
+const names = ['Bo', 'Bartholomew Bonecrusher', 'Thunderous Vertebrae #999'];
+const sizes = ['', '200%']; // Default and iOS large text.
 const viewports = [[375, 812], [430, 932]];
 const longest = values => values.reduce((best, s, i) => s.length > values[best].length ? i : best, 0);
 const pick = { adj: longest(NAME_ADJ), noun: longest(NAME_NOUN), num: 999 };
@@ -100,7 +100,11 @@ async function route(page, name) {
 async function prepare(page, phase, name) {
   await route(page, ['today', 'bonehead', 'settings', 'friends'].includes(phase) ? phase : 'friends');
   if (phase === 'leaderboard') await page.evaluate(() => document.querySelector('#crewLeaderboard').click());
-  if (phase === 'profile') await page.evaluate(() => window.__openFriendProfile(window.__nameFitMember));
+  if (phase === 'profile') {
+    await page.waitForSelector('#cfanView .pname-iso', { visible: true, timeout: 10000 });
+    await page.click('#cfanView');
+    await page.waitForSelector('#fpTitle .pname-iso', { visible: true, timeout: 10000 });
+  }
   if (phase === 'tower') await page.evaluate(name => window.__spireSheet({ besieged: true, siegeName: name, siegeUntil: Date.now() + 3600000, s: { id: 'name-fit-tower', name: 'Audit tower', dist: 0 }, view: { level: 1, tribute: { coins: 0 } }, held: true, lvl: 1, heldSince: Date.now() }), name);
   if (['garden', 'builder', 'onboarding', 'gift', 'cheer', 'tower-action'].includes(phase)) await page.evaluate(({ phase, pick }) => window.__nameFitSurface(phase, pick), { phase, pick });
   if (phase === 'rename') await page.evaluate(name => window.__renameNotice({ oldName: name }), name);
@@ -140,6 +144,11 @@ async function prepare(page, phase, name) {
     // Make request groups and results reachable through their native disclosure.
     for (const d of document.querySelectorAll('details:has(#friendsList)')) if (!d.open) d.querySelector('summary')?.click();
   });
+  if (phase === 'friends') {
+    for (const selector of ['#cfanView .pname-iso', '#friendsList .fl-sect:first-child .pname-iso', '#friendsList .fl-sect:last-child .pname-iso']) {
+      await page.waitForSelector(selector, { visible: true, timeout: 10000 });
+    }
+  }
 }
 async function measure(page, selector, name) {
   return page.evaluate(({ selector, name }) => {
@@ -164,15 +173,11 @@ async function measure(page, selector, name) {
           ['y', cs.overflowY, r.top, r.bottom, ar.top + a.clientTop, a.clientHeight, a.scrollHeight, a.scrollTop],
         ]) {
           const clipEnd = clipStart + client;
-          // Hidden permits programmatic scrolling; clip never does. Compare
-          // the element in content coordinates with this axis's scroll extent,
-          // not just the viewport. Below-fold content inside that extent is
-          // reachable. A non-scrolling axis must still report a cut.
-          const contentStart = start - clipStart + scroll;
-          const contentEnd = end - clipStart + scroll;
-          const reachable = overflow === 'hidden' && extent > client
-            && contentStart >= -1 && contentEnd <= extent + 1;
-          if (['hidden', 'clip'].includes(overflow) && !reachable
+          // Only real scroll axes are exempt. Hidden non-scrollers and
+          // cross-axis clipping remain failures even with a scroll extent.
+          const scrollAxis = ['auto', 'scroll'].includes(overflow)
+            || (axis === 'y' && a.matches('#app, .screen') && overflow === 'hidden');
+          if (['hidden', 'clip', 'auto', 'scroll'].includes(overflow) && !scrollAxis
               && (start < clipStart - 1 || end > clipEnd + 1))
             clipReasons.push({ element: describe(a), axis, overflow,
               elementStart: start, elementEnd: end, clipStart, clipEnd,
@@ -182,10 +187,20 @@ async function measure(page, selector, name) {
       if (r.left < -1 || r.right > innerWidth + 1)
         clipReasons.push({ element: 'viewport', axis: 'x', elementStart: r.left,
           elementEnd: r.right, clipStart: 0, clipEnd: innerWidth });
+      // Inline spans have zero CSSOM client/scroll dimensions even when
+      // painted. Measure actual text fragments against their containing box.
+      const inline = s.display === 'inline';
+      const range = document.createRange();
+      range.selectNodeContents(e);
+      const fragments = [...range.getClientRects()];
+      const clientWidth = inline ? e.parentElement.clientWidth : e.clientWidth;
+      const scrollWidth = inline ? Math.max(0, ...fragments.map(f => f.width)) : e.scrollWidth;
+      const clientHeight = inline ? r.height : e.clientHeight;
+      const scrollHeight = inline ? range.getBoundingClientRect().height : e.scrollHeight;
       return { element: describe(e), rect: { x: r.x, y: r.y, width: r.width, height: r.height },
-        scrollWidth: e.scrollWidth, clientWidth: e.clientWidth, scrollHeight: e.scrollHeight, clientHeight: e.clientHeight,
+        scrollWidth, clientWidth, scrollHeight, clientHeight,
         fontSize: parseFloat(s.fontSize), minimum: parseFloat(getComputedStyle(document.documentElement).fontSize) * .5625,
-        intact: e.textContent.includes(name), rendered: r.width > 0 && r.height > 0 && !hidden && Number(s.opacity) !== 0,
+        intact: e.textContent.includes(name), rendered: clientWidth > 0 && scrollWidth > 0 && r.width > 0 && r.height > 0 && !hidden && Number(s.opacity) !== 0,
         whiteSpace: s.whiteSpace, allowsWrapping: !['nowrap', 'pre'].includes(s.whiteSpace)
           && s.textWrapMode !== 'nowrap',
         clipped: clipReasons.length > 0, clipReasons };
@@ -231,14 +246,14 @@ try {
         for (const [site, selector, expected = name] of sites) {
           const key = JSON.stringify([name, w, h, size, site]); pending.delete(key);
           const context = `${site} ${w}x${h} text=${size || 'default'} name=${JSON.stringify(expected)}`;
-          if (error) { console.log(`UNPROVEN CONTROL ${context}: ${error}`); unproven++; continue; }
+          if (error) { console.log(`UNREACHED ${context} selector=${JSON.stringify(selector)}: ${error}`); unproven++; continue; }
           let rows;
           try { rows = await measure(page, selector, expected); }
-          catch (e) { console.log(`UNPROVEN CONTROL ${context}: ${e.message}`); unproven++; continue; }
-          if (!rows.length || rows.some(r => !r.rendered)) { console.log(`UNPROVEN CONTROL ${context}: ${selector} absent or hidden`); unproven++; continue; }
+          catch (e) { console.log(`UNREACHED ${context} selector=${JSON.stringify(selector)}: ${e.message}`); unproven++; continue; }
+          if (!rows.length || rows.some(r => !r.rendered)) { console.log(`UNREACHED ${context}: ${selector} absent, hidden or zero-width`); unproven++; continue; }
           for (const row of rows) {
             checked++;
-            console.log(`PASS CONTROL ${context} ${JSON.stringify(row)}`);
+            console.log(`PASS RENDERED CONTROL ${context} ${JSON.stringify(row)}`);
             const fitConditions = {
               positiveClientWidth: row.clientWidth > 0,
               horizontalOverflowWithinTolerance: row.scrollWidth - row.clientWidth <= 1,

@@ -12708,3 +12708,23 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
   min-height: calc(2 * 1.2em); line-height: 1.2;
 }
 .fam-rail .pw-item.famr small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+
+/* F6 / v588: complete builder names, including Thunderous Vertebrae #999.
+   Rows grow with wrapped text. No line clamp cuts off large-text names. */
+.pod-name,
+#friendsList .fl-main b,
+#lbBody .lb-who b,
+#raceResultCard .race-h b,
+#raceResultCard .race-lane .nm b,
+.gift-sealed .tx b,
+.spp-plate b,
+.cfan-card.feat .cfan-plate b {
+  min-width: 0; max-width: 100%;
+  white-space: normal; overflow-wrap: anywhere;
+  overflow: visible; text-overflow: clip;
+  line-height: 1.15;
+}
+.pod-name { width: 100%; text-align: center; }
+#raceResultCard .race-h { flex-wrap: wrap; }
+#raceResultCard .race-h b { flex: 1 1 100%; }
