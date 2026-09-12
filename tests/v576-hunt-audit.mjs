@@ -7,14 +7,14 @@ const app = read('js/app.js'), social = read('js/social.js'), ui = read('tests/u
 let failures = 0, passed = 0;
 async function test(name, run) { try { await run(); passed++; console.log('PASS ' + name); } catch (e) { failures++; console.log('FAIL ' + name + ': ' + e.message.split('\n')[0]); } }
 await test('CONTROL server-confirmed claim retains full reward after local cap failure', async () => {
-  // v590: the slice now reads takeoverPaid, declared above its start (an unpaid takeover receipt already paid by paySpireTakeover). Zero here: this row is about the local cap failure, not the receipt.
-  const source = 'let takeoverPaid = 0;\n' + app.slice(app.indexOf('const already = !!(remote'), app.indexOf("else if (foeCfg.mode === 'mimic')"));
+  const source = app.slice(app.indexOf('const already = !!(remote'), app.indexOf("else if (foeCfg.mode === 'mimic')"));
   assert.ok(source.startsWith('const already = !!(remote'), 'SETUP production settlement branch found');
+  // v590: the branch reads takeoverPaid (an unpaid takeover receipt paid by paySpireTakeover), declared above the slice; zero here, this row is about the local cap failure.
   const branch = source.slice(0, source.lastIndexOf('\n      }'));
   for (const local of [{ok:false,reason:'cap'}, {ok:true,level:1}, null]) {
    for (const mirrorFails of [false, true]) {
     const context = { remote:{ok:true,level:2}, refused:false,pending:false,foeCfg:{spire:{id:'s',name:'Tower'}},claimSpire:async()=>{if(!local)throw Error('storage');return local;}, social:{fetchMySpires:async()=>mirrorFails?[{id:'s'}]:null},syncSieges:async()=>{if(mirrorFails)throw Error('storage');},setSpireLevel:async()=>{if(mirrorFails)throw Error('storage');},toast:()=>{},dispatchEvent:()=>{},CustomEvent:class {}, extraCards:[],SPIRE_CAP:3 };
-    const result = await vm.runInNewContext(`(async()=>{let coins=0;${branch};return {coins,cards:extraCards.length};})()`, context);
+    const result = await vm.runInNewContext(`(async()=>{let coins=0,takeoverPaid=0;${branch};return {coins,cards:extraCards.length};})()`, context);
     assert.equal(result.coins,80); assert.equal(result.cards,1);
    }
   }
@@ -22,7 +22,7 @@ await test('CONTROL server-confirmed claim retains full reward after local cap f
     let refunded=0, localCalls=0;
     const remote=mode==='already'?{ok:true,already:true}:{ok:false,reason:mode};
     const context={remote,refused:mode==='cap',pending:mode==='offline',foeCfg:{spire:{id:'s',name:'Tower'},charge:'charge'},claimSpire:async()=>{localCalls++;return {ok:false,reason:'cap'};},refundPitFight:async()=>{refunded++;},toast:()=>{},dispatchEvent:()=>{},CustomEvent:class {},SPIRE_CAP:3};
-    const coins=await vm.runInNewContext(`(async()=>{let coins=0;${branch};return coins;})()`,context);
+    const coins=await vm.runInNewContext(`(async()=>{let coins=0,takeoverPaid=0;${branch};return coins;})()`,context);
     assert.equal(coins,mode==='offline'?0:mode==='cap'?40:25);
     assert.equal(localCalls,mode==='offline'?1:0);
     assert.equal(refunded,mode==='offline'?1:0);
