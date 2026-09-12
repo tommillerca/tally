@@ -12549,3 +12549,11 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
 #chContent .bp-card { text-align: center; }
 #chContent .bp-card-top { position: relative; justify-content: center; }
 #chContent .bp-card-top .bp-qty { position: absolute; right: 0; top: 0; }
+
+/* F1: the native inside disclosure marker shifts the summary text centre.
+   Keep the marker outside the text line, with symmetric space inside the tile. */
+#chContent .bp-crate-details summary,
+#chContent .bp-item-details summary {
+  list-style-position: outside;
+  padding-inline: 1em;
+}

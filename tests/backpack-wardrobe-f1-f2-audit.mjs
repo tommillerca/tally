@@ -2,7 +2,8 @@
  * The full-width two-column grid stays unchanged. Art centres and text range
  * centres must be within 1 CSS pixel of their card centre. Other item cards
  * receive the same check. F2 measures the rail by ascending x and inventories
- * every Take off button in the Wardrobe, including hidden slot controls.
+ * Take off controls within the fit rail. The .ward-cell.none grid cell clears
+ * an individual slot, so it is excluded by its role outside the rail, not name.
  * No base: serve this checkout. An explicit URL grades that URL unmodified.
  */
 import { fileURLToPath } from 'node:url';
@@ -65,7 +66,7 @@ try {
       const describe = el => { const r = el.getBoundingClientRect(); return { text: el.textContent.trim(), x: r.x, y: r.y, width: r.width, visible: visible(el), class: el.className, slot: el.dataset.equip }; };
       return {
         rail: [...document.querySelectorAll('.ward-toolbar > button')].filter(visible).map(describe).sort((a, b) => a.x - b.x),
-        takeOff: [...document.querySelectorAll('#chContent button, #chContent [role="button"]')].filter(el => el.textContent.trim() === 'Take off').map(describe)
+        takeOff: [...document.querySelectorAll('.ward-toolbar button, .ward-toolbar [role="button"]')].filter(el => el.textContent.trim() === 'Take off').map(describe)
       };
     });
     row(`CONTROL Wardrobe ${width}x${height}`, ward.rail.length === 4, { rail: ward.rail.length });
