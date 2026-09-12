@@ -700,7 +700,7 @@ export async function resolveGiftIntent(intent) {
     || (r.status === 429 && r.code === 'limit'));
   if (!r.ok && !refused) return { ...r, pending: true };
   await db.claimAndPay('kv', { k: `gift-terminal:${ck}`, v: r }, { kv: {
-    ...(refused ? { coins: cur => (cur || 0) + amount } : {}),
+    ...(refused ? { coins: cur => (cur || 0) + amount, coinsRev: cur => (Number(cur) || 0) + Math.max(1, Math.abs(amount)) } : {}),
  coinsRev: cur => (Number(cur) || 0) + Math.max(1, Math.abs(amount)),
     giftPending: cur => { const next = { ...cur }; delete next[ck]; return next; },
   } });
