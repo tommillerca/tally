@@ -57,22 +57,22 @@ async function sample(page, name, selector, clock) {
     document.querySelector(selector).scrollIntoView({block:'center',behavior:'instant'});
     await new Promise(requestAnimationFrame);
   },selector);
-  const region = await page.evaluate(selector => {
-    const el=document.querySelector(selector), r=el.getBoundingClientRect();
-    // The reveal scales from .96 to 1 around its centre. Include its final box.
-    const width=Math.max(r.width,el.offsetWidth)+10;
-    const height=Math.max(r.height,el.offsetHeight)+10;
-    return {x:Math.floor(r.x+r.width/2-width/2),y:Math.floor(r.y+r.height/2-height/2),
-      width:Math.ceil(width)+1,height:Math.ceil(height)+1};
+  // Keep crop dimensions fixed for pixel comparisons, but follow the current
+  // viewport position on every frame. The untransformed box bounds the scale.
+  const size = await page.evaluate(selector => {
+    const el=document.querySelector(selector);
+    return {width:el.offsetWidth+12,height:el.offsetHeight+12};
   },selector);
   const frames=[];
   for(const target of [30,140,400]) {
     await page.waitForFunction(({clock,target})=>performance.now()-window[clock]>=target,{}, {clock,target});
-    const state=await page.evaluate(({selector,clock})=>{
+    const state=await page.evaluate(({selector,clock,size})=>{
       const el=document.querySelector(selector), r=el.getBoundingClientRect();
       const imgs=[...el.querySelectorAll('img')];
       const v=window.visualViewport;
       return {ms:performance.now()-window[clock],
+        region:{x:Math.floor(r.x+r.width/2-size.width/2),
+          y:Math.floor(r.y+r.height/2-size.height/2),...size},
         rect:{x:r.x,y:r.y,width:r.width,height:r.height},
         viewport:{x:v?.offsetLeft||0,y:v?.offsetTop||0,width:v?.width||innerWidth,height:v?.height||innerHeight},
         scrollers:(()=>{
@@ -92,7 +92,8 @@ async function sample(page, name, selector, clock) {
         animations:el.getAnimations({subtree:true}).map(a=>({name:a.animationName||'WAAPI',
           target:a.effect?.target?.tagName,properties:[...new Set(a.effect?.getKeyframes().flatMap(k=>Object.keys(k)))]})),
         transform:getComputedStyle(el).transform};
-    },{selector,clock});
+    },{selector,clock,size});
+    const region=state.region;
     const contains=(outer,inner)=>inner.x>=outer.x&&inner.y>=outer.y&&
       inner.x+inner.width<=outer.x+outer.width&&inner.y+inner.height<=outer.y+outer.height;
     const contained=contains(region,state.rect), visible=contains(state.viewport,region);
@@ -114,7 +115,7 @@ async function sample(page, name, selector, clock) {
   }
   const changed=changedPixels(frames[0].pixels,frames[1].pixels);
   const detail=`changedPixels=${changed}, samplesMs=${frames.map(f=>f.ms.toFixed(1)).join(',')}, capturedMs=${frames.map(f=>f.capturedMs.toFixed(1)).join(',')}`;
-  writeFileSync(`${output}/${name}.json`,JSON.stringify({region,changedPixels:changed,frames:frames.map(({pixels,...state})=>state)},null,2)+'\n');
+  writeFileSync(`${output}/${name}.json`,JSON.stringify({sampling:"per-frame current rect with fixed untransformed size plus 12px margin",changedPixels:changed,frames:frames.map(({pixels,...state})=>state)},null,2)+'\n');
   return {frames,changed,detail};
 }
 async function samplerControl(page,name) {
