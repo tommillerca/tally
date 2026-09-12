@@ -96,6 +96,92 @@ const exportCode = cut("  $('#exportBtn').addEventListener", "  $('#importBtn').
 const eraseCode = cut("  $('#eraseBtn').addEventListener", '  /* Account deletion');
 const deleteCode = cut("  $('#delAcctBtn')?.addEventListener", '  // Force-fetch the latest build');
 
+// Refused writes must leave the same sheet operable, with its inputs intact.
+for (const site of ['restore', 'recovery', 'cloud', 'fit']) {
+  await test('RETRY / ONCE ' + site + ' refused write', async () => {
+    let reject = true, attempts = 0, commits = 0, uploads = 0;
+    const write = async () => {
+      attempts++;
+      if (reject) throw new Error('injected write refusal');
+      commits++;
+      return { ok: true, restored: true, recoveryId: 'test-id' };
+    };
+    const h = harness({ wrap: {}, el: {}, fit: { id: 'fit-1', name: 'One' },
+      S: { settings: {}, sounds: false }, saveRecoveryActive: false, saveWitness: null,
+      snapSettings() {}, levelSound() {}, closeAllSheetsViaHistory() {}, route() {},
+      renderSettings() {}, APP_SOCIAL_V: 1, deleteFit: write,
+      popSound() {}, haptic: { heavy() {} }, renderCharacter() {},
+      err: message => { throw new Error('unexpected validation: ' + message); } });
+    Object.assign(h.deps.social, { restoreWithPhrase: write, setRecoveryPhrase: write,
+      setCloudBackup: write, pushBackup: async () => { uploads++; return true; },
+      recoveryIdProblem: () => null, phraseProblem: () => null });
+    for (const id of ['#rsCode', '#rcId']) h.$(id).value = 'test-id';
+    for (const id of ['#rsPhrase', '#rcPhrase', '#rcPhrase2']) h.$(id).value = 'unchanged phrase';
+    const specs = {
+      restore: ["  $('#rsGo', wrap).addEventListener", '\n}\n', '#rsGo', 'Restore my Bonehead'],
+      recovery: ["  $('#rcSave', wrap).addEventListener", '\n}\n', '#rcSave', 'Save my recovery code'],
+      cloud: ["  $('#cbOn', el)?.addEventListener", "  $('#cbOff', el)?.addEventListener", '#cbOn'],
+      fit: ["      $('[data-fit-delete-confirm]', review).addEventListener", '\n    }));', '[data-fit-delete-confirm]'],
+    };
+    const [start, end, selector, label] = specs[site];
+    h.deps.review = {};
+    await run(cut(start, end), h.deps);
+    const btn = h.$(selector), click = () => btn.handlers.click({ currentTarget: btn });
+    await click().catch(() => {}); // Grade the stranded control even on the original handler.
+    assert.equal(btn.disabled, false, 'refused write must re-enable button');
+    assert.match(h.messages.join(' '), /could not|failed/i);
+    if (label) assert.equal(btn.textContent, label);
+    assert.equal(commits, 0);
+    for (const id of ['#rsPhrase', '#rcPhrase', '#rcPhrase2']) assert.equal(h.$(id).value, 'unchanged phrase');
+    reject = false;
+    const retry = click();
+    if (site === 'fit') await click();
+    await retry;
+    assert.equal(attempts, 2);
+    assert.equal(commits, 1);
+    if (site === 'cloud') assert.equal(uploads, 1);
+    if (site === 'fit') { await click(); assert.equal(commits, 1, 'completed deletion stays locked'); }
+  });
+}
+
+for (const stage of ['encrypt', 'recoverySetAt', 'recoveryId']) {
+  await test('RECOVERY outcome ' + stage + ' and retry', async () => {
+    const socialSource = readFileSync(new URL('../js/social.js', import.meta.url), 'utf8');
+    const start = socialSource.indexOf('export async function setRecoveryPhrase(');
+    const code = socialSource.slice(start, socialSource.indexOf('\nexport async function myRecoveryId', start)).replace('export ', '');
+    let refuse = true, requests = 0, records = 0;
+    const deps = { phraseProblem: () => null, recoveryIdProblem: () => null,
+      apiBase: async () => 'https://audit.invalid', ensureIdentity: async () => {}, backupKey: async () => {},
+      kvGet: async () => ({}), phraseKey: async () => ({}), RECOVERY_ITERS: 1,
+      enc: new TextEncoder(), u8ToB64: () => 'wrapped',
+      crypto: { getRandomValues: a => a, subtle: { encrypt: async () => {
+        if (refuse && stage === 'encrypt') throw new Error('crypto refused');
+        return new ArrayBuffer(1);
+      } } },
+      signedFetch: async () => { requests++; return { ok: true }; },
+      kvSet: async key => {
+        if (refuse && stage === key) throw new Error('local write refused');
+        if (key === 'recoveryId') records++;
+      } };
+    const setRecoveryPhrase = await run(code + '\nreturn setRecoveryPhrase;', deps);
+    const h = harness({ wrap: {}, S: {}, levelSound() {}, closeAllSheetsViaHistory() {},
+      err: message => { throw new Error(message); } });
+    Object.assign(h.deps.social, { setRecoveryPhrase, recoveryIdProblem: () => null, phraseProblem: () => null });
+    h.$('#rcId').value = 'test-id';
+    h.$('#rcPhrase').value = h.$('#rcPhrase2').value = 'unchanged phrase';
+    await run(cut("  $('#rcSave', wrap).addEventListener", '\n}\n'), h.deps);
+    await h.$('#rcSave').click();
+    assert.equal(h.$('#rcSave').disabled, false);
+    assert.equal(h.$('#rcPhrase').value, 'unchanged phrase');
+    assert.equal(requests, stage === 'encrypt' ? 0 : 1);
+    assert.match(h.messages.join(' '), stage === 'encrypt' ? /not sent to the server/i : /server saved.*could not record/i);
+    refuse = false;
+    await h.$('#rcSave').click();
+    assert.equal(records, 1, 'exactly one completed local credential record');
+    assert.equal(requests, stage === 'encrypt' ? 1 : 2, 'retry repeats the existing credential PUT after local failure');
+  });
+}
+
 await test('EXPORT native does not promise an unverified cloud save', async () => {
   await D.kvSet('cloudOff', true);
   const h = harness({ isNative: () => true });
