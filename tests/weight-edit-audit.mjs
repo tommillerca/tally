@@ -201,6 +201,11 @@ check('EDIT  the date and meal fields were preserved through the edit',
 await page.evaluate(id => document.querySelector(`[data-entry="${id}"]`).click(), seededId);
 await page.waitForSelector('#qaDel', { timeout: 5000 });
 await page.evaluate(() => document.querySelector('#qaDel').click());
+// v588 (F17, Tom: "just a confirm would be fine"): Delete now opens a confirm
+// sheet naming the food; the real tap is the confirm. Guarded in full by
+// tests/log-delete-confirm-audit.mjs; here we just go through it.
+await page.waitForSelector('[data-log-delete-confirm]', { timeout: 5000 });
+await page.evaluate(() => document.querySelector('[data-log-delete-confirm]').click());
 await page.waitForFunction(() => !document.querySelector('#qaDel'), { timeout: 8000 })
   .catch(() => {});
 await sleep(300);

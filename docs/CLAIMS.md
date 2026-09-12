@@ -1,5 +1,35 @@
 # What each patch note claims, and what backs it
 
+## v588 (2026-09-12)
+
+Assembled from five Codex lanes by the commander. Every browser audit below was run by the commander on the lane tree and again on the merged train; the lanes cannot bind a socket.
+
+Changelog item: Find the Salvage Bench below your slots in the Wardrobe. The Shop shortcut takes you straight there.
+1. PROOF: melt-ui-audit.mjs rows HOME (bench inside the Wardrobe screen), GONE (no bench in the Backpack), ROUTE (the Shop shortcut lands with the bench in the viewport) and EMPTY, plus every pre-existing melt, payout, SOP and transmog row: 28 rows green on the train, HOME, GONE and ROUTE red on live v587. wardrobe-stack-audit.mjs and wardrobe-slot-scroll-audit.mjs green on the train (round 1 of this lane hid the Dressing Room apply button and wardrobe-stack-audit caught it; round 2 renders the bench unconditionally as the last child). Two audit fixes rode along: the rarity row picks a piece with no spent currency receipt, and two Dressing Room copy rows are re-anchored on the v550 wording; both had left melt-ui-audit red on main since v550. | REACH: the Wardrobe (bench under the slot picker), the Backpack (section removed), the Shop shortcut and the two "Melt gear at the Salvage Bench" strings. The Kitchen block is untouched. Melt payouts and what melting consumes are unchanged.
+
+Changelog item: Long names wrap on podiums, leaderboards, race results, gifts, featured nameplates, newcomers and Pit labels.
+2. PROOF: name-fit-audit.mjs promoted from skip to full. Fixtures are Bo, Bartholomew Bonecrusher and Thunderous Vertebrae #999 (the longest name the builder can make, 25 characters; the old 128-W fixture was impossible) at default and 200% text on 375x812 and 430x932. FITS exempts only a real scroll axis, measures inline spans by text fragments, and a missing control is UNREACHED naming the selector. On the lane tree before this CSS: 366 FITS reds; after round 1: 8; after round 2: 0 failed. Red on live at .pod-name (154px of text in an 83px box) and #lbBody .lb-who b (261 in 162). | REACH: podium, level leaderboard, settled race winner and lanes, gift sender, tower plate, featured Crew plate, profile title, selected Crew name, both friend-request groups, newcomers, Pit opponent HUD and Pit venue, standing, gap and previous champion, and the incoming friend request row, whose name column collapsed to zero width at 200% text on a 375-wide phone (one letter per line, 787px tall) until its Accept and Decline controls moved to their own line. The two map sites are excluded because the fixture never boots WebGL; those names are guarded at .spp-plate b and #raceCard .gbn-txt small instead.
+
+Changelog item: Deleting a logged food asks you to confirm its name, then tells you which food was deleted.
+3. PROOF: log-delete-confirm-audit.mjs rows CONTROL, ASKS, CANCEL, DELETES, QUICK CONTROL, QUICK ASKS and QUICK DELETES, all green on the train; on live v587 ASKS is red because the tap deletes at once with no confirmation. | REACH: both delete buttons (the portion edit sheet and the quick-add edit sheet) through one shared confirm sheet. No undo, by Tom's call.
+
+Changelog item: Restore, recovery code saving, cloud backup On and Delete fit now let you retry after a failed write.
+4. PROOF: settings-safety-audit.mjs gains four RETRY / ONCE rows and three RECOVERY outcome rows that inject a refused write into the extracted production handlers and assert the button is re-enabled, a failure toast is shown, the input is kept, and a retry commits exactly once: 33 passed on the train, 7 of those red on a throwaway tree of main 8b4cefe8. | REACH: the four handlers named in the changelog item. A recovery save the server accepted but the device failed to record is disclosed separately from one never sent; the retry repeats the credential PUT.
+
+Changelog item: Clearing your height keeps it blank when you switch units.
+5. PROOF: forms-state-audit.mjs row HEIGHT, running the production profile binder against DOM doubles in both unit directions; red on main via `--main`, green on the train. Declared in the PURE tier. | REACH: the shared onboarding and Settings profile form.
+
+Changelog item: A suggested lucky number now turns on its checkbox and shows the number.
+6. PROOF: forms-state-audit.mjs row LUCKY: after a taken name gets suggestion 7, the preview, checkbox, visible input and next submitted number agree; red on main, green on the train. | REACH: the name builder's taken-name branch.
+
+Changelog item: Recovery ID availability follows the ID currently in the field.
+7. PROOF: forms-state-audit.mjs row RACE: a late reply for an older ID, an empty field or an invalid field paints nothing; red on main, green on the train. | REACH: the Recovery ID availability note. Server-side Save still rejects a taken ID.
+
+Changelog item: Recovery setup explains that your ID and phrase unlock your account, while recovering progress also needs a successful cloud backup.
+8. PROOF: forms-state-audit.mjs row COPY: the setup intro, the upgrade intro and the saved toast no longer claim credentials alone restore progress; red on main, green on the train. | REACH: three strings in the recovery sheet. The flow is unchanged.
+
+Held out of v588: pet growth with lineage (F7). The lane built the render-time scale, but the Stable draws pets through the pet card slider, which is a locked file region, so the growth would show in the Pit and on friend profiles and not where Tom looked. Waiting on Tom before touching the slider.
+
 ## v587 (2026-09-12)
 
 Changelog item: The options that open under a piece now fit on screen instead of running off the bottom.
@@ -5516,3 +5546,12 @@ Deviations: The existing typed gate protects trained, named, bonded, lineage, eq
 
 Changelog item: Wardrobe removes fit counts while keeping Save fit available with its six-fit limit.
 1. PROOF: `node tests/unit.test.js` R23 F8 renders five and six saved fits, checks absent counts, cap ghosting and the explanatory tap handler. `node tests/wardrobe-ui-1f-audit.mjs` retains inherited CSS, paperdoll and lower-handler hashes. | REACH: Wardrobe header and saved-fit switcher only. Geometry and clipping unmeasured. Stacking and slot return navigation blocked by the frozen lower-region contract.
+
+## v588 (2026-09-12)
+
+Changelog item: Long names wrap on podiums, leaderboards, race results, gifts, featured nameplates, newcomers and Pit labels.
+1. PROOF: `node tests/name-fit-audit.mjs` uses Bo, Bartholomew Bonecrusher and Thunderous Vertebrae #999 at default and 200% text on 375x812 and 430x932. FITS is unchanged in round 2, including clipping and overflow checks. The race fixture now supplies podium coins required by the renderer, a previous champion and a returning-racer debut date for the named gap. Preparation waits for hydrated request groups and race names, opening their native disclosures while polling. Active race lanes are restored to the inventory because hydration now reaches them. This lane's browser attempt exited 97: `listen EPERM: operation not permitted 127.0.0.1`, before any geometry was measured. Green geometry, CSS-reverted reds and live reds at `.pod-name` and `#lbBody .lb-who b` remain for the commander to prove. `node tests/unit.test.js` exited 0: `392 passed, 0 failed`. The first run caught a viewport-unit font-size declaration; replacing it with `var(--fs-tiny)` passed the type-scale guard and the full rerun. | REACH: the podium name, level leaderboard name, settled race winner and lanes, gift sender, tower plate, featured Crew plate, profile title, selected Crew name, both friend-request groups, including the incoming request row with controls below the name on narrow screens, newcomers (`#newcomersList .t3-tx b`), Pit opponent HUD (`.fight-hud .foe .fname`), Pit venue (`.fight-venue`), active race lanes, standing, gap and previous champion. This is the intended audit reach, not a claim of browser success in this environment.
+
+Round 2: newcomers and Pit venue allow breaks within a word. HUD names step down within the audit's legibility floor and wrap, with equal minimum two-line name rows. The HUD remains absolutely positioned, so it cannot push the fight stage. Actual overlay geometry still needs browser proof.
+
+Deviations: the two map sites are explicitly excluded under the frozen plan's unbooted-map allowance. This fixture does not open the WebGL map; owner identity is guarded at `.spp-plate b` and race identity at `#raceCard .gbn-txt small`. Neither substitutes for map geometry. Restoring active race lanes also required scoped wrapping for their existing nowrap rule; race champion content gets a shrinkable flex child, and standing/gap allow within-word wrapping. No FITS condition or exit-code priority was weakened. CSS syntax brace balance is 0. No prohibited files, commits, pushes or publishing.

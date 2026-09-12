@@ -7,7 +7,7 @@ import { MANUAL_WALKS_PER_DAY } from '../js/wellness.js';
 import {INGREDIENT_IDS, INGREDIENTS, POTIONS} from '../js/cooking.js';
 import {eggProgress, CRATES, CONSUMABLES, crateOdds, RARITIES} from '../js/loot.js';
 const app = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
-const bp = app.slice(app.indexOf("  if (tab === 'crates') {"), app.indexOf("    /* Scroll only when the USER opens the fold."));
+const bp = app.slice(app.indexOf("  if (tab === 'crates') {"), app.indexOf("    $$('.loot-pending', content)", app.indexOf("  if (tab === 'crates') {")) /* v588: the bench and its "Scroll only when" comment left the Backpack for the Wardrobe; the template now ends at the first handler */);
 function ingredients(source, inv) {
   const line = source.split('\n').find(l => l.includes('class="ingredient-grid"'));
   return vm.runInNewContext('`'+line.trim()+'`', {INGREDIENT_IDS, INGREDIENTS, ingInv:inv, ingIconHtml:()=>'', esc:x=>x});

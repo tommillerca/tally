@@ -19,7 +19,12 @@ const hash = s => createHash('sha256').update(s).digest('hex');
 // whole wardrobe rather than anything about the open slot.
 // The inherited CSS prefix and paperdoll slot-definition locks are unchanged.
 // The inherited CSS prefix and paperdoll slot-definition locks remain unchanged.
-const locks = {"dollMarkup": "c81d640267f7694649125d1d0db2f5429247dfe360dc60c7a4f96b4086ece5c5", "lowerHandlers": "3ac6bcbdd894142059adb4a1f9ef53b4a24a74ec62531b94b8d9600fda250345", "cssPrefixLength": 812158, "cssPrefixHash": "31e2702ba835e59fbea471754b76ba4381f678564bd5f371ac83e2df1209bed8"};
+// v588 rebaseline, authorized by Tom on 2026-09-12: "maybe the bench should be in
+// wardrobe? i dont know why it would be in the ktichen if it has to do with gear."
+// One markup change inside the frozen region: the Salvage Bench section is now
+// rendered as the last child of the Wardrobe body (renderSalvageBench), and the
+// Backpack no longer carries it. Guarded by melt-ui-audit rows HOME, GONE, ROUTE.
+const locks = {"dollMarkup": "37406be3e510678da05b8b903ff0bbd9d3349627d3bd46c621f9d68f14fa2d06", "lowerHandlers": "3ac6bcbdd894142059adb4a1f9ef53b4a24a74ec62531b94b8d9600fda250345", "cssPrefixLength": 812158, "cssPrefixHash": "31e2702ba835e59fbea471754b76ba4381f678564bd5f371ac83e2df1209bed8"};
 function grade(source) {
   assert.equal(hash(source.slice(source.indexOf('    const pdSlot = code => {'), source.indexOf('    const statChip', source.indexOf('    const pdSlot = code => {')))), '7889f55f1ea010200eabeadf40cd189b69d32c156d4d58e010364ea53240c462', 'paperdoll slot definitions changed');
   assert.match(source, /data-fit-switcher/, 'compact saved-fit switcher missing');

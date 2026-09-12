@@ -30,6 +30,43 @@ const { browser, page } = await boot(argUrl || own.url);
 let bad = 0;
 const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
 
+// Location and route checks run first so the old live build reports HOME and GONE.
+await page.evaluate(() => { location.hash = '#/bonehead'; });
+await sleep(1800);
+await page.evaluate(() => document.querySelector('#chTabs [data-tab="wardrobe"]')?.click());
+await sleep(1800);
+const home = await page.evaluate(() => {
+  const bench = document.querySelector('.bp-salvage');
+  const screen = bench?.closest('.screen');
+  return !!bench && !!screen?.querySelector('#chTabs [data-tab="wardrobe"][aria-selected="true"]')
+    && bench.closest('#chContent')?.dataset.characterTab === 'wardrobe';
+});
+check('HOME: bench belongs to the Wardrobe screen', home);
+await page.evaluate(() => document.querySelector('#chTabs [data-tab="crates"]')?.click());
+await sleep(1800);
+check('GONE: Backpack contains no bench', await page.evaluate(() =>
+  !!document.querySelector('#chTabs [data-tab="crates"][aria-selected="true"]')
+    && !document.querySelector('#chContent .bp-salvage')));
+await page.evaluate(() => document.querySelector('#chTabs [data-tab="shop"]')?.click());
+await sleep(1800);
+await page.evaluate(() => document.querySelector('#shopSalvage').click());
+await sleep(1800);
+check('ROUTE: shop shortcut opens the Wardrobe bench in the viewport', await page.evaluate(() => {
+  const bench = document.querySelector('.bp-salvage');
+  const r = bench?.getBoundingClientRect();
+  const screen = bench?.closest('.screen')?.getBoundingClientRect();
+  return !!document.querySelector('#chTabs [data-tab="wardrobe"][aria-selected="true"]')
+    && !!r && !!screen && r.width > 0 && r.height > 0
+    && r.top < Math.min(innerHeight, screen.bottom) && r.bottom > Math.max(0, screen.top)
+    && r.left < innerWidth && r.right > 0;
+}));
+if (!home) {
+  await browser.close();
+  if (own) own.close();
+  console.log(`${bad} FAILED`);
+  process.exit(1);
+}
+
 // a long list, so the bar really does sit over rows
 await page.evaluate(async () => {
   const loot = await import('./js/loot.js');
@@ -47,7 +84,7 @@ await page.evaluate(async () => {
 });
 await page.evaluate(() => { location.hash = '#/bonehead'; });
 await sleep(1800);
-await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="crates"]').click());
+await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="wardrobe"]').click());
 await sleep(1800);
 /* THE ENTRANCE, before anything is tapped. Tom's complaint was that melting is
    buried: it lived in a collapsed <details> three levels deep, so the spare count
@@ -226,23 +263,32 @@ check('SOP: a second melt of the same piece pays NOTHING',
    could be melted idk what the tiers are for rarity." disenchantGear has no rarity
    or stats gate today, so this pins that a future tier cannot ship unmeltable, and
    it enumerates the rarities from the catalogue rather than hardcoding today's. */
-const rar = await page.evaluate(async () => {
+const rar = await page.evaluate(async spent => {
   const loot = await import('./js/loot.js');
   const { GEAR_ITEMS } = await import('./js/gear.js');
   const tiers = [...new Set(GEAR_ITEMS.map(g => g.rarity))];
   const out = {};
+  // A melted id keeps its currency receipt for good, so a piece this run already
+  // melted (the SOP row's worn piece, or the fixture's) is refused as a repeat.
+  // Pick, per rarity, a piece nobody has melted or owns yet.
+  const owned = new Set(await loot.ownedGearIds());
   for (const t of tiers) {
-    const g = GEAR_ITEMS.find(x => x.rarity === t);
+    const g = GEAR_ITEMS.find(x => x.rarity === t && !owned.has(x.id) && !spent.includes(x.id));
+    if (!g) { out[t] = { ok: false, paid: 0, why: 'no unspent piece of this rarity' }; continue; }
     await loot.grantGear(g.id, 'test');
     const before = await loot.boneDust();
     const res = await loot.disenchantGear(g.id);
     out[t] = { ok: !!res.ok, paid: (await loot.boneDust()) - before };
   }
   return { tiers, out };
-});
+}, [melt.id].filter(Boolean));
 console.log('rarities:', JSON.stringify(rar));
 check('every rarity in the catalogue melts and pays', rar.tiers.length > 0
   && rar.tiers.every(t => rar.out[t].ok && rar.out[t].paid > 0), JSON.stringify(rar.out));
+
+const el = await page.$('.melt-fold');
+if (el) await el.screenshot({ path: auditOutputPath(`${DIR}/melt-bar.png`) });
+console.log('shot melt-bar');
 
 /* ---- TRANSMOG ON A PLAIN COSMETIC (Tom's consistency call, 2026-08-11) -----
    The panel used to require a STATTED piece, so a slot holding a plain cosmetic
@@ -275,6 +321,8 @@ else {
   await sleep(1600);
   await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="wardrobe"]')?.click());
   await sleep(1800);
+  await page.evaluate(() => document.querySelector('[data-pd="H"]')?.click());
+  await sleep(1800);
   const panel = await page.evaluate(() => {
     const grid = document.querySelector('.look-grid');
     const own = document.querySelector('.look-grid .ward-cell.look[data-look=""]');
@@ -306,10 +354,14 @@ else {
   });
   console.log('panel:', JSON.stringify(panel));
   check('the transmog panel is offered on a slot holding a plain cosmetic', panel.hasPanel && panel.cells >= 2, JSON.stringify(panel));
-  check('with what you are wearing preselected', panel.ownPreselected && /as equipped/i.test(panel.tag), JSON.stringify(panel));
+  /* v550 ("a clearer Dressing Room") retitled the own-look tag "Reset" and the safety
+     note "Your equipped piece keeps its stats." Both rows had drifted onto the old
+     copy and nobody saw it because the rarity row crashed first. Re-anchored on
+     the assertion, not the product (lessons_audit_drift_false_red). */
+  check('with what you are wearing preselected', panel.ownPreselected && /as equipped|reset/i.test(panel.tag), JSON.stringify(panel));
   check('and it says switching is free rather than quoting a price', /free/i.test(panel.lead), panel.lead);
   check('and it still promises the piece itself is safe, which is the other half a player needs before tapping',
-    /nothing is destroyed/i.test(panel.note), panel.note);
+    /nothing is destroyed|keeps its stats/i.test(panel.note), panel.note);
 
   /* THE END OF THE CHAIN, and it runs LAST on purpose: applying a transmog moves
      what is preselected, so doing this before the panel checks above made them
@@ -352,9 +404,22 @@ else {
     JSON.stringify(stale));
 }
 
-const el = await page.$('.melt-fold');
-if (el) await el.screenshot({ path: auditOutputPath(`${DIR}/melt-bar.png`) });
-console.log('shot melt-bar');
+// EMPTY runs LAST: it melts every piece, and a melted piece keeps its currency
+// receipt, so any later row that melts the same id would be refused as a repeat.
+// Empty the disposable audit inventory, then render the empty Wardrobe bench.
+await page.evaluate(async () => {
+  const loot = await import('./js/loot.js');
+  for (const id of await loot.ownedGearIds()) await loot.disenchantGear(id);
+  document.querySelector('#chTabs [data-tab="wardrobe"]')?.click();
+});
+await sleep(1800);
+check('EMPTY: no gear explains how to fill the bench', await page.evaluate(() => {
+  const bench = document.querySelector('.bp-salvage');
+  return !!bench && /Nothing to melt yet/.test(bench.textContent)
+    && /crates, the Boneyard and the Pit/.test(bench.textContent)
+    && !bench.querySelector('.melt-row');
+}));
+
 await browser.close();
 if (own) own.close();
 console.log(bad ? `\n${bad} FAILED` : '\nMELT BAR OK');

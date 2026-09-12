@@ -12708,3 +12708,56 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
   min-height: calc(2 * 1.2em); line-height: 1.2;
 }
 .fam-rail .pw-item.famr small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+/* v588: the bench belongs below the Wardrobe slot list. */
+#chContent .bp-salvage { margin-top: 16px; scroll-margin-top: 12px; }
+
+/* F6 / v588: complete builder names, including Thunderous Vertebrae #999.
+   Rows grow with wrapped text. No line clamp cuts off large-text names. */
+.pod-name,
+#friendsList .fl-main b,
+#lbBody .lb-who b,
+#raceResultCard .race-h b,
+#raceResultCard .race-lane .nm b,
+.gift-sealed .tx b,
+.spp-plate b,
+.cfan-card.feat .cfan-plate b {
+  min-width: 0; max-width: 100%;
+  white-space: normal; overflow-wrap: anywhere;
+  overflow: visible; text-overflow: clip;
+  line-height: 1.15;
+}
+.pod-name { width: 100%; text-align: center; }
+#raceResultCard .race-h { flex-wrap: wrap; }
+#raceResultCard .race-h b { flex: 1 1 100%; }
+
+/* F6 round 2: a single word must also fit at 200% text. */
+#newcomersList .t3-tx b,
+.fight-venue { overflow-wrap: anywhere; }
+/* The HUD is absolutely positioned over the arena, so wrapping cannot move
+   the fight stage. Reserve equal two-line name rows to align both HP bars. */
+.fight-hud .fname {
+  font-size: var(--fs-tiny);
+  min-height: calc(2.3em + 6px); line-height: 1.15;
+}
+.fight-hud .foe .fname {
+  white-space: normal; overflow-wrap: anywhere;
+  overflow: visible; text-overflow: clip;
+}
+/* Restored race hydration also exposes the active lanes to the same guard. */
+#raceCard .race-lane .nm b {
+  min-width: 0; max-width: 100%; white-space: normal;
+  overflow-wrap: anywhere; overflow: visible; text-overflow: clip;
+}
+#raceCard .race-champ > span { min-width: 0; }
+#raceCard .gbn-txt small,
+#raceCard .race-gap { overflow-wrap: anywhere; }
+
+/* F6 round 3: incoming request controls get their own line on phones so
+   large text cannot consume the name column. Outgoing rows have no group. */
+@media (max-width: 480px) {
+  #friendsList .fl-row:has(> .fl-actions) { flex-wrap: wrap; }
+  #friendsList .fl-row > .fl-actions {
+    flex-basis: 100%; flex-wrap: wrap; justify-content: flex-end;
+  }
+}

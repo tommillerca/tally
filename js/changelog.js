@@ -9,6 +9,16 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 588, date: '2026-09-12', title: 'The Salvage Bench moves to the Wardrobe, and names get room', items: [
+    'Find the Salvage Bench below your slots in the Wardrobe. The Shop shortcut takes you straight there.',
+    'Long names wrap on podiums, leaderboards, race results, gifts, featured nameplates, newcomers and Pit labels.',
+    'Deleting a logged food asks you to confirm its name, then tells you which food was deleted.',
+    'Restore, recovery code saving, cloud backup On and Delete fit now let you retry after a failed write.',
+    'Clearing your height keeps it blank when you switch units.',
+    'A suggested lucky number now turns on its checkbox and shows the number.',
+    'Recovery ID availability follows the ID currently in the field.',
+    'Recovery setup explains that your ID and phrase unlock your account, while recovering progress also needs a successful cloud backup.',
+  ] },
   { n: 587, date: '2026-09-12', title: 'Tapping a piece shows its options where you tapped', items: [
     'The options that open under a piece now fit on screen instead of running off the bottom.',
     'Cosmetic cards in that row are drawn at the right size again.',
