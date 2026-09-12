@@ -12375,7 +12375,7 @@ async function openNameBuilder(after) {
       if (r.suggestNum != null) {
         sel.num = r.suggestNum;
         const f = $('#nbNumVal', wrap); if (f) f.value = String(r.suggestNum);
-        $('#nbPreview', wrap).textContent = buildDisplayName(sel.adj, sel.noun, sel.num) || '-';
+        paint();
         toast(`${r.name} is taken. Try ${buildDisplayName(sel.adj, sel.noun, sel.num)}.`, 3400);
       } else toast(`${r.name} is taken. Pick another.`, 3000);
       return;
@@ -15720,6 +15720,9 @@ function bindProfileForm(wrap, initial, onChange) {
     if (cm != null) {
       if (imp) { const h = cmToFtIn(cm); $('#pfFt', wrap).value = h.ft; $('#pfIn', wrap).value = h.inch; }
       else $('#pfCm', wrap).value = Math.round(cm);
+    } else {
+      if (imp) { $('#pfFt', wrap).value = ''; $('#pfIn', wrap).value = ''; }
+      else $('#pfCm', wrap).value = '';
     }
     $('#hImp', wrap).hidden = !imp; $('#hMet', wrap).hidden = imp;
     $('#wUnit', wrap).textContent = imp ? 'lb' : 'kg';
@@ -22399,8 +22402,8 @@ async function openRecoverySheet() {
   // the new-player pitch at them.
   const upgrading = !existingId && await social.hasRecoveryPhrase();
   const intro = upgrading
-    ? 'You already have a recovery phrase, but restoring with it still needs your friend code, and that is on the phone you would have lost. Pick a Recovery ID and re-enter a phrase, and the ID is all you need from now on.'
-    : 'Two things you pick and remember. Together they bring your Bonehead back on any phone, even if this one is lost or wiped. We never see your phrase, so we can never reset it for you.';
+    ? 'You already have a recovery phrase, but restoring with it still needs your friend code, and that is on the phone you would have lost. Use this ID and your phrase instead of your friend code. The ID and phrase unlock your account. Recovering progress also needs a successful cloud backup.'
+    : 'Your Recovery ID and phrase unlock your account on another phone. Recovering progress also needs a successful cloud backup. We never see your phrase, so we can never reset it for you.';
   const wrap = openSheet(`
     <div class="sheet-head"><h2>${upgrading ? 'Finish your recovery code' : 'Recovery code'}</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
@@ -22426,8 +22429,9 @@ async function openRecoverySheet() {
   const state = (m, cls = '') => { const e = $('#rcIdState', wrap); e.textContent = m; e.className = 'rc-note ' + cls; };
 
   // Live availability, so nobody types a phrase twice only to be told the name is gone.
-  let idTimer = null;
+  let idTimer = null, idGeneration = 0;
   $('#rcId', wrap).addEventListener('input', () => {
+    const generation = ++idGeneration;
     clearTimeout(idTimer);
     const v = $('#rcId', wrap).value.toLowerCase().trim();
     if (!v) return state('');
@@ -22437,6 +22441,7 @@ async function openRecoverySheet() {
     state('Checking...');
     idTimer = setTimeout(async () => {
       const r = await social.recoveryIdAvailable(v);
+      if (generation !== idGeneration || v !== $('#rcId', wrap).value.toLowerCase().trim()) return;
       if (!r.ok) return state(r.reason || 'Could not check that right now.');
       state(r.available ? `"${v}" is free.` : `"${v}" is taken.`, r.available ? 'good' : 'bad');
     }, 450);
@@ -22457,7 +22462,7 @@ async function openRecoverySheet() {
     if (!r.ok) return err(r.reason || 'Could not save that.');
     levelSound(S.sounds);
     closeAllSheetsViaHistory();
-    toast(`Saved. Restore anywhere with "${r.recoveryId}" and your phrase.`, 4600);
+    toast(`Saved. "${r.recoveryId}" and your phrase unlock your account. Recovering progress also needs a successful cloud backup.`, 4600);
     refresh();
   });
 }

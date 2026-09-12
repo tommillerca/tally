@@ -1,5 +1,12 @@
 # What each patch note claims, and what backs it
 
+## v588 (2026-09-12)
+
+Changelog item: Forms preserve cleared height, show suggested lucky numbers, keep Recovery ID availability current, and explain what account recovery needs.
+1. PROOF: `forms-state-audit.mjs` executes the production profile binder, name builder and recovery sheet against DOM doubles. HEIGHT covers blank height in both unit directions, missing-height validation and nonblank conversion controls. LUCKY checks the preview, checkbox, visible input and next submitted number after suggestion 7. RACE resolves B before A and rejects A after newer, empty or invalid input. COPY evaluates setup and upgrade markup and the successful-save toast. All four rows are RED on main `8b4cefe8af3da4e9f3b1d105fb891de373894aea` using `node tests/forms-state-audit.mjs --main` (0 passed, 4 failed, exit 1), and GREEN in this checkout (4 passed, 0 failed, exit 0). Declared in the release gate PURE tier. `node tests/unit.test.js`: 392 passed, 0 failed, exit 0. Settings safety: 26 passed, 0 failed. Syntax and diff whitespace checks pass. | REACH: shared onboarding/Settings profile binder, name selection and recovery setup. DOM-model proof only; browser layout and live cloud recovery are unproven.
+
+Deviations: none. Recovery changes are copy and availability-state changes only. No version stamp was advanced.
+
 ## v587 (2026-09-12)
 
 Changelog item: The options that open under a piece now fit on screen instead of running off the bottom.

@@ -253,6 +253,7 @@ const coverageOnly = process.argv.includes('--coverage-only');
    the evidence in the failure line. */
 // Frozen loss-prevention work order, 2026-09-08: real UI and service controls, Node only.
 const PURE = [
+  'forms-state-audit.mjs', // Profile units, suggested name number, recovery availability and copy; Node DOM doubles.
   'wardrobe-ui-1f-audit.mjs',
   'wardrobe-unlock-audit.mjs', // Family variants, stats and duplicate-tile mutation control; Node only.
   'today-ui-1e-audit.mjs',

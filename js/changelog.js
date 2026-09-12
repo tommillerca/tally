@@ -9,6 +9,12 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 588, date: '2026-09-12', title: 'Forms keep your choices in sync', items: [
+    'Clearing your height keeps it blank when you switch units.',
+    'A suggested lucky number now turns on its checkbox and shows the number.',
+    'Recovery ID availability follows the ID currently in the field.',
+    'Recovery setup explains that your ID and phrase unlock your account, while recovering progress also needs a successful cloud backup.',
+  ] },
   { n: 587, date: '2026-09-12', title: 'Tapping a piece shows its options where you tapped', items: [
     'The options that open under a piece now fit on screen instead of running off the bottom.',
     'Cosmetic cards in that row are drawn at the right size again.',
