@@ -290,6 +290,7 @@ const PURE = [
   'render-sink-lint.mjs', 'lapse-witness-audit.mjs', 'spawn-claim-atomic-audit.mjs', 'wardrobe-family-audit.mjs', 'football-kit-audit.mjs', 'restore-latch-audit.mjs',
   'first-pet-audit.mjs', 'shop-economy-audit.mjs', 'recovery-status-audit.mjs', 'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs', 'take-and-pay-audit.mjs', 'level-rewards-atomic-audit.mjs',
 ];
+PURE.push('flagged-friend-audit.mjs'); // F22: retroactive suppression in Worker friends, accepts, gifts and cheers.
 PURE.push('lab-banner-audit.mjs'); // Original sprite metadata, CSS clocks and Backpack route; Node only.
 PURE.push('backpack-ui-1g-audit.mjs'); // 1G rendered inventory and independent egg progress controls.
 PURE.push('c6-price-audit.mjs'); // One-off beta correction: real purchase, hatch, refund, retries, abort, merge and boot disclosure.

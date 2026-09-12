@@ -1755,7 +1755,7 @@ async function requestFriendship(env, meId, otherId) {
   const row = await env.DB.prepare(
     `INSERT INTO friendships (a, b, status, requested_by, ts)
      SELECT ?,?,'pending',?,?
-      WHERE NOT EXISTS (SELECT 1 FROM players WHERE id IN (?,?) AND COALESCE(is_test, 0) = 1)
+      WHERE NOT EXISTS (SELECT 1 FROM players WHERE id IN (?,?) AND COALESCE(is_test, 0) <> 0)
      ON CONFLICT(a, b) DO UPDATE SET
        status = CASE WHEN friendships.requested_by <> excluded.requested_by THEN 'accepted' ELSE friendships.status END,
        ts     = CASE WHEN friendships.requested_by <> excluded.requested_by THEN excluded.ts   ELSE friendships.ts     END
@@ -2623,11 +2623,12 @@ export default {
         if (auth.err) return json({ error: auth.err }, 401);
         const other = String(JSON.parse(bodyText || '{}').id || '');
         const [a, b] = pairKey(auth.playerId, other);
-        const ex = await env.DB.prepare('SELECT requested_by FROM friendships WHERE a = ? AND b = ?').bind(a, b).first();
+        const ex = await env.DB.prepare('SELECT requested_by FROM friendships WHERE a = ? AND b = ? AND EXISTS (SELECT 1 FROM players WHERE id = friendships.a AND COALESCE(is_test, 0) = 0) AND EXISTS (SELECT 1 FROM players WHERE id = friendships.b AND COALESCE(is_test, 0) = 0)').bind(a, b).first();
         if (!ex) return json({ error: 'no such request' }, 404);
         if (ex.requested_by === auth.playerId) return json({ error: 'cannot accept your own request' }, 400);
         const acceptedAt = Date.now();
-        await env.DB.prepare('UPDATE friendships SET status = ?, ts = ? WHERE a = ? AND b = ?').bind('accepted', acceptedAt, a, b).run();
+        const accepted = await env.DB.prepare('UPDATE friendships SET status = ?, ts = ? WHERE a = ? AND b = ? AND EXISTS (SELECT 1 FROM players WHERE id = friendships.a AND COALESCE(is_test, 0) = 0) AND EXISTS (SELECT 1 FROM players WHERE id = friendships.b AND COALESCE(is_test, 0) = 0) RETURNING a').bind('accepted', acceptedAt, a, b).first();
+        if (!accepted) return json({ error: 'no such request' }, 404);
         await notifyFriendship(env, a, b, acceptedAt);
         return json({ ok: true });
       }
@@ -2676,7 +2677,7 @@ export default {
           'pb.handle b_handle, pb.name b_name, pb.friend_code b_code, pb.profile b_profile, pb.app_v b_v, pb.last_seen b_seen, ' +
           '(SELECT COUNT(*) FROM spires sp WHERE sp.owner = pb.id AND sp.tended_at > ?) b_spires ' +
           'FROM friendships f JOIN players pa ON pa.id = f.a JOIN players pb ON pb.id = f.b ' +
-          'WHERE (f.a = ? OR f.b = ?) AND ' + where + ' ORDER BY f.ts DESC LIMIT ?');
+          'WHERE (f.a = ? OR f.b = ?) AND COALESCE(pa.is_test, 0) = 0 AND COALESCE(pb.is_test, 0) = 0 AND ' + where + ' ORDER BY f.ts DESC LIMIT ?');
         const dormantSince = Date.now() - SPIRE_DORMANT_MS;
         /* LIMIT is the page PLUS ONE: the extra row is how truncation is known
            without a second COUNT query. It is dropped before the payload. */
@@ -3418,7 +3419,7 @@ export default {
         const prior = await originalAck();
         if (prior) return json(prior);
         const [a, b] = pairKey(auth.playerId, to);
-        const fr = await env.DB.prepare('SELECT status FROM friendships WHERE a = ? AND b = ?').bind(a, b).first();
+        const fr = await env.DB.prepare('SELECT status FROM friendships WHERE a = ? AND b = ? AND EXISTS (SELECT 1 FROM players WHERE id = friendships.a AND COALESCE(is_test, 0) = 0) AND EXISTS (SELECT 1 FROM players WHERE id = friendships.b AND COALESCE(is_test, 0) = 0)').bind(a, b).first();
         if (!fr || fr.status !== 'accepted') return json({ error: 'not friends' }, 403);
         const me = await env.DB.prepare('SELECT handle, name FROM players WHERE id = ?').bind(auth.playerId).first();
         const fromName = (me && (me.name || me.handle)) || 'A Bonehead';
@@ -3484,7 +3485,7 @@ export default {
         const prior = await originalAck();
         if (prior) return json(prior);
         const [a, b] = pairKey(auth.playerId, to);
-        const fr = await env.DB.prepare('SELECT status FROM friendships WHERE a = ? AND b = ?').bind(a, b).first();
+        const fr = await env.DB.prepare('SELECT status FROM friendships WHERE a = ? AND b = ? AND EXISTS (SELECT 1 FROM players WHERE id = friendships.a AND COALESCE(is_test, 0) = 0) AND EXISTS (SELECT 1 FROM players WHERE id = friendships.b AND COALESCE(is_test, 0) = 0)').bind(a, b).first();
         if (!fr || fr.status !== 'accepted') return json({ error: 'not friends' }, 403);
         const me = await env.DB.prepare('SELECT handle, name FROM players WHERE id = ?').bind(auth.playerId).first();
         const fromName = (me && (me.name || me.handle)) || 'A Bonehead';

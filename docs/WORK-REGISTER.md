@@ -10,6 +10,7 @@ Last updated: 2026-09-11 (v560 live)
 
 | # | Item | Owner | State | Next action |
 |---|---|---|---|---|
+| F22 | Flagged existing Crew accounts (server finding 5) | Codex | Implemented locally, v590; audit 11/11, main FRIENDS RED | Independent review, then Tom owns Worker deployment |
 | 1 | **Playtest slate, runs 10-14** | mostly ME (see note) | **STARTED at 12-A** | Census of all 122 browser audits running now |
 | 2 | **Wardrobe header rejig** — four misaligned single-item lines, four chip treatments | Codex, building | **PAUSED at Tom's request** | Park the tree, do not review until Tom lifts it |
 | 3 | ~~Step race: no progress bars~~ | me | **LANDED v558**, live | Closed. Bars 0/11 to 7/11 on the real board |
