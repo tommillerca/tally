@@ -22,7 +22,7 @@ async function check(name, run) {
   try { await run(); console.log(`PASS PURE ${name}`); }
   catch (e) { failures++; console.log(`FAIL PURE ${name}: ${e.message}`); }
 }
-await check('seeded balances accept a revisioned credit and export', async () => {
+await check('CONTROL seeded balances accept a revisioned credit and export', async () => {
   await seed(page, { coins: 900, dust: 80, reload: false });
   assert.equal(await kvGet('coins'), 900);
   assert.equal(await kvGet('bonedust'), 80);
