@@ -53,7 +53,9 @@ try {
     check(quick ? 'QUICK CONTROL' : 'CONTROL', await exists(row.id), 'edit sheet open and seeded entry exists');
     const asks = async () => {
       await click(del);
-      await page.waitForSelector(confirm);
+      // On a build with no confirm the tap deletes at once; name that as the red.
+      const asked = await page.waitForSelector(confirm, { timeout: 4000 }).then(() => true, () => false);
+      if (!asked) { check(quick ? 'QUICK ASKS' : 'ASKS', false, `no confirmation appeared; entry ${await exists(row.id) ? 'still present' : 'already deleted'}`); throw Error('no confirm sheet'); }
       const heading = await page.evaluate(sel => document.querySelector(sel).closest('.sheet').querySelector('h2').textContent, confirm);
       check(quick ? 'QUICK ASKS' : 'ASKS', heading === `Delete "${row.name}"?` && await exists(row.id), heading);
     };
