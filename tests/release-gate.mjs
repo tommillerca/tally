@@ -311,6 +311,8 @@ PURE.push('audit-output-audit.mjs'); // R3: Node filesystem refusal/control fixt
 PURE.push('branch-graveyard-audit.mjs');   // 2026-09-08: the branch classifier only calls a branch shipped on merged-PR evidence and never on commit counts or three-dot diffs, both of which lie under squash-merge; node-only, no network
 PURE.push('store-runtime-audit.mjs'); // M4/K1: Node-only real web bundle, local paths, scheme condition, App Store refresh/background checks and web update controls.
 PURE.push('r47-rest-audit.mjs');   // 2026-09-08 round 47 remainder: GET /spires returns only what a rival needs (the profile blob carried nine more fields than /leaderboard, including yard, gear and plat, against the app's own friends-only comment), the lost-tower card stops contradicting itself, the siege clock ticks
+PURE.push('podium-settlement-audit.mjs'); // Atomic Worker settlement, SQLite rollback and retry.
+PURE.push('leaderboard-seen-audit.mjs'); // F20: relative last-seen phrases, no UTC on the leaderboard (Tom, 2026-09-12)
 PURE.push('r47-economy-audit.mjs');   // 2026-09-08 round 47: a lost tower stops paying (measured 90 coins / 12 Bone Dust), an offline re-fight stays pending and cannot mint a rival's tower, a stale restore cannot resurrect the income, and a grant's receipt and payout commit together; mem-idb + the Worker source, no browser
 PURE.push('submission-build-audit.mjs'); // R45-9: PURE runs refusal/control fixtures. Explicit artifact paths require SUBMISSION=1, hash-bound build marker and native store-content preflight; native producer integration remains out of lane.
 PURE.push('harness-environment-audit.mjs'); // N1: Node execution of environment plumbing, default-call compatibility and timezone/locale grading controls.
@@ -412,8 +414,10 @@ PURE.push('reachable-density-audit.mjs'); // R4-21: guards the shared reachabili
 PURE.push('backpack-lab-polish-audit.mjs'); // v573: talents exclude salvage; deliberate melting keeps payout.
 PURE.push('interrupted-fight-audit.mjs');
 PURE.push('v576-hunt-audit.mjs');
+PURE.push('sw-standalone-doc-audit.mjs'); // Cached standalone navigation and app-route controls; Node only.
 PURE.push('native-shell-comment-audit.mjs'); // R4-21: remote iOS shell cannot claim a wrapped web build; mutation controls.
 const BROWSER = [
+  'pet-growth-audit.mjs', // F7: Today lineage 0 versus 3, width and aspect ratio; green on the lane, red on live v588 (equal widths), proven by the commander 2026-09-12.
   'log-delete-confirm-audit.mjs', // F17: named confirmation, cancel and delete through both log edit sheets.
   'r8-shop-css-browser-audit.mjs', // Operator proof: screenshot-sampled price contrast, wallet emphasis and disabled ghosts.
   'steprace-live-browser-audit.mjs', // Operator-only degraded race: painted avatars, track geometry and honest zero fill; no listener or launch.

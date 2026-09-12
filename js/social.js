@@ -1589,6 +1589,12 @@ export async function setRecoveryPhrase(phrase, recoveryId = null) {
   // signedFetch hands back the raw Response, so a taken id arrives as 409, not a throw
   if (r && r.status === 409) return { ok: false, reason: 'That recovery ID is taken. Pick another.', field: 'id' };
   if (!r || !r.ok) return { ok: false, reason: 'Could not reach the server. Try again.' };
+  const acknowledgement = await r.json().catch(() => null);
+  const expectedId = rid || (await kvGet('recoveryId', null));
+  if (acknowledgement?.ok !== true || typeof acknowledgement.recoveryId !== 'string' ||
+      !acknowledgement.recoveryId || acknowledgement.recoveryId !== expectedId) {
+    return { ok: false, reason: 'The server did not confirm your recovery code. Try again.' };
+  }
   try {
     await kvSet('recoverySetAt', Date.now());
     if (rid) await kvSet('recoveryId', rid);

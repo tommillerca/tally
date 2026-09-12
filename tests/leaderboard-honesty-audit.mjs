@@ -47,7 +47,7 @@ function harness(age, fleet = false) {
     crewCount: a => String(a.length), crewTruncText: () => '',
   });
   ctx.social.fetchStepRace = async () => ctx.raceFixture;
-  vm.runInContext(['leaderboardLastOnline', 'onlineLabel', 'snapshotNotice', 'snapshotDetail', 'crewCardHtml', 'requestRowsHtml', 'openFriendProfile'].map(fn).join('\n') + '\n'
+  vm.runInContext(['relativeAgo', 'leaderboardLastOnline', 'onlineLabel', 'snapshotNotice', 'snapshotDetail', 'crewCardHtml', 'requestRowsHtml', 'openFriendProfile'].map(fn).join('\n') + '\n'
     + ['paintFanSel', 'openLeaderboard', 'hydratePodium', 'raceFreshHtml', 'hydrateRace', 'hydrateNewcomers'].map(nested).join('\n'), ctx);
   vm.runInContext(fn('openFriendPaddock').replace("await import('./paddock.js')", 'paddock'), ctx);
   return { ctx, p, friend, nodes, node, sheet: () => sheet };
@@ -71,10 +71,19 @@ for (const [label, age, fleet] of scenarios) {
       if (surface === 'race') { await vm.runInContext('hydrateRace()', h.ctx); html = h.node('#raceCard').innerHTML; }
       const copy = text(html);
       assert.ok(copy.includes('Pal'), 'CONTROL player stays reachable');
-      assert.doesNotMatch(copy, /last seen|\b\d+d ago|\byesterday\b/i);
-      assert.doesNotMatch(copy, /Synced|recent sync|sync time|awaiting.*sync|Showing last shared snapshots|Online now/i);
-      if (surface === 'leaderboard') assert.match(copy, /Last online: 2026-/);
-      else assert.doesNotMatch(copy, /\bonline\b/i);
+      /* v589 re-anchor. Tom, 2026-09-12: "there is way too much UTC timezone
+         chatter text on the leader board now ... it should just say \"logged
+         on 2 hours ago or 2 days ago etc\"". The leaderboard row now carries
+         ONE relative phrase and never a date, a clock time or UTC. Every other
+         surface keeps the old bans. */
+      assert.doesNotMatch(copy, /Synced|recent sync|sync time|awaiting.*sync|Showing last shared snapshots/i);
+      if (surface === 'leaderboard') {
+        assert.match(copy, /online now|\d+ (minutes?|hours?|days?|weeks?) ago|yesterday/i, 'leaderboard carries a relative last-seen phrase');
+        assert.doesNotMatch(copy, /UTC|\d{4}-\d{2}-\d{2}|\b\d{2}:\d{2}\b|Last online:/i, 'leaderboard carries no timestamp');
+      } else {
+        assert.doesNotMatch(copy, /last seen|\b\d+d ago|\byesterday\b|Online now/i);
+        assert.doesNotMatch(copy, /\bonline\b/i);
+      }
       assert.doesNotMatch(html, /cfan-live|live-dot/);
       if (['podium', 'requests'].includes(surface)) assert.match(copy, /last shared/i);
       if (surface === 'race') {

@@ -12761,3 +12761,10 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
     flex-basis: 100%; flex-wrap: wrap; justify-content: flex-end;
   }
 }
+
+/* F7: keep the Pit stage around its uniformly grown companion. */
+#petStage.fstage.petmini {
+  width: calc(76px * var(--pet-growth, 1));
+  height: calc(76px * var(--pet-growth, 1));
+  min-height: calc(76px * var(--pet-growth, 1));
+}
