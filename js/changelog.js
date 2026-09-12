@@ -9,6 +9,9 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 589, date: '2026-09-12', title: 'Simpler leaderboard activity', items: [
+    'The leaderboard shows online now, hours ago or days ago instead of exact timestamps.',
+  ] },
   { n: 588, date: '2026-09-12', title: 'The Salvage Bench moves to the Wardrobe, and names get room', items: [
     'Find the Salvage Bench below your slots in the Wardrobe. The Shop shortcut takes you straight there.',
     'Long names wrap on podiums, leaderboards, race results, gifts, featured nameplates, newcomers and Pit labels.',

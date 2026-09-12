@@ -1,3 +1,4 @@
+import { loadProduction as loadSeenProduction, PHRASES as SEEN_PHRASES, NOW as SEEN_NOW, runAudit as runSeenAudit } from './leaderboard-seen-audit.mjs';
 // Node unit tests: node tests/unit.test.js
 import { PURE as DEVICE_REPORT_PURE } from './device-report-audit.mjs';
 import * as deviceReport from '../js/device-report.js';
@@ -73,6 +74,17 @@ let passed = 0, failed = 0;
    them, sync and async alike. */
 const QUEUE = [];
 function test(name, fn) { QUEUE.push([name, fn]); }
+
+test('relativeAgo uses elapsed boundaries and preserves presence gates', () => {
+  const { relativeAgo, onlineLabel } = loadSeenProduction();
+  for (const [age, expected] of SEEN_PHRASES) {
+    assert.equal(relativeAgo(SEEN_NOW - age, SEEN_NOW), expected);
+    assert.equal(onlineLabel(SEEN_NOW - age).on, age < 360000);
+    assert.equal(onlineLabel(SEEN_NOW - age).fresh, age < 86400000);
+  }
+  for (const now of [NaN, Infinity, undefined]) assert.equal(relativeAgo(SEEN_NOW, now), '');
+});
+test('leaderboard seen PURE audit', () => assert.equal(runSeenAudit(), 0));
 
 // Register every Device report PURE guard with the agreed Node proof runner.
 for (const [name, guard] of DEVICE_REPORT_PURE) test(`Device report PURE: ${name}`, () => guard(deviceReport));

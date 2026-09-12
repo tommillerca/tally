@@ -247,6 +247,21 @@ const LIMITS = {
   heightCm: { min: 90, max: 250 },
 };
 // Profile timestamps gate comparisons internally, never establish presence.
+// Elapsed time, independent of the player's timezone or wall clock calendar.
+function relativeAgo(ms, now) {
+  const age = now - ms;
+  if (!Number.isFinite(ms) || !Number.isFinite(now) || ms <= 0 || age < 0) return '';
+  if (age < 360000) return 'online now';
+  if (age < 3600000) return `${Math.floor(age / 60000)} minutes ago`;
+  if (age < 86400000) {
+    const hours = Math.floor(age / 3600000);
+    return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  }
+  if (age < 172800000) return 'yesterday';
+  if (age < 604800000) return `${Math.floor(age / 86400000)} days ago`;
+  const weeks = Math.floor(age / 604800000);
+  return `${weeks} week${weeks === 1 ? '' : 's'} ago`;
+}
 function onlineLabel(lastSeen) {
   const age = Date.now() - lastSeen;
   const valid = Number.isFinite(lastSeen) && lastSeen > 0 && age >= 0;
@@ -259,8 +274,7 @@ function snapshotDetail(lastSeen) {
   return '';
 }
 function leaderboardLastOnline(lastSeen) {
-  if (!Number.isFinite(lastSeen) || lastSeen <= 0 || lastSeen > Date.now()) return '';
-  return `Last online: ${new Date(lastSeen).toISOString().replace('T', ' ').slice(0, 16)} UTC`;
+  return relativeAgo(lastSeen, Date.now());
 }
 
 const S = {

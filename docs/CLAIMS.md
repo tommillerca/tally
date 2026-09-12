@@ -1,5 +1,10 @@
 # What each patch note claims, and what backs it
 
+## v589 (2026-09-12)
+
+Changelog item: The leaderboard shows online now, hours ago or days ago instead of exact timestamps.
+1. PROOF: leaderboard-seen-audit.mjs (PURE tier), PHRASES, NO-UTC and CONTROL green using the real functions and leaderboard row callback extracted from js/app.js. NO-UTC red on main cb2aca568cf53661d5f9bd584831f618feda3cd7 with the same fixture and template extraction. Unit coverage checks relativeAgo boundaries and unchanged onlineLabel on/fresh gates. | REACH: F20. Added relativeAgo(ms, now) beside onlineLabel and changed leaderboardLastOnline, consumed by the existing .lb-seen row template. Audited every toISOString and UTC match in js/app.js: the sole last-seen timestamp site was leaderboardLastOnline; remaining matches are date-parsing comments and the bounded-stat diagnostic date. Race cards use the already empty snapshotDetail, so no other last-seen formatter required changes. Invalid or future timestamps remain blank. Yesterday means elapsed 24 to under 48 hours; weeks start at seven elapsed days. No stamps changed.
+
 ## v588 (2026-09-12)
 
 Assembled from five Codex lanes by the commander. Every browser audit below was run by the commander on the lane tree and again on the merged train; the lanes cannot bind a socket.
