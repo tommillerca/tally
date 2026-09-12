@@ -21795,7 +21795,7 @@ function petDestructionHtml(q) {
 
 /* Salvage, Breed and Animate share this review. A stale quote replaces the
  * disclosure in place and clears the typed acknowledgement before another try. */
-function openPetDestructionReview({ title, html, typed = false, accepts = t => t === 'ANIMATE', prompt = 'Type ANIMATE to confirm', action = 'Animate', commit, onClose = null, message = '' }) {
+function openPetDestructionReview({ title, html, typed = false, accepts = t => t === 'ANIMATE', prompt = 'Type ANIMATE to confirm', action = 'Animate', commit, onClose = null, message = '', retryOnFailure = false }) {
   let busy = false, finished = false, afterClose = null;
   const wrap = openSheet(`<div class="sheet-head"><h2>${esc(title)}</h2><button class="sheet-close">Cancel</button></div><div class="sheet-body lab-review">${html}${typed ? `<div class="t1-field"><label for="pdIn">${esc(prompt)}</label><input id="pdIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false"></div>` : ''}<p id="pdStatus" role="status"></p></div><div class="t1-foot"><button class="btn danger-ish" id="pdGo" ${typed ? 'disabled' : ''}>${esc(action)}</button></div>`, { cls: 't1 pet-a11y', name: 'PetDestruction', onClose: () => { onClose?.(); if (afterClose) queueMicrotask(afterClose); } });
   let input = $('#pdIn', wrap), status = $('#pdStatus', wrap);
@@ -21819,14 +21819,17 @@ function openPetDestructionReview({ title, html, typed = false, accepts = t => t
         status.textContent = result.message || ''; input.focus?.();
         return;
       }
-      finished = true;
+      finished = !(retryOnFailure && result?.retry);
       afterClose = result?.afterClose || null;
       if (result?.message) status.textContent = result.message;
       if (result?.close && wrap.isConnected) history.back();
     } catch {
-      finished = true;
-      status.textContent = 'The save could not be verified. This action is paused while its status is unresolved.';
-    } finally { busy = false; }
+      finished = !retryOnFailure;
+      status.textContent = retryOnFailure ? 'The save could not be completed. Try again.' : 'The save could not be verified. This action is paused while its status is unresolved.';
+    } finally {
+      busy = false;
+      if (retryOnFailure) go.disabled = finished || !typedOk();
+    }
   });
   return wrap;
 }
@@ -22507,31 +22510,37 @@ function fileReplacementHtml(current, next) {
     }).join('');
     sections.push(`<h3>${esc(STORE_WORDS[store])}: ${before.length} → ${after.length} records</h3><ul>${details || '<li>New records from the backup.</li>'}</ul>`);
   }
-  return `<p>This replaces the save on this device. Current values → values after replacement:</p>${sections.join('') || '<p>No current records change.</p>'}<p>A restore point of your current save must be saved first. If storage is full or unavailable, replacement is blocked. Afterwards, use Settings → Restore points to return. Points stay on this device until Erase all data or Delete account removes them.</p>`;
+  return `<p>This replaces the save on this device. Current values → values after replacement:</p>${sections.join('') || '<p>No current records change.</p>'}<p>A restore point of your current save must be saved first. If storage is full or unavailable, replacement is blocked. Afterwards, use Settings → Restore points to return. The last two restore points are kept on this device; older ones are removed when a new one is saved.</p>`;
 }
 
 function openFileReplacementReview(data, current, next, undo = false) {
+  let applied = false, counts;
   return openPetDestructionReview({
     title: undo ? 'Return to this restore point?' : 'Replace your save with this file?',
     html: fileReplacementHtml(current, next), typed: true,
     accepts: text => text.trim().toUpperCase() === 'REPLACE',
-    prompt: 'Type REPLACE to confirm these changes', action: 'Replace save',
+    prompt: 'Type REPLACE to confirm these changes', action: 'Replace save', retryOnFailure: true,
     commit: async () => {
       try {
-        // Synchronous verified storage write completes before any import opens.
-        saveFileRestorePoint(current);
+        // Database transactions apply every store or abort unchanged. Remember
+        // completion before UI work so retry never repeats a successful import.
+        if (!applied) {
+          // Synchronous verified storage write completes before any import opens.
+          saveFileRestorePoint(current);
+          if (undo) await restoreFileSave(data, current);
+          else counts = await importAll(data, { replace: true, expectedFileState: current });
+          applied = true;
+        }
         if (undo) {
-          await restoreFileSave(data, current);
           location.reload(); // Also refresh if the review was dismissed while storage was committing.
           return { message: 'Restore point recovered. The save you just left is also kept in Restore points.' };
         }
-        const counts = await importAll(data, { replace: true, expectedFileState: current });
         await finishFileImport(counts);
         return { message: 'Backup restored. Return through Settings → Restore points.' };
       } catch (err) {
-        const message = fileImportFailure(err) + ' Existing restore points remain available in Settings → Restore points.';
+        const message = (applied ? 'Your save was replaced, but the screen could not refresh. Try again to refresh it.' : fileImportFailure(err)) + ' Existing restore points remain available in Settings → Restore points.';
         toast(message, 7200);
-        return { message };
+        return { message, retry: true };
       }
     },
   });
@@ -24810,7 +24819,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v581'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v582'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 let grantDeliveryBusy = false;
