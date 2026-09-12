@@ -72,7 +72,7 @@ async function harness(scenario, webdriver = true) {
     let favs = new Set(), fanOrder = [], centerId = null, fanQuery = '', fanFavouritesOnly = false;
     ${app.match(/^  let fanPaintRevision = 0;$/m)?.[0] || ''}
     const fanFriend = id => data.friends.find(f => f.playerId === id);
-    ${['leaderboardLastOnline', 'onlineLabel', 'snapshotNotice', 'crewCardHtml', 'crewCount', 'crewTruncText', 'requestRowsHtml'].map(fn).join('\n')}
+    ${['relativeAgo', 'leaderboardLastOnline', 'onlineLabel', 'snapshotNotice', 'crewCardHtml', 'crewCount', 'crewTruncText', 'requestRowsHtml'].map(fn).join('\n')}
     ${fetchBranch}
     ${['resortFan', 'paintFan', 'paint', 'openLeaderboard', 'raceFreshHtml', 'hydrateRace'].map(nested).join('\n')}
     globalThis.run = async () => { ${meBranch}

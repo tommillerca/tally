@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import vm from 'node:vm';
 import * as art from '../data/boneheadz.js';
-import { morphAsset, isMorph } from '../js/pets.js';
+import { morphAsset, isMorph, petGrowth } from '../js/pets.js';
 import { ANIMATED_PETS, petMassScale } from '../js/petanim.js';
 
 const root = new URL('../', import.meta.url);
@@ -39,6 +39,7 @@ const context = vm.createContext({
   petWear: async () => current.wear, levelFor: () => ({ level: 1, name: 'Bonehead' }),
   platformTag: () => 'web', RACE_RULES: 1, championTitle: async () => '',
 });
+context.petGrowth = petGrowth; // v589: sprites scale by lineage
 vm.runInContext([
   declaration('wearOf'), declaration('snapPetMorph'),
   ...['staticMassScale', 'petScale', 'croppedPetImg', 'petPortraitHtml',

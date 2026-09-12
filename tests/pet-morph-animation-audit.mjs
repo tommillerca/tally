@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as art from '../data/boneheadz.js';
 import * as animation from '../js/petanim.js';
-import { morphAsset } from '../js/pets.js';
+import { morphAsset, petGrowth } from '../js/pets.js';
 
 const root = new URL('../', import.meta.url);
 const app = fs.readFileSync(new URL('js/app.js', root), 'utf8');
@@ -35,6 +35,7 @@ function renderer({ oldGate = false, oldFill = false, anim = animation } = {}) {
     assert.match(src, /const imgSize = restStage[^;]+;/, 'CONTROL fill mutation applied');
     src = src.replace(/const imgSize = restStage[^;]+;/, 'const imgSize = (px * FILL) / Math.max(cw, ch);');
   }
+  context.petGrowth = petGrowth; // v589: sprites scale by lineage
   vm.runInContext(src, context);
   return context;
 }
