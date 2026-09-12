@@ -250,6 +250,61 @@ async function confirm(h) {
 }
 function points() { return [...local.values()].map(v => JSON.parse(v)); }
 
+async function liveFileReview(h, file) {
+  await files(h).importBackupFromFile(file);
+  assert.match(h.html, /id="pdIn"/);
+  assert.match(h.html, /Replace your save with this file/);
+  assert.equal(typeof h.$('#pdIn').handlers.input, 'function');
+  h.$('#pdIn').value = 'REPLACE';
+  h.$('#pdIn').handlers.input();
+  assert.equal(h.$('#pdGo').disabled, false);
+  console.log('CONTROL ' + JSON.stringify({ opened: true, confirmation: h.$('#pdIn').value, disabled: h.$('#pdGo').disabled }));
+}
+await test('SENTENCE retention number matches production eviction and observed saves', async () => {
+  const f = await fixture(), h = fileHarness();
+  await liveFileReview(h, f.file);
+  const dbSource = readFileSync(new URL('../js/db.js', import.meta.url), 'utf8');
+  const limit = Number(dbSource.match(/for \(const old of points\.slice\((\d+)\)\)/)?.[1]);
+  assert.ok(limit > 0, 'production eviction limit must be found');
+  for (let i = 0; i < limit + 2; i++) D.saveFileRestorePoint(f.current);
+  assert.equal(D.fileRestorePoints().length, limit);
+  const sentence = h.html.match(/The last (\w+) restore points are kept on this device; older ones are removed when a new one is saved\./);
+  assert.ok(sentence, 'retention sentence missing');
+  assert.equal(({ two: 2 })[sentence[1]] ?? Number(sentence[1]), limit);
+});
+for (const failure of ['throw', 'quota', 'abort', 'after-commit']) {
+  await test('RETRY / ONCE file ' + failure, async () => {
+    const f = await fixture(), h = fileHarness();
+    let attempts = 0, commits = 0, refreshes = 0;
+    h.deps.importAll = async (...args) => {
+      attempts++;
+      if (failure === 'throw' && attempts === 1) throw new Error('forced commit failure');
+      const result = await D.importAll(...args);
+      commits++;
+      return result;
+    };
+    h.deps.hydrateGenericUse = async () => {
+      if (failure === 'after-commit' && ++refreshes === 1) throw new Error('forced refresh failure');
+    };
+    await liveFileReview(h, f.file);
+    quotaFailure = failure === 'quota'; abortClear = failure === 'abort' ? 'inv' : false;
+    await h.$('#pdGo').click();
+    assert.equal(h.$('#pdIn').value, 'REPLACE');
+    assert.equal(h.$('#pdGo').disabled, false, 'refused sheet must remain live');
+    if (failure !== 'after-commit') await assertState(f.current);
+    quotaFailure = false; abortClear = false;
+    const retry = h.$('#pdGo').click();
+    await h.$('#pdGo').click(); // Busy guard also covers overlapping presses.
+    await retry;
+    assert.equal(attempts, ['throw', 'abort'].includes(failure) ? 2 : 1, 'retry reaches the handler without repeating an applied import');
+    assert.equal(commits, 1, 'exactly one successful database commit');
+    assert.equal(await D.kvGet('coins'), 100);
+    await h.$('#pdGo').click();
+    assert.equal(commits, 1, 'finished guard prevents another commit');
+    console.log('ONCE ' + JSON.stringify({ failure, attempts, commits }));
+  });
+}
+
 await test('CONTROL file import refuses malformed JSON and damaged stores without losing earnings', async () => {
   await D.kvSet('coins', 125);
   await D.db.put('inv', { id: 'earned-crate', kind: 'crate' });

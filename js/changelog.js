@@ -9,6 +9,10 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 582, date: '2026-09-12', title: 'Importing a backup tells the truth, and can be retried', items: [
+    'The import screen now says what really happens to your restore points.',
+    'If an import is refused, you can free up space and try again without starting over.',
+  ] },
   { n: 581, date: '2026-09-11', title: 'Settings, tidied', items: [
     'Settings reads in a sensible order, and every button shows its whole label.',
     'Diagnostics, the device report and the USDA key tuck away until you want them.',
