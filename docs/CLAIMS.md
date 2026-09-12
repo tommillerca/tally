@@ -1,5 +1,15 @@
 # What each patch note claims, and what backs it
 
+## v580 (2026-09-11)
+
+Changelog item: Chests and items in the Backpack are centred on their cards.
+1. PROOF: `node tests/backpack-wardrobe-f1-f2-audit.mjs` row CENTRED, green at 375x812 and 430x932 with a 1px tolerance: art, title and summary all land on the card centre (99.25 and 275.75 at 375px; 113 and 317 at 430px). Proven red against live v579 in `docs/v579/guard-red.txt`, where the same cards read art 53, title 73.4, summary 82.8 against a card centre of 99.25. Round 1 centred art and title but left the summary at a constant +6.34px on every card at both widths, which was an asymmetric box property rather than a text one; it was removed at source rather than nudged. | REACH: the Backpack's crate and item cards at those two viewports. Other Backpack sections are unmeasured.
+
+Changelog item: In the Wardrobe, Take off and The Studio have swapped places.
+2. PROOF: `node tests/backpack-wardrobe-f1-f2-audit.mjs` row ORDER: the fit rail reads Saved fits (16), Save fit (132.9), Take off (193.9), The Studio (257.7) by ascending x. `tests/studio-audit.mjs` was rebaselined to assert the NEW order (save < reset < studio) rather than relaxed. ONE-TAKE-OFF is scoped to the fit rail: the second element reading "Take off" is the `.ward-cell.none` grid cell that clears a slot, which is long-standing UI and not a duplicate. | REACH: the Wardrobe fit rail at 375x812 and 430x932.
+
+Deviations: this item was logged on 2026-09-11 as part of Tom's sentence "In back centre chests lose the text that is already explained in details and odds", whose dropdown half shipped in v577. The word "centre" was dropped when the note was transcribed into `docs/PLAYTEST-FEEDBACK-v568.md`, so the centring was never built. The register that should have caught it is restored in ROADMAP.md and enforced by `tests/feedback-register-lint.mjs`.
+
 ## v579 (2026-09-11)
 
 Changelog item: Settings buttons no longer break a word in half, and the backup rows line up.

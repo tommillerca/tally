@@ -33,8 +33,8 @@ verbatim; never paraphrase into the table.
 
 | # | Area | Tom, verbatim | Status | Evidence |
 |---|---|---|---|---|
-| F1 | Backpack | "In back **centre** chests" (same sentence as the details/odds dropdown, which shipped in v577) | **OPEN** — measured on live v579: crate tiles sit at x=29 and x=206, `text-align: start`, not centred | — |
-| F2 | Wardrobe | "the wardrobe having the studio button and take off swapped" | **OPEN** — live v579 rail order is Saved fits, Save fit, The Studio, Take off | — |
+
+
 | F3 | Settings | "settings still has tons of problems in the design i think i sent over an analysis of that?" | **OPEN — NEEDS TOM.** `docs/PLAYTEST-SETTINGS.md` exists but is a SAFETY analysis, not a design one. Asked Tom which he means | — |
 | F4 | Settings | `docs/PLAYTEST-SETTINGS.md` item 1: importing an older backup silently removes newer earnings (125 coins + 1 crate -> 100 coins, 0 crates, message "Backup restored") | **OPEN, HIGH HARM.** Breaks the no-permanent-loss lock | `docs/PLAYTEST-SETTINGS.md` |
 | F5 | Melt | "no sound on melt it's also a fucking nightmare that needs to be redesigned basically unuseable with the interface" | **REVIEW DELIVERED, NEEDS TOM'S PICK.** Every advertised Salvage Bench route opens the Backpack instead; the bench is below the Kitchen. Sound hooks all exist | `docs/melt-review.md` |
@@ -56,6 +56,8 @@ verbatim; never paraphrase into the table.
 | Pit | Spire takeover paid 40 instead of the earned 80 | v579 | `tests/v576-hunt-audit.mjs` |
 | Wardrobe | Slot-tap scroll, cosmetic stacking | v579 | `tests/wardrobe-slot-scroll-audit.mjs`, `tests/wardrobe-stack-audit.mjs` |
 | Settings | Import/Restore buttons no longer break a word in half | v579 | `tests/settings-rows-audit.mjs` |
+| Backpack | Chests and items centred on their cards ("In back **centre** chests") | v580 | `tests/backpack-wardrobe-f1-f2-audit.mjs` row CENTRED, red on v579 |
+| Wardrobe | Take off and The Studio swapped | v580 | same audit, row ORDER |
 | Wardrobe | Offhand art (shovel/toothbrush/flag off the figure) | earlier | Tom: "finally the shovel is fixed. mark it done" |
 
 
