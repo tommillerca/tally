@@ -696,7 +696,9 @@ function unprovenLines(out) {
    there are not, which is where the stack will be. */
 function failLines(out) {
   const lines = out.split('\n');
-  const hits = lines.filter(l => /^FAIL|FAILED/.test(l));
+  // The godmode footer 'AUDIT END x: FAILED' matched this filter and was the
+  // only 'hit' for a crashed suite, which is how the stack went missing.
+  const hits = lines.filter(l => /^FAIL|FAILED/.test(l) && !/^AUDIT END|^RETAINED|^MACHINE/.test(l));
   /* 2026-09-12: the tail alone was the godmode DEPENDENCY footer and the AUDIT
      END line, so a crashed suite's log said nothing about WHY (23 of main's 48
      reds were "unresolved" in the triage for exactly this reason). Keep the
