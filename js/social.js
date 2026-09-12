@@ -1589,9 +1589,15 @@ export async function setRecoveryPhrase(phrase, recoveryId = null) {
   // signedFetch hands back the raw Response, so a taken id arrives as 409, not a throw
   if (r && r.status === 409) return { ok: false, reason: 'That recovery ID is taken. Pick another.', field: 'id' };
   if (!r || !r.ok) return { ok: false, reason: 'Could not reach the server. Try again.' };
-  await kvSet('recoverySetAt', Date.now());
-  if (rid) await kvSet('recoveryId', rid);
-  return { ok: true, recoveryId: rid || (await kvGet('recoveryId', null)), friendCode: (await kvGet('social', {}))?.friendCode || null };
+  try {
+    await kvSet('recoverySetAt', Date.now());
+    if (rid) await kvSet('recoveryId', rid);
+    return { ok: true, recoveryId: rid || (await kvGet('recoveryId', null)), friendCode: (await kvGet('social', {}))?.friendCode || null };
+  } catch (cause) {
+    const error = new Error('Recovery credentials accepted, local recording failed.', { cause });
+    error.recoveryAccepted = true;
+    throw error;
+  }
 }
 
 export async function myRecoveryId() { return kvGet('recoveryId', null); }

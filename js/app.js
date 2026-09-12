@@ -15335,14 +15335,20 @@ async function renderSettings(el) {
   $('#cbOn', el)?.addEventListener('click', async () => {
     const btn = $('#cbOn', el);
     btn.disabled = true;
-    await social.setCloudBackup(true);
-    const pushed = await social.pushBackup(APP_SOCIAL_V).catch(() => false);
-    if (pushed) toast('Cloud backup on. Your progress is safe.');
-    else {
-      const fail = await kvGet('backupFail', null);
-      toast(`Cloud backup on. ${cloudFailLine(fail && fail.reason, Number(await kvGet('clockSkewMs', 0)) || 0)}`, 5600);
+    try {
+      await social.setCloudBackup(true);
+      const pushed = await social.pushBackup(APP_SOCIAL_V).catch(() => false);
+      if (pushed) toast('Cloud backup on. Your progress is safe.');
+      else {
+        const fail = await kvGet('backupFail', null);
+        toast(`Cloud backup on. ${cloudFailLine(fail && fail.reason, Number(await kvGet('clockSkewMs', 0)) || 0)}`, 5600);
+      }
+      renderSettings(el);
+    } catch {
+      toast('Could not finish turning cloud backup on. Try again.', 5600);
+    } finally {
+      btn.disabled = false;
     }
-    renderSettings(el);
   });
   $('#cbOff', el)?.addEventListener('click', async () => {
     await social.setCloudBackup(false);
@@ -17548,8 +17554,18 @@ async function renderCharacter(wrap, tab, opts = {}) {
         <div class="t1-foot"><button class="btn ghost sheet-close">Cancel</button><button class="btn danger-ish" data-fit-delete-confirm>Delete fit</button></div>`, { cls: 't1', name: 'Delete fit' });
       $('[data-fit-delete-confirm]', review).addEventListener('click', async ev => {
         if (ev.currentTarget.disabled) return;
-        ev.currentTarget.disabled = true;
-        await deleteFit(fit.id);
+        const btn = ev.currentTarget;
+        btn.disabled = true;
+        let deleted = false;
+        try {
+          await deleteFit(fit.id);
+          deleted = true;
+        } catch {
+          toast('Could not delete this fit. Try again.', 5600);
+          return;
+        } finally {
+          if (!deleted) btn.disabled = false;
+        }
         history.back();
         S.fitEdit = null; popSound(S.sounds); haptic.heavy();
         toast(`Deleted "${fit.name}".`, 2000, { action: true });
@@ -22452,8 +22468,15 @@ async function openRecoverySheet() {
     const bad = social.phraseProblem(a);
     if (bad) return err(bad);
     const btn = $('#rcSave', wrap); btn.disabled = true; btn.textContent = 'Saving...';
-    const r = await social.setRecoveryPhrase(a, id);
-    btn.disabled = false; btn.textContent = 'Save my recovery code';
+    let r;
+    try {
+      r = await social.setRecoveryPhrase(a, id);
+    } catch (error) {
+      toast(error?.recoveryAccepted ? 'The server saved your recovery credentials, but this device could not record them. Keep your ID and phrase and try again.' : 'Could not prepare recovery credentials. They were not sent to the server. Try again.', 5600);
+      return;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Save my recovery code';
+    }
     if (!r.ok) return err(r.reason || 'Could not save that.');
     levelSound(S.sounds);
     closeAllSheetsViaHistory();
@@ -22646,8 +22669,15 @@ async function openRestoreSheet() {
   $('#rsGo', wrap).addEventListener('click', async () => {
     const wasOnb = saveRecoveryActive || !S.settings;   // this sheet is also onboarding's restore path
     const btn = $('#rsGo', wrap); btn.disabled = true; btn.textContent = 'Restoring...';
-    const r = await social.restoreWithPhrase($('#rsCode', wrap).value, $('#rsPhrase', wrap).value);
-    btn.disabled = false; btn.textContent = 'Restore my Bonehead';
+    let r;
+    try {
+      r = await social.restoreWithPhrase($('#rsCode', wrap).value, $('#rsPhrase', wrap).value);
+    } catch (error) {
+      toast('Could not finish restoring on this device. Your inputs are kept. Try again.', 5600);
+      return;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Restore my Bonehead';
+    }
     if (!r.ok) return err(r.reason || 'Could not restore.');
     S.settings = await kvGet('settings', S.settings);
     if (r.restored) saveWitness = { settings: !!S.settings, loot: !!(await kvGet('loot-init', false)) };

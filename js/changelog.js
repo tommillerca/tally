@@ -9,6 +9,9 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 588, date: '2026-09-12', title: 'Retry without reopening the sheet', items: [
+    'Restore, recovery code saving, cloud backup On and Delete fit now let you retry after a failed write.',
+  ] },
   { n: 587, date: '2026-09-12', title: 'Tapping a piece shows its options where you tapped', items: [
     'The options that open under a piece now fit on screen instead of running off the bottom.',
     'Cosmetic cards in that row are drawn at the right size again.',

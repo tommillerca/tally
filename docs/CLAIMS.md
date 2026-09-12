@@ -1,5 +1,10 @@
 # What each patch note claims, and what backs it
 
+## v588 (2026-09-12)
+
+Changelog item: Restore, recovery code saving, cloud backup On and Delete fit now let you retry after a failed write.
+1. PROOF: `settings-safety-audit.mjs` has four RETRY / ONCE rows injecting refusal into extracted production handlers, preserving inputs, checking failure toasts and re-enabled controls, then recording exactly one successful commit on retry. All four were RED against main at `8b4cefe8af3da4e9f3b1d105fb891de373894aea` (26 passed, 4 failed). The fixed audit has 33 passed, 0 failed, including production recovery-save logic with encryption and both local metadata writes refused separately. Server acceptance followed by local failure is disclosed separately from credentials never sent. The retry repeats the existing credential PUT; exactly one commit means one completed local record, not one server request. Delete fit remains locked both while pending and after success. | REACH: PURE handler and dependency doubles only. Browser layout, real crypto, storage and server delivery are unproven.
+
 ## v587 (2026-09-12)
 
 Changelog item: The options that open under a piece now fit on screen instead of running off the bottom.
