@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
+import { EGG_STEP_THRESHOLD } from '../js/game.js';
+import { STEPS_PER_ACTIVE_MIN } from '../js/loot.js';
+import { MANUAL_WALKS_PER_DAY } from '../js/wellness.js';
 import {INGREDIENT_IDS, INGREDIENTS, POTIONS} from '../js/cooking.js';
 import {eggProgress, CRATES, CONSUMABLES, crateOdds, RARITIES} from '../js/loot.js';
 const app = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
@@ -44,6 +47,11 @@ console.log('PASS Backpack: seven rendered ingredients, independent egg records,
 const template = bp.slice(bp.indexOf('content.innerHTML = ') + 'content.innerHTML = '.length, bp.lastIndexOf(';'));
 function render(extra = {}) {
   return vm.runInNewContext(template, {
+    /* v584 put the egg threshold sentence into this template, so the constant
+       has to be in scope here or the whole render throws ReferenceError. Taken
+       from js/game.js rather than typed, so this harness cannot drift from the
+       rule the sentence quotes. */
+    EGG_STEP_THRESHOLD, STEPS_PER_ACTIVE_MIN, MANUAL_WALKS_PER_DAY,
     INGREDIENT_IDS, INGREDIENTS, POTIONS, CRATES, CONSUMABLES, crateOdds, RARITIES,
     pendingLoot:[], crates:[], eggs:[], lifeSteps:600, eggStale:false,
     ingInv:{}, bpPotions:{}, boosts:0, boost:0, vigors:0, foodActive:[],

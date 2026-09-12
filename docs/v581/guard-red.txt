@@ -1,3 +1,76 @@
+B2 egg progression guard evidence
+Plan SHA256: 588715c5c520d3c521b4c7cee08c05de95c4b96e4c91ff4f894037e0c62e1742
+Baseline main: 26621a9f29dd60e8fdbccb4dfa8b59422029cd1b
+
+The baseline sources were read with git show main:<relative path>, without checking out or editing main.
+
+Command: node tests/egg-progress-audit.mjs --simulate --main
+Exit: 1, expected red. Real reward and progress functions with in-memory persistence.
+This proves PROGRESS red and missing TOLD source copy, not rendered TOLD.
+
+DIRECT SIMULATION main: real walk/egg functions, memory persistence; no IndexedDB or DOM proof.
+PASS CONTROL {"health":[{"date":"2026-09-11","manualWalks":[{"min":30,"at":1789184346582,"source":"manual"},{"min":30,"at":1789184346582,"source":"manual"}]}],"xp":[{"key":"mwalk-2026-09-11-1","type":"wellness","xp":10,"label":"Walked 30 min","date":"2026-09-11"},{"key":"mwalk-2026-09-11-2","type":"wellness","xp":10,"label":"Walked 30 min","date":"2026-09-11"}],"inv":[{"id":"control-egg","kind":"egg","stepsAtStart":0,"goal":8000}],"energy":{"vigor":2}}
+FAIL PROGRESS {"before":0,"after":0,"delta":0,"rawCredit":0}
+FAIL EARN [{"ok":true,"xp":10,"vigor":1,"count":1},{"ok":true,"xp":10,"vigor":1,"count":2}]
+PASS CAP [{"ok":false,"reason":"capped"},{"ok":false,"reason":"capped"}]
+PASS NO-RESET {"banked":2500,"kept":2500,"anchor":10000}
+PASS RACE {"race":{"weekKey":"2026-09-11","steps":0},"petMeter":0}
+FAIL REPLAY {"concurrent":[{"ok":true,"xp":10,"vigor":1,"count":1},{"ok":true,"xp":10,"vigor":1,"count":1}],"replay":{"ok":true,"xp":10,"vigor":1,"count":2},"changedReplay":{"ok":false,"reason":"capped"}}
+FAIL CLOCK {"backwards":{"ok":true,"xp":10,"vigor":1,"count":1},"forwards":{"ok":true,"xp":10,"vigor":1,"count":1}}
+FAIL SHARED-EGG {"before":0,"after":0,"eggs":1}
+FAIL CONCURRENT-CAP {"four":[{"ok":true,"xp":10,"vigor":1,"count":1},{"ok":true,"xp":10,"vigor":1,"count":1},{"ok":true,"xp":10,"vigor":1,"count":1},{"ok":true,"xp":10,"vigor":1,"count":1}],"credit":0}
+MEASUREMENT 60 elapsed days, two walks/day, no Health, one initial unhatched egg; remove ready eggs without simulating pet loot or level rewards.
+[{"minutes":15,"days":60,"accepted":120,"dailyEggs":0,"hatchReady":0,"unhatched":1,"raceSteps":0},{"minutes":30,"days":60,"accepted":120,"dailyEggs":0,"hatchReady":0,"unhatched":1,"raceSteps":0},{"minutes":60,"days":60,"accepted":120,"dailyEggs":0,"hatchReady":0,"unhatched":1,"raceSteps":0}]
+FAIL TOLD-SOURCE (DOM BLOCKED) {"copy":"","threshold":14000}
+EGG AUDIT: 7 failed
+
+Command: node tests/egg-progress-audit.mjs --simulate
+Exit: 0
+
+DIRECT SIMULATION working tree: real walk/egg functions, memory persistence; no IndexedDB or DOM proof.
+PASS CONTROL {"health":[{"date":"2026-09-11","manualWalks":[{"min":30,"at":1789184320681,"source":"manual","eggCredit":7500},{"min":30,"at":1789184320681,"source":"manual","eggCredit":7500}]}],"xp":[{"key":"mwalk-2026-09-11-1","type":"wellness","xp":10,"label":"Walked 30 min","date":"2026-09-11","ts":1789184320681},{"key":"mwalk-2026-09-11-2","type":"wellness","xp":10,"label":"Walked 30 min","date":"2026-09-11","ts":1789184320681},{"key":"egg-2026-09-11","type":"egg","xp":15,"label":"Big-day Step Egg","date":"2026-09-11","ts":1789184320681}],"inv":[{"id":"control-egg","kind":"egg","stepsAtStart":0,"goal":8000,"manualWalkCredit":15000},{"id":"manual-egg-2026-09-11","kind":"egg","stepsAtStart":0,"goal":8000,"source":"steps-2026-09-11","morph":"base","morphPolicy":"lab-final-v1","ts":1789184320681}],"energy":{"vigor":2}}
+PASS PROGRESS {"before":0,"after":8000,"delta":8000,"rawCredit":15000}
+PASS EARN [{"ok":true,"xp":10,"vigor":1,"count":1,"eggCredit":7500,"egg":false,"fromLevel":1,"toLevel":1},{"ok":true,"xp":25,"vigor":1,"count":2,"eggCredit":7500,"egg":true,"fromLevel":1,"toLevel":1}]
+PASS CAP [{"ok":false,"reason":"capped"},{"ok":false,"reason":"capped"}]
+PASS NO-RESET {"banked":2500,"kept":6250,"anchor":10000}
+PASS RACE {"race":{"weekKey":"2026-09-11","steps":0},"petMeter":0}
+PASS REPLAY {"concurrent":[{"ok":true,"xp":10,"vigor":1,"count":1,"eggCredit":7500,"egg":false,"fromLevel":1,"toLevel":1},{"ok":false,"reason":"duplicate"}],"replay":{"ok":false,"reason":"duplicate"},"changedReplay":{"ok":false,"reason":"duplicate"}}
+PASS CLOCK {"backwards":{"ok":false,"reason":"backwards"},"forwards":{"ok":false,"reason":"unwitnessed"}}
+PASS SHARED-EGG {"before":1,"after":1,"eggs":2}
+PASS CONCURRENT-CAP {"four":[{"ok":true,"xp":10,"vigor":1,"count":1,"eggCredit":7500,"egg":false,"fromLevel":1,"toLevel":1},{"ok":true,"xp":25,"vigor":1,"count":2,"eggCredit":7500,"egg":true,"fromLevel":1,"toLevel":1},{"ok":false,"reason":"capped"},{"ok":false,"reason":"capped"}],"credit":15000}
+MEASUREMENT 60 elapsed days, two walks/day, no Health, one initial unhatched egg; remove ready eggs without simulating pet loot or level rewards.
+[{"minutes":15,"days":60,"accepted":120,"dailyEggs":0,"hatchReady":1,"unhatched":0,"raceSteps":0},{"minutes":30,"days":60,"accepted":120,"dailyEggs":60,"hatchReady":60,"unhatched":1,"raceSteps":0},{"minutes":60,"days":60,"accepted":120,"dailyEggs":60,"hatchReady":61,"unhatched":0,"raceSteps":0}]
+PASS TOLD-SOURCE (DOM BLOCKED) {"copy":"<p class=\"note egg-threshold\">An egg needs 14,000 steps in a day.</p>","threshold":14000}
+EGG AUDIT: 0 failed
+
+Command: node tests/egg-progress-audit.mjs
+Exit: 1, BLOCKED before any browser row.
+Rendered TOLD red/green, real IndexedDB concurrency and UI controls remain unverified.
+Proposed deviation: retain this direct simulation as partial evidence and run the browser audit against a separately served baseline tree and this tree in an environment that permits local servers.
+
+AUDIT START egg-progress-audit.mjs: completion pending; planned rows undeclared
+INTERRUPTED egg-progress-audit.mjs: Error: listen EPERM: operation not permitted 127.0.0.1
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+AUDIT END egg-progress-audit.mjs: FAILED; INCOMPLETE; rows=0/undeclared; failed=0; unproven=0; exit=1
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted 127.0.0.1
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '127.0.0.1'
+}
+
+Node.js v22.22.2
 B34 frozen plan SHA256: 4b52b75cbf0b4231665c26199194d04fcf70040ae1629d03df1d407b205b7937
 Baseline HEAD and local main: 26621a9f29dd60e8fdbccb4dfa8b59422029cd1b
 Production files unmodified during red run; extended guard only.
@@ -48,3 +121,56 @@ PASS FILE payout queued after snapshot persists is checked under the import lock
 PASS FILE undo quota failure preserves the imported state and original point
 PASS FILE repeated imports retain older points; ERASE removes points only after success
 settings-safety: 21 passed, 5 failed
+
+Round 2 frozen work order
+Plan SHA256: bbfcaf191c0148de37732a150ff536a6c0e8165dc4d884d570fa0537621937be
+Baseline: 72026f4bcfaf361204800b50a1dcf1f4af54e21e (git show, read-only)
+
+Command: node tests/egg-progress-audit.mjs --simulate --main
+Exit: 1 (expected simulation red). PROGRESS is red on the pinned baseline.
+TOLD-SOURCE is source evidence only, not rendered TOLD proof.
+DIRECT SIMULATION main: real walk/egg functions, memory persistence; no IndexedDB or DOM proof.
+PASS CONTROL {"health":[{"date":"2026-09-11","manualWalks":[{"min":30,"at":1789186141888,"source":"manual"},{"min":30,"at":1789186141888,"source":"manual"}]}],"xp":[{"key":"mwalk-2026-09-11-1","type":"wellness","xp":10,"label":"Walked 30 min","date":"2026-09-11"},{"key":"mwalk-2026-09-11-2","type":"wellness","xp":10,"label":"Walked 30 min","date":"2026-09-11"}],"inv":[{"id":"control-egg","kind":"egg","stepsAtStart":0,"goal":8000}],"energy":{"vigor":2}}
+FAIL PROGRESS {"before":0,"after":0,"delta":0,"rawCredit":0}
+FAIL EARN [{"ok":true,"xp":10,"vigor":1,"count":1},{"ok":true,"xp":10,"vigor":1,"count":2}]
+PASS CAP [{"ok":false,"reason":"capped"},{"ok":false,"reason":"capped"}]
+PASS NO-RESET {"banked":2500,"kept":2500,"anchor":10000}
+PASS RACE {"race":{"weekKey":"2026-09-11","steps":0},"petMeter":0}
+FAIL REPLAY {"concurrent":[{"ok":true,"xp":10,"vigor":1,"count":1},{"ok":true,"xp":10,"vigor":1,"count":1}],"replay":{"ok":true,"xp":10,"vigor":1,"count":2},"changedReplay":{"ok":false,"reason":"capped"}}
+FAIL CLOCK {"backwards":{"ok":true,"xp":10,"vigor":1,"count":1},"forwards":{"ok":true,"xp":10,"vigor":1,"count":1}}
+FAIL SHARED-EGG {"before":0,"after":0,"eggs":1}
+FAIL CONCURRENT-CAP {"four":[{"ok":true,"xp":10,"vigor":1,"count":1},{"ok":true,"xp":10,"vigor":1,"count":1},{"ok":true,"xp":10,"vigor":1,"count":1},{"ok":true,"xp":10,"vigor":1,"count":1}],"credit":0}
+MEASUREMENT 60 elapsed days, two walks/day, no Health, one initial unhatched egg; remove ready eggs without simulating pet loot or level rewards.
+[{"minutes":15,"days":60,"accepted":120,"dailyEggs":0,"hatchReady":0,"unhatched":1,"raceSteps":0},{"minutes":30,"days":60,"accepted":120,"dailyEggs":0,"hatchReady":0,"unhatched":1,"raceSteps":0},{"minutes":60,"days":60,"accepted":120,"dailyEggs":0,"hatchReady":0,"unhatched":1,"raceSteps":0}]
+FAIL TOLD-SOURCE (DOM BLOCKED) {"copy":"","threshold":14000}
+EGG AUDIT: 7 failed
+
+Command: node tests/egg-progress-audit.mjs
+Exit: 1. Browser fixture blocked before serving the working tree.
+AUDIT START egg-progress-audit.mjs: completion pending; planned rows undeclared
+FAIL FIXTURE {"control":"browser fixture boot","error":"listen EPERM: operation not permitted 127.0.0.1"}
+EGG AUDIT: 1 failed
+RETAINED FAIL FIXTURE {"control":"browser fixture boot","error":"listen EPERM: operation not permitted 127.0.0.1"}
+AUDIT END egg-progress-audit.mjs: FAILED; NORMAL EXIT (row coverage undeclared); rows=1/undeclared; failed=1; unproven=0; exit=1
+
+Required rendered TOLD red on 72026f4b remains UNPROVEN. Localhost binding
+is denied by this environment and approval is unavailable. No browser baseline
+run was possible. Proposed deviation: retain the explicit blocker and have the
+independent reviewer run this audit against an isolated export of 72026f4b,
+then against this checkout in an environment allowing the local server/browser.
+Do not count the simulation or fixture failure as rendered TOLD red.
+
+Control method: in-page DOM click invokes the real crates and walk handlers.
+TOLD compares the rendered sentence and its parsed number to EGG_STEP_THRESHOLD.
+No application reward logic was changed in this round.
+
+Agreed proof: node tests/unit.test.js
+Exit: 0
+393 passed, 0 failed
+
+Working-tree simulation: node tests/egg-progress-audit.mjs --simulate
+Exit: 0
+EGG AUDIT: 0 failed
+
+Other denied action: read-only process inspection with ps was denied by the sandbox.
+No commit, push or publish was attempted.

@@ -2941,6 +2941,17 @@ test('EGG a normal egg still needs its full goal', () => {
   const b = eggProgress({ stepsAtStart: 1000 }, 9000);
   assert.equal(b.ready, true, '8000 walked should hatch it');
 });
+// These assertions extend the existing goal and stalled-anchor guards to the new
+// manual reward path. Banked progress and negative-credit refusal stay enforced;
+// the normal full-goal and zero-goal assertions above remain unchanged.
+test('EGG manual credit preserves banked steps and works without Health', () => {
+  const old = { stepsAtStart: 1000, goal: 8000 };
+  assert.equal(eggProgress(old, 3000).walked, 2000);
+  assert.equal(eggProgress({ ...old, manualWalkCredit: 3750 }, 3000).walked, 5750);
+  assert.equal(eggProgress({ stepsAtStart: 0, goal: 8000, manualWalkCredit: 15000 }, 0).ready, true);
+  assert.equal(eggProgress({ ...old, manualWalkCredit: -100 }, 3000).walked, 2000);
+  assert.equal(eggProgress({ stepsAtStart: 9000, goal: 8000, manualWalkCredit: 3750 }, 0).walked, 3750);
+});
 test('EGG STALL an anchor above lifetime unsticks instead of freezing forever', () => {
   // the device has 4,000 lifetime steps but the egg was anchored at 12,000
   const p = eggProgress({ stepsAtStart: 12000, goal: 8000 }, 4000);

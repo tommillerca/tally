@@ -2,9 +2,10 @@
 // ONLY ever add a reward, never punish (wellbeing contract). Each completion
 // writes an idempotent ledger event (type 'wellness') dated today, so quests can
 // read it and the XP is one-time per day. State for the day lives in kv 'wellness'.
-import { kvGet, kvSet, db } from './db.js';
-import { award, awardCapped } from './game.js';
-import { addVigor } from './energy.js';
+import { kvGet, kvSet, db, payAtomic, dayDecision, DAY_WITNESS_KEY } from './db.js';
+import { award, awardCapped, EGG_STEP_THRESHOLD, levelFor, grantLevelRewards, totalXp } from './game.js';
+import { VIGOR_CAP } from './energy.js';
+import { STEPS_PER_ACTIVE_MIN, ACTIVE_MIN_DAILY_CAP, EGG_GOAL_STEPS } from './loot.js';
 import { dateKey } from './nutrition.js';
 
 export const WATER_GOAL = 8; // cups
@@ -68,9 +69,11 @@ export async function markSleep(hours, date = dateKey()) {
  * all ignore because each of them reads only `r.steps`.
  *
  * What it DOES pay, through the same local ledgers everything else uses:
- *   XP     award() row of type 'wellness', so it also counts toward the
+ *   XP     ledger row of type 'wellness', so it also counts toward the
  *          wellness quests (wellnessDays / w-wellness) like water/bed/sleep
- *   Vigor  addVigor(1), banked exactly like a Vigor Draught
+ *   Vigor  one banked charge, exactly like a Vigor Draught
+ *   Eggs   incubation credit at STEPS_PER_ACTIVE_MIN per minute, plus the
+ *          daily egg when verified steps plus manual credit reach its threshold
  */
 export const MANUAL_WALK_MAX_MIN = 60;
 /* Two a day, enforced HERE in the write path rather than in the UI: a manual
@@ -85,22 +88,62 @@ export async function manualWalksToday(date = dateKey()) {
   return (h && Array.isArray(h.manualWalks)) ? h.manualWalks : [];
 }
 
-// Log one walk of up to MANUAL_WALK_MAX_MIN minutes. Returns
-// { ok, xp, energy, count } or { ok: false, reason: 'capped' }.
-export async function logManualWalk(minutes, date = dateKey()) {
-  const min = Math.max(1, Math.min(MANUAL_WALK_MAX_MIN, Math.round(Number(minutes) || 0)));
-  const h = (await db.get('health', date)) || { date };
-  const walks = Array.isArray(h.manualWalks) ? h.manualWalks : [];
-  if (walks.length >= MANUAL_WALKS_PER_DAY) return { ok: false, reason: 'capped' };
-  walks.push({ min, at: Date.now(), source: 'manual' });
-  h.manualWalks = walks; // never h.steps: see the block comment above
-  await db.put('health', h);
-  const xp = await award(`mwalk-${date}-${walks.length}`, 'wellness', MANUAL_WALK_XP, `Walked ${min} min`, date);
-  // Vigor rides the award's idempotency: two overlapping taps race the cap
-  // read above, but they mint the same ledger key, so only the one whose
-  // award() actually paid banks the Vigor (one extra Pit fight per walk).
-  if (xp > 0) await addVigor(1);
-  return { ok: true, xp, vigor: xp > 0 ? 1 : 0, count: walks.length };
+// A free daily ordinal becomes a recorded walk. The live health row, XP
+// receipts, day guard and egg rewards are read and written in ONE transaction.
+// UI requests carry the rendered ordinal: double-taps and replays are no-ops.
+// Callers without an ordinal can claim at most two slots, including across tabs.
+// Clock rollback is refused; forward changes use the existing witnessed grace.
+export async function logManualWalk(minutes, date = dateKey(), slot = null) {
+  if (!Number.isFinite(Number(minutes)) || Number(minutes) <= 0) return { ok: false, reason: 'invalid' };
+  const min = Math.max(1, Math.min(MANUAL_WALK_MAX_MIN, Math.round(Number(minutes))));
+  const ts = Date.now();
+  const result = await payAtomic({
+    snapshot: { keys: ['dayHighWater', DAY_WITNESS_KEY], stores: ['health', 'xp', 'inv'] },
+    decide: (s, rows) => {
+      const day = dayDecision(date, s.dayHighWater, s[DAY_WITNESS_KEY], true);
+      if (!day.fresh) return { result: { ok: false, reason: day.reason } };
+      const h = rows.health.find(r => r.date === date) || { date };
+      const walks = Array.isArray(h.manualWalks) ? h.manualWalks : [];
+      const count = walks.length + 1;
+      if (slot != null && slot !== count) return { result: { ok: false, reason: 'duplicate' } };
+      if (count > MANUAL_WALKS_PER_DAY) return { result: { ok: false, reason: 'capped' } };
+      const key = `mwalk-${date}-${count}`;
+      if (rows.xp.some(r => r.key === key)) return { result: { ok: false, reason: 'duplicate' } };
+      const eggCredit = min * STEPS_PER_ACTIVE_MIN;
+      const nextWalks = [...walks, { min, at: ts, source: 'manual', eggCredit }];
+      const puts = [{ store: 'health', val: { ...h, manualWalks: nextWalks } },
+        { store: 'xp', val: { key, type: 'wellness', xp: MANUAL_WALK_XP, label: `Walked ${min} min`, date, ts } }];
+      // Credit only eggs already held. Keep their original anchors and every
+      // banked step; the shared pet meter and competitive health.steps stay intact.
+      for (const e of rows.inv.filter(r => r.kind === 'egg')) {
+        puts.push({ store: 'inv', val: { ...e, manualWalkCredit: (e.manualWalkCredit || 0) + eggCredit } });
+      }
+      const eggKey = `egg-${date}`;
+      const daily = (h.steps || 0) + nextWalks.reduce((n, w) => n + (w.eggCredit || 0), 0);
+      const egg = daily >= EGG_STEP_THRESHOLD && !rows.xp.some(r => r.key === eggKey);
+      if (egg) {
+        const meter = rows.health.reduce((n, r) => n + (r.steps || 0)
+          + Math.min(r.exerciseMin || 0, ACTIVE_MIN_DAILY_CAP) * STEPS_PER_ACTIVE_MIN, 0);
+        puts.push({ store: 'xp', val: { key: eggKey, type: 'egg', xp: 15, label: 'Big-day Step Egg', date, ts } },
+          { store: 'inv', val: { id: `manual-egg-${date}`, kind: 'egg', stepsAtStart: meter,
+            goal: EGG_GOAL_STEPS, source: 'steps-' + date, morph: 'base', morphPolicy: 'lab-final-v1', ts } });
+      }
+      const before = rows.xp.reduce((n, r) => n + (r.xp || 0), 0);
+      const xp = MANUAL_WALK_XP + (egg ? 15 : 0);
+      return { puts, kv: {
+        ...Object.fromEntries(Object.entries(day.writes).map(([k, v]) => [k, () => v])),
+        pitEnergy: cur => ({ ...(cur || {}), vigor: Math.min(VIGOR_CAP, Math.max(0, (cur?.vigor || 0) + 1)) }),
+      }, result: { ok: true, xp, vigor: 1, count, eggCredit, egg,
+        fromLevel: levelFor(before).level, toLevel: levelFor(before + xp).level } };
+    },
+  });
+  if (result.ok && result.toLevel > result.fromLevel) {
+    const rewards = await grantLevelRewards(result.fromLevel, result.toLevel);
+    if (typeof dispatchEvent === 'function') dispatchEvent(new CustomEvent('bh-levelup', {
+      detail: { levelUp: levelFor(await totalXp()), from: result.fromLevel, rewards },
+    }));
+  }
+  return result;
 }
 
 /* USER ROUTINES.

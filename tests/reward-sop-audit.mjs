@@ -275,7 +275,7 @@ const ACTIONS = [
    * welcome kit did.
    * ======================================================================== */
   { id: 'js/game.js:finishFoodLogged', sites: 7, undriven: 'the shared live/recovery food reward path; all awards retain their ledger keys and capped entry-id refs. take-and-pay-audit.mjs drives interrupted writes, midnight recovery and overlapping opens; log-write-failure-audit.mjs owns the browser failure controls' },
-  { id: 'js/game.js:onHealthSync', sites: 16, undriven: 'sixteen ledger-keyed milestone awards over a health payload; the shape is one award per (date, milestone) and the primitive is driven above. tests/health-intake-audit.mjs owns the payload end' },
+  { id: 'js/game.js:onHealthSync', sites: 15, undriven: 'fifteen ledger-keyed milestone payout sites; the daily egg and its receipt now commit together. tests/health-intake-audit.mjs owns the payload end; egg-progress-audit.mjs drives the shared manual/Health egg receipt' },
   { id: 'js/game.js:onWeighIn', sites: 1, undriven: 'one award keyed weigh-<date>; the primitive is driven above' },
   { id: 'js/game.js:awardDayCloseIfDue', sites: 4, undriven: "runs at boot for YESTERDAY only, all four sites ledger-keyed on that date; not a control a player can press twice. Was 6 until 2026-09-05: the off-budget branch stopped granting its Common Crate (crate-frequency audit lever 2), leaving its award() call as the only payout, then 5 to 4 later the same day (offline crash seam OFF-2b): the on-budget branch's separate award()+grantCrate() calls (2 sites) became one awardOnce(...,{puts:[crateRow]}) call (1 site), the crate riding inside the claim's own transaction instead of a second untransacted write" },
   { id: 'js/wellness.js:addWater', sites: 1, undriven: 'ledger key water-<date>, and the goal edge is guarded by wasGoal so topping up cannot re-award' },
@@ -283,11 +283,14 @@ const ACTIONS = [
   { id: 'js/wellness.js:markSleep', sites: 1, undriven: 'ledger key sleep-<date>' },
   /* REGISTERED BY THE REVIEWER, deliberately: the agent that built the manual
      walk (feat/manual-walk, 2026-08-30) correctly refused to register its own
-     payout, which is the entire point of this registry. Pays 10 XP + 1 Vigor,
-     capped 2/day and 60min in the write path, ledger key mwalk-<date>-<n>, and
+     payout, which is the entire point of this registry. Pays 10 XP + 1 Vigor plus egg credit,
+     capped 2/day and 60min in the write path, atomic daily slot and ledger key mwalk-<date>-<n>, and
      by construction it never writes h.steps, so the step race and step quests
      cannot see it (the race pays real prizes). */
-  { id: 'js/wellness.js:logManualWalk', sites: 1, undriven: 'ledger key mwalk-<date>-<n>, capped 2/day in the write path' },
+  // Manual egg credit is a NEW reward path. The census still counts its atomic
+  // payout site; egg-progress-audit adds replay, clock, cap and shared-receipt
+  // assertions without relaxing the existing XP/Vigor or race-isolation guards.
+  { id: 'js/wellness.js:logManualWalk', sites: 1, undriven: 'egg-progress-audit.mjs drives atomic daily slots, concurrent duplicate requests, clock refusal, egg credit and daily egg receipts' },
   /* HALF FALSIFIED, 2026-09-04 census, and left exempt on purpose with the truth
      written down rather than the comfortable sentence. The per-routine claim is
      the ledger key and it is atomic. The DAILY CEILING is not: routinesDone() is

@@ -1,5 +1,17 @@
 # What each patch note claims, and what backs it
 
+## v584 (2026-09-12)
+
+Changelog item: A walk you add yourself now counts toward your next egg, even without Apple Health.
+1. PROOF: `node tests/egg-progress-audit.mjs`. The manual "Add a walk" row paid XP, quests and Vigor and, as its own comment said, never wrote a `steps` field, while eggs hatch on steps: a player who declined Health or had no watch could walk forever and never get a second egg. PROGRESS moves 0 to 8000 (rawCredit 15000) on this build and 0 to 0 on live v583, recorded in `docs/v581/guard-red.txt`. The new reward path is covered against farming as the rewarded-actions SOP requires: CAP refuses the third and fourth walk of a day with reason "capped", REPLAY refuses a duplicate, and CLOCK refuses a backwards change and reports a forwards one as "unwitnessed". NO-RESET proves banked progress survives the change (banked 2500, kept 6250 against an anchor of 10000), which is the never-lose-progress lock. RACE proves manual walks still do NOT enter the step race (steps 0, petMeter 0), so unverified steps cannot leak onto a competitive board. | REACH: manual walk logging and egg progress on a save with no Health source. Real Health ingestion is unchanged and unmeasured here.
+
+Changelog item: The Stable says how many steps an egg needs.
+2. PROOF: `node tests/egg-progress-audit.mjs` row TOLD, which asserts the NUMBER in the rendered sentence against `EGG_STEP_THRESHOLD` itself, so the copy cannot drift from the rule: `{"text":"An egg needs 14,000 steps in a day.","number":14000,"threshold":14000}`. The figure was rendered to the player zero times before this, so a Health player on 9,000 steps a day saw two eggs in sixty days with no explanation. | REACH: the egg progress surface at 393x852.
+
+Deviations: the audit also found a defect the bug report did not mention. On live v583 a REPLAYED manual walk is accepted and paid again (`{"replay":{"ok":true,"xp":10,"vigor":1}}`); this change refuses it. Recorded because it is a real reward-path hole closed here rather than a claim made for it.
+
+Two fixture faults were fixed in `tests/ui-audit.js` while landing this, both of which needed a rendered browser to diagnose. Its text was read and passed to `page.evaluate()`, which runs a classic script, so its `export` threw "Unexpected token 'export'" and voided the row; the export keyword is now stripped before evaluation. And its toggle check reported `#wardFitSwitcher did not toggle its fit list and accessibility state together` against a control that works: measured on live v583 and on this tree, `aria-expanded` goes false to true and `#wardFitList` unhides. It held a STALE node reference, because toggling runs a `refresh()` that replaces the node, so it re-read a detached element carrying the original attribute. It now re-queries by id.
+
 ## v583 (2026-09-12)
 
 Changelog item: A Laboratory experiment plays its reveal even when the outcome was certain.
