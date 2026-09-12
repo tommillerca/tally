@@ -1856,14 +1856,16 @@ async function notifyFriendship(env, aId, bId, now = Date.now()) {
 
    Returns true when a row landed, false when the cap refused it (or, with an
    explicit key, when this exact request already landed). */
-async function insertCappedGrant(env, { to, prefix, cap, type, payload, now, key = null }) {
-  const hi = prefix + '￿'; // prefix-range count: no LIKE, playerIds contain '_'
-  const count = 'SELECT COUNT(*) FROM grants WHERE player_id = ? AND key >= ? AND key < ?';
+async function insertCappedGrant(env, { to, prefix, cap, type, payload, now, key = null, countPrefix = prefix }) {
+  const hi = countPrefix + '￿'; // Range count also includes older day-keyed grants.
+  const dayStart = Math.floor(now / 86400000) * 86400000;
+  const countArgs = [to, countPrefix, hi, dayStart, dayStart + 86400000];
+  const count = 'SELECT COUNT(*) FROM grants WHERE player_id = ? AND key >= ? AND key < ? AND ts >= ? AND ts < ?';
   const r = await env.DB.prepare(
     `INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts)
      SELECT ?, ${key ? '?' : `? || (${count})`}, ?, ?, ?
       WHERE (${count}) < ?`)
-    .bind(to, ...(key ? [key] : [prefix, to, prefix, hi]), type, payload, now, to, prefix, hi, cap).run();
+    .bind(to, ...(key ? [key] : [prefix, ...countArgs]), type, payload, now, ...countArgs, cap).run();
   return !!(r.meta && r.meta.changes);
 }
 
@@ -3422,6 +3424,18 @@ export default {
         const to = String(bd.to || '');
         const mode = bd.mode === 'spend' ? 'spend' : 'free';
         if (!to || to === auth.playerId) return json({ error: 'bad recipient' }, 400);
+        const ck = String(bd.ck || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+        const operationKey = ck ? `gift-${mode}-${auth.playerId}-ck-${ck}` : null;
+        const originalAck = async () => {
+          if (!operationKey) return null;
+          const row = await env.DB.prepare('SELECT payload FROM grants WHERE player_id = ? AND key = ?')
+            .bind(to, operationKey).first();
+          if (!row) return null;
+          const p = JSON.parse(row.payload);
+          return p.ack || { ok: true, reward: { coins: p.coins }, mode: p.mode };
+        };
+        const prior = await originalAck();
+        if (prior) return json(prior);
         const [a, b] = pairKey(auth.playerId, to);
         const fr = await env.DB.prepare('SELECT status FROM friendships WHERE a = ? AND b = ?').bind(a, b).first();
         if (!fr || fr.status !== 'accepted') return json({ error: 'not friends' }, 403);
@@ -3430,49 +3444,35 @@ export default {
         const day = new Date(Date.now()).toISOString().slice(0, 10);
         const now = Date.now();
         if (mode === 'free') {
-          /* ONCE PER DAY, and the UNIQUE (player_id, key) is what enforces it.
-             The check used to be a SELECT followed by an INSERT, which is not a
-             once-per-day check at all across an await: measured locally on
-             2026-08-17, three of eight concurrent free gifts passed it, three
-             rewards were rolled, and one grant was delivered. INSERT OR IGNORE
-             against the constraint is atomic, and `changes` is the honest answer
-             to "was mine the one that landed". Nothing is written on the losing
-             path, so a refused caller has cost the recipient nothing. */
-          const key = `gift-free-${auth.playerId}-${day}`;
+          const prefix = `gift-free-${auth.playerId}-`;
           const reward = rollFreeGift();
-          const payload = JSON.stringify({ ...reward, from: fromName, note: `${fromName} sent you a gift!`, gift: true, mode });
-          const r = await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
-            .bind(to, key, 'gift', payload, now).run();
-          if (!(r.meta && r.meta.changes)) return json({ error: 'already sent today', code: 'daily-done' }, 409);
-          return json({ ok: true, reward, mode });
+          const ack = { ok: true, reward, mode };
+          const payload = JSON.stringify({ ...reward, from: fromName, note: `${fromName} sent you a gift!`, gift: true, mode, ack });
+          const landed = await insertCappedGrant(env, {
+            to, prefix: `${prefix}${day}`, countPrefix: prefix, cap: 1,
+            type: 'gift', now, key: operationKey || `${prefix}${day}`, payload,
+          });
+          if (!landed) {
+            const prior = await originalAck();
+            if (prior) return json(prior);
+            return json({ error: 'already sent today', code: 'daily-done' }, 409);
+          }
+          return json(ack);
         }
+
         const coins = Math.max(1, Math.min(1000, Math.floor(bd.coins || 0)));
         const reward = { coins };
-        /* A RETRY IS NOT A SECOND GIFT, and here that is not merely untidy, it
-           MINTS COINS. js/app.js deducts the sender locally BEFORE the send and
-           refunds only when the answer says it failed, so a gift that was
-           delivered but whose answer was lost refunds the sender while the
-           recipient keeps the coins. Two of them, both succeeding, debits the
-           sender twice and credits the friend twice. The counted cap key made
-           that unavoidable: it is the opposite of dedup, minting the NEXT n for
-           every retry. Same `ck` treatment as /cheer, for the same reason, with
-           the same shape: the client mints one key per amount chip and reuses
-           it for every retry of that chip, the grant's UNIQUE (player_id, key)
-           collapses them, and no ck (older clients) keeps the counted key. */
-        const ck = String(bd.ck || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
         const prefix = `gift-spend-${auth.playerId}-${day}-`;
         const landed = await insertCappedGrant(env, {
           to, prefix, cap: 5, type: 'gift', now,
-          key: ck ? `${prefix}ck-${ck}` : null,
+          key: operationKey, countPrefix: `gift-spend-${auth.playerId}-`,
           payload: JSON.stringify({ ...reward, from: fromName, note: `${fromName} sent you ${coins} coins!`, gift: true, mode }),
         });
         /* `false` has two causes with a ck: the cap refused it, or this exact
-           tap already landed. The retry MUST be answered ok, because the client
-           refunds itself on anything else and the friend keeps the coins. */
+           tap already landed. Return the stored reward on a delivered retry. */
         if (!landed && ck) {
-          const dupe = await env.DB.prepare('SELECT 1 FROM grants WHERE player_id = ? AND key = ?')
-            .bind(to, `${prefix}ck-${ck}`).first();
-          if (dupe) return json({ ok: true, duplicate: true, reward, mode });
+          const ack = await originalAck();
+          if (ack) return json(ack);
         }
         if (!landed) return json({ error: 'daily spend-gift limit', code: 'limit' }, 429);
         return json({ ok: true, reward, mode });
@@ -3490,21 +3490,24 @@ export default {
         const cheer = Math.floor(Number(bd.cheer));
         if (!to || to === auth.playerId) return json({ error: 'bad recipient' }, 400);
         if (!(cheer >= 0 && cheer < 64)) return json({ error: 'bad cheer' }, 400);
+        const ck = String(bd.ck || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+        const operationKey = ck ? `cheer-${auth.playerId}-ck-${ck}` : null;
+        const originalAck = async () => {
+          if (!operationKey) return null;
+          const row = await env.DB.prepare('SELECT payload FROM grants WHERE player_id = ? AND key = ?')
+            .bind(to, operationKey).first();
+          if (!row) return null;
+          const p = JSON.parse(row.payload);
+          return { ok: true };
+        };
+        const prior = await originalAck();
+        if (prior) return json(prior);
         const [a, b] = pairKey(auth.playerId, to);
         const fr = await env.DB.prepare('SELECT status FROM friendships WHERE a = ? AND b = ?').bind(a, b).first();
         if (!fr || fr.status !== 'accepted') return json({ error: 'not friends' }, 403);
         const me = await env.DB.prepare('SELECT handle, name FROM players WHERE id = ?').bind(auth.playerId).first();
         const fromName = (me && (me.name || me.handle)) || 'A Bonehead';
         const day = new Date(Date.now()).toISOString().slice(0, 10);
-        /* A RETRY IS NOT A SECOND CHEER. The cap key counts rows, so a client
-           that re-sends after a lost answer (the app's own network deadline
-           fires at 12s and the tap is re-armed) mints the NEXT n and delivers a
-           duplicate. The client mints one `ck` per tap and reuses it on retry;
-           the same UNIQUE (player_id, key) + INSERT OR IGNORE that enforces the
-           gift's once-a-day does the deduping here, and a duplicate answers ok
-           without a second cheer, because the sender did what they meant to do
-           exactly once. No ck (older clients) keeps the counted key. */
-        const ck = String(bd.ck || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
         const prefix = `cheer-${auth.playerId}-${day}-`;
         // same COUNT-then-key shape as the spend gift, and the same fix: the
         // count is evaluated inside the insert, so no two concurrent cheers can
@@ -3513,7 +3516,7 @@ export default {
         // the deduping; the cap is counted over both shapes either way.
         const landed = await insertCappedGrant(env, {
           to, prefix, cap: 10, type: 'cheer', now: Date.now(),
-          key: ck ? `${prefix}ck-${ck}` : null,
+          key: operationKey, countPrefix: `cheer-${auth.playerId}-`,
           payload: JSON.stringify({ from: fromName, cheer, cheerFrom: auth.playerId, note: `${fromName} cheered you` }),
         });
         /* A REFUSAL HAS TWO CAUSES AND ONLY ONE OF THEM IS AN ERROR. With a ck,
@@ -3522,9 +3525,8 @@ export default {
            the player it failed and they send a third. One SELECT, only on the
            rare path, and it is the row's own existence that decides. */
         if (!landed && ck) {
-          const dupe = await env.DB.prepare('SELECT 1 FROM grants WHERE player_id = ? AND key = ?')
-            .bind(to, `${prefix}ck-${ck}`).first();
-          if (dupe) return json({ ok: true, duplicate: true });
+          const ack = await originalAck();
+          if (ack) return json(ack);
         }
         if (!landed) return json({ error: 'daily cheer limit', code: 'limit' }, 429);
         /* THE SENDER GETS A RECEIPT TOO (S12). A cheer was the one thing in the

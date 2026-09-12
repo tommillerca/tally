@@ -1,5 +1,14 @@
 # What each patch note claims, and what backs it
 
+## v590 (2026-09-12)
+
+Changelog item: Coin gifts survive interrupted sends and retry without spending twice.
+1. PROOF: gift-intent-audit.mjs CRASH, LOST-REPLY, REFUND, ONCE and CONTROL pass over production db.js and a transport double. CRASH fails on main because the persisted debit has no intent. | REACH: paid gift confirmation, sheet reopening and profile sync. Ambiguous outcomes remain pending; definitive application refusals refund once. The server half is not deployed.
+
+Changelog item: Retrying a gift or cheer after midnight keeps the original delivery.
+2. PROOF: cheer-retry-key-audit.mjs MIDNIGHT, GIFT ORIGINAL ACK AND REMOVED FRIEND, CONTROL, GIFT CAP AND SEVEN DAYS and FREE GIFT RETRY AND CAP pass against the full Worker with in-memory SQLite. MIDNIGHT fails on main with two recipient grants; removed-friend retry also fails on main. | REACH: gift and cheer operation keys, original acknowledgements and unchanged daily caps. Existing grant retention is 90 days. The server half is not deployed.
+
+
 ## v588 (2026-09-12)
 
 Assembled from five Codex lanes by the commander. Every browser audit below was run by the commander on the lane tree and again on the merged train; the lanes cannot bind a socket.

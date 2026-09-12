@@ -9,6 +9,10 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 590, date: '2026-09-12', title: 'Gift and cheer retries keep one delivery', items: [
+    'Coin gifts survive interrupted sends and retry without spending twice.',
+    'Retrying a gift or cheer after midnight keeps the original delivery.',
+  ] },
   { n: 588, date: '2026-09-12', title: 'The Salvage Bench moves to the Wardrobe, and names get room', items: [
     'Find the Salvage Bench below your slots in the Wardrobe. The Shop shortcut takes you straight there.',
     'Long names wrap on podiums, leaderboards, race results, gifts, featured nameplates, newcomers and Pit labels.',

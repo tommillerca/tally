@@ -1,5 +1,10 @@
 # The Worker is behind main, on purpose
 
+## v590 gift and cheer retries (2026-09-12, pending)
+
+F23 and F22: server/src/index.js uses sender, recipient and stable client keys independently of UTC day, and returns original acknowledgements before checking friendship. Daily caps count grant timestamps for new keys. Existing 90-day grant retention exceeds the required seven days. No schema migration is needed. This Worker change is not deployed. Deployment belongs to Tom; no deployment, production D1 access or secret changes were performed.
+
+
 Written 2026-08-23, after #77 merged.
 
 > ## CORRECTION, 2026-08-25 — READ THIS BEFORE THE TABLE BELOW
