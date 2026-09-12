@@ -35,7 +35,7 @@ verbatim; never paraphrase into the table.
 |---|---|---|---|---|
 
 
-| F3 | Settings | "settings still has tons of problems in the design i think i sent over an analysis of that?" | **OPEN — NEEDS TOM.** `docs/PLAYTEST-SETTINGS.md` exists but is a SAFETY analysis, not a design one. Asked Tom which he means | — |
+| F3 | Settings | "settings work was done with a diff claude here it is he has git access if you want him to push idk what the move is" | **IN FLIGHT.** Answered: a second session produced a full Settings tidy (patch + review pack, base v568, never pushed). Being rebased onto v580 in lane `l-settings-tidy`, resolutions per the pack's section 5. Card order is a taste call and goes to Tom from a render | `inbox/settings-review-pack.md` |
 | F4 | Settings | `docs/PLAYTEST-SETTINGS.md` item 1: importing an older backup silently removes newer earnings (125 coins + 1 crate -> 100 coins, 0 crates, message "Backup restored") | **OPEN, HIGH HARM.** Breaks the no-permanent-loss lock | `docs/PLAYTEST-SETTINGS.md` |
 | F5 | Melt | "no sound on melt it's also a fucking nightmare that needs to be redesigned basically unuseable with the interface" | **REVIEW DELIVERED, NEEDS TOM'S PICK.** Every advertised Salvage Bench route opens the Backpack instead; the bench is below the Kitchen. Sound hooks all exist | `docs/melt-review.md` |
 | F6 | Names | Names still clipped at `#newcomersList .t3-tx b` (3758px of text in a 143px box) and `#lbBody .lb-who b` (86 in 77), plus 144 rows at 200%/53px text | **OPEN.** v579 fixed only `.hub-name` and `.hero-name` | `tests/name-fit-audit.mjs` (declared `skip`) |
