@@ -9,6 +9,10 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 580, date: '2026-09-11', title: 'Centred chests, and the Studio moves along the rail', items: [
+    'Chests and items in the Backpack are centred on their cards.',
+    'In the Wardrobe, Take off and The Studio have swapped places.',
+  ] },
   { n: 579, date: '2026-09-11', title: 'Settings rows, Wardrobe stacking, and a claim that pays', items: [
     'Settings buttons no longer break a word in half, and the backup rows line up.',
     'Tapping a slot on the paperdoll scrolls to that slot\'s items, and tapping it again brings you back.',
