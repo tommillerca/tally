@@ -2,10 +2,19 @@
 
 ## v588 (2026-09-12)
 
-Changelog item: Forms preserve cleared height, show suggested lucky numbers, keep Recovery ID availability current, and explain what account recovery needs.
-1. PROOF: `forms-state-audit.mjs` executes the production profile binder, name builder and recovery sheet against DOM doubles. HEIGHT covers blank height in both unit directions, missing-height validation and nonblank conversion controls. LUCKY checks the preview, checkbox, visible input and next submitted number after suggestion 7. RACE resolves B before A and rejects A after newer, empty or invalid input. COPY evaluates setup and upgrade markup and the successful-save toast. All four rows are RED on main `8b4cefe8af3da4e9f3b1d105fb891de373894aea` using `node tests/forms-state-audit.mjs --main` (0 passed, 4 failed, exit 1), and GREEN in this checkout (4 passed, 0 failed, exit 0). Declared in the release gate PURE tier. `node tests/unit.test.js`: 392 passed, 0 failed, exit 0. Settings safety: 26 passed, 0 failed. Syntax and diff whitespace checks pass. | REACH: shared onboarding/Settings profile binder, name selection and recovery setup. DOM-model proof only; browser layout and live cloud recovery are unproven.
+Changelog item: Clearing your height keeps it blank when you switch units.
+1. PROOF: forms-state-audit.mjs row HEIGHT runs the production profile binder against DOM doubles: blank height in both unit directions stays blank, missing-height validation fires, and a nonblank height still converts (control). RED on main 8b4cefe8 via `node tests/forms-state-audit.mjs --main` (0 passed, 4 failed), GREEN here (4 passed). Declared in the PURE tier. | REACH: the shared onboarding and Settings profile form, both unit directions.
 
-Deviations: none. Recovery changes are copy and availability-state changes only. No version stamp was advanced.
+Changelog item: A suggested lucky number now turns on its checkbox and shows the number.
+2. PROOF: forms-state-audit.mjs row LUCKY: after the server suggests 7 for a taken name, the preview, the checkbox, the visible input and the next submitted number all agree. RED on main, GREEN here. | REACH: the name builder's taken-name branch only.
+
+Changelog item: Recovery ID availability follows the ID currently in the field.
+3. PROOF: forms-state-audit.mjs row RACE: B's reply resolving before A's late reply paints only B; A's reply after a newer, empty or invalid input paints nothing. RED on main, GREEN here. | REACH: the Recovery ID field's live availability note. Server-side Save still rejects a taken ID as before.
+
+Changelog item: Recovery setup explains that your ID and phrase unlock your account, while recovering progress also needs a successful cloud backup.
+4. PROOF: forms-state-audit.mjs row COPY: the rendered setup intro, the upgrade intro and the saved toast no longer claim that credentials alone restore progress. RED on main, GREEN here. `node tests/unit.test.js`: 392 passed, 0 failed. | REACH: copy only, three strings in the recovery sheet. The flow is unchanged.
+
+Deviations: none. No version stamp was advanced.
 
 ## v587 (2026-09-12)
 
