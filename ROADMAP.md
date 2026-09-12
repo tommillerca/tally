@@ -9,6 +9,56 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 🔴 OPEN FEEDBACK — Tom asked, nobody has closed it
+
+**Read this section before replying to Tom, and before planning any work.**
+Rebuilt 2026-09-11 from the session transcript after Tom said: *"it's your jobs
+to keep track and youve forgotten shit like three times now like literally just
+write it down somewhere and reference it bro it isnt hard. then when something
+is done cross it off? you used to use a roadmap what happened to that i feel
+like youve regressed like crazy this week"*.
+
+He is right, and the failure was not the building, it was the WRITING DOWN. Two
+worked examples, both confirmed:
+
+- **"In back centre chests lose the text..."** was logged in
+  `docs/PLAYTEST-FEEDBACK-v568.md` as *"crates lose the text..."*. The word
+  **centre** was dropped at transcription, so the centring request never reached
+  a build. One sentence, two requests, one captured.
+- **"STOP MAKING BONEHEAD FLOAT AND MOVE SO MUCH"** was actioned as the motion
+  half only. The grounding half took until v579.
+
+Rule that follows: **a message containing two asks gets two rows here.** Quote
+verbatim; never paraphrase into the table.
+
+| # | Area | Tom, verbatim | Status | Evidence |
+|---|---|---|---|---|
+| F1 | Backpack | "In back **centre** chests" (same sentence as the details/odds dropdown, which shipped in v577) | **OPEN** — measured on live v579: crate tiles sit at x=29 and x=206, `text-align: start`, not centred | — |
+| F2 | Wardrobe | "the wardrobe having the studio button and take off swapped" | **OPEN** — live v579 rail order is Saved fits, Save fit, The Studio, Take off | — |
+| F3 | Settings | "settings still has tons of problems in the design i think i sent over an analysis of that?" | **OPEN — NEEDS TOM.** `docs/PLAYTEST-SETTINGS.md` exists but is a SAFETY analysis, not a design one. Asked Tom which he means | — |
+| F4 | Settings | `docs/PLAYTEST-SETTINGS.md` item 1: importing an older backup silently removes newer earnings (125 coins + 1 crate -> 100 coins, 0 crates, message "Backup restored") | **OPEN, HIGH HARM.** Breaks the no-permanent-loss lock | `docs/PLAYTEST-SETTINGS.md` |
+| F5 | Melt | "no sound on melt it's also a fucking nightmare that needs to be redesigned basically unuseable with the interface" | **REVIEW DELIVERED, NEEDS TOM'S PICK.** Every advertised Salvage Bench route opens the Backpack instead; the bench is below the Kitchen. Sound hooks all exist | `docs/melt-review.md` |
+| F6 | Names | Names still clipped at `#newcomersList .t3-tx b` (3758px of text in a 143px box) and `#lbBody .lb-who b` (86 in 77), plus 144 rows at 200%/53px text | **OPEN.** v579 fixed only `.hub-name` and `.hero-name` | `tests/name-fit-audit.mjs` (declared `skip`) |
+| F7 | Pets | "Are we still having pets grow with breeding or something like that physically? My lvl 1 fish seems small but if that's intentional all good" | **OPEN — QUESTION, unanswered.** Answer before building anything | — |
+| F8 | Phone | derived, not a Tom quote: playtest slate run 13 item 3, "which ones buzz" when you melt, take it all off, buy something | **OPEN — DECISION**, needs a real phone | `PLAYTESTSLATEship20260910` |
+| F9 | Onboarding | The restore-button trap: a non-gamer burned 14 taps in a restore sheet after taking the primary-styled "Restore an account" | **OPEN** | run 9 |
+| F10 | Steps | `weekSteps` clamp investigation | **OPEN** | — |
+
+### Closed this week, with the evidence that closed it
+
+| Area | Item | Shipped | Evidence |
+|---|---|---|---|
+| Today | Bonehead grounded on his shadow, both figures 5% left | v579 | `tests/hero-ground-audit.mjs`, 40 rows red on v578 |
+| Today | Toast off the five door tiles, and off controls on every screen | v578, v579 | `tests/toast-today-audit.mjs`, `tests/toast-reach-audit.mjs` |
+| Rooms | Laboratory and Kitchen headers | v579 | `tests/room-headers-audit.mjs` |
+| Names | `.hub-name` / `.hero-name` no longer truncated | v579 | measured 293/227 -> 227/227 |
+| Backpack | Tab highlight, item dropdowns, bigger pet box (CSS lost in a chain merge) | v577 | `docs/CLAIMS.md` v577 |
+| Pit | Spire takeover paid 40 instead of the earned 80 | v579 | `tests/v576-hunt-audit.mjs` |
+| Wardrobe | Slot-tap scroll, cosmetic stacking | v579 | `tests/wardrobe-slot-scroll-audit.mjs`, `tests/wardrobe-stack-audit.mjs` |
+| Settings | Import/Restore buttons no longer break a word in half | v579 | `tests/settings-rows-audit.mjs` |
+| Wardrobe | Offhand art (shovel/toothbrush/flag off the figure) | earlier | Tom: "finally the shovel is fixed. mark it done" |
+
+
 ## ✅ Step race: no progress bars, no rank line — FIXED in v558, byte-verified live
 
 Tom, 2026-09-10: "the progress in the step race isnt showing".
