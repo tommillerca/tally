@@ -35,7 +35,7 @@ assert.equal(ui.labNeedsTyped({inputs:[{...base,bankedSteps:10}],branches:[]}),t
 assert.equal(ui.labNeedsTyped({inputs:[base],branches:[{lost:['C1|base']}]}),true);
 assert.equal(ui.labNeedsTyped({inputs:[base],branches:[{lost:[]}]}),false);
 console.log('PASS 10/10: pair warnings in both directions, valid recipes, preserved risk gates');
-const backpack=app.slice(app.indexOf("  if (tab === 'crates') {"),app.indexOf("    $('#openStableFromBp'"));
+const backpack=app.slice(app.indexOf("  if (tab === 'crates') {"),app.indexOf("    $('#bpKitchen', content)") /* v588: the bench and its handlers left the Backpack for the Wardrobe; the Kitchen handler is the last thing still in this block */);
 assert.doesNotMatch(backpack,/lab-banner-recipes/);
 assert.match(backpack,/data-lab-open/);
 for(const description of ['${CONSUMABLES.xp2.desc}','${CONSUMABLES.vigor.desc}','${esc(p.desc)}']) {
