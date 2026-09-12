@@ -1288,10 +1288,9 @@ const RACE_RULES = 2;
    The race week, mirrored from js/app.js (raceWeekKey / RACE_EPOCH / RACE_DAYS).
    KEEP IN SYNC, exactly like ADJ/NOUN and RACE_RULES above.
 
-   The client computes its week key in LOCAL time and the server computes it in
-   UTC, so the two disagree for up to a day around a boundary. That skew is why
-   validateWeek() accepts the previous and next key as well as the current one,
-   and why each of the three gets a different rule rather than a blanket pass. */
+   The client uses local calendar Fridays. Accept calendar keys within one day
+   of the current, previous or next UTC period start. Classifying chooses the
+   existing bounds/settlement rule; storage always retains the supplied key. */
 const RACE_EPOCH = '2026-08-07';
 const RACE_DAYS = 7;
 const RACE_PERIOD_MS = RACE_DAYS * 86400000;
@@ -1410,11 +1409,12 @@ const ordinal = n => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n
 function classifyWeekKey(key, nowMs) {
   if (typeof key !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(key)) return null;
   const t = Date.parse(key + 'T00:00:00Z');
-  if (!Number.isFinite(t)) return null;
+  if (!Number.isFinite(t) || dayKeyUTC(t) !== key) return null;
   const cur = raceWeekStartMs(nowMs);
-  if (t === cur) return 'current';
-  if (t === cur - RACE_PERIOD_MS) return 'previous';
-  if (t === cur + RACE_PERIOD_MS) return 'next';
+  // Accept adjacent calendar dates without rewriting the supplied key.
+  if (Math.abs(t - cur) <= 86400000) return 'current';
+  if (Math.abs(t - (cur - RACE_PERIOD_MS)) <= 86400000) return 'previous';
+  if (Math.abs(t - (cur + RACE_PERIOD_MS)) <= 86400000) return 'next';
   return null;
 }
 
@@ -1458,7 +1458,7 @@ function classifyWeekKey(key, nowMs) {
    likeliest cause of a strange key is our own next feature, and taking a
    player's whole yard offline over it is the worse failure. */
 const SNAP_KEYS = new Set([
-  'weekKey', 'weekSteps', 'raceV', 'plat',
+  'weekKey', 'weekSteps', 'utcOffsetMinutes', 'raceV', 'plat',
   'level', 'levelName', 'stats', 'talents', 'title', 'outfit', 'gearLo', 'gear', 'badges',
   'pet', 'yard',
 ]);
@@ -1580,6 +1580,14 @@ function sanitizeSnapshot(rawSnap, row, nowMs) {
   if (Array.isArray(snap.gear) && snap.gear.length > MAX_GEAR_IDS) {
     snap.gear = snap.gear.slice(0, MAX_GEAR_IDS);
     bounded.push('gear');
+  }
+
+  // UTC offset minutes east of UTC, supplied by the phone. Keep this metadata
+  // in the profile JSON; it never rewrites or merges the player's race key.
+  if (snap.utcOffsetMinutes !== undefined &&
+      (!Number.isInteger(snap.utcOffsetMinutes) || snap.utcOffsetMinutes < -720 || snap.utcOffsetMinutes > 840)) {
+    delete snap.utcOffsetMinutes;
+    bounded.push('utcOffsetMinutes');
   }
 
   /* ---- raceV ----

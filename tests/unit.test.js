@@ -92,6 +92,16 @@ for (const [name, guard] of DEVICE_REPORT_PURE) test(`Device report PURE: ${name
 test('petGrowth lineage 0', () => assert.equal(petGrowth(0), 1));
 test('petGrowth lineage 3', () => assert.equal(petGrowth(3), 1.12));
 test('petGrowth caps lineage 9', () => assert.equal(petGrowth(9), 1.24));
+for (const zone of ['America/Vancouver', 'Europe/Berlin']) {
+  test(`race week local DST: ${zone}`, () => {
+    execFile_.execFileSync(process.execPath, [join(here, 'race-week-local-audit.mjs'), '--client',
+      ...(zone === 'Europe/Berlin' ? ['--positive'] : [])], { encoding: 'utf8' });
+  });
+}
+test('race week local Worker acceptance and settlement', () => {
+  const output = execFile_.execFileSync(process.execPath, [join(here, 'race-week-local-audit.mjs')], { encoding: 'utf8' });
+  assert.match(output, /5 passed, 0 failed/);
+});
 
 test('cloud opt-out stops garment profile uploads and discloses stale Crew entries', () => {
   const output = execFile_.execFileSync(process.execPath,
