@@ -16701,7 +16701,7 @@ const gwartHeroHtml = rk => {
 async function renderSalvageBench(content, wrap) {
   const [invAll, gearLoNow, dust, counts] = await Promise.all([inventory(), gearLoadout(), boneDust(), petCounts()]);
   const pCountTotal = Object.values(counts).reduce((a, n) => a + n, 0);
-  content.innerHTML = `      <section class="bp-salvage"><div class="t3-sect"><b>Salvage Bench · nothing wasted</b><i></i></div>
+  content.insertAdjacentHTML('beforeend', `      <section class="bp-salvage"><div class="t3-sect"><b>Salvage Bench · nothing wasted</b><i></i></div>
       <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">${ICONS.dust(13)}</span> ${dust.toLocaleString()}</b></div>
       <p class="note">Every piece pays Bone Dust. Use dust for looks in the Dressing Room and the weekly Rack. Melting consumes the gear and its stats. Its look is yours forever.</p>
       ${/* THE BENCH STOPS PROMISING A LIST THAT IS NOT THERE. On a new account the
@@ -16776,7 +16776,8 @@ async function renderSalvageBench(content, wrap) {
                    : `<span class="melt-val on">+${gearDustValue(g)}</span>`}
           </label>`;
         }).join('') + `</details>`;
-      })()}</section>`;
+      })()}</section>`);
+    content = content.lastElementChild;
     /* Scroll only when the USER opens the fold. The fold renders with `open`
        whenever spares exist, and a <details> born open fires 'toggle' on
        parse, so a toggle-driven scroll yanked every Backpack render (fresh
@@ -17428,7 +17429,6 @@ async function renderCharacter(wrap, tab, opts = {}) {
            should look like a bar competing with it. The Dressing Room toggle
            switches the WHOLE wardrobe between pieces and looks, so it belongs
            with the paperdoll and is rendered there instead. -->
-      <div data-ward-slot-view${S.wardrobeReturnSlot ? '' : ' hidden'}>
       <div class="ward-slot-nav"><button class="btn ghost ward-back" data-slot-return><span aria-hidden="true">&lsaquo;</span>Back to slots</button></div>
       <div data-ward-pieces${S.wardrobeLookMode ? ' hidden' : ''}>
       <div class="sect-h" data-slot-heading="${slot}" style="margin-top:10px">${esc(GEAR_SLOTS.includes(slot) ? GEAR_SLOT_LABELS[slot] : slotMeta.label)} · pick your piece</div>
@@ -17681,8 +17681,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
       }${
         lockedCount ? `<p class="note">More ${slotMeta.label.toLowerCase()} pieces are out there. Keep hunting.</p>` : ''
       }</div></details>` : ''}
-      </div><div data-ward-bench${S.wardrobeReturnSlot ? ' hidden' : ''}></div>`;
-    await renderSalvageBench($('[data-ward-bench]', content), wrap);
+      `;
+    await renderSalvageBench(content, wrap);
     $$('[data-look-source]', content).forEach(btn => btn.addEventListener('click', () => openCharacter(btn.dataset.lookSource)));
     // --- saved fits: existing equip, rename and confirmed delete semantics ---
     $('[data-fit-switcher]', content)?.addEventListener('click', e => {
@@ -17806,8 +17806,6 @@ async function renderCharacter(wrap, tab, opts = {}) {
     const returnToDoll = () => {
       S.wardrobeReturnSlot = null;
       S.wardrobeReturnTop = null;
-      $('[data-ward-slot-view]', content).hidden = true;
-      $('[data-ward-bench]', content).hidden = false;
       scrollWardrobeTo($('.paperdoll', content));
     };
     const wirePd = b => b.addEventListener('click', async () => {

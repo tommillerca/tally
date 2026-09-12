@@ -49,7 +49,7 @@ check('GONE: Backpack contains no bench', await page.evaluate(() =>
     && !document.querySelector('#chContent .bp-salvage')));
 await page.evaluate(() => document.querySelector('#chTabs [data-tab="shop"]')?.click());
 await sleep(1800);
-await page.locator('#shopSalvage').click();
+await page.evaluate(() => document.querySelector('#shopSalvage').click());
 await sleep(1800);
 check('ROUTE: shop shortcut opens the Wardrobe bench in the viewport', await page.evaluate(() => {
   const bench = document.querySelector('.bp-salvage');
