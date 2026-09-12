@@ -256,7 +256,14 @@ try {
           let rows;
           try { rows = await measure(page, selector, expected); }
           catch (e) { console.log(`UNREACHED ${context} selector=${JSON.stringify(selector)}: ${e.message}`); unproven++; continue; }
-          if (!rows.length || rows.some(r => !r.rendered)) { console.log(`UNREACHED ${context}: ${selector} absent, hidden or zero-width`); unproven++; continue; }
+          if (!rows.length || rows.some(r => !r.rendered)) {
+            // Say WHICH: a selector that matched nothing, a hidden ancestor, or a zero box.
+            const why = await page.evaluate(sel => [...document.querySelectorAll(sel)].map(e => {
+              const r = e.getBoundingClientRect(); const cs = getComputedStyle(e);
+              const hid = e.closest('[hidden], details:not([open]) > :not(summary)');
+              return { rect: [r.x, r.y, r.width, r.height].map(Math.round), display: cs.display, vis: cs.visibility, op: cs.opacity, text: e.textContent.slice(0, 40), hiddenBy: hid ? hid.tagName + '.' + hid.className : null };
+            }), selector);
+            console.log(`UNREACHED ${context}: ${selector} absent, hidden or zero-width ${JSON.stringify({ matches: why, rows })}`); unproven++; continue; }
           for (const row of rows) {
             checked++;
             console.log(`PASS RENDERED CONTROL ${context} ${JSON.stringify(row)}`);
