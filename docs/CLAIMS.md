@@ -1,5 +1,10 @@
 # What each patch note claims, and what backs it
 
+## v590 (2026-09-12)
+
+Changelog item: Health sync rewards now arrive together, so an interrupted sync can retry without losing your coins, egg, crate or workout rewards.
+1. PROOF: health-milestone-atomic-audit.mjs (PURE), 58 passed, 0 failed. Agreed proof `node tests/unit.test.js`: 392 passed, 0 failed, exit 0. CONTROL pins shipped amounts, caps, inventory and toast totals for a 14,000-step day with qualifying workouts, exercise, cycling and all three disciplines. CRASH aborts each of 28 XP claim transactions and checks the exact committed prefix, then reloads and retries twice. CRASH also stops later transactions after each successful claim to detect split payouts. ONCE checks identical retries and concurrent syncs. The identical audit on an isolated archive of main cb2aca568cf53661d5f9bd584831f618feda3cd7 reports 5 passed, 53 failed (exit 1), including CRASH commit stepms-2026-09-12-5000: coins and coinsRev are 0 instead of 20. | REACH: onHealthSync through the existing Health ingestion caller. Each milestone uses awardOnce with its complete atomic payment and reports only claimed rewards. Keys, labels, amounts, caps and thresholds stay unchanged. Production game.js and db.js run over mem-idb; this is Node persistence proof, not browser or device proof. Level rewards are a separate work order and the fixture stays within one level.
+
 ## v588 (2026-09-12)
 
 Assembled from five Codex lanes by the commander. Every browser audit below was run by the commander on the lane tree and again on the merged train; the lanes cannot bind a socket.
