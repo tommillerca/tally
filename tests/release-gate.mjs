@@ -413,6 +413,7 @@ PURE.push('reachable-density-audit.mjs'); // R4-21: guards the shared reachabili
 PURE.push('backpack-lab-polish-audit.mjs'); // v573: talents exclude salvage; deliberate melting keeps payout.
 PURE.push('interrupted-fight-audit.mjs');
 PURE.push('v576-hunt-audit.mjs');
+PURE.push('sw-standalone-doc-audit.mjs'); // Cached standalone navigation and app-route controls; Node only.
 PURE.push('native-shell-comment-audit.mjs'); // R4-21: remote iOS shell cannot claim a wrapped web build; mutation controls.
 const BROWSER = [
   'pet-growth-audit.mjs', // F7: Today lineage growth and aspect ratio. Commander must prove RED on live (equal widths); pending.

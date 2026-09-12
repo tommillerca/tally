@@ -158,7 +158,7 @@ for (const stage of ['encrypt', 'recoverySetAt', 'recoveryId']) {
         if (refuse && stage === 'encrypt') throw new Error('crypto refused');
         return new ArrayBuffer(1);
       } } },
-      signedFetch: async () => { requests++; return { ok: true }; },
+      signedFetch: async () => { requests++; return { ok: true, json: async () => ({ ok: true, updatedAt: 123, recoveryId: 'test-id' }) }; },
       kvSet: async key => {
         if (refuse && stage === key) throw new Error('local write refused');
         if (key === 'recoveryId') records++;

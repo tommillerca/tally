@@ -604,14 +604,14 @@ function checkStamp() {
  * still in flight). */
 async function shell(req) {
   const nav = req.mode === 'navigate';
-  /* NAVIGATIONS ALWAYS READ './index.html', NOT THEIR OWN URL. A navigation
-     carries whatever query and hash the player arrived with (#/boneyard, and
-     index.html's dead-shell watchdog retries with ?bhgr=<now>), and none of
-     those are cache keys. The precached shell is the answer for all of them:
-     this is a single-page app and the hash is read by app.js after boot. */
+  // Standalone precached documents keep their own cache key, including offline.
+  // App routes still use index.html regardless of their query or hash.
+  const standalone = nav && PRECACHE.find(path => path.endsWith('.html') &&
+    path !== './index.html' && new URL(req.url).pathname.endsWith(path.slice(1)));
+  const cacheKey = nav ? (standalone || './index.html') : req.url;
   try {
     if ((nav || PRECACHED.has(req.url)) && await shellReady()) {
-      const hit = await caches.match(nav ? './index.html' : req.url, { cacheName: VERSION });
+      const hit = await caches.match(cacheKey, { cacheName: VERSION });
       if (hit) return hit;
     }
   } catch { /* the cache is gone or unreadable: fall through to the network, never fail the request */ }
