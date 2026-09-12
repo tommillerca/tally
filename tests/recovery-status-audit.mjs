@@ -2,8 +2,8 @@
 // No sockets or browser. CONTROL pins both existing 404 messages.
 import assert from 'node:assert/strict';
 import './mem-idb.mjs';
-import { kvSet } from '../js/db.js';
-import { restoreWithPhrase } from '../js/social.js';
+import { kvGet, kvSet } from '../js/db.js';
+import { restoreWithPhrase, setRecoveryPhrase } from '../js/social.js';
 
 const API = 'https://recovery-audit.invalid';
 await kvSet('apiBase', API);
@@ -77,3 +77,60 @@ try {
 } finally {
   globalThis.fetch = originalFetch;
 }
+
+// Save acknowledgement rows use the real signing, wrapping and storage path.
+let failures = 0;
+try {
+  await kvSet('social', { playerId: 'audit-player', friendCode: 'BONE-AAAA-BBBB' });
+  const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  await kvSet('identity', {
+    privJwk: await crypto.subtle.exportKey('jwk', pair.privateKey),
+    pubJwk: await crypto.subtle.exportKey('jwk', pair.publicKey),
+  });
+  for (const [name, body, accepted, requested = 'new-code', status = 200] of [
+    ['HTML', '<html>interstitial</html>', false],
+    ['empty object', {}, false],
+    ['ok false', { ok: false }, false],
+    ['wrong ID', { ok: true, recoveryId: 'wrong-code' }, false],
+    ['missing ID', { ok: true }, false],
+    ['null body', null, false],
+    ['real success', { ok: true, updatedAt: 123, recoveryId: 'new-code' }, true],
+    ['existing ID success', { ok: true, updatedAt: 123, recoveryId: 'old-code' }, true, null],
+    ['existing ID mismatch', { ok: true, recoveryId: 'new-code' }, false, null],
+    ['409 control', {}, false, 'new-code', 409],
+  ]) {
+    await kvSet('recoverySetAt', 17);
+    await kvSet('recoveryId', 'old-code');
+    let puts = 0;
+    globalThis.fetch = async (url, options) => {
+      assert.equal(String(url), API + '/recovery');
+      assert.equal(options.method, 'PUT');
+      assert.equal(JSON.parse(options.body).recoveryId, requested);
+      puts++;
+      return new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
+    };
+    try {
+      const result = await setRecoveryPhrase('a phrase long enough for recovery', requested);
+      assert.equal(puts, 1);
+      assert.equal(result.ok, accepted);
+      if (accepted) {
+        assert.ok(await kvGet('recoverySetAt') > 17);
+        assert.equal(await kvGet('recoveryId'), requested || 'old-code');
+        assert.equal(result.recoveryId, requested || 'old-code');
+      } else {
+        assert.equal(result.reason, status === 409 ? 'That recovery ID is taken. Pick another.' : 'The server did not confirm your recovery code. Try again.');
+        if (status === 409) assert.equal(result.field, 'id');
+        assert.equal(await kvGet('recoverySetAt'), 17);
+        assert.equal(await kvGet('recoveryId'), 'old-code');
+      }
+      console.log(`PASS recovery save: ${name}`);
+    } catch (error) {
+      failures++;
+      console.error(`FAIL recovery save: ${name}: ${error.message}`);
+    }
+  }
+} finally {
+  globalThis.fetch = originalFetch;
+}
+console.log(`recovery save: ${10 - failures} passed, ${failures} failed`);
+if (failures) process.exitCode = 1;

@@ -9,6 +9,10 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 589, date: '2026-09-12', title: 'Recovery save confirmation and the Privacy link', items: [
+    'Recovery code saving now waits for the server to confirm your recovery ID.',
+    'The Privacy link opens the policy instead of reopening the app.',
+  ] },
   { n: 588, date: '2026-09-12', title: 'The Salvage Bench moves to the Wardrobe, and names get room', items: [
     'Find the Salvage Bench below your slots in the Wardrobe. The Shop shortcut takes you straight there.',
     'Long names wrap on podiums, leaderboards, race results, gifts, featured nameplates, newcomers and Pit labels.',

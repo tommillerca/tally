@@ -1,5 +1,17 @@
 # What each patch note claims, and what backs it
 
+## v589 (2026-09-12)
+
+Changelog item: Recovery code saving now waits for the server to confirm your recovery ID.
+1. PROOF: recovery-status-audit.mjs retains 32 lookup cases and adds 10 save cases covering HTML, empty JSON, ok:false, missing/mismatched IDs, null, real success, existing-ID rewrap and 409. Seven refusal rows fail on unchanged main cb2aca56, including all three required body cases; valid success and 409 controls pass. | REACH: real setRecoveryPhrase signing, wrapping and local storage with stubbed HTTP. Refusals preserve both recovery metadata fields. settings-safety-audit.mjs passes all 33 rows after its success stub adopts the real acknowledgement body, preserving proof of UI retry handling and the tagged post-acceptance local-write error. Node only, no live server or browser claim.
+
+Changelog item: The Privacy link opens the policy instead of reopening the app.
+2. PROOF: sw-standalone-doc-audit.mjs executes the production fetch listener with a ready cache and offline transport. Privacy navigation with and without a query fails on unchanged main cb2aca56; today hash, index retry query and app-path controls pass. All five rows pass after the fix. Declared PURE. | REACH: standalone HTML entries in PRECACHE use their own document key; app navigations retain index.html. Node cache doubles, no browser click claim.
+
+Agreed proof: node tests/unit.test.js, exit 0, `392 passed, 0 failed`.
+
+The final frozen-plan note assigns v589 headings, superseding its earlier v588 wording. Runtime build stamps remain v588 as requested. No release or publication is claimed.
+
 ## v588 (2026-09-12)
 
 Assembled from five Codex lanes by the commander. Every browser audit below was run by the commander on the lane tree and again on the merged train; the lanes cannot bind a socket.

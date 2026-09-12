@@ -412,6 +412,7 @@ PURE.push('reachable-density-audit.mjs'); // R4-21: guards the shared reachabili
 PURE.push('backpack-lab-polish-audit.mjs'); // v573: talents exclude salvage; deliberate melting keeps payout.
 PURE.push('interrupted-fight-audit.mjs');
 PURE.push('v576-hunt-audit.mjs');
+PURE.push('sw-standalone-doc-audit.mjs'); // Cached standalone navigation and app-route controls; Node only.
 PURE.push('native-shell-comment-audit.mjs'); // R4-21: remote iOS shell cannot claim a wrapped web build; mutation controls.
 const BROWSER = [
   'log-delete-confirm-audit.mjs', // F17: named confirmation, cancel and delete through both log edit sheets.
