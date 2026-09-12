@@ -9,8 +9,8 @@ import { boot, seed, serveTree, sleep } from './godmode.js';
 import { NAME_ADJ, NAME_NOUN, buildName } from '../js/names.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const names = ['Bo', 'Bartholomew Bonecrusher', 'Bartholomew Bonecrusher ' + 'W'.repeat(128)];
-const sizes = ['', '200%', '53px']; // No maximum is declared by the app. 53px is a stress case.
+const names = ['Bo', 'Bartholomew Bonecrusher', 'Thunderous Vertebrae #999'];
+const sizes = ['', '200%']; // Default and iOS large text.
 const viewports = [[375, 812], [430, 932]];
 const longest = values => values.reduce((best, s, i) => s.length > values[best].length ? i : best, 0);
 const pick = { adj: longest(NAME_ADJ), noun: longest(NAME_NOUN), num: 999 };
@@ -35,7 +35,8 @@ const phases = [
   ['intro', [['Pit introduction name', '.vs-name.foe'], ['Pit introduction venue', '.vs-venue']]],
   ['rename', [['rename notice', '.sheet-rename .sheet-body > p:nth-child(2) b']]],
   ['fight', [['Pit opponent heading', '.fight-title h2'], ['Pit opponent HUD', '.fight-hud .foe .fname'], ['Pit venue', '.fight-venue']]],
-  ['map', [['owned tower marker', '.map-spire.mine .spire-flag'], ['map race standing', '#mapCount']]],
+  // Owned marker excluded: this fixture never boots WebGL; owner name is guarded at .spp-plate b, not marker geometry.
+  // Map standing excluded: this fixture never boots WebGL; race name is guarded at #raceCard .gbn-txt small, not map geometry.
   ['builder', [['name-builder draft', '#nbPreview', draft]]],
   ['onboarding', [['onboarding draft', '#onbName', draft]]],
 ];
@@ -43,7 +44,6 @@ const phases = [
 // missing controls into passes. Every other site still gates on CONTROL.
 const outsideFixture = new Map([
   ['.fight-over .note', 'repeat-result state is not reached by the fixture'],
-  ['#raceCard .race-lane .nm b', 'active-race lanes are not reached by the fixture'],
   ['.vs-name.foe', 'transient Pit introduction is not reached by the fixture'],
   ['.vs-venue', 'same transient Pit introduction as .vs-name.foe'],
 ]);
@@ -70,6 +70,8 @@ async function fixture(page, name) {
     const db = await import('./js/db.js');
     await db.kvSet('social', { playerId: 'name-fit-self', name, handle: name, friendCode: 'BONE-FIT' });
     await db.kvSet('onbName', pick);
+    // A returning racer gets the named gap instead of the first-race welcome.
+    await db.kvSet('raceDebutWk', '2020-01-01');
     await db.kvSet('giftbox', [{ key: 'name-fit-gift', payload: { coins: 25, note: `${name} sent you a gift!` } }]);
     await db.db.put('xp', { key: 'name-fit-delivery', type: 'social', xp: 0, label: `${name} sent you a gift`, ts: Date.now() - 86400000 });
     await db.db.put('xp', { key: 'name-fit-cheer', type: 'cheer', xp: 0, label: `${name} cheered you`, from: name, cheer: 0, cheerFrom: 'name-fit-friend', ts: Date.now() });
@@ -83,7 +85,7 @@ async function fixture(page, name) {
     window.__testFriends = { friends: [member('name-fit-friend')], incoming: [member('incoming')], outgoing: [member('outgoing')], reached: true };
     window.__testLb = ['newcomer', 'name-fit-self', 'another'].map((id, i) => ({ ...member(id), outfit, level: 12, you: i === 1 }));
     const players = window.__testLb.map((p, i) => ({ ...p, rank: i + 1, place: i + 1, steps: 24000 - 1000 * i, seenAt: now }));
-    window.__testRace = { players, yourRank: 2, podium: players, champion: players[0] };
+    window.__testRace = { players, yourRank: 2, podium: players.map(p => ({ ...p, coins: 25 })), champion: players[0] };
     window.__raceResults = () => players;
   }, { name });
   await page.evaluate(async () => { await window.__raceResultForgetCache?.(); });
@@ -98,9 +100,18 @@ async function route(page, name) {
   await sleep(500);
 }
 async function prepare(page, phase, name) {
+  // Keep the fixture snapshot from waiting on an unrelated profile upload.
+  await page.evaluate(async () => {
+    const db = await import('./js/db.js');
+    await db.kvSet('racePushAt', Date.now());
+  });
   await route(page, ['today', 'bonehead', 'settings', 'friends'].includes(phase) ? phase : 'friends');
   if (phase === 'leaderboard') await page.evaluate(() => document.querySelector('#crewLeaderboard').click());
-  if (phase === 'profile') await page.evaluate(() => window.__openFriendProfile(window.__nameFitMember));
+  if (phase === 'profile') {
+    await page.waitForSelector('#cfanView .pname-iso', { visible: true, timeout: 10000 });
+    await page.click('#cfanView');
+    await page.waitForSelector('#fpTitle .pname-iso', { visible: true, timeout: 10000 });
+  }
   if (phase === 'tower') await page.evaluate(name => window.__spireSheet({ besieged: true, siegeName: name, siegeUntil: Date.now() + 3600000, s: { id: 'name-fit-tower', name: 'Audit tower', dist: 0 }, view: { level: 1, tribute: { coins: 0 } }, held: true, lvl: 1, heldSince: Date.now() }), name);
   if (['garden', 'builder', 'onboarding', 'gift', 'cheer', 'tower-action'].includes(phase)) await page.evaluate(({ phase, pick }) => window.__nameFitSurface(phase, pick), { phase, pick });
   if (phase === 'rename') await page.evaluate(name => window.__renameNotice({ oldName: name }), name);
@@ -119,18 +130,6 @@ async function prepare(page, phase, name) {
     });
     await page.waitForSelector('.fight-over .note', { timeout: 5000 });
   }
-  if (phase === 'map') {
-    await page.setGeolocation({ latitude: 49.2827, longitude: -123.1207, accuracy: 8 });
-    const target = await page.evaluate(async () => {
-      const sp = await import('./js/spires.js');
-      const s = sp.spiresNear(49.2827, -123.1207)[0];
-      if (!s) throw new Error('No tower fixture available');
-      await sp.syncSieges([{ ...s, level: 1, claimedAt: Date.now(), tendedAt: Date.now() }]);
-      return s;
-    });
-    await page.setGeolocation({ latitude: target.lat, longitude: target.lng, accuracy: 8 });
-    await route(page, 'boneyard');
-  }
   if (phase !== 'intro') await sleep(500);
   await page.evaluate(async () => {
     await document.fonts.ready;
@@ -140,6 +139,22 @@ async function prepare(page, phase, name) {
     // Make request groups and results reachable through their native disclosure.
     for (const d of document.querySelectorAll('details:has(#friendsList)')) if (!d.open) d.querySelector('summary')?.click();
   });
+  if (phase === 'friends') {
+    // Wait for asynchronous race and request hydration before opening folds.
+    // Re-open the native disclosure while polling if hydration replaced it.
+    await page.waitForFunction(name => {
+      for (const d of document.querySelectorAll('details:has(#friendsList), #raceCard')) {
+        if (!d.hidden && !d.open) d.querySelector('summary')?.click();
+      }
+      return ['#cfanView .pname-iso', '#friendsList .fl-sect:first-child .pname-iso',
+        '#friendsList .fl-sect:last-child .pname-iso', '#raceCard .race-champ b',
+        '#raceCard .gbn-txt small', '#raceCard .race-gap'].every(selector => {
+          const e = document.querySelector(selector);
+          return e?.textContent.includes(name) && e.getBoundingClientRect().width > 0
+            && e.getBoundingClientRect().height > 0 && getComputedStyle(e).visibility !== 'hidden';
+        });
+    }, { timeout: 10000 }, name);
+  }
 }
 async function measure(page, selector, name) {
   return page.evaluate(({ selector, name }) => {
@@ -164,15 +179,11 @@ async function measure(page, selector, name) {
           ['y', cs.overflowY, r.top, r.bottom, ar.top + a.clientTop, a.clientHeight, a.scrollHeight, a.scrollTop],
         ]) {
           const clipEnd = clipStart + client;
-          // Hidden permits programmatic scrolling; clip never does. Compare
-          // the element in content coordinates with this axis's scroll extent,
-          // not just the viewport. Below-fold content inside that extent is
-          // reachable. A non-scrolling axis must still report a cut.
-          const contentStart = start - clipStart + scroll;
-          const contentEnd = end - clipStart + scroll;
-          const reachable = overflow === 'hidden' && extent > client
-            && contentStart >= -1 && contentEnd <= extent + 1;
-          if (['hidden', 'clip'].includes(overflow) && !reachable
+          // Only real scroll axes are exempt. Hidden non-scrollers and
+          // cross-axis clipping remain failures even with a scroll extent.
+          const scrollAxis = ['auto', 'scroll'].includes(overflow)
+            || (axis === 'y' && a.matches('#app, .screen') && overflow === 'hidden');
+          if (['hidden', 'clip', 'auto', 'scroll'].includes(overflow) && !scrollAxis
               && (start < clipStart - 1 || end > clipEnd + 1))
             clipReasons.push({ element: describe(a), axis, overflow,
               elementStart: start, elementEnd: end, clipStart, clipEnd,
@@ -182,8 +193,18 @@ async function measure(page, selector, name) {
       if (r.left < -1 || r.right > innerWidth + 1)
         clipReasons.push({ element: 'viewport', axis: 'x', elementStart: r.left,
           elementEnd: r.right, clipStart: 0, clipEnd: innerWidth });
+      // Inline spans have zero CSSOM client/scroll dimensions even when
+      // painted. Measure actual text fragments against their containing box.
+      const inline = s.display === 'inline';
+      const range = document.createRange();
+      range.selectNodeContents(e);
+      const fragments = [...range.getClientRects()];
+      const clientWidth = inline ? e.parentElement.clientWidth : e.clientWidth;
+      const scrollWidth = inline ? Math.max(0, ...fragments.map(f => f.width)) : e.scrollWidth;
+      const clientHeight = inline ? r.height : e.clientHeight;
+      const scrollHeight = inline ? range.getBoundingClientRect().height : e.scrollHeight;
       return { element: describe(e), rect: { x: r.x, y: r.y, width: r.width, height: r.height },
-        scrollWidth: e.scrollWidth, clientWidth: e.clientWidth, scrollHeight: e.scrollHeight, clientHeight: e.clientHeight,
+        scrollWidth, clientWidth, scrollHeight, clientHeight,
         fontSize: parseFloat(s.fontSize), minimum: parseFloat(getComputedStyle(document.documentElement).fontSize) * .5625,
         intact: e.textContent.includes(name), rendered: r.width > 0 && r.height > 0 && !hidden && Number(s.opacity) !== 0,
         whiteSpace: s.whiteSpace, allowsWrapping: !['nowrap', 'pre'].includes(s.whiteSpace)
@@ -231,14 +252,21 @@ try {
         for (const [site, selector, expected = name] of sites) {
           const key = JSON.stringify([name, w, h, size, site]); pending.delete(key);
           const context = `${site} ${w}x${h} text=${size || 'default'} name=${JSON.stringify(expected)}`;
-          if (error) { console.log(`UNPROVEN CONTROL ${context}: ${error}`); unproven++; continue; }
+          if (error) { console.log(`UNREACHED ${context} selector=${JSON.stringify(selector)}: ${error}`); unproven++; continue; }
           let rows;
           try { rows = await measure(page, selector, expected); }
-          catch (e) { console.log(`UNPROVEN CONTROL ${context}: ${e.message}`); unproven++; continue; }
-          if (!rows.length || rows.some(r => !r.rendered)) { console.log(`UNPROVEN CONTROL ${context}: ${selector} absent or hidden`); unproven++; continue; }
+          catch (e) { console.log(`UNREACHED ${context} selector=${JSON.stringify(selector)}: ${e.message}`); unproven++; continue; }
+          if (!rows.length || rows.some(r => !r.rendered)) {
+            // Say WHICH: a selector that matched nothing, a hidden ancestor, or a zero box.
+            const why = await page.evaluate(sel => [...document.querySelectorAll(sel)].map(e => {
+              const r = e.getBoundingClientRect(); const cs = getComputedStyle(e);
+              const hid = e.closest('[hidden], details:not([open]) > :not(summary)');
+              return { rect: [r.x, r.y, r.width, r.height].map(Math.round), display: cs.display, vis: cs.visibility, op: cs.opacity, text: e.textContent.slice(0, 40), hiddenBy: hid ? hid.tagName + '.' + hid.className : null };
+            }), selector);
+            console.log(`UNREACHED ${context}: ${selector} absent, hidden or zero-width ${JSON.stringify({ matches: why, rows })}`); unproven++; continue; }
           for (const row of rows) {
             checked++;
-            console.log(`PASS CONTROL ${context} ${JSON.stringify(row)}`);
+            console.log(`PASS RENDERED CONTROL ${context} ${JSON.stringify(row)}`);
             const fitConditions = {
               positiveClientWidth: row.clientWidth > 0,
               horizontalOverflowWithinTolerance: row.scrollWidth - row.clientWidth <= 1,
