@@ -159,7 +159,7 @@ export async function awardCapped(prefix, type, xp, label, cap, date, ref = null
    number cannot say whether a 0-XP slot was taken (0 is both "capped" and "a
    payload with no XP"), and the spar ledger below pays COINS off a 0-XP row, so
    anything gating money on the slot must read `claimed` (QA round 28 P4). */
-async function claimCapped(prefix, type, xp, label, cap, date, ref = null) {
+async function claimCapped(prefix, type, xp, label, cap, date, ref = null, pay = null) {
   const d = date || dateKey();
   for (let n = 1; n <= cap; n++) {
     const key = `${prefix}-${d}-${n}`;
@@ -181,7 +181,7 @@ async function claimCapped(prefix, type, xp, label, cap, date, ref = null) {
        write. Measured before this: two tabs each pushing 12 awards against a
        12/day ceiling wrote the correct 12 rows and PAID 190 XP against a cap
        of 120, because both were told they had granted the same key. */
-    const r = await awardOnce(key, type, xp, label, d, ref != null ? { ref } : null);
+    const r = await awardOnce(key, type, xp, label, d, ref != null ? { ref } : null, pay);
     if (r.claimed) return r;
     /* Lost the claim. If the winner was our own twin (two overlapping calls
        for one entry: reward-sop's "twoAtOnce" line paid 320 against 310), the
@@ -205,9 +205,30 @@ async function claimCapped(prefix, type, xp, label, cap, date, ref = null) {
    Whether a spar should also spend a Pit charge is Tom's call and unchanged. */
 export const SPAR_DAILY_CAP = XP_DAILY_CAP.fight;
 export const SPAR_COINS = { win: 15, loss: 5 };
-export async function claimSpar(fightId, won, date) {
-  const r = await claimCapped('spar', 'spar', 0, won ? 'Sparring win' : 'Sparring loss', SPAR_DAILY_CAP, date, fightId);
-  return { claimed: r.claimed, coins: r.claimed ? (won ? SPAR_COINS.win : SPAR_COINS.loss) : 0 };
+export async function claimSpar(fightId, won, date, coinMult = 1) {
+  let coins = won ? SPAR_COINS.win : SPAR_COINS.loss;
+  const extras = [];
+  // A new daily slot and its full payment commit together. Request order in
+  // claimAndPay applies the charm before food, with the shipped rounding.
+  const pay = { kv: {
+    buffs: cur => {
+      if (!won || !(cur?.xp2 > 0)) return undefined;
+      const bonus = Math.round(coins * BATTLE_CHARM_BONUS);
+      coins += bonus; extras.push(`Battle Charm +${bonus} coins`);
+      return { ...cur, xp2: cur.xp2 - 1 };
+    },
+    coins: cur => {
+      if (won && coinMult > 1) {
+        const bonus = Math.round(coins * (coinMult - 1));
+        coins += bonus; extras.push(`Feast +${bonus} coins`);
+      }
+      return Math.max(0, (Number(cur) || 0) + coins);
+    },
+    coinsRev: cur => (Number(cur) || 0) + Math.max(1, Math.abs(coins)),
+  } };
+  const r = await claimCapped('spar', 'spar', 0, won ? 'Sparring win' : 'Sparring loss', SPAR_DAILY_CAP, date, fightId, pay);
+  return { claimed: r.claimed, coins: r.claimed ? coins : 0,
+    ...(r.claimed && extras.length ? { extras } : {}) };
 }
 
 // A decided staked win survives closing the arena or a process death. Keep its
@@ -429,20 +450,21 @@ export async function awardOnce(key, type, xp, label, date, extra = null, pay = 
 // more, a loss still gives a shame-free consolation) so the incentive is to battle
 // MANY friends, not farm one. Records a `friendbattle` ledger row tagged with the
 // friendId so the daily/weekly friend quests can count total + distinct friends.
-// Returns {firstToday, coins, xp, won}; caller adds the coins.
+// Returns the committed {firstToday, coins, xp, won} payment for display.
 export async function claimFriendBattle(friendId, won, date) {
   const d = date || dateKey();
   const key = `friendbattle-${d}-${friendId}`;
   const xp = won ? 12 : 5;
-  /* The claim IS the check. `if (await db.get(...)) return firstToday:false`
-     followed by an award was two operations with an await between them, and
-     the caller pays 25 coins on firstToday, so two tabs battling the same
-     friend at the same moment were both paid. */
-  const claim = await awardOnce(key, 'friendbattle', xp, won ? "Beat a friend's bonehead" : 'Battled a friend', d);
+  // Transition: this friend's first battle today. Metadata and coins belong
+  // to the same ledger claim, so neither a crash nor a twin can split them.
+  const coins = won ? 25 : 8;
+  const claim = await awardOnce(key, 'friendbattle', xp, won ? "Beat a friend's bonehead" : 'Battled a friend', d,
+    { friendId, won: won ? 1 : 0 }, { kv: {
+      coins: cur => Math.max(0, (Number(cur) || 0) + coins),
+      coinsRev: cur => (Number(cur) || 0) + Math.max(1, Math.abs(coins)),
+    } });
   if (!claim.claimed) return { firstToday: false, coins: 0, xp: 0, won };
-  const row = await db.get('xp', key);
-  if (row) { row.friendId = friendId; row.won = won ? 1 : 0; await db.put('xp', row); }
-  return { firstToday: true, coins: won ? 25 : 8, xp, won };
+  return { firstToday: true, coins, xp, won };
 }
 
 export function levelCoins(level) { return 20 + level * 5; }

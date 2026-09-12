@@ -27114,7 +27114,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
       const r = await claimFriendBattle(foeCfg.friendId, won);
       xp = r.xp; coins = r.coins; foeCfg._friendFirst = r.firstToday;
       trackEvent('friend_battle', { won });
-      if (coins) await coinsAdd(coins);
       if (won) {
         confettiRain(90); levelSound(S.sounds);
         const badges = await evaluateBadges();
@@ -27141,7 +27140,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
          ledger key and no cap (start() skips spendPitFight on purpose). The
          coins now come off claimSpar's daily slot; past SPAR_DAILY_CAP, or on a
          repeated settle of this fight, it pays 0. */
-      if (foeCfg.mode === 'spar') { coins = (await claimSpar(fightId, true)).coins; }
+      if (foeCfg.mode === 'spar') {
+        const r = await claimSpar(fightId, true, undefined, await foodCoinMult());
+        coins = r.coins; extras.push(...(r.extras || []));
+      }
       else if (foeCfg.mode === 'boss') {
         const r = await claimDenWin(foeCfg.den);
         if (r) {
@@ -27381,8 +27383,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
         }
         dispatchEvent(new CustomEvent('bh-wanderer-beaten', { detail: { key: foeCfg.claimKey } }));
       }
-      // The Wanderer already paid coins and consumed its charm atomically.
-      if (foeCfg.mode !== 'wanderer') {
+      // The Wanderer and spar already paid coins and consumed their charm atomically.
+      if (foeCfg.mode !== 'wanderer' && foeCfg.mode !== 'spar') {
       // Battle Charm: spend a charge on the win for +25% coins.
       if (coins > 0) {
         const bonusPct = await consumeBattleCharmCharge();
@@ -27422,7 +27424,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
          same daily slot as a spar win. Staked modes are unchanged: their 5 is
          already bounded by the Pit charge spendPitFight took. */
       coins = foeCfg.mode === 'spar' ? (await claimSpar(fightId, false)).coins : 5;
-      if (coins) await coinsAdd(coins);
+      if (coins && foeCfg.mode !== 'spar') await coinsAdd(coins);
       window.__refreshWalletPill?.();
       refreshLevelChip();   // R41-16: no xp on a loss, but stays true to "like the wallet pill does"
     }
