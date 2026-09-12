@@ -5,7 +5,8 @@
  * is provisional until independently rendered. CARDS preserves this set; it
  * cannot honestly be required to fail on an unchanged baseline with that set.
  * Separate from settings-rows: this covers mobile shape, folds and card loss,
- * while settings-rows retains its 100%/200% text and action-column contract.
+ * while settings-rows retains its 100%/200% text checks. NO-COLUMN replaces
+ * its deliberately retired fixed-width action-column contract.
  */
 import { boot, serveTree } from './godmode.js';
 import { fileURLToPath } from 'node:url';
