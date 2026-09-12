@@ -413,6 +413,7 @@ PURE.push('interrupted-fight-audit.mjs');
 PURE.push('v576-hunt-audit.mjs');
 PURE.push('native-shell-comment-audit.mjs'); // R4-21: remote iOS shell cannot claim a wrapped web build; mutation controls.
 const BROWSER = [
+  'log-delete-confirm-audit.mjs', // F17: named confirmation, cancel and delete through both log edit sheets.
   'r8-shop-css-browser-audit.mjs', // Operator proof: screenshot-sampled price contrast, wallet emphasis and disabled ghosts.
   'steprace-live-browser-audit.mjs', // Operator-only degraded race: painted avatars, track geometry and honest zero fill; no listener or launch.
   'crew-bars-browser-audit.mjs', // Operator browser and approved baseline required; no auto-launch.
