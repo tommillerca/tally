@@ -29,7 +29,14 @@ try {
     process.exitCode = 97;
   }
   console.log('CONTROL', counts ?? 'fixture unavailable');
-  if (!(counts?.slots >= 4 && counts?.sections >= 2)) {
+  /* ONE section, not two. This required two item sections, which only ever
+     existed because the wardrobe listed every OTHER slot underneath the open
+     one. Tom removed that overview in v586 ("youre trying to do too much"), so
+     the picker now renders exactly one section: the slot you tapped. Requiring
+     two made this guard demand the layout he rejected and report UNPROVEN on
+     the corrected one. What it grades is unchanged: tapping a slot scrolls its
+     heading into view and tapping again returns to the paperdoll. */
+  if (!(counts?.slots >= 4 && counts?.sections >= 1)) {
     console.log('CONTROL UNPROVEN: cannot build slots and item sections fixture');
     process.exitCode = 97;
   } else {
