@@ -12429,3 +12429,19 @@ body:has(.screen--today):not(:has(#sheets .sheet)) .toast { top: calc(var(--sat)
 .bh-room-stage { position: absolute; left: 18px; right: 18px; bottom: 15px; height: 1px; background: color-mix(in srgb, var(--header-accent) 22%, transparent); pointer-events: none; }
 .lab-sheet .bh-room-header { margin-bottom: 0; }
 .lab-sheet #labBody { padding-bottom: 0; }
+
+/* Room headers: keep the approved default composition. When the available
+   inline width falls below 10 root ems, use a compact 1.125rem title with
+   breathing room for wrapped glyphs. At root 53px: 59.625px type, 71.55px
+   line boxes, above the 1rem body size. All four illustrations stay intact.
+   The audit budget is 340px at 375x812, leaving over 58% for room content.
+   No height cap: longer future copy grows instead of being truncated. */
+.bh-room-header {
+  container-type: inline-size;
+}
+@container (width < 10em) {
+  .bh-room-header .bh-room-title {
+    --fs-room-title: 1.125rem;
+    line-height: 1.2;
+  }
+}

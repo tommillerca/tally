@@ -1,0 +1,19 @@
+AUDIT START room-headers-audit.mjs: completion pending; planned rows undeclared
+AUDIT PLAN room-headers-audit.mjs: 13 rows
+PASS NO-REVERT: recoverInterruptedPitFight
+PASS NO-REVERT: leaderboardLastOnline
+PASS NO-REVERT: fanPaintRevision
+SCALE budget: 340px at root 53px, viewport 375x812; leaves over 58% for room content. Mode: prove-red (round-2 typography)
+UNPRV CONTROL kitchen  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV HEADER kitchen  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV ART kitchen  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV SCALE kitchen  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV COPY kitchen  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV CONTROL lab  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV HEADER lab  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV ART lab  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV SCALE lab  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+UNPRV COPY lab  DID NOT RUN: Error: listen EPERM: operation not permitted 127.0.0.1
+room headers: 0 failures
+AUDIT END room-headers-audit.mjs: UNPROVEN; COMPLETE; rows=13/13; failed=0; unproven=10; exit=97
+exit=97

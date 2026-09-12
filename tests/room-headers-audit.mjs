@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {boot, sleep, serveTree, unproven, exitFor} from './godmode.js';
 import {declareAudit, recordAuditRow, completeAudit} from './audit-lifecycle.mjs';
-declareAudit({expectedRows:11});
+declareAudit({expectedRows:13});
 const root = fileURLToPath(new URL('../', import.meta.url));
 let failures = 0;
 const completed = new Set();
@@ -23,7 +23,11 @@ const source = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 for (const symbol of ['recoverInterruptedPitFight', 'leaderboardLastOnline', 'fanPaintRevision']) {
   check('NO-REVERT', new RegExp(`\\b${symbol}\\b`).test(source), symbol);
 }
-const arg = process.argv[2] || process.env.URL;
+// 340/812 is under 42%: reserve over 58% of the viewport for room content.
+const scaleHeightBound = 340;
+const proveRed = process.argv.includes('--prove-red');
+console.log(`SCALE budget: ${scaleHeightBound}px at root 53px, viewport 375x812; leaves over 58% for room content. Mode: ${proveRed ? 'prove-red (round-2 typography)' : 'current CSS'}`);
+const arg = process.argv.slice(2).find(a => !a.startsWith('--')) || process.env.URL;
 let server, browser;
 try {
   server = arg ? null : await serveTree(root);
@@ -40,7 +44,7 @@ try {
       await page.evaluate(() => history.back());
       await sleep(400);
     }
-    await page.evaluate(() => { document.documentElement.style.fontSize = '16px'; });
+    await page.evaluate(() => { document.querySelectorAll('style[data-room-prove-red]').forEach(el => el.remove()); document.documentElement.style.fontSize = '16px'; });
     const door = room === 'kitchen' ? '#kitchenActBtn' : '#stableBtn';
     await page.waitForSelector(door, {timeout:15000});
     await page.click(door);
@@ -51,7 +55,17 @@ try {
     const bodyId = room === 'lab' ? 'labBody' : 'kitchenBody';
     await page.waitForFunction(id => document.getElementById(id)?.querySelectorAll('*').length > 5, {timeout:15000}, bodyId);
     await sleep(700);
-    for (const size of [16, 53]) {
+    const originalTitle = await page.$eval(`.bh-room-${room} .bh-room-title`, el => el.textContent);
+    for (const [size, copy] of [[16, originalTitle], [53, originalTitle], [53, 'THE EXPERIMENTAL LABORATORY']]) {
+      const extended = copy !== originalTitle;
+      await page.$eval(`.bh-room-${room} .bh-room-title`, (el, text) => { el.textContent = text; }, copy);
+      // Recreate the frozen round-2 defect without mutating source files.
+      if (proveRed && size === 53) await page.evaluate(() => {
+        const style = document.createElement('style');
+        style.dataset.roomProveRed = '';
+        style.textContent = '.bh-room-header .bh-room-title { --fs-room-title: 2.25rem; line-height: 1; }';
+        document.head.append(style);
+      });
       // No app-defined upper bound: 53px is an explicit stress case, not a
       // claim that Chromium emulates the native Dynamic Type setting.
       await page.evaluate(size => { document.documentElement.style.fontSize = `${size}px`; }, size);
@@ -77,18 +91,22 @@ try {
         if (title) range.selectNodeContents(title);
         const textFits = !!title && title.scrollWidth <= title.clientWidth + 1 && title.scrollHeight <= title.clientHeight + 1 && [...range.getClientRects()].every(r => inside(r, title.getBoundingClientRect()) && inside(r,bounds));
         return {count:body?.querySelectorAll('*').length || 0, rendered:!!body && body.getBoundingClientRect().width > 0 && body.getBoundingClientRect().height > 0 && getComputedStyle(body).visibility === 'visible', height:bounds?.height || 0,
-          art:images.map(img => ({decoded:img.complete && img.naturalWidth > 0 && img.naturalHeight > 0 && img.getBoundingClientRect().width > 0 && img.getBoundingClientRect().height > 0 && getComputedStyle(img).visibility === 'visible', width:img.naturalWidth, height:img.naturalHeight})), unclipped,textFits};
+          art:images.map(img => ({decoded:img.complete && img.naturalWidth > 0 && img.naturalHeight > 0 && img.getBoundingClientRect().width > 0 && img.getBoundingClientRect().height > 0 && getComputedStyle(img).visibility === 'visible', width:img.naturalWidth, height:img.naturalHeight})), unclipped,textFits,
+          titleSize: title ? parseFloat(getComputedStyle(title).fontSize) : 0,
+          rootSize: parseFloat(getComputedStyle(document.documentElement).fontSize)};
       }, {room, bodyId});
       if (size === 16) {
         check(`CONTROL ${room}`, m.rendered && m.count > 5, `${m.count} screen elements; rendered=${m.rendered}`);
         check(`HEADER ${room}`, Math.abs(m.height - 144) <= 2, `${m.height}px (expected 144 +/- 2)`);
         check(`ART ${room}`, m.art.length === 4 && m.art.every(i => i.decoded), JSON.stringify(m.art));
-      } else check(`SCALE ${room}`, m.unclipped && m.textFits, `root ${size}px; height ${m.height}px; art unclipped=${m.unclipped}; text fits=${m.textFits}`);
+      } else check(`${extended ? 'COPY' : 'SCALE'} ${room}`,
+        m.height <= scaleHeightBound && m.unclipped && m.textFits && m.titleSize >= m.rootSize,
+        `root ${size}px; height ${m.height}px; bound ${scaleHeightBound}px (leaves over 58% of 812px for room content); title ${m.titleSize}px >= body ${m.rootSize}px; art unclipped=${m.unclipped}; text fits=${m.textFits}; copy=${JSON.stringify(copy)}`);
     }
   }
 } catch (error) {
   if (/EPERM|EACCES|Could not find Chrome|Failed to launch/.test(String(error))) {
-    for (const room of ['kitchen', 'lab']) for (const row of ['CONTROL', 'HEADER', 'ART', 'SCALE']) {
+    for (const room of ['kitchen', 'lab']) for (const row of ['CONTROL', 'HEADER', 'ART', 'SCALE', 'COPY']) {
       const name = `${row} ${room}`;
       if (!completed.has(name)) {
         unproven(name, String(error));
