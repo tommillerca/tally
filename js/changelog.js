@@ -9,6 +9,9 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 583, date: '2026-09-12', title: 'The Laboratory celebrates every result', items: [
+    'A Laboratory experiment plays its reveal even when the outcome was certain.',
+  ] },
   { n: 582, date: '2026-09-12', title: 'Importing a backup tells the truth, and can be retried', items: [
     'The import screen now says what really happens to your restore points.',
     'If an import is refused, you can free up space and try again without starting over.',
