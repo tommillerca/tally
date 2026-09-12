@@ -1,5 +1,10 @@
 # The Worker is behind main, on purpose
 
+## v590 pending: F22 flagged friendships (2026-09-12)
+
+Worker only, not deployed. Suppress both participants with COALESCE(is_test, 0) = 0 in all friends buckets and gift, cheer and accept authorization. Recheck in the accept UPDATE and align reciprocal requests with the same zero/null visibility rule. test_run remains provenance only. No migration or D1 operation performed; no secrets accessed. Deployment is Tom's. Local PURE proof: flagged-friend-audit.mjs, 11 passed, 0 failed; main friends-list row RED.
+
+
 Written 2026-08-23, after #77 merged.
 
 > ## CORRECTION, 2026-08-25 — READ THIS BEFORE THE TABLE BELOW

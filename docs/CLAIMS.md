@@ -1,5 +1,10 @@
 # What each patch note claims, and what backs it
 
+## v590 (2026-09-12)
+
+Changelog item: Flagged test accounts stay out of Crew lists and cannot exchange gifts, cheers or friendship accepts.
+1. PROOF: flagged-friend-audit.mjs, PURE in-process Worker with signed requests and in-memory SQLite: 11 passed, 0 failed. Against main cb2aca568cf53661d5f9bd584831f618feda3cd7 via --main: 2 passed, 9 failed, including the FRIENDS row returning flagged b to a. Controls pass on both sources. node tests/unit.test.js: 392 passed, 0 failed, exit 0. Tests cover all three buckets after retroactive flagging, free and spend gifts and cheers in both directions, refused accepts without relationship or grant changes, and unflagged NULL/zero accounts carrying test_run provenance. | REACH: Worker only, not deployed. Existing and pending friendships, gift and cheer authorization, and explicit or reciprocal accepts. No client or version stamps changed. F22; deployment remains Tom's.
+
 ## v588 (2026-09-12)
 
 Assembled from five Codex lanes by the commander. Every browser audit below was run by the commander on the lane tree and again on the merged train; the lanes cannot bind a socket.
