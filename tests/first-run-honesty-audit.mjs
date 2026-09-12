@@ -56,7 +56,12 @@ try {
   await fresh.waitForSelector('#saveNew', { visible: true });
   await fresh.click('#saveNew');
   await fresh.waitForSelector('#onbGo', { visible: true });
-  const disclosure = await fresh.$eval('.onb', el => el.innerText);
+  /* 2026-09-12: the line is TYPED by runTalkBox into a clipped reveal span, so
+     innerText never carries it (innerText skips clipped text) and this row was
+     red on every gate run on main while the sentence was in the DOM the whole
+     time. Read what a screen reader gets (the talkbox's aria-label, which
+     carries the full line) alongside the sheet's visible text. */
+  const disclosure = await fresh.$eval('.onb', el => el.innerText + ' ' + [...el.querySelectorAll('.talkbox')].map(t => t.getAttribute('aria-label') || '').join(' '));
   const expected = "New bones. I'm Gwart. You eat, the skeleton earns. I keep an anonymous account for you. No email, password, or sign-up. The Privacy policy tells the long version.";
   ok('DISCLOSURE Gwart introduces himself and names the anonymous account', disclosure.includes(expected));
   await fresh.screenshot({ path: auditOutputPath(path.join(shots, 'first-run-disclosure.png')) });
