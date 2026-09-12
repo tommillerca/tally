@@ -15,9 +15,11 @@ function check(row, pass, detail) {
   if (!pass) failures++;
 }
 const source = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
-// Read merge-base..main history: d29682d1 (v570) added
-// recoverInterruptedPitFight; 7dcd8c18 (v571) added leaderboardLastOnline;
-// 6041ef56 (v571) added fanPaintRevision. All postdate 4767f7f1's base.
+// Verified with git log b13e7fd2..main and per-symbol git log -S:
+// d29682d1 (v570): recoverInterruptedPitFight.
+// 7dcd8c18 (v571): leaderboardLastOnline.
+// 6041ef56 (v571): fanPaintRevision.
+// Full provenance and removal inventory: docs/v578/room-headers-commit-message.txt.
 for (const symbol of ['recoverInterruptedPitFight', 'leaderboardLastOnline', 'fanPaintRevision']) {
   check('NO-REVERT', new RegExp(`\\b${symbol}\\b`).test(source), symbol);
 }
