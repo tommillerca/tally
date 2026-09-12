@@ -9,6 +9,10 @@ export const NEXT_CHANGES = [
 
 
 export const CHANGES = [
+  { n: 581, date: '2026-09-11', title: 'Settings, tidied', items: [
+    'Settings reads in a sensible order, and every button shows its whole label.',
+    'Diagnostics, the device report and the USDA key tuck away until you want them.',
+  ] },
   { n: 580, date: '2026-09-11', title: 'Centred chests, and the Studio moves along the rail', items: [
     'Chests and items in the Backpack are centred on their cards.',
     'In the Wardrobe, Take off and The Studio have swapped places.',
