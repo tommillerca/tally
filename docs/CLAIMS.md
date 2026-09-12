@@ -1,5 +1,12 @@
 # What each patch note claims, and what backs it
 
+## v589 (2026-09-12)
+
+Changelog item: Pets grow a little with breeding outside the Stable, up to 24%.
+1. PROOF: pet-growth-audit.mjs measures Today with two C6 instances at lineage 0 and 3, requiring 12% greater rendered width within 1px and aspect ratio unchanged within 1%. Commander browser execution and live RED (equal widths) are pending, not claimed. node tests/unit.test.js: 395 passed, 0 failed (exit 0). Unit rows cover lineage 0, 3 and the cap at 9. | REACH: Pit, Today, Crew and the app.js Paddock scene, not the Stable, by Tom's call.
+
+Deviations: the plan's .cf-art site is the locked Stable slider, so it stays unchanged; the actual Crew fan .cfan-pet receives lineage instead. petPortraitHtml accepts optional lineage for that fan. Today's CSS overrides sprite size, so its --pet-rel also includes growth. The named keeperPet belongs to the Spire view; both it and the actual app.js Paddock scene receive lineage. Browser proof is reserved for the commander as ordered; live RED remains unproven.
+
 ## v588 (2026-09-12)
 
 Assembled from five Codex lanes by the commander. Every browser audit below was run by the commander on the lane tree and again on the merged train; the lanes cannot bind a socket.

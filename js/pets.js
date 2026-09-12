@@ -185,6 +185,7 @@ export const SHINY_STAT_MULT = 1.08;
 // v128 breeding: each LINEAGE tier (bred by fusing two pets) adds a flat % to every
 // stat. Lineage remains earned and recorded forever; combat has a finite budget.
 export const PET_STAT_MULT_CAP = 1.5; // combined rarity, shiny and lineage budget
+export function petGrowth(lineage) { return 1 + 0.04 * Math.min(lineage || 0, 6); }
 export const PET_LINEAGE_STEP = 0.05; // +5% per lineage tier
 
 // Shared by combat stats and the Stable's capped bonus disclosure.
