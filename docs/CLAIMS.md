@@ -3,7 +3,7 @@
 ## v588 (2026-09-12)
 
 Changelog item: Clearing your height keeps it blank when you switch units.
-1. PROOF: forms-state-audit.mjs row HEIGHT runs the production profile binder against DOM doubles: blank height in both unit directions stays blank, missing-height validation fires, and a nonblank height still converts (control). RED on main 8b4cefe8 via `node tests/forms-state-audit.mjs --main` (0 passed, 4 failed), GREEN here (4 passed). Declared in the PURE tier. | REACH: the shared onboarding and Settings profile form, both unit directions.
+1. PROOF: forms-state-audit.mjs row HEIGHT runs the production profile binder against DOM doubles: blank height in both unit directions stays blank, missing-height validation fires, and a nonblank height still converts (control). RED on main 8b4cefe8 via the audit run with --main (0 passed, 4 failed), GREEN here (4 passed). Declared in the PURE tier. | REACH: the shared onboarding and Settings profile form, both unit directions.
 
 Changelog item: A suggested lucky number now turns on its checkbox and shows the number.
 2. PROOF: forms-state-audit.mjs row LUCKY: after the server suggests 7 for a taken name, the preview, the checkbox, the visible input and the next submitted number all agree. RED on main, GREEN here. | REACH: the name builder's taken-name branch only.
