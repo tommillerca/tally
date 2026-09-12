@@ -88,3 +88,9 @@ Held out of v588: pet growth (D2), and l-ackpriv (recovery save must see a real 
 - `docs/GATE-REDS-2026-09-12.md` (Codex, commander-read): 22 FIXTURE, 2 PRODUCT, 3 AUDIT DRIFT, 3 ENVIRONMENT, 4 HOLLOW, 23 UNRESOLVED (the gate log only kept a network summary line for those; next gate run should keep the FAIL and stack per suite).
 - The fixture mechanism: `tests/godmode.js` seeds coins with a raw kv write while the demo boot already funded 340 coins through the currency writer, so the next revisioned write refuses "currency history does not match". One helper fix is the biggest single green. Lane dispatched.
 - The product finding: `sw.js` PRECACHE lacks `js/hero-ground.js`, `js/laboratory.js` and two pixel icons, so one failed fetch offline blanks the app. Lane dispatched; ships as v591.
+
+## 14:57 Worker deployed (Tom: "d1 deploy now")
+
+- Migration applied, then server/deploy.sh. Its preflight caught two things first: the friends route had lost its index seek to the flagged-account predicates (moved into the JOIN conditions; the plan test's own bind order had drifted since v498), and a same-key gift or cheer retry no longer said duplicate:true (restored). Both landed as PRs #521 and #522 before the deploy.
+- Worker version 23e80a11 is 100% live; /health and /health/deep 200, race routes reachable. The script's deep-health curl raced the rollout and saw a 404 for a moment; re-checked clean.
+- Everything on the deploy card is now live. Remaining for Tom: nothing today. Next: v591 (precache gap, seed helper) is assembled and gating.
