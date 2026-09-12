@@ -12557,3 +12557,34 @@ body #toast.toast[data-severity][data-seat-clear] { top: var(--toast-seat, calc(
   list-style-position: outside;
   padding-inline: 1em;
 }
+/* SETTINGS TIDY, 2026-09-11. Every short action in a settings row (Import,
+   Review, Guide, Join, Read, Claim, Copy, Open) wrapped into a vertical stack of
+   letters at 393px, because the row is a flex box, the label wants its whole
+   sentence, and a button's automatic minimum is one glyph. The seg got its
+   `flex: none` in the tap-target pass; the buttons never did. The label is the
+   thing that yields, never the control. */
+.settings-row .lab { flex: 1 1 auto; min-width: 0; }
+.settings-row > .btn, .settings-row > a.btn { flex: none; white-space: nowrap; }
+.settings-row.stack { flex-direction: column; align-items: stretch; gap: 10px; }
+.settings-row .notif-presets { display: flex; gap: 8px; margin: 0; flex-wrap: nowrap; }
+.settings-row .notif-presets .btn { flex: 1; min-width: 0; white-space: nowrap; }
+#redeemInput::placeholder { text-transform: none; }
+.settings-note { margin: 8px 2px 0; }
+.settings-foot { text-align: center; margin-top: 18px; }
+.redeem-row { display: flex; gap: 8px; }
+/* A fold is a settings row that opens: same type, same padding, chevron where
+   the control would be. Rows inside keep their own hairlines. */
+.settings-fold > summary {
+  list-style: none; cursor: pointer; position: relative;
+  display: flex; flex-direction: column; gap: 0; padding: 13px 30px 13px 2px;
+}
+.settings-fold > summary::-webkit-details-marker { display: none; }
+.settings-fold > summary::after {
+  content: '▸'; position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  color: var(--text-3); font-size: var(--fs-4); transition: transform 0.2s;
+}
+.settings-fold[open] > summary::after { transform: translateY(-50%) rotate(90deg); }
+.settings-fold > summary > b { font-size: var(--fs-3); font-weight: 600; }
+.settings-fold > summary > span { font-size: var(--fs-2); color: var(--text-3); }
+.settings-fold-body { padding: 2px 2px 12px; }
+.settings-fold-actions { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
