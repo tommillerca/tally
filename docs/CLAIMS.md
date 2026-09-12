@@ -5517,37 +5517,9 @@ Deviations: The existing typed gate protects trained, named, bonded, lineage, eq
 Changelog item: Wardrobe removes fit counts while keeping Save fit available with its six-fit limit.
 1. PROOF: `node tests/unit.test.js` R23 F8 renders five and six saved fits, checks absent counts, cap ghosting and the explanatory tap handler. `node tests/wardrobe-ui-1f-audit.mjs` retains inherited CSS, paperdoll and lower-handler hashes. | REACH: Wardrobe header and saved-fit switcher only. Geometry and clipping unmeasured. Stacking and slot return navigation blocked by the frozen lower-region contract.
 
-## v588
+## v588 (2026-09-12)
 
 Changelog item: Long names wrap on podiums, leaderboards, race results, gifts and featured nameplates.
+1. PROOF: name-fit-audit.mjs promoted from skip to full, with the fixtures Bo, Bartholomew Bonecrusher and Thunderous Vertebrae #999 (the longest name the builder can make, 25 characters) at default and 200% text on 375x812 and 430x932. Its FITS row now exempts only a real scroll axis (auto/scroll, or the app's own vertical scroller), measures inline spans by text fragments, and reports a missing control as UNREACHED naming the selector. Browser green on this tree, red with the CSS reverted, and red on live at .pod-name and #lbBody .lb-who b are the commander's to prove; the lane could not open a browser. `node tests/unit.test.js`: 392 passed, 0 failed. | REACH: the podium name, the level leaderboard name, the settled race winner and lanes, the gift sender, the tower plate, the featured Crew plate, the profile title, the selected Crew name and both friend-request groups. All wrap instead of clipping; there is no line clamp, so a 200% name may take three lines in the narrow podium box rather than being cut.
 
-| PROOF | REACH |
-|---|---|
-| `node tests/unit.test.js`: exit 0, `392 passed, 0 failed` (full output: `/private/tmp/f6-unit.txt`). `node tests/name-fit-audit.mjs` promoted to full, with Bo, Bartholomew Bonecrusher and Thunderous Vertebrae #999 at default and 200%. Browser proof pending, no geometry pass claimed. | Both 375x812 and 430x932. Podium, leaderboard, settled winner and lanes, gift sender, tower plate, featured Crew plate, profile, selected Crew name and both request groups. |
-
-The audit waits for the seeded Crew controls, opens the profile through its
-selected-name button and opens request disclosures. Inline name spans use text
-fragment geometry because inline CSSOM client/scroll widths are zero even when
-painted. Missing, hidden or zero-width controls report UNREACHED with their
-selector and keep the audit nonzero. FITS still rejects horizontal overflow and
-hidden non-scrolling ancestor clipping, including cross-axis clipping. Only
-actual auto/scroll axes and the app's known vertical scrollers are exempt.
-
-Verification limits: socket/browser execution is unavailable in this work order.
-Every geometry row above, all four .pname-iso controls, local exit 0, CSS-revert
-red and live-site red on .pod-name and #lbBody .lb-who b require commander proof.
-No live-site result is inferred from source inspection.
-
-Deviations: wrapping has no two-line clamp, allowing extra lines in narrow
-podium boxes at 200% rather than cutting off names. The incoming and outgoing
-request name containers also need their existing ellipsis removed to satisfy
-the four required inline controls. Source inspection found those spans already
-seeded and their zero CSSOM widths were not evidence of an unrendered fixture.
-The audit therefore repairs measurement as well as explicitly reaching the UI.
-CSS syntax brace balance is 0. The pre-existing raw text balance is 1 because
-an older comment contains an unmatched literal opening brace; that unrelated
-comment is unchanged. No version stamps, prohibited pet files, original checkout,
-commit, push or publication are part of this change.
-
-Denied action: sandbox refused a read-only `ps` process-status check with
-`operation not permitted`. The running unit proof completed unaffected.
+Deviations: the incoming and outgoing request name containers also lose their ellipsis so the four inline nameplates fit. CSS syntax brace balance is 0; the raw count was already 1 on main because an older comment holds a literal brace. No version stamps, no prohibited pet files, no art.
