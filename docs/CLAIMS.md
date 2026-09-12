@@ -1,5 +1,10 @@
 # What each patch note claims, and what backs it
 
+## v591 (2026-09-12)
+
+Changelog item: Test seeds fund coins the way the game does, so a dozen guards can grade again
+1. PROOF: seed-currency-audit.mjs, four PURE rows green; three rows red against the old helper. Executes seed over mem-idb with production revisioned currency writes: funded balances accept another credit and export, lower and zero targets preserve history, non-demo pages refuse, and corrupt fixtures fail before returning. | REACH: godmode seed shared by purchase-firewall.mjs, freeze-refund-audit.mjs, garden-retire-audit.mjs, merchant-retire-audit.mjs, backup-roundtrip-audit.mjs and remote-den-audit.mjs. Browser runs remain commander verification.
+
 ## v590 (2026-09-12)
 
 Assembled from ten Codex lanes by the commander. Every pure audit was run on its lane tree and proven red on a throwaway worktree of main; the unit suite on the merged train is 400 passed. Worker changes ship as code only: nothing changes live until Tom runs server/deploy.sh (docs/SERVER-DEPLOY-PENDING.md, one bundle).

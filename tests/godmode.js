@@ -872,7 +872,7 @@ export async function click(page, re) {
    path through the UI, which is the point: the render being checked is the real
    one, fed real data.
      level      -> an xp award row worth enough to reach that level
-     coins/dust -> the kv values the app reads
+     coins/dust -> revisioned currency balances and histories
      beatRungs  -> ladder rungs marked beaten, exactly as a win records them
      champ      -> the Champion marked beaten
      xp         -> arbitrary extra award rows, if you need a specific shape
@@ -901,6 +901,10 @@ export const localDay = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export async function seed(page, opts = {}) {
+  // Demo seeding precedes the first rendered screen. Wait for it, then use
+  // the same settling interval as boot() before changing opening balances.
+  await page.waitForFunction(() => document.documentElement.classList.contains('booted'));
+  await sleep(2400);
   const res = await page.evaluate(async (o) => {
     // THE guard, and it has to be about THIS PAGE, not about what databases exist.
     // The first version only checked that a tally-demo database was present, which
@@ -934,8 +938,18 @@ export async function seed(page, opts = {}) {
       });
     }
     const kv = {};
-    if (o.coins != null) kv.coins = o.coins;
-    if (o.dust != null) kv.bonedust = o.dust;   // loot.js reads 'bonedust'; 'dust' seeded nothing
+    // Import from this page's served tree, just as the app does. These are
+    // the production writers behind loot.js coinsAdd / boneDustAdd.
+    const { kvGet, kvBumpRevisioned, exportAll } = await import('./js/db.js');
+    const currencies = [['coins', 'coinsRev', o.coins], ['bonedust', 'dustRev', o.dust]];
+    for (const [key, revision, requested] of currencies) {
+      if (requested != null) {
+        await kvBumpRevisioned(key, revision, requested - await kvGet(key, 0));
+      }
+      // Check even unspecified currencies so a broken fixture fails here.
+      await kvBumpRevisioned(key, revision, 0);
+    }
+    await exportAll();
     if (o.trainalloc) kv.trainalloc = o.trainalloc;   // spent training points, {stat: points}; app.js buildFighter reads it
     if (Object.keys(kv).length) {
       await new Promise((res2, rej) => {
@@ -944,7 +958,7 @@ export async function seed(page, opts = {}) {
         tx.oncomplete = res2; tx.onerror = () => rej(tx.error);
       });
     }
-    return { db: name, xpRows: xpRows.map(r => r.key), kv: Object.keys(kv) };
+    return { db: name, xpRows: xpRows.map(r => r.key), kv: [...currencies.filter(([, , value]) => value != null).map(([key]) => key), ...Object.keys(kv)] };
   }, opts);
   if (res.error) throw new Error(res.error);
   if (opts.reload !== false) {
