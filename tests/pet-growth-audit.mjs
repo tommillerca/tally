@@ -44,6 +44,7 @@ try {
   const grown = await measure(ids[1]);
   console.log(`TODAY ${JSON.stringify({ base, grown })}`);
   assert.ok(base.width > 0 && base.height > 0 && grown.width > 0 && grown.height > 0, 'Nonempty sprite measurements');
+  console.log(`PASS CONTROL both companions rendered and measured: ${JSON.stringify({ base: [base.width, base.height], grown: [grown.width, grown.height] })}`);
   assert.equal(base.lineage, 0);
   assert.equal(grown.lineage, 3);
   assert.ok(Math.abs(grown.width - base.width * 1.12) <= 1, 'TODAY lineage 3 is 12% wider within 1px');

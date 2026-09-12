@@ -34,7 +34,7 @@ for (const [path, expected] of [
     let response;
     listeners.fetch({ request: { url: new URL(path, base).href, method: 'GET', mode: 'navigate' }, respondWith: p => { response = p; } });
     assert.equal(await (await response).text(), expected);
-    console.log(`PASS standalone navigation: ${path}`);
+    console.log(`PASS ${expected === 'APP DOCUMENT' ? 'CONTROL app route still gets index.html' : 'standalone navigation'}: ${path}`);
   } catch (error) {
     failures++;
     console.error(`FAIL standalone navigation: ${path}: ${error.message}`);
