@@ -1,5 +1,12 @@
 # What each patch note claims, and what backs it
 
+## v589 (2026-09-12)
+
+Changelog item: First run puts starting your Bonehead first, with account and backup restore still available.
+1. PROOF: device-loss-audit.mjs rows UNKNOWN-PRIMARY, UNKNOWN-RESTORE-STAYS and KNOWN-UNCHANGED execute the production gate with Node DOM doubles. UNKNOWN-PRIMARY failed on unchanged main cb2aca568cf53661d5f9bd584831f618feda3cd7 because saveNew was not primary; all 17 rows pass after the change. | REACH: unknown first-run button order, styling, copy and restore handler; known status and either saved-progress witness retain primary recovery and Retry. No browser layout proof is claimed.
+
+Deviation: neither restore-latch-audit.mjs nor first-run-honesty-audit.mjs extracts this gate with Node DOM doubles. The existing extraction is in device-loss-audit.mjs, so that audit was extended and its old heading assertion updated. The unit suite exposed the same old heading assertion in storage-boot-audit.mjs; it was updated to the required copy.
+
 ## v588 (2026-09-12)
 
 Assembled from five Codex lanes by the commander. Every browser audit below was run by the commander on the lane tree and again on the merged train; the lanes cannot bind a socket.

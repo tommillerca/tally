@@ -1441,14 +1441,13 @@ function renderAccountRecovery(status = saveRecoveryStatus) {
   $('#tabbar').style.display = 'none';
   const gear = $('#gearBtn'); if (gear) gear.hidden = true;
   el.innerHTML = `<div class="onb onb-in"${known ? ' data-severity="error" role="alert"' : ''}><div class="onb-scroll">
-    <h1>${known ? 'RECOVER YOUR BONES' : 'PLAYED BEFORE?'}</h1>
+    <h1>${known ? 'RECOVER YOUR BONES' : 'NEW HERE?'}</h1>
     <p class="onb-sub">${known
       ? 'Your saved progress is missing or could not be read. Restore your backup before continuing.'
-      : 'This phone has no saved progress. If you have played before, restore your account or a backup file.'}</p>
+      : 'Start your Bonehead. Played before on another phone? Restore your account or a backup file instead.'}</p>
     </div><div class="onb-foot">
-    <button class="btn" id="saveRestore">Restore an account or backup file</button>
-    ${known ? '<button class="btn ghost" id="saveRetry">Retry cloud recovery</button>'
-      : '<button class="btn ghost" id="saveNew">I am new. Start my Bonehead</button>'}
+    ${known ? '<button class="btn" id="saveRestore">Restore an account or backup file</button>\n    <button class="btn ghost" id="saveRetry">Retry cloud recovery</button>'
+      : '<button class="btn" id="saveNew">I am new. Start my Bonehead</button><button class="btn ghost" id="saveRestore">Restore an account or backup file</button>'}
     </div></div>`;
   $('#saveRestore').addEventListener('click', () => openRestoreSheet());
   $('#saveNew')?.addEventListener('click', async () => {

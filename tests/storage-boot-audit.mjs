@@ -82,7 +82,7 @@ async function runBoot(failedStorage) {
     assert.equal(reloads, 1, 'reload is actionable without storage');
   } else {
     assert.ok(setupCalls > 0, 'CONTROL: normal boot continues through setup');
-    assert.match(screen.innerHTML, /PLAYED BEFORE\?/);
+    assert.match(screen.innerHTML, /NEW HERE\?/);
     assert.doesNotMatch(screen.innerHTML, /Storage is unavailable|storageRetry/,
       'CONTROL: normal boot must not disclose a storage failure');
   }

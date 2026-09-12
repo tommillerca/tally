@@ -43,6 +43,46 @@ function uiContext(extra = {}) {
   vm.runInContext(['storageIsFull', 'guardSaveBeforeInit', 'renderAccountRecovery'].map(n => fn(n, true)).join('\n'), c);
   return c;
 }
+// F9: grade the production gate with the existing Node DOM doubles.
+function gateButton(html, id) {
+  const tag = html.match(new RegExp(`<button\\b[^>]*id="${id}"[^>]*>`));
+  assert.ok(tag, `${id} must render`);
+  const classes = tag[0].match(/class="([^"]*)"/)[1].split(/\s+/);
+  return { primary: classes.includes('btn') && !classes.includes('ghost'), classes };
+}
+await check('UNKNOWN-PRIMARY', () => {
+  const c = uiContext();
+  c.renderAccountRecovery('unknown');
+  const html = c.$('#screen').innerHTML;
+  assert.ok(gateButton(html, 'saveNew').primary, 'saveNew must be primary');
+  const foot = html.slice(html.indexOf('<div class="onb-foot">'));
+  assert.ok(foot.indexOf('id="saveNew"') < foot.indexOf('id="saveRestore"'), 'new player choice must precede restore');
+});
+await check('UNKNOWN-RESTORE-STAYS', async () => {
+  const c = uiContext();
+  c.renderAccountRecovery('unknown');
+  const html = c.$('#screen').innerHTML;
+  assert.ok(gateButton(html, 'saveRestore').classes.includes('ghost'));
+  assert.match(html, /Start your Bonehead\. Played before on another phone\? Restore your account or a backup file instead\./);
+  await c.$('#saveRestore').handlers.click();
+  assert.equal(c.restoreOpened, true);
+});
+await check('KNOWN-UNCHANGED', () => {
+  for (const [status, saveWitness] of [
+    ['known', { settings: false, loot: false }],
+    ['unknown', { settings: true, loot: false }],
+    ['unknown', { settings: false, loot: true }],
+  ]) {
+    const c = uiContext({ saveWitness });
+    c.renderAccountRecovery(status);
+    const html = c.$('#screen').innerHTML;
+    assert.ok(gateButton(html, 'saveRestore').primary);
+    gateButton(html, 'saveRetry');
+    assert.equal(typeof c.$('#saveRetry').handlers.click, 'function');
+    assert.equal(c.$('#saveNew'), null);
+    assert.match(html, /RECOVER YOUR BONES/);
+  }
+});
 let backup = null, gets = 0, puts = 0, failure = false;
 const API = 'https://device-loss.invalid';
 globalThis.fetch = async (url, opts = {}) => {
@@ -113,7 +153,7 @@ await check('R54-2 965 rows to 6 without a key: recovery is offered before onboa
   assert.ok(start >= 0 && end > start);
   Object.assign(c, { renderOnboarding() { c.onboardingOpened = true; }, social });
   await vm.runInContext(`(async () => {${boot.slice(start, end)}})()`, c);
-  assert.match(c.$('#screen').innerHTML, /PLAYED BEFORE\?/, 'wipe went straight to the first-run poster');
+  assert.match(c.$('#screen').innerHTML, /NEW HERE\?/, 'wipe went straight to the first-run poster');
   await c.$('#saveRestore').handlers.click();
   assert.equal(c.restoreOpened, true);
   assert.equal(c.onboardingOpened, undefined);
