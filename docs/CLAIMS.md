@@ -1,5 +1,10 @@
 # What each patch note claims, and what backs it
 
+## v590 (2026-09-12)
+
+Changelog item: Interrupted tower claims recover their 80 takeover coins on the next ownership sync.
+1. PROOF: spire-takeover-atomic-audit.mjs CRASH, ONCE, LEGACY and CONTROL exercise the signed in-process Worker and real client model with SQLite and IndexedDB doubles. All four rows pass. CRASH is red on main cb2aca56: ownership held, coins 0 instead of 80. node tests/unit.test.js exits 0 with 392 passed, 0 failed; take-and-pay-audit.mjs is all clean, including BASELINE Spire. | REACH: claim settlement and ownership sync, with a receipt and 80 coins committed by claimAndPay in one transaction. The server half is not deployed. Legacy takeovers with no id are treated as already paid. Recovery covers the current ownership transition on this local wallet; losing the tower before sync or losing the local payment receipts is outside this guarantee. Immediate fight bonuses retain their existing path; recovery pays the base 80 only.
+
 ## v588 (2026-09-12)
 
 Assembled from five Codex lanes by the commander. Every browser audit below was run by the commander on the lane tree and again on the merged train; the lanes cannot bind a socket.

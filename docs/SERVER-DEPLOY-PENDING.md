@@ -1,3 +1,13 @@
+## v590 spire takeover receipts (2026-09-12)
+
+Pending, not deployed. Tom owns deployment. Apply
+`server/migrations/2026-09-12-spire-takeover-receipt.sql` before deploying
+this Worker. Neither action was run here. Fresh schema includes takeover_id.
+The ownership write stores a spire-id plus claim timestamp receipt and returns
+it on successful and already-owned claims and the authenticated ownership sync.
+Legacy NULL receipts are treated as already paid. No production inspection,
+D1 writes or secrets were used for this work.
+
 # The Worker is behind main, on purpose
 
 Written 2026-08-23, after #77 merged.

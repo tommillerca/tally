@@ -2775,7 +2775,7 @@ export default {
         if (auth.err) return json({ error: auth.err }, 401);
         const now = Date.now();
         const rs = await env.DB.prepare(
-          `SELECT id, name, lat, lng, owner, owner_name, claimed_at, tended_at, level, siege_until, siege_name
+          `SELECT id, name, lat, lng, owner, owner_name, claimed_at, tended_at, level, siege_until, siege_name, takeover_id
              FROM spires WHERE owner = ?`).bind(auth.playerId).all();
         let rows = await sweepSieges(env, rs.results || [], now);
 
@@ -2806,7 +2806,7 @@ export default {
           serverNow: now,
           spires: rows.map(r => ({
             id: r.id, name: r.name, lat: r.lat, lng: r.lng, level: r.level || 1,
-            claimedAt: r.claimed_at, tendedAt: r.tended_at,
+            claimedAt: r.claimed_at, tendedAt: r.tended_at, takeover_id: r.takeover_id,
             siegeUntil: r.siege_until || null, siegeName: r.siege_name || null,
           })),
         });
@@ -2966,17 +2966,17 @@ export default {
            and the takeover then mints a spire-lost grant addressed to a deleted
            account, which is a second orphan minted by the first. */
         const won = await env.DB.prepare(
-          `INSERT INTO spires (id, name, lat, lng, owner, owner_name, defender, claimed_at, tended_at, level, updated_at)
-             SELECT ?,?,?,?,?,?,?,?,?,?,?
+          `INSERT INTO spires (id, name, lat, lng, owner, owner_name, defender, claimed_at, tended_at, level, updated_at, takeover_id)
+             SELECT ?,?,?,?,?,?,?,?,?,?,?,?
               WHERE (SELECT COUNT(*) FROM spires WHERE owner = ? AND tended_at > ?) < 3
                 AND NOT EXISTS (SELECT 1 FROM spires WHERE id = ? AND (owner = ? OR claimed_at > ?))
                 AND EXISTS (SELECT 1 FROM players WHERE id = ?)
              ON CONFLICT(id) DO UPDATE SET name=excluded.name, owner=excluded.owner, owner_name=excluded.owner_name,
                defender=excluded.defender, claimed_at=excluded.claimed_at, tended_at=excluded.tended_at,
-               level=spires.level+1, updated_at=excluded.updated_at
-           RETURNING level`)
+               level=spires.level+1, updated_at=excluded.updated_at, takeover_id=excluded.takeover_id
+           RETURNING level, takeover_id`)
           .bind(id, spireName, b.lat, b.lng, auth.playerId, me?.name || me?.handle || null,
-                me?.profile || null, now, now, 1, now,
+                me?.profile || null, now, now, 1, now, `${id}:${now}`,
                 auth.playerId, now - SPIRE_DORMANT_MS,
                 id, auth.playerId, now - SPIRE_SHIELD_MS,
                 auth.playerId).first();
@@ -3014,9 +3014,9 @@ export default {
              nothing, falls through, and is answered by the rules under it. */
           const tend = await env.DB.prepare(
             `UPDATE spires SET tended_at = ?, updated_at = ?, defender = ? WHERE id = ? AND owner = ?
-             RETURNING level`)
+             RETURNING level, takeover_id`)
             .bind(now, now, me?.profile || null, id, auth.playerId).first();
-          if (tend) return json({ ok: true, already: true, level: tend.level || 1 });
+          if (tend) return json({ ok: true, already: true, level: tend.level || 1, takeover_id: tend.takeover_id });
           // Nothing landed, so say WHICH rule refused it. Read after the write,
           // never before: this only picks the message, it decides nothing.
           const nowRow = await env.DB.prepare('SELECT claimed_at FROM spires WHERE id = ?').bind(id).first();
@@ -3041,7 +3041,7 @@ export default {
               note: `${me?.name || me?.handle || 'Someone'} toppled ${spireName}. Walk back and take it.`,
             }), now, prev.owner).run();
         }
-        return json({ ok: true, tookFrom: prev ? (prev.owner_name || 'someone') : null, level: won.level });
+        return json({ ok: true, tookFrom: prev ? (prev.owner_name || 'someone') : null, level: won.level, takeover_id: won.takeover_id });
       }
 
       // A visit restores resolve. Owner only.

@@ -14,7 +14,7 @@
  * state is keyed by spire id in one kv record. Sparser cells than dens (2.2 km
  * vs 1.1 km) so each one reads as a monument rather than litter.
  */
-import { kvGet, kvUpdate } from './db.js';
+import { db, kvGet, kvUpdate } from './db.js';
 import { dateKey } from './nutrition.js';
 
 export const SPIRE_CELL_DEG = 0.02;      // ~2.2 km cells: a couple within a good walk
@@ -251,8 +251,19 @@ export async function setSpireLevel(id, level, now = Date.now()) {
  *  thing that may start or end a siege; this just makes it readable offline and
  *  between polls. Returns the sieges that are NEW to this device, so the caller
  *  can announce them exactly once. */
+// A legacy transition has no receipt and is treated as already paid.
+export async function paySpireTakeover(takeover_id) {
+  if (typeof takeover_id !== 'string' || !takeover_id) return 0;
+  const paid = await db.claimAndPay('kv', { k: `spire-takeover:${takeover_id}`, v: true }, {
+    kv: { coins: cur => (Number(cur) || 0) + 80,
+      coinsRev: cur => (Number(cur) || 0) + 80 },
+  });
+  return paid ? 80 : 0;
+}
+
 export async function syncSieges(rows, now = spireNow()) {
   if (!Array.isArray(rows)) return [];
+  for (const row of rows) await paySpireTakeover(row.takeover_id);
   const next = new Map(rows.map(r => [r.id, {
     ...r, siege: r.siegeUntil ? { until: r.siegeUntil, name: r.siegeName || 'The siege' } : null,
   }]));
