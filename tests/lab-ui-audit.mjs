@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import vm from 'node:vm';
-import { MORPHS, MORPH_LABEL, ownedPairs, ownedCellCount, petLevel, isMorph, morphAsset } from '../js/pets.js';
+import { MORPHS, MORPH_LABEL, ownedPairs, ownedCellCount, petLevel, isMorph, morphAsset, petGrowth } from '../js/pets.js';
 import { eggProgress } from '../js/loot.js';
 import { BH_BY_ID } from '../data/boneheadz.js';
 const source = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
@@ -292,7 +292,7 @@ await check('bench help discloses repeated coin flips without collection or stoc
 });
 await check('all 36 preview files use the shipped morph resolver and suppress shiny and wear', () => {
   const helper = source.slice(source.indexOf('function petPortraitHtml('), source.indexOf('async function refreshShinyPets'));
-  const portrait = Function('morphAsset', 'BH_BY_ID', 'bhAsset', 'croppedPetImg', `${helper}; return petPortraitHtml;`)(morphAsset, BH_BY_ID, p => `assets/bh/C/${p.id}.png`, (sp, px, ground, src, wear, thumb) => ({ sp, px, ground, src, wear, thumb }));
+  const portrait = Function('petGrowth', 'morphAsset', 'BH_BY_ID', 'bhAsset', 'croppedPetImg', `${helper}; return petPortraitHtml;`)(petGrowth, morphAsset, BH_BY_ID, p => `assets/bh/C/${p.id}.png`, (sp, px, ground, src, wear, thumb) => ({ sp, px, ground, src, wear, thumb }));
   const paths = [];
   for (let i = 1; i <= 6; i++) for (const morph of MORPHS) {
     const sp = `C${i}`, art = portrait(sp, 144, false, { morph, wear: null, thumb: true });
