@@ -7,7 +7,8 @@ const app = read('js/app.js'), social = read('js/social.js'), ui = read('tests/u
 let failures = 0, passed = 0;
 async function test(name, run) { try { await run(); passed++; console.log('PASS ' + name); } catch (e) { failures++; console.log('FAIL ' + name + ': ' + e.message.split('\n')[0]); } }
 await test('CONTROL server-confirmed claim retains full reward after local cap failure', async () => {
-  const source = app.slice(app.indexOf('const already = !!(remote'), app.indexOf("else if (foeCfg.mode === 'mimic')"));
+  // v590: the slice now reads takeoverPaid, declared above its start (an unpaid takeover receipt already paid by paySpireTakeover). Zero here: this row is about the local cap failure, not the receipt.
+  const source = 'let takeoverPaid = 0;\n' + app.slice(app.indexOf('const already = !!(remote'), app.indexOf("else if (foeCfg.mode === 'mimic')"));
   assert.ok(source.startsWith('const already = !!(remote'), 'SETUP production settlement branch found');
   const branch = source.slice(0, source.lastIndexOf('\n      }'));
   for (const local of [{ok:false,reason:'cap'}, {ok:true,level:1}, null]) {
